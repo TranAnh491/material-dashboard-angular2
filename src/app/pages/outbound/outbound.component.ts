@@ -2409,22 +2409,37 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  getHistoryPoOptions(): string[] {
-    const s = new Set<string>();
-    for (const m of this.filteredMaterials) {
+  /** Template gọi mỗi vòng change detection — chỉ tính lại khi filteredMaterials đổi (luôn gán mảng mới). */
+  private historyOptionsSource: any[] | null = null;
+  private historyOptionsLength = -1;
+  private historyPoOptionsCache: string[] = [];
+  private historyLsxOptionsCache: string[] = [];
+
+  private refreshHistoryOptions(): void {
+    const src = this.filteredMaterials;
+    if (src === this.historyOptionsSource && src.length === this.historyOptionsLength) return;
+    const po = new Set<string>();
+    const lsx = new Set<string>();
+    for (const m of src) {
       const p = String(m.poNumber || '').trim();
-      if (p) s.add(p);
+      if (p) po.add(p);
+      const l = String(m.productionOrder || '').trim();
+      if (l) lsx.add(l);
     }
-    return Array.from(s).sort();
+    this.historyPoOptionsCache = Array.from(po).sort();
+    this.historyLsxOptionsCache = Array.from(lsx).sort();
+    this.historyOptionsSource = src;
+    this.historyOptionsLength = src.length;
+  }
+
+  getHistoryPoOptions(): string[] {
+    this.refreshHistoryOptions();
+    return this.historyPoOptionsCache;
   }
 
   getHistoryLsxOptions(): string[] {
-    const s = new Set<string>();
-    for (const m of this.filteredMaterials) {
-      const p = String(m.productionOrder || '').trim();
-      if (p) s.add(p);
-    }
-    return Array.from(s).sort();
+    this.refreshHistoryOptions();
+    return this.historyLsxOptionsCache;
   }
 
   /**

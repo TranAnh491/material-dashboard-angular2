@@ -3,23 +3,25 @@
   <div class="excel-container">
     <!-- Excel-like Header -->
     <div class="excel-header">
-      <h4>📦 FG OUT - Xuất thành phẩm</h4>
+      <div class="fo-title">
+        <h4>FG Out</h4>
+        <span class="fo-sub">Xuất thành phẩm</span>
+      </div>
     </div>
-    
-    <!-- Excel-like Actions -->
+
+    <!-- Thanh công cụ: điều hướng | tìm kiếm + lọc | thao tác.
+         Không đặt nút ở .excel-header: navbar chung của app nằm đè lên vùng đó nên nút không bấm được. -->
     <div class="excel-actions">
       <div class="action-controls">
-        <button class="custom-btn" (click)="openMorePopup()">
-          <i class="material-icons">more_vert</i>
-          More
-        </button>
-
         <button class="custom-btn" (click)="goToMenu()" title="Về Menu">
           <i class="material-icons">home</i>
-          Về Menu
+          Menu
         </button>
-
-        <button class="custom-btn" (click)="refreshAllData()">
+        <button class="custom-btn" (click)="openMorePopup()">
+          <i class="material-icons">more_horiz</i>
+          More
+        </button>
+        <button class="custom-btn" (click)="refreshAllData()" title="Tải lại dữ liệu 30 ngày gần nhất">
           <i class="material-icons">refresh</i>
           Làm mới
         </button>
@@ -27,90 +29,50 @@
         <span class="toolbar-divider"></span>
 
         <div class="search-box">
-          <input type="text" 
-                 class="custom-input search-input-uppercase" 
+          <i class="material-icons search-ico" aria-hidden="true">search</i>
+          <input type="text"
+                 class="custom-input search-input-uppercase"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchChange($event)"
                  (keydown.enter)="onSearchEnter($event)"
-                 placeholder="Shipment 4–5 · Mã TP P002052 · Lô exact 5492(4)">
-        </div>
-        <span class="load-hint" *ngIf="isLoadingMaterials || materialsLoadHint">
-          <i class="material-icons" *ngIf="isLoadingMaterials">sync</i>
-          {{ materialsLoadHint || 'Đang tải...' }}
-        </span>
-        <div class="shipment-box" *ngIf="filteredMaterials.length">
-          <span class="shipment-box-label">Shipment:</span>
-          <span class="shipment-box-value">{{ displayedShipmentsText }}</span>
-        </div>
-        <div class="total-summary-box" *ngIf="filteredMaterials.length">
-          <ng-container *ngIf="!isSingleShipmentView">
-            <span class="total-summary-item">Tổng QTY: <strong>{{ getTotalQty() | number }}</strong></span>
-            <span class="total-summary-item">Tổng Carton: <strong>{{ getTotalCarton() | number }}</strong></span>
-          </ng-container>
-          <ng-container *ngIf="isSingleShipmentView">
-            <span class="total-summary-item">Tổng QTY Shipment: <strong>{{ getTotalQty() | number }}</strong></span>
-            <span class="total-summary-item">Tổng thùng Shipment (CTN): <strong>{{ getTotalCarton() | number }}</strong></span>
-            <span class="total-summary-item"
-                  [style.color]="materialCodeCountComparison.matches ? '#2e7d32' : '#c62828'"
-                  style="font-weight: 600;">
-              Số mã TP: FG Out {{ materialCodeCountComparison.fgOutCount }} / Shipment {{ materialCodeCountComparison.shipmentCount }}
-              <span *ngIf="!materialCodeCountComparison.matches">⚠️ Lệch số mã</span>
-            </span>
-            <span class="total-summary-item" style="font-weight: 600;">So sánh theo Mã TP (FG Out vs Shipment):</span>
-            <span class="total-summary-item"
-                  *ngFor="let t of totalsByMaterialCodeInShipment"
-                  [style.color]="t.qtyMatches ? '#2e7d32' : '#c62828'">
-              <strong>{{ t.materialCode }}</strong>:
-              {{ t.totalQty | number }} (CTN {{ t.totalCarton | number }})
-              vs Shipment {{ t.shipmentQty === null ? '—' : (t.shipmentQty | number) }}
-              <span *ngIf="!t.qtyMatches">⚠️</span>
-            </span>
-          </ng-container>
+                 placeholder="Shipment 4–5 · Mã TP P002052 · Lô 5492(4)">
         </div>
 
-        <span class="toolbar-divider"></span>
-
-        <div class="factory-filter">
-          <span class="filter-label">Nhà máy:</span>
-          <button type="button" 
+        <div class="factory-filter" role="group" aria-label="Nhà máy">
+          <button type="button"
                   class="custom-btn factory-btn"
                   [class.active]="selectedFactory === 'ASM1'"
                   (click)="setFactoryFilter('ASM1')">ASM1</button>
-          <button type="button" 
+          <button type="button"
                   class="custom-btn factory-btn"
                   [class.active]="selectedFactory === 'ASM2'"
                   (click)="setFactoryFilter('ASM2')">ASM2</button>
-          <button type="button" 
+          <button type="button"
                   class="custom-btn factory-btn"
                   [class.active]="selectedFactory === ''"
-                  (click)="setFactoryFilter('')">TOTAL</button>
+                  (click)="setFactoryFilter('')">Tất cả</button>
         </div>
-        
+
         <button class="custom-btn" (click)="showTimeRangeDialog = true">
           <i class="material-icons">schedule</i>
-          Lọc theo thời gian
+          Thời gian
         </button>
-        
-        <button class="custom-btn" (click)="viewAllMaterials()">
+
+        <button class="custom-btn" (click)="viewAllMaterials()" title="Bỏ lọc nhà máy, xem đủ 30 ngày">
           <i class="material-icons">visibility</i>
           Xem tất cả
         </button>
 
-        <span class="toolbar-divider"></span>
+        <span class="load-hint" *ngIf="isLoadingMaterials || materialsLoadHint">
+          <i class="material-icons" *ngIf="isLoadingMaterials">sync</i>
+          {{ materialsLoadHint || 'Đang tải...' }}
+        </span>
 
-        <button class="custom-btn" (click)="addNewRow()">
-          <i class="material-icons">add</i>
-          Thêm dòng
-        </button>
+        <span class="toolbar-spacer"></span>
 
-        <button class="custom-btn btn-warning" (click)="openXuatKhoDialog()">
-          <i class="material-icons">exit_to_app</i>
-          Xuất Kho
-        </button>
-
-        <button class="custom-btn btn-print" (click)="openPrintByShipment()">
-          <i class="material-icons">print</i>
-          Print
+        <button class="custom-btn btn-warning" *ngIf="historyMode" (click)="exitHistoryMode()">
+          <i class="material-icons">close</i>
+          Thoát History ({{ historyMaterialCode }})
         </button>
 
         <button class="custom-btn" (click)="openHistoryDialog()">
@@ -118,12 +80,66 @@
           History
         </button>
 
-        <button class="custom-btn btn-warning" *ngIf="historyMode" (click)="exitHistoryMode()">
-          <i class="material-icons">close</i>
-          Thoát History ({{ historyMaterialCode }})
+        <button class="custom-btn" (click)="addNewRow()">
+          <i class="material-icons">add</i>
+          Thêm dòng
         </button>
 
+        <button class="custom-btn btn-print" (click)="openPrintByShipment()">
+          <i class="material-icons">print</i>
+          Print
+        </button>
+
+        <button class="custom-btn btn-warning" (click)="openXuatKhoDialog()">
+          <i class="material-icons">exit_to_app</i>
+          Xuất Kho
+        </button>
       </div>
+    </div>
+
+    <!-- Dải tổng hợp: chỉ hiện khi có kết quả -->
+    <div class="fo-summary" *ngIf="filteredMaterials.length">
+      <div class="fo-stat fo-stat--ship">
+        <span>Shipment</span>
+        <b>{{ displayedShipmentsText }}</b>
+      </div>
+      <ng-container *ngIf="isSingleShipmentView; else multiShipTotals">
+        <div class="fo-stat">
+          <span>Tổng QTY</span>
+          <b>{{ getTotalQty() | number }}</b>
+        </div>
+        <div class="fo-stat">
+          <span>Tổng thùng (CTN)</span>
+          <b>{{ getTotalCarton() | number }}</b>
+        </div>
+        <ng-container *ngIf="materialCodeCountComparison as cmp">
+          <div class="fo-stat" [class.fo-stat--bad]="!cmp.matches" [class.fo-stat--ok]="cmp.matches">
+            <span>Số mã TP (FG Out / Shipment)</span>
+            <b>{{ cmp.fgOutCount }} / {{ cmp.shipmentCount }}<ng-container *ngIf="!cmp.matches"> · lệch</ng-container></b>
+          </div>
+        </ng-container>
+        <div class="fo-compare">
+          <span class="fo-compare__label">So với Shipment:</span>
+          <span class="fo-chip"
+                *ngFor="let t of totalsByMaterialCodeInShipment"
+                [class.fo-chip--ok]="t.qtyMatches"
+                [class.fo-chip--bad]="!t.qtyMatches"
+                [title]="t.materialCode + ': FG Out ' + (t.totalQty | number) + ' (CTN ' + (t.totalCarton | number) + ') · Shipment ' + (t.shipmentQty === null ? '—' : (t.shipmentQty | number))">
+            <b>{{ t.materialCode }}</b>
+            {{ t.totalQty | number }}<span class="fo-chip__vs"> / {{ t.shipmentQty === null ? '—' : (t.shipmentQty | number) }}</span>
+          </span>
+        </div>
+      </ng-container>
+      <ng-template #multiShipTotals>
+        <div class="fo-stat">
+          <span>Tổng QTY</span>
+          <b>{{ getTotalQty() | number }}</b>
+        </div>
+        <div class="fo-stat">
+          <span>Tổng Carton</span>
+          <b>{{ getTotalCarton() | number }}</b>
+        </div>
+      </ng-template>
     </div>
     
     <!-- Excel-like Body -->
@@ -218,7 +234,7 @@
           </tr>
         </thead>
         <tbody>
-          <ng-container *ngFor="let row of displayRows; let i = index; trackBy: trackByDisplayRow">
+          <ng-container *ngFor="let row of displayRows | slice:0:rowLimit; let i = index; trackBy: trackByDisplayRow">
             <!-- Dòng chi tiết -->
             <tr *ngIf="row.type === 'detail'" class="detail-row"
                 [ngClass]="getPalletRowClass(row)"
@@ -380,9 +396,9 @@
                        [title]="row.material.approved ? 'Đã duyệt' : 'Chưa duyệt'">
               </td>
               <td class="action-cell">
-                <button mat-icon-button color="warn" (click)="deleteMaterial(row.material)"
-                        matTooltip="Xóa">
-                  <mat-icon>delete</mat-icon>
+                <button type="button" class="fo-del-btn" (click)="deleteMaterial(row.material)"
+                        title="Xóa dòng" aria-label="Xóa dòng">
+                  <i class="material-icons">delete_outline</i>
                 </button>
               </td>
             </tr>
@@ -395,6 +411,13 @@
               <td colspan="9"></td>
             </tr>
           </ng-container>
+          <tr *ngIf="displayRows.length > rowLimit" class="fo-more-row">
+            <td colspan="22">
+              <span class="fo-more-text">Đang hiện {{ rowLimit | number }} / {{ displayRows.length | number }} dòng</span>
+              <button type="button" class="fo-more-btn" (click)="showMoreRows()">Xem thêm {{ rowStep }} dòng</button>
+              <button type="button" class="fo-more-btn" (click)="showAllRows()">Hiện tất cả</button>
+            </td>
+          </tr>
           <tr *ngIf="!isLoadingMaterials && displayRows.length === 0" class="excel-empty-row">
             <td colspan="22" class="excel-empty-cell">
               <div class="excel-empty">

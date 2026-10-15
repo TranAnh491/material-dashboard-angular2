@@ -11,6 +11,7 @@ import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { LocationAddUnlockService } from '../../services/location-add-unlock.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
+import { KkCatalogService } from '../../services/kk-catalog.service';
 import {
   blocksSingleLetterPrefixMatch,
   getDefaultLocationsForWarehouse,
@@ -318,6 +319,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.clearLocationLookup();
     this.setupRulesListener();
     void this.loadWarehouseRulesFromFirestore();
+    void this.loadKkCatalogForRules();
     this.applyFilters();
   }
   
@@ -390,6 +392,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   forcedAllowedDestinationPrefixes: string[] = [];
   forcedWarehouseType: WarehouseType | '' = '';
   forcedAllowedLocations: string[] = [];
+  forcedRuleSource: 'catalog' | 'legacy' | '' = '';
+  private kkTypeMap = new Map<string, string>();
+  private kkHomeLocs = new Map<string, string>();
+  private kkCatalogReady = false;
   locationWarehouseRows: LocationWarehouseRow[] = [];
   locationRuleParentGroups: LocationRuleParentGroup[] = [];
   expandedLocationRuleParent: string | null = null;
@@ -723,7 +729,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (ruleExempt || this.isTargetRuleExempt(targetLocation, useAsm3)) return true;
     const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
     if (resolved.locations.length === 0) return true;
-    return this.locationMatchesAllowedDestinations(targetLocation, resolved.locations);
+    return this.locationMatchesForcedRule(targetLocation, resolved.locations, resolved.source);
   }
 
   /** Chuẩn hoá prefix vị trí trong rule cũ — giữ nguyên IQC+ (không qua formatViTriInput). */
@@ -954,13 +960,80 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  private resolveAllowedDestinationsForMaterial(materialCode: string): { warehouseType: WarehouseType | ''; locations: string[] } {
-    const warehouseType = this.getWarehouseTypeForMaterial(materialCode);
-    if (warehouseType) {
-      return { warehouseType, locations: this.getLocationsForWarehouse(warehouseType) };
+  /**
+   * Rule ép vị trí đi theo Danh mục vị trí (Quản lý nguyên liệu), không ép Kho Thường / Kho Mát.
+   * Mã chưa có vị trí trong danh mục → rule mã → vị trí (cũ).
+   */
+  private resolveAllowedDestinationsForMaterial(materialCode: string): {
+    warehouseType: WarehouseType | '';
+    locations: string[];
+    source: 'catalog' | 'legacy' | '';
+  } {
+    const catalogLocs = this.catalogLocationsForMaterial(materialCode);
+    if (catalogLocs.length) {
+      return { warehouseType: '', locations: catalogLocs, source: 'catalog' };
     }
     const legacy = this.findMatchedRuleFromList(materialCode);
-    return { warehouseType: '', locations: legacy?.destinationLocationPrefixes || [] };
+    const locations = legacy?.destinationLocationPrefixes || [];
+    return { warehouseType: '', locations, source: locations.length ? 'legacy' : '' };
+  }
+
+  private async loadKkCatalogForRules(): Promise<void> {
+    try {
+      const [typeMap, homeLocs] = await Promise.all([
+        this.kkCatalog.loadAllAsMap(),
+        this.kkCatalog.loadHomeLocs()
+      ]);
+      this.kkTypeMap = typeMap;
+      this.kkHomeLocs = homeLocs;
+      this.kkCatalogReady = true;
+      this.applyLocationRuleToSelectedMaterial();
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.warn('loadKkCatalogForRules failed:', e);
+    }
+  }
+
+  private catalogLocationsForMaterial(materialCode: string): string[] {
+    if (!this.kkCatalogReady) return [];
+    const loc = this.kkCatalog.assignedLocForMaterial(materialCode, this.kkTypeMap, this.kkHomeLocs);
+    return String(loc || '')
+      .split(/[\n\r,;]+/)
+      .map(s => s.trim())
+      .filter(s => {
+        const u = s.toUpperCase();
+        return !!s && u !== 'PASS' && u !== 'BACKUP' && !u.startsWith('PASS ') && !u.startsWith('BACKUP ');
+      });
+  }
+
+  /** R1 / R01 → R01, S7 → S07; Fridge / Frigde coi như nhau. */
+  private normalizeCatalogLocation(loc: string): string {
+    let s = String(loc || '').replace(/\s/g, '').toUpperCase();
+    s = s.replace(/^([RS])0*(\d{1,2})(?!\d)/, (_m, l: string, n: string) => `${l}${n.padStart(2, '0')}`);
+    if (s.startsWith('FRIDGE')) s = 'FRIGDE' + s.slice(6);
+    return s;
+  }
+
+  /** Vị trí đích có nằm trong vị trí danh mục: cùng dãy (R02, S07-T3 → S07), cùng block (R05-2) hoặc trùng tên khu vực. */
+  private locationMatchesCatalogLocations(target: string, allowed: string[]): boolean {
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
+    const t = this.normalizeCatalogLocation(target);
+    if (!t) return false;
+    for (const loc of allowed) {
+      let key = this.normalizeCatalogLocation(loc);
+      if (!key) continue;
+      const tier = /^([RS]\d{2})-T\d+$/.exec(key);
+      if (tier) key = tier[1];
+      if (t === key || t.startsWith(key + '-')) return true;
+      if (!/^[RS]\d{2}/.test(key) && t.startsWith(key)) return true;
+    }
+    return false;
+  }
+
+  private locationMatchesForcedRule(target: string, allowed: string[], source: 'catalog' | 'legacy' | ''): boolean {
+    return source === 'catalog'
+      ? this.locationMatchesCatalogLocations(target, allowed)
+      : this.locationMatchesAllowedDestinations(target, allowed);
   }
 
   private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
@@ -1144,12 +1217,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.forcedAllowedDestinationPrefixes = [];
       this.forcedAllowedLocations = [];
       this.forcedWarehouseType = '';
+      this.forcedRuleSource = '';
       return;
     }
 
     const code = this.selectedMaterialForStore.materialCode || '';
     const resolved = this.resolveAllowedDestinationsForMaterial(code);
     this.forcedWarehouseType = resolved.warehouseType;
+    this.forcedRuleSource = resolved.source;
     this.forcedAllowedLocations = resolved.locations;
     this.forcedAllowedDestinationPrefixes = resolved.locations;
     this.isTargetLocationForced = resolved.locations.length > 0;
@@ -1158,6 +1233,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Gợi ý rule ngắn gọn — không liệt kê toàn bộ tên vị trí. */
   get storeMaterialForcedRuleLabel(): string {
     if (!this.isTargetLocationForced) return '';
+    if (this.forcedRuleSource === 'catalog') {
+      return `Vị trí theo danh mục: ${this.forcedAllowedLocations.join(', ')}`;
+    }
     if (this.forcedWarehouseType === 'Kho Mát') {
       return 'Nguyên liệu này cần lưu trữ tại kho mát';
     }
@@ -1240,7 +1318,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const formatted = this.formatViTriInput(location || '');
     if (!formatted) return false;
     if (!this.isTargetLocationForced) return true;
-    return this.locationMatchesAllowedDestinations(formatted, this.forcedAllowedLocations);
+    return this.locationMatchesForcedRule(formatted, this.forcedAllowedLocations, this.forcedRuleSource);
   }
 
   // Dời Kệ (Move Shelf) Modal
@@ -1313,6 +1391,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private factoryAccessService: FactoryAccessService,
     private locationAddUnlock: LocationAddUnlockService,
     private nvlkhCatalog: NvlkhCatalogService,
+    private kkCatalog: KkCatalogService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) {

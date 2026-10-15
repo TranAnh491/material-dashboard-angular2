@@ -4261,3 +4261,281 @@
   display: block;
 }
 
+/* =========================================================
+   FlowSpace theme (học từ ASP Project > Project management, 13/10/2026)
+   Trang trắng, viền mảnh #E5E5E0, bo góc 12-14px, bóng rất nhẹ.
+   Màu chỉ thuộc các họ: xám, be, xanh dương, xanh lá, cam, vàng, đỏ. Không dùng tím.
+   Khối này nằm cuối file nên ghi đè các style cũ phía trên.
+   ========================================================= */
+:host {
+  --fs-bg: #FFFFFF;
+  --fs-surface: #FFFFFF;
+  --fs-surface-2: #F4F4F2;
+  --fs-line: #E5E5E0;
+  --fs-fg: #252823;
+  --fs-muted: #747770;
+  --fs-muted-2: #9A9D95;
+  --fs-blue: #3478F6;   --fs-blue-l: #EAF2FF;   --fs-blue-d: #2057B5;
+  --fs-green: #269B62;  --fs-green-l: #E5F5EB;  --fs-green-d: #176B43;
+  --fs-orange: #F28C28; --fs-orange-l: #FFF0DE; --fs-orange-d: #B95E0C;
+  --fs-yellow: #F4C542; --fs-yellow-l: #FFF7D6; --fs-yellow-d: #8A6900;
+  --fs-red: #E05252;    --fs-red-l: #FDEAEA;    --fs-red-d: #A92F2F;
+  --fs-card-shadow: 0 1px 2px rgba(37, 40, 35, .04), 0 1px 0 rgba(37, 40, 35, .02);
+  --fs-r: 12px;
+  --fs-r-lg: 14px;
+
+  /* nối token cũ của dashboard sang FlowSpace */
+  --dash-bg: var(--fs-bg);
+  --dash-surface: var(--fs-surface);
+  --dash-surface-2: var(--fs-surface-2);
+  --dash-text: var(--fs-fg);
+  --dash-muted: var(--fs-muted);
+  --dash-border: var(--fs-line);
+  --dash-border-strong: var(--fs-line);
+  --dash-shadow: var(--fs-card-shadow);
+  --dash-hover: var(--fs-surface-2);
+  --dash-accent: var(--fs-blue);
+  --dash-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --dash-box-gap: 16px;
+
+  /* màu trạng thái: giữ nguyên ý nghĩa, đổi sang tông FlowSpace */
+  --st-pass: var(--fs-blue);
+  --st-pending: var(--fs-yellow);
+  --st-hold: var(--fs-orange);
+  --st-ok: var(--fs-green);
+  --st-ng: var(--fs-red);
+  --st-ready: var(--fs-muted-2);
+  --b-red: var(--fs-red);
+  --b-yellow: var(--fs-yellow);
+  --b-green: var(--fs-green);
+  --b-gray: var(--fs-muted-2);
+}
+
+:host :focus-visible { outline: 2px solid var(--fs-blue); outline-offset: 2px; }
+
+/* ── Topbar: tiêu đề lớn + mô tả xám (giống .topbar / .board-title) ── */
+.dash-topbar { padding: 4px 0 14px; align-items: center; }
+.dash-topbar__logo { height: 36px; }
+.dash-topbar__title { font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.dash-topbar__sub { font-size: 13px; margin-top: 2px; }
+.dash-pill,
+.dash-iconbtn {
+  box-shadow: none;
+  border: 1px solid var(--fs-line);
+  background: var(--fs-surface);
+}
+.dash-pill { height: 34px; border-radius: 980px; }
+.dash-pill__label { font-weight: 600; letter-spacing: .02em; }
+.dash-select { background: var(--fs-surface); border-color: var(--fs-line); font-weight: 600; }
+.dash-iconbtn { border-radius: 8px; transition: background .15s; }
+.dash-iconbtn:hover:not(:disabled) { background: var(--fs-surface-2); }
+.dash-iconbtn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── KPI: số lớn, nhãn xám, không icon (giống .fs-kpi) ── */
+.fs-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.fs-kpi {
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-line);
+  border-radius: var(--fs-r);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  box-shadow: var(--fs-card-shadow);
+}
+.fs-kpi b {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--fs-fg);
+}
+.fs-kpi span { color: var(--fs-muted); font-size: 12.5px; }
+.fs-kpi small { color: var(--fs-muted-2); font-size: 11.5px; }
+.fs-kpi.t-blue b { color: var(--fs-blue-d); }
+.fs-kpi.t-green b { color: var(--fs-green-d); }
+.fs-kpi.t-orange b { color: var(--fs-orange-d); }
+.fs-kpi.t-red b { color: var(--fs-red-d); }
+.fs-kpi.t-yellow b { color: var(--fs-yellow-d); }
+
+/* ── Card / panel: nền trắng, viền mảnh, bóng rất nhẹ, không gradient ── */
+.card,
+.dash-surface-card,
+.safety-stock-box,
+.rack-warnings-box,
+.iqc-week-box {
+  background: var(--fs-surface) !important;
+  border: 1px solid var(--fs-line) !important;
+  border-radius: var(--fs-r-lg) !important;
+  box-shadow: var(--fs-card-shadow) !important;
+}
+.chart-card-green,
+.chart-card-blue,
+.chart-card-amber { border-color: var(--fs-line) !important; }
+.dash-widget--clickable,
+.rack-warnings-box { transition: border-color .15s, box-shadow .15s; }
+.dash-widget--clickable:hover,
+.rack-warnings-box:hover {
+  transform: none;
+  border-color: color-mix(in srgb, var(--fs-blue) 35%, var(--fs-line)) !important;
+  box-shadow: 0 0 0 3px var(--fs-blue-l) !important;
+}
+
+/* tiêu đề panel: 14px, đậm vừa, bỏ ô icon màu (giống .panel h3) */
+.dash-widget__head { padding: 16px 16px 0; }
+.dash-widget__title,
+.dash-widget__title-text,
+.dash-chart-title,
+.box-header h5,
+.rack-warnings-box .box-header h5 {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--fs-fg) !important;
+}
+.dash-widget__ico { display: none !important; }
+.box-header h5 .material-icons { display: none !important; }
+
+/* pill phụ trong header: viền mảnh, chữ xám */
+.dash-widget__pill,
+.chart-badge {
+  border: 1px solid var(--fs-line);
+  background: var(--fs-surface);
+  color: var(--fs-muted);
+  font-weight: 600;
+  border-radius: 980px;
+}
+.chart-badge-green {
+  background: var(--fs-green-l);
+  border-color: color-mix(in srgb, var(--fs-green) 34%, transparent);
+  color: var(--fs-green-d);
+}
+.chart-badge-amber {
+  background: var(--fs-orange-l);
+  border-color: color-mix(in srgb, var(--fs-orange) 34%, transparent);
+  color: var(--fs-orange-d);
+}
+.acc-month-line { color: var(--fs-muted); font-size: 12.5px; }
+.acc-month-line strong { color: var(--fs-fg); font-variant-numeric: tabular-nums; }
+.dash-chart-footer,
+.card-footer { border-top: 1px solid var(--fs-line) !important; color: var(--fs-muted) !important; font-size: 12px; }
+
+/* ── Nút: giống .btn (viền mảnh, bo 6px); nút Run = .btn.primary ── */
+.detail-run-btn,
+.detail-viewall-btn,
+.refresh-btn,
+.dash-widget__week-nav-btn,
+.pg-btn {
+  border: 1px solid var(--fs-line) !important;
+  background: var(--fs-surface) !important;
+  color: var(--fs-fg) !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  transition: background .15s, border-color .15s;
+}
+.detail-run-btn {
+  background: var(--fs-blue) !important;
+  border-color: var(--fs-blue) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.detail-run-btn:hover:not(:disabled) { background: var(--fs-blue-d) !important; border-color: var(--fs-blue-d) !important; }
+.detail-viewall-btn:hover,
+.refresh-btn:hover,
+.dash-widget__week-nav-btn:hover:not(:disabled),
+.pg-btn:not(:disabled):hover { background: var(--fs-surface-2) !important; }
+.detail-run-btn:disabled,
+.dash-widget__week-nav-btn:disabled,
+.pg-btn:disabled { opacity: .5; cursor: not-allowed; }
+.refresh-btn i,
+.dash-widget__week-nav-btn i.material-icons { color: var(--fs-muted) !important; }
+
+/* ── Header 2 bảng chi tiết: bỏ nền màu, chỉ còn tiêu đề + mô tả ── */
+.custom-card-header {
+  background: var(--fs-surface) !important;
+  border-bottom: 1px solid var(--fs-line);
+  padding: 16px 16px 12px;
+  border-radius: var(--fs-r-lg) var(--fs-r-lg) 0 0;
+}
+.custom-card-title { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+.custom-card-desc { font-size: 12.5px; margin-top: 2px; }
+
+/* ── Bảng: giống .pf-table (đầu bảng xám nhạt, kẻ ngang mảnh, không sọc) ── */
+.workorder-status-table {
+  border-collapse: separate !important;
+  border-spacing: 0;
+  border: 1px solid var(--fs-line) !important;
+  border-radius: var(--fs-r) !important;
+  font-size: 13px;
+}
+.workorder-status-table th,
+.workorder-status-table td,
+.dash-widget .workorder-status-table th,
+.dash-widget .workorder-status-table td {
+  border-width: 0 0 1px 0 !important;
+  border-color: var(--fs-line) !important;
+  font-size: 13px !important;
+  padding: 9px 10px !important;
+  font-variant-numeric: tabular-nums;
+}
+.workorder-status-table th,
+.dash-widget .workorder-status-table th {
+  background: var(--fs-surface-2) !important;
+  color: var(--fs-muted) !important;
+  font-weight: 600 !important;
+  font-size: 11.5px !important;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.workorder-status-table tbody tr:last-child td { border-bottom: 0 !important; }
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(odd),
+.dashboard-status-boards .workorder-status-table.table-striped tbody tr:nth-of-type(even) {
+  background-color: var(--fs-surface) !important;
+}
+.dashboard-status-boards .workorder-status-table tbody tr:hover { background-color: var(--fs-surface-2) !important; }
+
+/* chip trạng thái: nền nhạt cùng họ màu, chữ đậm hơn (giống .chip) */
+.status-badge {
+  height: auto;
+  padding: 1px 9px;
+  font-weight: 600;
+  border-radius: 980px;
+  background: color-mix(in srgb, var(--cc, #9A9D95) 16%, #fff) !important;
+  color: color-mix(in srgb, var(--cc, #9A9D95) 58%, #1d1f1b) !important;
+  border: 1px solid color-mix(in srgb, var(--cc, #9A9D95) 34%, transparent) !important;
+}
+.status-badge--green { --cc: var(--fs-green); }
+.status-badge--amber { --cc: var(--fs-orange); }
+.status-badge--blue { --cc: var(--fs-blue); }
+.status-badge--red { --cc: var(--fs-red); }
+
+/* ── Ô trống / đang tải: viền nét đứt (giống .fs-empty) ── */
+.dash-run-empty,
+.dash-run-loading {
+  border: 1px dashed var(--fs-line);
+  border-radius: var(--fs-r);
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+/* ── Safety stock: ô ngày theo họ màu FlowSpace ── */
+.weekday-item { border-radius: 10px; }
+.weekday-item.late      { background: var(--fs-red-l);     border-color: var(--fs-red);     color: var(--fs-red-d); }
+.weekday-item.inventory { background: var(--fs-yellow-l);  border-color: var(--fs-yellow);  color: var(--fs-yellow-d); }
+.weekday-item.regular   { background: var(--fs-surface);   border-color: var(--fs-line);    color: var(--fs-fg); }
+.weekday-item.scan-day  { background: var(--fs-blue-l);    border-color: var(--fs-blue);    color: var(--fs-blue-d); }
+.weekday-item.unknown   { background: var(--fs-surface-2); border-color: var(--fs-muted-2); color: var(--fs-muted); }
+
+/* ── Chú thích màu: chấm vuông bo nhẹ, chữ xám (giống .fs-legend) ── */
+.wo-heatmap-legend,
+.pdg-legend { color: var(--fs-muted); font-size: 12px; }
+.wo-legend-dot,
+.pdg-legend__dot { border-radius: 3px !important; }
+

@@ -54,61 +54,26 @@
     </div>
     
     <!-- KPI Cards Section - desktop only -->
-    <div class="dash-grid dash-grid--kpis" *ngIf="!isMobileLayout">
-      <div class="card p-3 kpi-card kpi-card-workorder">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <p class="text-uppercase small mb-1 kpi-label">WORK ORDER</p>
-            <h3 class="fw-bold kpi-value">{{ workOrder }}</h3>
-            <p class="text-muted small">Hoàn thành / Tổng</p>
-          </div>
-          <div class="kpi-icon">
-            <i class="material-icons">assignment</i>
-          </div>
-        </div>
-        <div class="kpi-spark kpi-spark--green"></div>
+    <div class="fs-kpis" *ngIf="!isMobileLayout">
+      <div class="fs-kpi t-blue">
+        <b>{{ workOrder }}</b>
+        <span>Work Order</span>
+        <small>Hoàn thành / Tổng</small>
       </div>
-
-      <div class="card p-3 kpi-card kpi-card-shipment">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <p class="text-uppercase small mb-1 kpi-label">SHIPMENT</p>
-            <h3 class="fw-bold kpi-value">{{ shipment }}</h3>
-            <p class="text-muted small">Đã Ship / Tổng số</p>
-          </div>
-          <div class="kpi-icon">
-            <i class="material-icons">inventory_2</i>
-          </div>
-        </div>
-        <div class="kpi-spark kpi-spark--sky"></div>
+      <div class="fs-kpi t-blue">
+        <b>{{ shipment }}</b>
+        <span>Shipment</span>
+        <small>Đã ship / Tổng số</small>
       </div>
-
-      <div class="card p-3 kpi-card kpi-card-otd">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <p class="text-uppercase small mb-1 kpi-label">OTD</p>
-            <h3 class="fw-bold kpi-value">100%</h3>
-            <p class="text-muted small">This month</p>
-          </div>
-          <div class="kpi-icon">
-            <i class="material-icons">track_changes</i>
-          </div>
-        </div>
-        <div class="kpi-spark kpi-spark--orange"></div>
+      <div class="fs-kpi t-green">
+        <b>100%</b>
+        <span>OTD</span>
+        <small>Tháng này</small>
       </div>
-
-      <div class="card p-3 kpi-card kpi-card-safety">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <p class="text-uppercase small mb-1 kpi-label">SAFETY</p>
-            <h3 class="fw-bold kpi-value">100%</h3>
-            <p class="text-muted small">Since Dec-2018</p>
-          </div>
-          <div class="kpi-icon">
-            <i class="material-icons">health_and_safety</i>
-          </div>
-        </div>
-        <div class="kpi-spark kpi-spark--red"></div>
+      <div class="fs-kpi t-green">
+        <b>100%</b>
+        <span>Safety</span>
+        <small>Từ 12/2018</small>
       </div>
     </div>
 
@@ -473,13 +438,12 @@
 
       <!-- Work Order Details -->
       <div class="card">
-        <div class="custom-card-header custom-card-header-purple detail-card-header">
+        <div class="custom-card-header detail-card-header">
           <div class="detail-card-header__left">
             <h4 class="custom-card-title">
-              <i class="material-icons detail-header-ico detail-header-ico--green">assignment</i>
-              Work Order Status - {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }} (Details)
+              Work Order Status · {{ selectedFactory === 'ASM1' ? 'ASM1 + Sample 1' : 'ASM2 + Sample 2' }}
             </h4>
-            <p class="custom-card-desc">Weekly: Thứ 2 – Thứ 7 (6 ngày làm việc)</p>
+            <p class="custom-card-desc">Theo tuần: Thứ 2 – Thứ 7 (6 ngày làm việc)</p>
           </div>
           <div class="detail-card-header__actions">
             <button type="button" class="detail-run-btn" (click)="runWorkOrderStatus()" [disabled]="woStatusLoading">
@@ -543,14 +507,12 @@
 
       <!-- Shipment — chi tiết: 7 ngày sắp tới -->
       <div class="card">
-        <div class="custom-card-header custom-card-header-amber detail-card-header">
+        <div class="custom-card-header detail-card-header">
           <div class="detail-card-header__left">
-            <h4 class="custom-card-title">
-              <i class="material-icons detail-header-ico detail-header-ico--amber">local_shipping</i>
-              Shipment — chi tiết
-            </h4>
-            <p class="custom-card-desc">
-              Các lô có ngày ship (Dispatch → Request → Import) trong <strong>7 ngày sắp tới</strong> (từ hôm nay), cùng collection <strong>shipments</strong> với tab Shipment — theo nhà máy đang chọn trên dashboard. Cùng <strong>Shipment</strong> và cùng <strong>trạng thái</strong> thì <strong>gộp tổng Carton</strong>; cột ngày ship lấy ngày sớm nhất trong nhóm.
+            <h4 class="custom-card-title">Shipment 7 ngày tới</h4>
+            <p class="custom-card-desc"
+               title="Ngày ship lấy theo Dispatch → Request → Import, cùng dữ liệu với tab Shipment, theo nhà máy đang chọn. Cùng Shipment và cùng trạng thái thì gộp tổng Carton; ngày ship lấy ngày sớm nhất trong nhóm.">
+              Các lô có ngày ship từ hôm nay đến 7 ngày tới. Cùng Shipment và trạng thái thì gộp tổng Carton.
             </p>
           </div>
           <div class="detail-card-header__actions">

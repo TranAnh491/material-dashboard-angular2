@@ -185,6 +185,36 @@
       outline: none;
     }
   }
+
+  .scan-axone-input {
+    width: 320px;
+    min-width: 180px;
+
+    &:focus {
+      background-color: #e3f2fd !important;
+      border-color: #2196F3 !important;
+      box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2) !important;
+      outline: none;
+    }
+  }
+}
+
+.axone-phase {
+  color: #1565c0;
+}
+
+.axone-status {
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 420px;
+}
+
+.axone-status--ok {
+  color: #1b5e20;
+}
+
+.axone-status--ng {
+  color: #b71c1c;
 }
 
 .scanned-list-wrap {

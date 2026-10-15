@@ -20,7 +20,31 @@
             <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
             <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedCarton()}}</strong> thùng, <strong>{{getCurrentPalletScannedQuantity()}}</strong> pcs</span>
           </div>
-          <div class="scan-inputs-row">
+          <div class="scan-inputs-row" *ngIf="checkMode === 'pn-qty-axone'">
+            <span class="scan-info-item axone-phase">
+              {{ axonePhase === 'internal' ? '1. Tem nội bộ' : '2. Tem khách' }}
+            </span>
+            <input type="text"
+                   class="custom-input scan-axone-input"
+                   [(ngModel)]="currentScanInput"
+                   (keyup.enter)="onAxoneScan()"
+                   [placeholder]="axonePhase === 'internal' ? 'Scan tem nội bộ (MãTP|SốPcs|...)' : 'Scan tem khách'"
+                   readonly
+                   (focus)="$event.target.removeAttribute('readonly')"
+                   (blur)="$event.target.setAttribute('readonly', 'readonly')">
+            <span class="axone-status" *ngIf="axoneStatus" [class.axone-status--ok]="axoneStatusOk === true" [class.axone-status--ng]="axoneStatusOk === false">
+              {{ axoneStatus }}
+            </span>
+            <button class="custom-btn btn-success" (click)="saveScannedData()" [disabled]="scannedItems.length === 0">
+              <i class="material-icons">check_circle</i>
+              Done
+            </button>
+            <button class="custom-btn" (click)="resetCheck()">
+              <i class="material-icons">close</i>
+              Hủy
+            </button>
+          </div>
+          <div class="scan-inputs-row" *ngIf="checkMode !== 'pn-qty-axone'">
             <input type="text" 
                    class="custom-input scan-material-input" 
                    [(ngModel)]="currentScanInput"
@@ -199,9 +223,10 @@
                             [ngModel]="row.item.display?.checkTypeLabel"
                             (ngModelChange)="onCheckTypeChange(row.item, $event)"
                             [disabled]="row.item.isLocked"
-                            title="Thùng = Check Thùng, Lượng = Check Số lượng">
+                            title="Thùng = Check Thùng, Lượng = Check Số lượng, Lượng Axone = đối chiếu 2 tem">
                       <option value="Thùng">Thùng</option>
                       <option value="Lượng">Lượng</option>
+                      <option value="Lượng Axone">Lượng Axone</option>
                     </select>
                   </td>
                   <td class="notes-cell" [class.notes-warning]="row.item.display?.checkNote">
@@ -260,6 +285,10 @@
         <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn-qty')">
           <i class="material-icons">numbers</i>
           Check Số Lượng
+        </button>
+        <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn-qty-axone')">
+          <i class="material-icons">compare_arrows</i>
+          Check Lượng (Axone)
         </button>
       </div>
     </div>

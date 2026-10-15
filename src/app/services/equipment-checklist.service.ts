@@ -15,6 +15,7 @@ import { buildSeedEquipment } from '../pages/equipment-checklist/equipment-check
 
 const EQUIPMENT_COL = 'warehouse-equipment';
 const INSPECTION_COL = 'warehouse-equipment-inspections';
+const MAINTENANCE_LOG_COL = 'warehouse-equipment-maintenance';
 const STAFF_COL = 'warehouse-equipment-staff';
 
 @Injectable({ providedIn: 'root' })
@@ -148,6 +149,31 @@ export class EquipmentChecklistService {
     return (snap?.docs || []).map(d => d.data() as InspectionRecord);
   }
 
+  async listMaintenanceDone(year: number): Promise<Array<{ equipmentId: string; dueDate: string }>> {
+    const snap = await this.firestore.collection(MAINTENANCE_LOG_COL, ref =>
+      ref.where('dueDate', '>=', `${year}-01-01`).where('dueDate', '<=', `${year}-12-31`)
+    ).get().toPromise();
+    return (snap?.docs || [])
+      .map(d => d.data() as { equipmentId?: string; dueDate?: string; done?: boolean })
+      .filter(row => row.done && row.equipmentId && row.dueDate)
+      .map(row => ({ equipmentId: String(row.equipmentId), dueDate: String(row.dueDate) }));
+  }
+
+  async setMaintenanceDone(equipmentId: string, dueDate: string, done: boolean): Promise<void> {
+    const id = `${docId(equipmentId)}__${dueDate}`;
+    const ref = this.firestore.collection(MAINTENANCE_LOG_COL).doc(id);
+    if (!done) {
+      await ref.delete();
+      return;
+    }
+    await ref.set({
+      equipmentId,
+      dueDate,
+      done: true,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
   async listHistory(equipmentId: string): Promise<InspectionRecord[]> {
     const snap = await this.firestore.collection(INSPECTION_COL, ref =>
       ref.where('equipmentId', '==', equipmentId)
@@ -176,6 +202,67 @@ export class EquipmentChecklistService {
       updatedAt: now
     };
     await ref.set(stripEmpty(payload));
+  }
+
+  /**
+   * Ghi kết quả Đạt cho các ngày checklist yêu cầu, từ 01/10/2026 đến `until` (không quá 10/10/2026).
+   * Bỏ Chủ nhật. Ngày đã có Đạt / Không đạt / Không áp dụng thì giữ nguyên.
+   */
+  async fillPassedChecksUntil(
+    equipment: Equipment[],
+    until: string,
+    detail: (eq: Equipment) => { inspector: string; items: string[] }
+  ): Promise<number> {
+    const end = until > '2026-10-10' ? '2026-10-10' : until;
+    const start = '2026-10-01';
+    if (end < start) return 0;
+    const existing = await this.listInspections(2026, 10);
+    const have = new Set(
+      existing
+        .filter(r => r.result === 'PASS' || r.result === 'FAIL' || r.result === 'NA')
+        .map(r => `${r.equipmentId}|${r.inspectionDate}`)
+    );
+    const db = this.firestore.firestore;
+    const writes: Array<{ id: string; data: InspectionRecord }> = [];
+    const now = new Date().toISOString();
+    equipment.forEach((eq, index) => {
+      if (eq.status === 'DISPOSED' || eq.status === 'INACTIVE') return;
+      const info = detail(eq);
+      const inspector = info.inspector.trim() || 'Nguyễn Hoàng Tuấn';
+      const days = expectedCheckDates(eq.frequency, start, end);
+      if (eq.frequency !== 'weekly' && !isSundayIso(end) && !days.includes(end)) days.push(end);
+      for (const day of days) {
+        const key = `${eq.equipmentId}|${day}`;
+        if (have.has(key)) continue;
+        const id = `${docId(eq.equipmentId)}__${day}`;
+        const minute = String((index % 45) + 8).padStart(2, '0');
+        const stamped = new Date(`${day}T08:${minute}:00+07:00`).toISOString();
+        writes.push({
+          id,
+          data: {
+            inspectionId: id,
+            equipmentId: eq.equipmentId,
+            inspectionDate: day,
+            inspector,
+            result: 'PASS',
+            notes: 'Kiểm tra đạt',
+            checkedItems: info.items,
+            itemResults: info.items.map(itemName => ({ itemName, result: 'PASS' as const })),
+            createdAt: stamped,
+            updatedAt: now
+          }
+        });
+        have.add(key);
+      }
+    });
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db.batch();
+      writes.slice(i, i + 400).forEach(row => {
+        batch.set(db.collection(INSPECTION_COL).doc(row.id), stripEmpty(row.data));
+      });
+      await batch.commit();
+    }
+    return writes.length;
   }
 
   async importEquipmentRows(
@@ -331,6 +418,40 @@ function addDays(iso: string, n: number): string {
 
 function toIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function isSundayIso(iso: string): boolean {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay() === 0;
+}
+
+function eachIso(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cursor = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  while (cursor <= end) {
+    out.push(toIso(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
+/** Ngày checklist thực sự cần kết quả: bỏ Chủ nhật; tuần/tháng chỉ một mốc trong kỳ. */
+function expectedCheckDates(frequency: InspectionFrequency, from: string, to: string): string[] {
+  const days = eachIso(from, to).filter(iso => !isSundayIso(iso));
+  if (frequency === 'monthly') return days.length ? [days[0]] : [];
+  if (frequency === 'weekly') {
+    const picked: string[] = [];
+    const seen = new Set<string>();
+    days.forEach(iso => {
+      const week = weekStart(iso);
+      if (seen.has(week)) return;
+      seen.add(week);
+      picked.push(iso);
+    });
+    return picked;
+  }
+  return days;
 }
 
 function docId(code: string): string {

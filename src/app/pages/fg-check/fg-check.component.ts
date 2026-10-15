@@ -18,7 +18,7 @@ export interface FGCheckItem {
   isChecked: boolean;
   checkId: string;
   scanId?: string; // ID scan khi bắt đầu check (ASP+4 số), dùng hiển thị trong cột ID Check
-  checkMode?: 'pn' | 'pn-qty'; // Lưu mode check của item
+  checkMode?: 'pn' | 'pn-qty' | 'pn-qty-axone'; // Lưu mode check của item
   shipmentCarton?: number; // Số thùng Shipment từ tab shipment
   shipmentQuantity?: number; // Lượng Shipment từ tab shipment
   poShip?: string; // PO Ship để phân biệt các dòng cùng materialCode
@@ -64,7 +64,7 @@ export interface FGCheckItemDisplay {
   carton: number;
   cartonText: string;
   quantityText: string;
-  checkTypeLabel: 'Thùng' | 'Lượng';
+  checkTypeLabel: 'Thùng' | 'Lượng' | 'Lượng Axone';
   checkNote: string;
   isDuplicate: boolean;
   isCartonOk: boolean;
@@ -107,7 +107,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   showCheckDialog: boolean = false;
   checkDialogStep: 'mode' | 'form' = 'mode'; // Trong dialog: chọn mode trước, sau đó nhập ID/Shipment/Pallet
   checkStep: number = 0; // 0 = select mode, 1 = shipment input, 2 = scan pallet, 3 = scan material+qty
-  checkMode: 'pn' | 'pn-qty' = 'pn';
+  checkMode: 'pn' | 'pn-qty' | 'pn-qty-axone' = 'pn';
+  /** Check Lượng Axone: mỗi thùng quét tem nội bộ rồi tem khách. */
+  axonePhase: 'internal' | 'customer' = 'internal';
+  axoneInternal: { materialCode: string; qty: number } | null = null;
+  axoneStatus = '';
+  axoneStatusOk: boolean | null = null;
   /** ID khi quét: lấy 7 ký tự đầu, định dạng ASP + 4 số (VD: ASP1234) */
   scannedCheckId: string = '';
   scannedShipment: string = '';
@@ -673,16 +678,19 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     return Number(item.carton) || 0;
   }
 
-  /** Hiển thị Loại check: Thùng (pn) hoặc Lượng (pn-qty). */
-  getCheckTypeLabel(item: FGCheckItem): 'Thùng' | 'Lượng' {
+  /** Hiển thị Loại check: Thùng (pn), Lượng (pn-qty), Lượng Axone (pn-qty-axone). */
+  getCheckTypeLabel(item: FGCheckItem): 'Thùng' | 'Lượng' | 'Lượng Axone' {
     const mode = item.checkMode || this.checkMode;
-    return mode === 'pn' ? 'Thùng' : 'Lượng';
+    if (mode === 'pn') return 'Thùng';
+    if (mode === 'pn-qty-axone') return 'Lượng Axone';
+    return 'Lượng';
   }
 
   /** Đổi loại check của item và lưu Firebase. */
   onCheckTypeChange(item: FGCheckItem, label: string): void {
     if (item.isLocked) return;
-    const newMode: 'pn' | 'pn-qty' = label === 'Lượng' ? 'pn-qty' : 'pn';
+    const newMode: 'pn' | 'pn-qty' | 'pn-qty-axone' =
+      label === 'Lượng Axone' ? 'pn-qty-axone' : label === 'Lượng' ? 'pn-qty' : 'pn';
     if ((item.checkMode || this.checkMode) === newMode) return;
     item.checkMode = newMode;
     if (!item.id) return;
@@ -738,7 +746,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     const checkMode = item.checkMode || this.checkMode;
     
-    if (checkMode === 'pn-qty') {
+    if (checkMode === 'pn-qty' || checkMode === 'pn-qty-axone') {
       // Check số lượng: so sánh quantity với shipmentQuantity
       return (item.quantity || 0) >= (item.shipmentQuantity || 0);
     } else {
@@ -1210,8 +1218,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  /** Chọn mode Check Thùng hoặc Check Số Lượng, chuyển sang form nhập ID/Shipment/Pallet */
-  selectCheckMode(mode: 'pn' | 'pn-qty'): void {
+  /** Chọn mode Check Thùng, Check Số Lượng hoặc Check Lượng Axone. */
+  selectCheckMode(mode: 'pn' | 'pn-qty' | 'pn-qty-axone'): void {
     this.checkMode = mode;
     this.updateTableColspan();
     this.checkDialogStep = 'form';
@@ -1331,7 +1339,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     // Focus vào input scan mã TP sau khi popup đóng
     setTimeout(() => {
-      const input = document.querySelector('.scan-material-input') as HTMLInputElement;
+      const selector = this.checkMode === 'pn-qty-axone' ? '.scan-axone-input' : '.scan-material-input';
+      const input = document.querySelector(selector) as HTMLInputElement;
       if (input) {
         input.focus();
       }
@@ -1347,6 +1356,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.currentScanInput = '';
     this.currentQtyInput = '';
     this.waitingForQty = false;
+    this.axonePhase = 'internal';
+    this.axoneInternal = null;
+    this.axoneStatus = '';
+    this.axoneStatusOk = null;
     this.isScanning = false;
     this.scannedItems = []; // Reset danh sách scan tạm thời
     this.currentShipmentItems = []; // Reset danh sách shipment items
@@ -1569,6 +1582,165 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }, 100);
     
     this.cdr.detectChanges();
+  }
+
+  /**
+   * Tem nội bộ Axone: P030089_C|120|20261013M007|C
+   * ô 1 = mã TP, ô 2 = số pcs.
+   */
+  private parseAxoneInternalQr(raw: string): { materialCode: string; qty: number } | null {
+    const parts = String(raw || '').trim().split('|').map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+    const materialCode = parts[0].toUpperCase();
+    if (!/^\d+$/.test(parts[1])) return null;
+    const qty = parseInt(parts[1], 10);
+    if (!materialCode || !Number.isFinite(qty) || qty <= 0) return null;
+    return { materialCode, qty };
+  }
+
+  /** Đang chờ tem khách mà quét lại tem nội bộ (MãTP|pcs|lot|...) thì nhận thùng mới. */
+  private isAxoneInternalRescan(raw: string): boolean {
+    const parts = String(raw || '').trim().split('|').map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 3 || !/^\d+$/.test(parts[1])) return false;
+    return /^[PTML]\d{6}/i.test(parts[0]);
+  }
+
+  private readAxoneQtyToken(token: string): number {
+    const t = String(token || '').trim().toUpperCase().replace(/PCS$/, '');
+    if (!/^\d+$/.test(t)) return 0;
+    const n = parseInt(t, 10);
+    return n > 0 ? n : 0;
+  }
+
+  /** Tem khách: lấy mã KH (khớp danh mục) và lượng (ô số hoặc token số). */
+  private parseAxoneCustomerQr(raw: string): { customerCode: string; qty: number } | null {
+    const text = String(raw || '').trim().toUpperCase();
+    if (!text) return null;
+    const parts = text.split('|').map((p) => p.trim()).filter(Boolean);
+    const tokens = parts.length ? parts : text.split(/[\s,;]+/).filter(Boolean);
+
+    let qty = 0;
+    if (parts.length >= 2) qty = this.readAxoneQtyToken(parts[1]);
+    if (!qty) {
+      for (const t of tokens) {
+        const n = this.readAxoneQtyToken(t);
+        if (n > 0) {
+          qty = n;
+          break;
+        }
+      }
+    }
+
+    let customerCode = '';
+    for (const t of tokens) {
+      if (this.customerMappings.has(t)) {
+        customerCode = t;
+        break;
+      }
+    }
+    if (!customerCode) {
+      let best = '';
+      this.customerMappings.forEach((_codes, key) => {
+        if (key.length >= 3 && text.includes(key) && key.length > best.length) best = key;
+      });
+      customerCode = best;
+    }
+    if (!customerCode) {
+      customerCode = tokens.find((t) => this.readAxoneQtyToken(t) <= 0) || '';
+    }
+    if (!customerCode || qty <= 0) return null;
+    return { customerCode, qty };
+  }
+
+  private customerCodeMatchesMaterial(customerCode: string, materialCode: string): boolean {
+    const candidates = this.customerMappings.get(String(customerCode || '').trim().toUpperCase()) || [];
+    const target = String(materialCode || '').trim().toUpperCase();
+    return candidates.some((c) => String(c || '').trim().toUpperCase() === target);
+  }
+
+  private focusAxoneInput(): void {
+    setTimeout(() => {
+      const input = document.querySelector('.scan-axone-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 80);
+  }
+
+  /**
+   * Mỗi thùng: scan tem nội bộ → scan tem khách → đối chiếu mã TP/mã KH và lượng.
+   * Khớp thì ghi 1 thùng, rồi quay lại scan tem nội bộ của thùng mới.
+   */
+  onAxoneScan(): void {
+    const raw = String(this.currentScanInput || '').trim();
+    if (!raw) return;
+
+    if (this.axonePhase === 'internal' || this.isAxoneInternalRescan(raw)) {
+      const parsed = this.parseAxoneInternalQr(raw);
+      this.currentScanInput = '';
+      if (!parsed) {
+        this.axoneStatusOk = false;
+        this.axoneStatus = 'Tem nội bộ không đúng. Cần dạng MãTP|SốPcs|... (vd P030089_C|120|...).';
+        alert(this.axoneStatus);
+        this.focusAxoneInput();
+        return;
+      }
+      this.axoneInternal = parsed;
+      this.axonePhase = 'customer';
+      this.axoneStatusOk = null;
+      this.axoneStatus = `Tem nội bộ: ${parsed.materialCode} · ${parsed.qty} pcs. Quét tem khách của thùng này.`;
+      this.cdr.detectChanges();
+      this.focusAxoneInput();
+      return;
+    }
+
+    const internal = this.axoneInternal;
+    const customer = this.parseAxoneCustomerQr(raw);
+    this.currentScanInput = '';
+    if (!internal) {
+      this.axonePhase = 'internal';
+      this.axoneStatusOk = false;
+      this.axoneStatus = 'Chưa có tem nội bộ. Quét tem nội bộ trước.';
+      this.focusAxoneInput();
+      return;
+    }
+    if (!customer) {
+      this.axoneStatusOk = false;
+      this.axoneStatus = 'Không đọc được mã KH và lượng trên tem khách. Quét lại tem khách.';
+      alert(this.axoneStatus);
+      this.focusAxoneInput();
+      return;
+    }
+    if (customer.qty !== internal.qty) {
+      this.axoneStatusOk = false;
+      this.axoneStatus = `Lượng không khớp: tem khách ${customer.qty} pcs, tem nội bộ ${internal.qty} pcs. Quét lại tem khách.`;
+      alert(this.axoneStatus);
+      this.cdr.detectChanges();
+      this.focusAxoneInput();
+      return;
+    }
+    if (!this.customerCodeMatchesMaterial(customer.customerCode, internal.materialCode)) {
+      this.axoneStatusOk = false;
+      this.axoneStatus = `Mã không khớp: tem khách "${customer.customerCode}" không map tới mã TP ${internal.materialCode}. Quét lại tem khách.`;
+      alert(this.axoneStatus);
+      this.cdr.detectChanges();
+      this.focusAxoneInput();
+      return;
+    }
+
+    this.scannedItems.push({
+      materialCode: internal.materialCode,
+      quantity: internal.qty,
+      customerCode: customer.customerCode
+    });
+    this.saveSingleScannedItem(customer.customerCode, internal.materialCode, internal.qty);
+    this.axoneInternal = null;
+    this.axonePhase = 'internal';
+    this.axoneStatusOk = true;
+    this.axoneStatus = `OK: ${internal.materialCode} · ${internal.qty} pcs · mã KH ${customer.customerCode}. Scan thùng mới — quét tem nội bộ.`;
+    this.cdr.detectChanges();
+    this.focusAxoneInput();
   }
 
   /** Lưu một item đơn lẻ vào Firebase. Check Thùng (pn): mỗi lần scan = cộng đúng 1 thùng (carton+1), không cộng quantity. */

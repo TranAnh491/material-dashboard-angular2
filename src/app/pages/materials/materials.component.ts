@@ -48,6 +48,8 @@ import {
   formatJRackBlock,
   compactJRackLocations
 } from './layout-location-catalog';
+import { normalizeShelfGroups, shelfGroupRows } from './shelf-group-catalog';
+import { B037_REQUIRED_LOCATION, isB037Code } from './fridge-nvl-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
@@ -59,6 +61,13 @@ import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { buildTemThungQrData, stripTemThungMarker } from '../../services/tem-thung-qr.util';
+import {
+  MaterialQrLabel,
+  buildMaterialQrLabelDocument,
+  formatMaterialLabelType,
+  materialLabelTraIconType,
+  parseMaterialQrLabelFields
+} from '../../services/material-qr-label.util';
 import * as firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
@@ -295,6 +304,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private kkLocMapTypeCache = new Map<string, InventoryMaterial[]>();
   private kkLocMapLoadId = 0;
   kkLocMapBusy = false;
+  /** Menu thả xuống trên thanh công cụ trang KK: 'print' = In & báo cáo, 'tools' = Công cụ */
+  kkToolMenu: 'print' | 'tools' | null = null;
   kkLiveActive = false;
   kkLiveLoading = false;
   kkLiveError = '';
@@ -324,6 +335,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
   kkLocMapExpandedKey: string | null = null;
   showKkCatalogPopup = false;
+  kkCatalogTab: 'codes' | 'shelves' = 'codes';
+  kkShelfRows: Array<{ shelf: string; groups: string }> = [];
+  kkShelfSaving = false;
   showTieuHuyPopup = false;
   tieuHuyImporting = false;
   tieuHuyBusy = false;
@@ -350,7 +364,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private tieuHuyLinkQMap = new Map<string, number>();
   private readonly tieuHuyWarehouseValue = 'TIEUHUY';
   kkCatalogEntries: KkCatalogEntry[] = [];
-  kkCatalogAisleRows: Array<{ shelf: string; groups: string; family: 'R' | 'S' }> = [];
   kkCatalogQuery = '';
   kkCatalogLoading = false;
   kkCatalogImporting = false;
@@ -422,6 +435,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   };
   /** Mở danh sách mã phẳng (Chi tiết) theo đầu mã B009/B016/B018 — đã thay bằng bảng KK */
   kkConnectorFloorCodesOpen: Record<string, boolean> = {};
+  /** Sơ đồ kệ B009/B016/B018 chỉ mở khi bấm Sơ Đồ. */
+  kkConnectorBoardOpen: Record<string, boolean> = {};
+  /** null = chưa set, mọi vị trí đều chọn được. */
+  kkMucAllowedLocs: Record<string, string[] | null> = {};
+  kkMucLocPicker: {
+    category: string;
+    shelves: Array<{ shelf: string; levels: Array<{ level: number; locs: string[] }> }>;
+  } | null = null;
+  kkMucLocPickerOn: Record<string, boolean> = {};
+  kkMucLocPickerSaving = false;
+  private kkMucAllowedLoaded = false;
+  kkMucExtraShelves: Record<string, string[]> = {};
+  kkMucRemovedShelves: Record<string, string[]> = {};
+  kkMucShelfMenuCategory = '';
+  kkMucShelfMenuX = 0;
+  kkMucShelfMenuY = 0;
+  kkMucShelfDraft = '';
+  kkMucShelfSaving = false;
   /** Chi tiết KK theo tầng mâm (B009/B016/B018) — hiện bảng kiểm kê mọi mã trong dải */
   kkConnectorFloorDetail: {
     prefix: string;
@@ -757,6 +788,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     { id: 'NG', label: 'Kho NG', icon: 'report' }
   ];
   private searchSubject = new Subject<string>();
+  /** Tăng mỗi lần search/xóa search — kết quả cũ về trễ không được ghi đè số bag. */
+  private searchRequestId = 0;
   
   // 🚀 OPTIMIZATION: Add loading states
   isSearching = false;
@@ -949,6 +982,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   invLocListMaterial: InventoryMaterial | null = null;
   /** Tick chọn vị trí để xóa trong popup. */
   invLocListSelected: Record<string, boolean> = {};
+  /** Cột Vị trí bảng tồn kho: chọn kệ mẹ rồi kệ con, thay vị trí hiện tại. */
+  showInvShelfPicker = false;
+  invShelfPickMaterial: InventoryMaterial | null = null;
+  invShelfPickParent: string | null = null;
+  invShelfPickQuery = '';
+  invShelfPickSaving = false;
   /** Dọn vị trí sai hàng loạt (toàn nhà máy). */
   showBulkDisposableLocPicker = false;
   bulkDisposableLocBusy = false;
@@ -1753,7 +1792,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         remarks: '',
         isCompleted: false
       } as any;
-      this.createQRPrintWindow(qrImages, fakeMaterial, true);
+      this.createQRPrintWindow(qrImages, fakeMaterial, true, false, invRows);
 
       const batch = this.firestore.firestore.batch();
       for (const mc of orderedMats) {
@@ -2463,7 +2502,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         isCompleted: false
       };
 
-      this.createQRPrintWindow(qrImages, fakeMaterial, true);
+      this.createQRPrintWindow(qrImages, fakeMaterial, true, false, inventoryRows);
 
       // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới
       if (this.REPRINT_FLAG_RULE_ENABLED) {
@@ -3126,6 +3165,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   onDocumentClick(): void {
     if (this.skipKkTypeBoxMenuClose) return;
     this.closeKkTypeBoxMenu();
+    this.closeKkMucShelfMenu();
   }
 
   /** Detect mobile / PDA — dùng giao diện xem tồn đơn giản. */
@@ -3772,6 +3812,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const fullCount = Math.floor(stock / sp);
     const partial = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
     return partial <= 1e-9 ? `${fullCount}` : `${fullCount}+1`;
+  }
+
+  /** Số bag đúng bằng cột BAG ("20" hoặc "20+1" = 21). Dùng cho ô Tổng bag. */
+  private displayedBagCount(material: InventoryMaterial): number {
+    const sp = this.getEffectiveStandardPacking(material);
+    const stock = this.calculateCurrentStock(material);
+    if (!sp || sp <= 0) {
+      const stored = Number(material.totalBags ?? 0);
+      return stored > 0 && Number.isFinite(stored) ? Math.floor(stored) : 0;
+    }
+    if (stock <= 0) return 0;
+    const fullCount = Math.floor(stock / sp);
+    const partial = Math.round((stock - fullCount * sp) * 1e6) / 1e6;
+    return partial <= 1e-9 ? fullCount : fullCount + 1;
   }
 
   getBagsBreakdownTitle(material: InventoryMaterial): string {
@@ -4860,6 +4914,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyCatalogToMaterials(this.inventoryMaterials);
     this.kkLocMapTypeCache.forEach(list => this.applyCatalogToMaterials(list));
     this.invalidateKkTypeViewCache();
+    this.updateTotalStockCount();
   }
 
   private mergeNvlItemIntoCatalogCache(item: {
@@ -5467,15 +5522,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Clear search and reset to initial state
   clearSearch(): void {
+    this.searchRequestId++;
     this.searchTerm = '';
     this.searchByKk = false;
     this.showOnlyNegativeStock = false;
+    this.isLoading = false;
+    this.isSearching = false;
     if (this.viewWarehouseFilter) {
       void this.loadViewWarehouseInventory();
       return;
     }
     this.filteredInventory = [];
     this.inventoryMaterials = [];
+    this.displayedInventory = [];
+    this.currentPage = 1;
+    this.totalPages = 1;
+    this.updateTotalStockCount();
 
     // Return to initial state - no data displayed
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
@@ -5542,6 +5604,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         void this.refreshLastStatusForMaterials(this.filteredInventory);
         void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
           this.applyCatalogToMaterials(this.inventoryMaterials);
+          this.updateTotalStockCount();
           void this.applyStorageUnitsFromCatalog();
           if (this.showKhColumn) void this.applyNvlkhFromCatalog();
           this.cdr.markForCheck();
@@ -5780,6 +5843,111 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.invLocListSelected = {};
   }
 
+  openInvShelfPicker(material: InventoryMaterial, event?: Event): void {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!material) return;
+    this.invShelfPickMaterial = material;
+    this.invShelfPickParent = null;
+    this.invShelfPickQuery = '';
+    this.showInvShelfPicker = true;
+    this.cdr.detectChanges();
+  }
+
+  closeInvShelfPicker(): void {
+    if (this.invShelfPickSaving) return;
+    this.showInvShelfPicker = false;
+    this.invShelfPickMaterial = null;
+    this.invShelfPickParent = null;
+    this.invShelfPickQuery = '';
+  }
+
+  /** Kệ mẹ: dãy R, dãy S kho mát, khu khác (HOACHAT, Frigde, Locker…). */
+  get invShelfParentSections(): Array<{ title: string; parents: Array<{ id: string; hasChildren: boolean }> }> {
+    const q = this.invShelfPickQuery.trim().toUpperCase();
+    const match = (id: string) => !q || id.toUpperCase().includes(q);
+    const jGroups = getLayoutLocationGroups('J');
+    const mix = getLayoutLocationGroups('ASM1').find((g) => g.id === 'mix')?.slots || [];
+    const sections = [
+      {
+        title: 'Dãy kệ R',
+        parents: jGroups.filter((g) => /^R\d+$/.test(g.id)).map((g) => ({ id: g.id, hasChildren: true }))
+      },
+      {
+        title: 'Dãy kệ S · Kho mát',
+        parents: jGroups.filter((g) => /^S\d{2}$/.test(g.id)).map((g) => ({ id: g.id, hasChildren: true }))
+      },
+      {
+        title: 'Khu khác',
+        parents: mix.map((id) => ({ id, hasChildren: false }))
+      }
+    ];
+    return sections
+      .map((s) => ({ ...s, parents: s.parents.filter((p) => match(p.id)) }))
+      .filter((s) => s.parents.length);
+  }
+
+  /** Kệ con: R05 → R05-1…R05-6; S07 → S07-1-1…S07-3-7. */
+  get invShelfChildren(): string[] {
+    const parent = this.invShelfPickParent;
+    if (!parent) return [];
+    const rack = /^R0*(\d{1,2})$/.exec(parent);
+    if (rack) {
+      return Array.from({ length: 6 }, (_, i) => formatJRackBlock(Number(rack[1]), i + 1));
+    }
+    if (/^S\d{2}$/.test(parent)) {
+      return getLayoutLocationGroups('J').find((g) => g.id === parent)?.slots || [];
+    }
+    return [];
+  }
+
+  isInvShelfCurrent(token: string): boolean {
+    const m = this.invShelfPickMaterial;
+    if (!m) return false;
+    return this.locationParts(m.location).some(
+      (t) => this.kkScanLocationsEqual(t, token) || String(t).trim().toUpperCase() === token.toUpperCase()
+    );
+  }
+
+  pickInvShelfParent(parent: { id: string; hasChildren: boolean }): void {
+    if (parent.hasChildren) {
+      this.invShelfPickParent = parent.id;
+      this.cdr.detectChanges();
+      return;
+    }
+    void this.applyInvShelfPick(parent.id);
+  }
+
+  backInvShelfParent(): void {
+    this.invShelfPickParent = null;
+    this.cdr.detectChanges();
+  }
+
+  async applyInvShelfPick(token: string): Promise<void> {
+    const m = this.invShelfPickMaterial;
+    if (!m?.id || this.invShelfPickSaving) return;
+    if (!this.canEditInvLocation()) {
+      alert('Cần quyền sửa vị trí.');
+      return;
+    }
+    this.invShelfPickSaving = true;
+    this.cdr.detectChanges();
+    try {
+      await this.applyInvLocListParts(m, [token]);
+    } finally {
+      this.invShelfPickSaving = false;
+    }
+    this.closeInvShelfPicker();
+    this.cdr.detectChanges();
+  }
+
+  /** Từ popup chọn kệ → mở danh sách vị trí hiện tại (xem / xóa). */
+  openInvLocListFromShelfPicker(): void {
+    const m = this.invShelfPickMaterial;
+    this.closeInvShelfPicker();
+    if (m) this.openInvLocListPopup(m);
+  }
+
   /** Key ổn định cho tick chọn trong popup. */
   invLocListKey(loc: string): string {
     return String(loc || '').trim().toUpperCase();
@@ -5801,7 +5969,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (/^NVL[A-Z]?\d*/.test(c) || c.startsWith('NVLA') || c.startsWith('NVLH') || c.startsWith('NVL')) {
       return 'NVL cũ';
     }
-    if (this.kkWarehouseFromLocation(raw) === 'D1' || this.kkWarehouseFromLocation(bare) === 'D1') {
+    if (this.kkWarehouseFromLocationLegacy(raw) === 'D1' || this.kkWarehouseFromLocationLegacy(bare) === 'D1') {
       // S/R-… kho J không vào đây (persistent). Token D1 còn lại.
       if (!this.isKkPersistentLocation(raw)) return 'Kho D1';
     }
@@ -6190,6 +6358,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Perform search — mã hàng hoặc vị trí (tick Location)
   private async performSearch(searchTerm: string): Promise<void> {
+    const requestId = ++this.searchRequestId;
+    const stillCurrent = () => requestId === this.searchRequestId;
+
     if (this.searchByKk) {
       this.searchTerm = searchTerm;
       this.applyFilters();
@@ -6203,18 +6374,36 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       this.filteredInventory = [];
       this.inventoryMaterials = [];
+      this.displayedInventory = [];
+      this.currentPage = 1;
+      this.totalPages = 1;
+      this.isLoading = false;
+      this.isSearching = false;
+      this.updateTotalStockCount();
       return;
     }
 
     const minSearchLen = this.isNguyenLieuPage ? 4 : 3;
     if (!this.isLocationSearchActive && searchTerm.length < minSearchLen) {
       this.filteredInventory = [];
+      this.displayedInventory = [];
+      this.currentPage = 1;
+      this.totalPages = 1;
+      this.isLoading = false;
+      this.isSearching = false;
+      this.updateTotalStockCount();
       console.log(`⏰ ASM1 Search term "${searchTerm}" quá ngắn (cần ít nhất ${minSearchLen} ký tự)`);
       return;
     }
 
     if (this.isLocationSearchActive && searchTerm.trim().length < 1) {
       this.filteredInventory = [];
+      this.displayedInventory = [];
+      this.currentPage = 1;
+      this.totalPages = 1;
+      this.isLoading = false;
+      this.isSearching = false;
+      this.updateTotalStockCount();
       return;
     }
 
@@ -6359,6 +6548,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
 
+      if (!stillCurrent()) return;
+
       if (querySnapshot && !querySnapshot.empty) {
         console.log(`✅ ASM1 Found ${querySnapshot.docs.length} documents from Firebase`);
 
@@ -6421,18 +6612,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
         this.readTracker.track('materials', 'inventory-materials', querySnapshot.docs.length);
         this.applyCatalogToMaterials(this.inventoryMaterials);
-        void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
-          this.applyCatalogToMaterials(this.inventoryMaterials);
-          this.applyCatalogToMaterials(this.filteredInventory);
-          void this.applyStorageUnitsFromCatalog();
-          if (this.showKhColumn) void this.applyNvlkhFromCatalog();
-          this.cdr.markForCheck();
-        });
+        await this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode));
+        if (!stillCurrent()) return;
+        this.applyCatalogToMaterials(this.inventoryMaterials);
 
         // IMPROVED: Không cần filter thêm nữa vì đã query chính xác từ Firebase
         this.filteredInventory = this.viewWarehouseFilter
           ? this.inventoryMaterials.filter((m) => this.materialMatchesViewWarehouse(m))
           : [...this.inventoryMaterials];
+        void this.applyStorageUnitsFromCatalog();
+        if (this.showKhColumn) void this.applyNvlkhFromCatalog();
         
         // KHÔNG gộp dòng khi search - chỉ gộp khi bấm nút "Gộp dòng trùng lặp"
         // this.consolidateInventoryData();
@@ -6458,13 +6647,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         // No results found
         this.inventoryMaterials = [];
         this.filteredInventory = [];
+        this.displayedInventory = [];
+        this.currentPage = 1;
+        this.updatePagination();
+        this.updateTotalStockCount();
         console.log(`🔍 ASM1 No results found for: "${searchTerm}" after trying all search methods`);
       }
       
     } catch (error) {
       console.error('❌ ASM1 Error during search:', error);
+      if (!stillCurrent()) return;
       this.filteredInventory = [];
+      this.displayedInventory = [];
+      this.updatePagination();
+      this.updateTotalStockCount();
     } finally {
+      if (!stillCurrent()) return;
       this.isLoading = false;
       this.isSearching = false;
       this.searchProgress = 100;
@@ -6511,7 +6709,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Sort inventory by FIFO: Material Code -> PO (oldest first)
   private sortInventoryFIFO(): void {
-    if (!this.filteredInventory || this.filteredInventory.length === 0) return;
+    if (!this.filteredInventory || this.filteredInventory.length === 0) {
+      this.updateNegativeStockCount();
+      return;
+    }
     
     console.log('🔄 Sorting inventory by FIFO: Material Code -> PO (oldest first)...');
     
@@ -7131,6 +7332,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = null;
     setTimeout(() => void this.loadKkCatalogMeta(), 0);
+    void this.loadKkMucAllowedLocs();
   }
 
   closeKkLocMap(): void {
@@ -7165,6 +7367,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showKkPalletCheck = false;
     this.stopKkLive();
     this.syncKkPageLock();
+  }
+
+  toggleKkToolMenu(menu: 'print' | 'tools'): void {
+    this.kkToolMenu = this.kkToolMenu === menu ? null : menu;
   }
 
   toggleKkLive(): void {
@@ -7436,7 +7642,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkActiveSourceProductType = null;
     this.kkAllStockDetail = false;
     this.kkConnectorFloorDetail = null;
-    if (!this.kkStockLoaded) return;
+    if (!this.kkStockLoaded) {
+      if (view === 'type') void this.loadKkMucAllowedLocs();
+      return;
+    }
     if (view === 'location') void this.loadKkLocMap();
     else if (view === 'material') void this.loadKkByMaterial();
     else if (view === 'manager' && this.kkLocMapTypeCache.size) {
@@ -7445,6 +7654,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       void this.loadKkCatalogForMap();
     }
+    if (view === 'type') void this.loadKkMucAllowedLocs();
     this.syncKkPageLock();
   }
 
@@ -7556,7 +7766,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!this.kkCatalogTypeMap.size) {
         this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
       }
-      const productType = this.productTypeOfMaterial(code) || 'Chưa gán danh mục';
+      const productType = this.kkTypeOrGroupOfMaterial(code);
+      const inCatalog = !!this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
       let stock = 0;
       let lines = 0;
       this.kkLocMapTypeCache.forEach((list) => {
@@ -7598,7 +7809,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         productType,
         stock,
         lines,
-        found: lines > 0 || productType !== 'Chưa gán danh mục'
+        found: lines > 0 || inCatalog
       };
     } catch (e) {
       console.error('❌ submitKkCodeLookup:', e);
@@ -8120,7 +8331,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           groups: this.kkTypeBrandGroupsOf(category, sorted)
         };
       })
-      .filter((muc) => muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
+      .filter((muc) => muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0))
+      // Không hiển thị mục B033 — 14/10/2026
+      .filter((muc) => !MaterialsComponent.KK_HIDDEN_MUCS.includes(muc.category));
     this.kkTypeBoxGroupsCached = this.mergeKkSingletonMucsFromB019(this.kkTypeBoxGroupsCached);
     this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
     return this.kkTypeBoxGroupsCached;
@@ -8165,8 +8378,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = String(productType || '').trim();
     if (!raw) return 'Khác';
     if (raw === 'Chưa gán danh mục') return raw;
-    if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
+    // Mọi loại có mã đầu A (A001, A031…) gom chung một mục "A" — 14/10/2026
+    if (prefixes.length ? prefixes.every((p) => p.startsWith('A')) : /^A\d{3}$/i.test(raw)) return 'A';
+    if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
     const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
     if (bPrefix === 'B018') return 'B018';
     if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
@@ -8216,13 +8431,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
   }> | undefined {
     // B017 hiện hai dãy R17/R18, không chia kệ S.
-    if (category === 'NHUA' || category === 'DAYCAP' || category === 'B036' || category === 'B042' || category === 'B017') {
-      return undefined;
-    }
-    if (!/^B\d{3}$/.test(category)) return undefined;
-    if (category === 'B009' || category === 'B016' || category === 'B018') {
-      return this.kkTypeConnectorShelfGroupsOf(category, boxes);
-    }
+    // Từ 14/10/2026: B009/B016/B018 cũng không chia kệ × tầng nữa — mọi mục hiện lưới phẳng.
     return undefined;
   }
 
@@ -8368,7 +8577,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const shelfBoxes = boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to));
       return {
         key: s.shelf,
-        title: `Kệ ${s.shelf} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`,
+        title: s.from > 0
+          ? `Kệ ${s.shelf} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`
+          : `Kệ ${s.shelf}`,
         boxes: shelfBoxes,
         subMucs
       };
@@ -8391,14 +8602,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     to: number;
     perFloor: number;
   }> {
-    if (prefix === 'B018') {
+    const removed = new Set(this.kkMucRemovedShelves[prefix] || []);
+    return this.kkConnectorRackShelfDefs(prefix).filter((row) => !removed.has(row.shelf));
+  }
+
+  private kkConnectorRackShelfDefs(prefix: string): Array<{
+    shelf: string;
+    from: number;
+    to: number;
+    perFloor: number;
+  }> {
+    if (prefix === 'B017') {
       return [
-        { shelf: 'S01', from: 1, to: 200, perFloor: 50 },
-        { shelf: 'S03', from: 201, to: 600, perFloor: 80 },
-        { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
+        { shelf: 'S23', from: 1, to: 40, perFloor: 20 },
+        { shelf: 'S24', from: 41, to: 80, perFloor: 20 },
+        { shelf: 'S25', from: 81, to: 999, perFloor: 20 }
       ];
     }
-    if (prefix === 'B017') return [];
     if (prefix === 'B016') {
       return [
         { shelf: 'S11', from: 1, to: 250, perFloor: 50 },
@@ -8407,12 +8627,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         { shelf: 'S14', from: 751, to: 999, perFloor: 50 }
       ];
     }
-    return [
-      { shelf: 'S07', from: 1, to: 250, perFloor: 50 },
-      { shelf: 'S08', from: 251, to: 500, perFloor: 50 },
-      { shelf: 'S09', from: 501, to: 750, perFloor: 50 },
-      { shelf: 'S10', from: 751, to: 999, perFloor: 50 }
-    ];
+    if (prefix === 'B018') {
+      return [
+        { shelf: 'S01', from: 1, to: 200, perFloor: 50 },
+        { shelf: 'S03', from: 201, to: 600, perFloor: 80 },
+        { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
+      ];
+    }
+    if (prefix === 'B009') {
+      return [
+        { shelf: 'S07', from: 1, to: 250, perFloor: 50 },
+        { shelf: 'S08', from: 251, to: 500, perFloor: 50 },
+        { shelf: 'S09', from: 501, to: 750, perFloor: 50 },
+        { shelf: 'S10', from: 751, to: 999, perFloor: 50 }
+      ];
+    }
+    return [];
   }
 
   private kkConnectorFloorRange(
@@ -8427,6 +8657,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   isKkConnectorRackMuc(category: string): boolean {
     return category === 'B009' || category === 'B016' || category === 'B018';
+  }
+
+  /**
+   * Mục hiện theo sơ đồ mâm kệ trên trang KK. Từ 14/10/2026 không chia mâm kệ nữa (B009/B016/B018
+   * hiện lưới phẳng như các mục khác). In tem kệ theo mâm vẫn dùng isKkConnectorRackMuc.
+   */
+  isKkRackBoardMuc(_category: string): boolean {
+    return false;
   }
 
   isKkNhuaMuc(category: string): boolean {
@@ -8550,8 +8788,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Gộp terminal chưa rõ hãng + không hãng thành một loại. */
   private kkCanonicalTypeKey(productType: string, groupCodes: string[] = []): string {
+    // Gom cả đầu mã về một loại (không chia theo phi / kích thước nữa) — 14/10/2026
+    const merged = this.kkMergedPrefixTypeOf(productType, groupCodes);
+    if (merged) return merged;
     if (this.isKkUnbrandedTerminalType(productType, groupCodes)) return 'Đầu cốt (terminal)';
     return productType;
+  }
+
+  /** Mục không hiển thị trên trang KK (theo Loại hàng). */
+  private static readonly KK_HIDDEN_MUCS = ['B033'];
+
+  /** Đầu mã gom thành 1 loại duy nhất trên trang KK (tên ô = đầu mã). */
+  private static readonly KK_MERGED_PREFIX_TYPES = ['B042', 'B017', 'B015'];
+
+  /** Loại thuộc hẳn một đầu mã trong KK_MERGED_PREFIX_TYPES → trả về đầu mã đó, ngược lại ''. */
+  private kkMergedPrefixTypeOf(productType: string, groupCodes: string[] = []): string {
+    const shared = this.kkTypeSharedBPrefix(groupCodes);
+    if (shared && MaterialsComponent.KK_MERGED_PREFIX_TYPES.includes(shared)) return shared;
+    // Mã chưa có trong danh mục: loại = đầu mã (vd "B015"), không có groupCodes
+    const raw = String(productType || '').trim().toUpperCase();
+    return MaterialsComponent.KK_MERGED_PREFIX_TYPES.includes(raw) ? raw : '';
   }
 
   /** Cùng một đầu mã B+3 (vd B017, B005). Trống nếu loại có nhiều đầu mã. */
@@ -8609,6 +8865,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (category === 'ĐẦU CỐT') return 'Mục Đầu cốt (Terminal)';
     if (category === 'NHUA') return 'Mục Nhựa';
     if (category === 'DAYCAP') return 'Mục Dây cáp';
+    if (category === 'A') return 'Nhóm A';
     if (/^B\d{3}$/.test(category)) return `Mục ${category}`;
     const lower = category.toLocaleLowerCase('vi');
     const pretty = lower ? lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1) : category;
@@ -8714,7 +8971,288 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Bấm ô mâm/tầng: chọn tầng (highlight). Chi tiết → bảng KK. */
   selectKkB009Floor(category: string, shelf: string, sub: { key: string; title: string }): void {
+    if (!this.kkB009FloorSelectable(category, shelf, sub)) return;
     this.setKkB009Floor(category, shelf, sub);
+  }
+
+  isKkConnectorBoardOpen(category: string): boolean {
+    return !!this.kkConnectorBoardOpen[category];
+  }
+
+  toggleKkConnectorBoard(category: string, event?: Event): void {
+    event?.stopPropagation();
+    this.kkConnectorBoardOpen = {
+      ...this.kkConnectorBoardOpen,
+      [category]: !this.kkConnectorBoardOpen[category]
+    };
+  }
+
+  onKkMucContextMenu(event: MouseEvent, category: string): void {
+    const id = String(category || '').trim();
+    if (!id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.kkMucShelfMenuCategory = id;
+    this.kkMucShelfMenuX = event.clientX;
+    this.kkMucShelfMenuY = event.clientY;
+    this.kkMucShelfDraft = '';
+    this.skipKkTypeBoxMenuClose = true;
+    setTimeout(() => { this.skipKkTypeBoxMenuClose = false; }, 0);
+    this.cdr.detectChanges();
+  }
+
+  closeKkMucShelfMenu(): void {
+    this.kkMucShelfMenuCategory = '';
+    this.kkMucShelfDraft = '';
+  }
+
+  kkMucCodeTotal(muc: { boxes?: Array<{ totalLines?: number }> }): number {
+    return (muc.boxes || []).reduce((n, box) => n + (Number(box.totalLines) || 0), 0);
+  }
+
+  kkMucCheckedTotal(muc: { boxes?: Array<{ checked?: number }> }): number {
+    return (muc.boxes || []).reduce((n, box) => n + (Number(box.checked) || 0), 0);
+  }
+
+  kkMucParentShelves(category: string): string[] {
+    const removed = new Set(this.kkMucRemovedShelves[category] || []);
+    const base = this.kkConnectorRackShelfDefs(category)
+      .map((row) => row.shelf)
+      .filter((shelf) => !removed.has(shelf));
+    const extra = (this.kkMucExtraShelves[category] || []).filter((shelf) => !base.includes(shelf) && !removed.has(shelf));
+    return [...base, ...extra];
+  }
+
+  kkMucExtraShelvesOf(category: string): string[] {
+    return this.kkMucExtraShelves[category] || [];
+  }
+
+  addKkMucParentShelf(): void {
+    const category = this.kkMucShelfMenuCategory;
+    if (!category || this.kkMucShelfSaving) return;
+    if (!this.canEdit) {
+      alert('Bạn không có quyền thêm kệ.');
+      return;
+    }
+    const shelf = this.normalizeKkParentShelf(this.kkMucShelfDraft);
+    if (!shelf) {
+      alert('Nhập tên kệ mẹ.');
+      return;
+    }
+    const defs = new Set(this.kkConnectorRackShelfDefs(category).map((row) => row.shelf));
+    const removed = new Set(this.kkMucRemovedShelves[category] || []);
+    if (removed.has(shelf)) {
+      removed.delete(shelf);
+      void this.saveKkMucShelfState(category, this.kkMucExtraShelves[category] || [], [...removed]);
+      return;
+    }
+    if (this.kkMucParentShelves(category).includes(shelf)) {
+      alert(`${shelf} đã có trong mục ${category}.`);
+      return;
+    }
+    const next = defs.has(shelf)
+      ? (this.kkMucExtraShelves[category] || [])
+      : [...(this.kkMucExtraShelves[category] || []), shelf];
+    void this.saveKkMucShelfState(category, next, [...removed]);
+  }
+
+  removeKkMucParentShelf(shelf: string): void {
+    const category = this.kkMucShelfMenuCategory;
+    if (!category || this.kkMucShelfSaving || !this.canEdit) return;
+    const defs = new Set(this.kkConnectorRackShelfDefs(category).map((row) => row.shelf));
+    const extras = (this.kkMucExtraShelves[category] || []).filter((id) => id !== shelf);
+    const removed = (this.kkMucRemovedShelves[category] || []).filter((id) => id !== shelf);
+    if (defs.has(shelf)) removed.push(shelf);
+    void this.saveKkMucShelfState(category, extras, removed);
+  }
+
+  private normalizeKkParentShelf(raw: string): string {
+    const text = String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!text || text.length > 40) return '';
+    const rack = /^([RS])\s*0*(\d{1,2})$/.exec(text.replace(/\s+/g, ''));
+    if (rack) {
+      const n = Number(rack[2]);
+      if (!n || n > 99) return '';
+      return `${rack[1]}${String(n).padStart(2, '0')}`;
+    }
+    return text;
+  }
+
+  private async saveKkMucShelfState(category: string, shelves: string[], removed: string[]): Promise<void> {
+    const prev = this.kkMucExtraShelves[category] || [];
+    const prevRemoved = this.kkMucRemovedShelves[category] || [];
+    this.kkMucShelfSaving = true;
+    this.kkMucExtraShelves = { ...this.kkMucExtraShelves, [category]: shelves };
+    this.kkMucRemovedShelves = { ...this.kkMucRemovedShelves, [category]: removed };
+    this.invalidateKkTypeViewCache();
+    this.cdr.detectChanges();
+    try {
+      await this.firestore.collection('kk-muc-allowed-locs').doc(category).set({
+        category,
+        parentShelves: shelves,
+        removedParentShelves: removed,
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      this.kkMucShelfDraft = '';
+      this.kkMucShelfSaving = false;
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('saveKkMucShelfState', e);
+      this.kkMucExtraShelves = { ...this.kkMucExtraShelves, [category]: prev };
+      this.kkMucRemovedShelves = { ...this.kkMucRemovedShelves, [category]: prevRemoved };
+      this.invalidateKkTypeViewCache();
+      this.kkMucShelfSaving = false;
+      alert('Không lưu được kệ mẹ.');
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async saveKkMucParentShelves(category: string, shelves: string[]): Promise<void> {
+    await this.saveKkMucShelfState(category, shelves, this.kkMucRemovedShelves[category] || []);
+  }
+
+  hasKkMucAllowedSet(category: string): boolean {
+    return Array.isArray(this.kkMucAllowedLocs[category]);
+  }
+
+  kkMucLocAllowed(category: string, loc: string): boolean {
+    const set = this.kkMucAllowedLocs[category];
+    if (!set) return true;
+    return set.includes(loc);
+  }
+
+  kkB009FloorSelectable(category: string, shelf: string, sub: { key: string }): boolean {
+    if (!this.hasKkMucAllowedSet(category)) return true;
+    const level = this.kkB009SubLevel(sub);
+    return this.kkShelfBlockNos(shelf).some((block) => this.kkMucLocAllowed(category, this.kkB009LocOf(shelf, block, level)));
+  }
+
+  kkB009VisibleShelfGroups(muc: {
+    category?: string;
+    groups?: Array<{
+      key: string;
+      title: string;
+      boxes: typeof this.kkTypeBoxesCached;
+      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
+    }>;
+  }): NonNullable<typeof muc.groups> {
+    const groups = this.kkB009ShelfGroups(muc);
+    const category = String(muc.category || '');
+    if (!this.hasKkMucAllowedSet(category)) return groups;
+    return groups.filter((group) =>
+      this.kkB009LevelsTopDown(group).some((sub) => this.kkB009FloorSelectable(category, group.key, sub))
+    );
+  }
+
+  kkB009VisibleLevels(
+    category: string,
+    group: { key: string; subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }> }
+  ): typeof group.subMucs {
+    const levels = this.kkB009LevelsTopDown(group);
+    if (!this.hasKkMucAllowedSet(category)) return levels;
+    return levels.filter((sub) => this.kkB009FloorSelectable(category, group.key, sub));
+  }
+
+  openKkMucLocPicker(category: string): void {
+    const shelves = this.kkConnectorRackShelves(category).map((row) => ({
+      shelf: row.shelf,
+      levels: Array.from({ length: 7 }, (_, index) => {
+        const level = 7 - index;
+        return {
+          level,
+          locs: this.kkShelfBlockNos(row.shelf).map((block) => this.kkB009LocOf(row.shelf, block, level))
+        };
+      })
+    }));
+    const saved = this.kkMucAllowedLocs[category];
+    const on: Record<string, boolean> = {};
+    for (const shelf of shelves) {
+      for (const level of shelf.levels) {
+        for (const loc of level.locs) on[loc] = saved ? saved.includes(loc) : true;
+      }
+    }
+    this.kkMucLocPickerOn = on;
+    this.kkMucLocPickerSaving = false;
+    this.kkMucLocPicker = { category, shelves };
+  }
+
+  closeKkMucLocPicker(): void {
+    if (this.kkMucLocPickerSaving) return;
+    this.kkMucLocPicker = null;
+    this.kkMucLocPickerOn = {};
+  }
+
+  kkMucShelfAllOn(shelf: { levels: Array<{ locs: string[] }> }): boolean {
+    const locs = shelf.levels.reduce<string[]>((all, level) => all.concat(level.locs), []);
+    return locs.length > 0 && locs.every((loc) => this.kkMucLocPickerOn[loc]);
+  }
+
+  toggleKkMucShelf(shelf: { levels: Array<{ locs: string[] }> }, checked: boolean): void {
+    const next = { ...this.kkMucLocPickerOn };
+    for (const level of shelf.levels) {
+      for (const loc of level.locs) next[loc] = checked;
+    }
+    this.kkMucLocPickerOn = next;
+  }
+
+  async saveKkMucAllowedLocs(): Promise<void> {
+    const picker = this.kkMucLocPicker;
+    if (!picker || this.kkMucLocPickerSaving || !this.canEdit) return;
+    const locations = Object.keys(this.kkMucLocPickerOn).filter((loc) => this.kkMucLocPickerOn[loc]).sort();
+    this.kkMucLocPickerSaving = true;
+    try {
+      await this.firestore.collection('kk-muc-allowed-locs').doc(picker.category).set({
+        category: picker.category,
+        locations,
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+      this.kkMucAllowedLocs = { ...this.kkMucAllowedLocs, [picker.category]: locations };
+      this.kkMucLocPickerSaving = false;
+      this.closeKkMucLocPicker();
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('saveKkMucAllowedLocs', e);
+      this.kkMucLocPickerSaving = false;
+      alert('Không lưu được vị trí cho phép.');
+      this.cdr.detectChanges();
+    }
+  }
+
+  private async loadKkMucAllowedLocs(): Promise<void> {
+    if (this.kkMucAllowedLoaded) return;
+    this.kkMucAllowedLoaded = true;
+    try {
+      const snap = await this.firestore.collection('kk-muc-allowed-locs').get().toPromise();
+      const next: Record<string, string[] | null> = {};
+      const extra: Record<string, string[]> = {};
+      const removed: Record<string, string[]> = {};
+      for (const doc of snap?.docs || []) {
+        const data = (doc.data() || {}) as { locations?: unknown; parentShelves?: unknown; removedParentShelves?: unknown };
+        if (Array.isArray(data.locations)) {
+          next[doc.id] = data.locations.map((loc) => String(loc || '').trim()).filter(Boolean);
+        }
+        if (Array.isArray(data.parentShelves)) {
+          const shelves = data.parentShelves
+            .map((shelf) => this.normalizeKkParentShelf(String(shelf || '')))
+            .filter(Boolean);
+          extra[doc.id] = Array.from(new Set(shelves));
+        }
+        if (Array.isArray(data.removedParentShelves)) {
+          const shelves = data.removedParentShelves
+            .map((shelf) => this.normalizeKkParentShelf(String(shelf || '')))
+            .filter(Boolean);
+          removed[doc.id] = Array.from(new Set(shelves));
+        }
+      }
+      this.kkMucAllowedLocs = next;
+      this.kkMucExtraShelves = extra;
+      this.kkMucRemovedShelves = removed;
+      if (Object.keys(extra).length || Object.keys(removed).length) this.invalidateKkTypeViewCache();
+      this.cdr.detectChanges();
+    } catch (e) {
+      this.kkMucAllowedLoaded = false;
+      console.error('loadKkMucAllowedLocs', e);
+    }
   }
 
   isKkConnectorFloorCodesOpen(category: string): boolean {
@@ -8972,10 +9510,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkConnectorFloorDetail = null;
     const c = String(code || '').trim().toUpperCase();
     if (!c) return;
-    const type = this.kkCatalog.productTypeOf(c, this.kkCatalogTypeMap)
-      || this.productTypeOfMaterial(c);
-    const productType = type && type !== '—' ? type : c;
-    this.selectKkTypeBox(productType);
+    this.selectKkTypeBox(this.kkTypeOrGroupOfMaterial(c));
     this.kkTypeDetailQuery = c;
     this.kkTypeSearchDraft = c;
   }
@@ -11819,8 +12354,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return isJWarehouseLocation(this.stripDoiKhoWhPrefix(raw).toUpperCase());
   }
 
-  /** Kho theo vị trí: R1–R99 / S1–S99 / J5 → Kho J; 00- → 00; ASM3/WH3 → kho tạm; còn lại = D1. */
-  kkWarehouseFromLocation(location: string | null | undefined): KkWarehouse {
+  /**
+   * Kho của một dòng tồn trên trang KK. Từ 14/10/2026 mọi hàng đều thuộc Kho J
+   * (không còn Kho D1 / ASM3 / 00 / trống) — chỉ đổi cách hiển thị, chuỗi vị trí trong dữ liệu giữ nguyên.
+   * Cách phân kho cũ theo vị trí: kkWarehouseFromLocationLegacy.
+   */
+  kkWarehouseFromLocation(_location: string | null | undefined): KkWarehouse {
+    return 'J';
+  }
+
+  /** (Cũ) Kho theo vị trí: R1–R99 / S1–S99 / J5 → Kho J; 00- → 00; ASM3/WH3 → kho tạm; còn lại = D1. */
+  kkWarehouseFromLocationLegacy(location: string | null | undefined): KkWarehouse {
     const tokens = splitMultiLocations(String(location || ''));
     const list = tokens.length ? tokens : [String(location || '')];
     for (const token of list) {
@@ -14457,7 +15001,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!materialCode) continue;
         const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
         const groupCode = this.kkCatalog.groupCodeFromMaterial(materialCode);
-        const productType = (groupCode && this.kkCatalogTypeMap.get(groupCode)) || 'Chưa gán danh mục';
+        const productType = this.kkTypeOrGroupOfMaterial(materialCode);
         const kkOn = this.isKkFlagOn(data.kkChecked);
         const cur = byType.get(productType) || {
           productType,
@@ -14611,6 +15155,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   productTypeOfMaterial(materialCode: string): string {
     return this.kkCatalog.productTypeOf(materialCode, this.kkCatalogTypeMap) || '—';
+  }
+
+  /** Loại hàng theo Danh mục KK; mã chưa có loại hàng → xếp theo nhóm đầu mã (R029, A031, B015…). */
+  private kkTypeOrGroupOfMaterial(materialCode: string): string {
+    const code = String(materialCode || '').trim().toUpperCase();
+    const type = this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
+    if (type) return type;
+    const head = /^([A-Z]\d{3})/.exec(code);
+    return head ? head[1] : 'Chưa gán danh mục';
   }
 
   private syncKkTypeRows(): void {
@@ -15849,7 +16402,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.closeMorePopup();
     this.showKkCatalogPopup = true;
     this.kkCatalogQuery = '';
+    this.kkCatalogTab = 'codes';
     void this.loadKkCatalogPopup();
+    void this.loadKkShelfGroups();
   }
 
   closeKkCatalogPopup(): void {
@@ -15857,14 +16412,60 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showKkCatalogPopup = false;
   }
 
-  private refreshKkCatalogAisleRows(): void {
-    this.kkCatalogAisleRows = this.kkCatalog.aisleCatalogRows(
-      this.kkCatalogEntries,
-      this.kkCatalogTypeMap,
-      this.kkTypeHomeLocs,
-      26,
-      25
-    );
+  get kkShelfFilteredRows(): Array<{ shelf: string; groups: string }> {
+    const q = this.kkCatalogQuery.trim().toUpperCase();
+    if (!q) return this.kkShelfRows;
+    return this.kkShelfRows.filter((row) => row.shelf.includes(q) || row.groups.toUpperCase().includes(q));
+  }
+
+  async loadKkShelfGroups(): Promise<void> {
+    try {
+      const snap = await this.firestore.collection('kk-shelf-group-map').doc('layout').get().toPromise();
+      const raw = (snap?.data() as { shelves?: unknown } | undefined)?.shelves;
+      const saved = raw && typeof raw === 'object' ? raw as Record<string, string> : null;
+      this.kkShelfRows = shelfGroupRows(saved);
+      this.kkShelfCommitted = JSON.stringify(this.kkShelfPayload());
+    } catch (e) {
+      console.error('loadKkShelfGroups', e);
+      this.kkShelfRows = shelfGroupRows(null);
+    }
+    this.cdr.detectChanges();
+  }
+
+  async saveKkShelfGroups(): Promise<void> {
+    if (this.kkShelfSaving) return;
+    for (const row of this.kkShelfRows) row.groups = normalizeShelfGroups(row.groups);
+    const shelves = this.kkShelfPayload();
+    const key = JSON.stringify(shelves);
+    if (key === this.kkShelfCommitted) return;
+    this.kkShelfSaving = true;
+    this.cdr.detectChanges();
+    try {
+      await this.firestore.collection('kk-shelf-group-map').doc('layout').set({
+        shelves,
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+      this.kkShelfCommitted = key;
+      // Danh mục vị trí cộng thêm kệ theo dãy kệ → nạp lại ngay để vị trí gợi ý / ép vị trí cập nhật
+      void this.kkCatalog.loadShelfMap().then(() => {
+        this.invalidateKkTypeViewCache();
+        this.cdr.markForCheck();
+      });
+    } catch (e) {
+      console.error('saveKkShelfGroups', e);
+      alert('Không lưu được danh mục dãy kệ.');
+    } finally {
+      this.kkShelfSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private kkShelfCommitted = '';
+
+  private kkShelfPayload(): Record<string, string> {
+    const shelves: Record<string, string> = {};
+    for (const row of this.kkShelfRows) shelves[row.shelf] = row.groups;
+    return shelves;
   }
 
   kkCatalogLocOf(entry: KkCatalogEntry): string {
@@ -15881,12 +16482,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private kkCatalogEffectiveLoc(entry: KkCatalogEntry): string {
+    if (isB037Code(entry.groupCode)) return B037_REQUIRED_LOCATION;
     const saved = String(entry.location || '').trim();
     if (saved) return saved;
     return this.kkCatalogRuleLoc(entry);
   }
 
   async saveKkCatalogLocation(entry: KkCatalogEntry): Promise<void> {
+    if (isB037Code(entry.groupCode)) {
+      entry.location = B037_REQUIRED_LOCATION;
+      this.kkCatalogLocCommitted.set(entry.groupCode, B037_REQUIRED_LOCATION.toUpperCase());
+      this.cdr.detectChanges();
+      return;
+    }
     const next = String(entry.location || '').trim().toUpperCase();
     const prev = this.kkCatalogLocCommitted.get(entry.groupCode) || '';
     if (next === prev || this.kkCatalogSavingCode) return;
@@ -15895,7 +16503,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.kkCatalog.saveGroupLocation(entry.groupCode, next);
       entry.location = next;
       this.kkCatalogLocCommitted.set(entry.groupCode, next);
-      this.refreshKkCatalogAisleRows();
     } catch (e) {
       console.error('saveKkCatalogLocation:', e);
       entry.location = prev;
@@ -15916,12 +16523,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkCatalogLocCommitted = new Map(
         this.kkCatalogEntries.map((entry) => [entry.groupCode, String(entry.location || '').trim().toUpperCase()])
       );
-      this.refreshKkCatalogAisleRows();
     } catch (e) {
       console.error('❌ loadKkCatalogPopup:', e);
       alert('❌ Không tải được Danh mục KK.');
       this.kkCatalogEntries = [];
-      this.kkCatalogAisleRows = [];
     } finally {
       this.kkCatalogLoading = false;
       this.cdr.detectChanges();
@@ -17576,7 +18181,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     // Update the BehaviorSubject for reactive updates
     this.totalStockSubject.next(totalStock);
     this.totalBagSubject.next(
-      this.filteredInventory.reduce((sum, material) => sum + this.effectiveTotalBags(material), 0)
+      this.filteredInventory.reduce((sum, material) => sum + this.displayedBagCount(material), 0)
     );
 
     return totalStock;
@@ -18909,7 +19514,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.totalStockSubject.next(totalStock);
 
     const totalBags = this.filteredInventory.reduce((sum, material) => {
-      return sum + this.effectiveTotalBags(material);
+      return sum + this.displayedBagCount(material);
     }, 0);
     this.totalBagSubject.next(totalBags);
     console.log(`📊 Total stock count updated: ${totalStock} · bags: ${totalBags}`);
@@ -20584,7 +21189,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         qrImages.push({ image, qrData, index: i });
       }
 
-      this.openCustomLabelPrintWindow(printWindow, qrImages, code, po, qty, imd, num);
+      await this.createQRPrintWindow(qrImages, null, false, false, [], printWindow);
     } catch (e: any) {
       console.error('[Custom Print] error', e);
       alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
@@ -20594,353 +21199,100 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private openCustomLabelPrintWindow(
-    printWindow: Window,
-    qrImages: { image: string; qrData: string; index: number }[],
-    code: string, po: string, qty: string, imd: string, total: number
-  ): void {
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const fmtQty = (q: string) => {
-      const n = Number(String(q).replace(/,/g, ''));
-      return Number.isFinite(n) ? n.toLocaleString('en-US') : q;
-    };
-
-    const labels = qrImages.map(qr => {
-      const p = this.parseInboundQrLabelDisplayFields(qr.qrData);
-      return `
-        <div class="qr-container">
-          <div class="qr-section">
-            <img src="${qr.image}" alt="QR" class="qr-image">
-          </div>
-          <div class="info-section">
-            <div>
-              <div class="info-row material-code material-code-main">${esc(p.materialCode)}</div>
-              <div class="info-row">PO: ${esc(p.po)}</div>
-              <div class="info-row material-code">${fmtQty(p.quantity)}</div>
-              ${imd ? `<div class="info-row">IMD: ${esc(p.imd)}</div>` : ''}
-              <div class="info-row">BAG: ${esc(p.bag)}</div>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
-
-    printWindow.document.write(`<!DOCTYPE html>
-<html><head><title>In Tùy Chỉnh – ${esc(code)}</title>
-<style>
-  * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
-  body { font-family:Arial,sans-serif; background:white!important; overflow:hidden!important; width:57mm!important; height:32mm!important; }
-  .qr-container { display:flex!important; border:1px solid #000!important; width:57mm!important; height:32mm!important; page-break-inside:avoid!important; background:white!important; box-sizing:border-box!important; }
-  .qr-section { width:30mm!important; height:30mm!important; display:flex!important; align-items:center!important; justify-content:center!important; border-right:1px solid #ccc!important; box-sizing:border-box!important; }
-  .qr-image { width:28mm!important; height:28mm!important; display:block!important; }
-  .info-section { flex:1!important; padding:1mm!important; display:flex!important; flex-direction:column!important; justify-content:flex-start!important; align-items:flex-start!important; font-size:9.6px!important; line-height:1.15!important; box-sizing:border-box!important; color:#000!important; }
-  .info-row { margin:0.8mm 0!important; font-weight:bold!important; color:#000!important; display:block!important; white-space:nowrap!important; font-family:Arial,sans-serif!important; }
-  .info-row.material-code { font-size:17.74px!important; line-height:1.05!important; }
-  .info-row.material-code.material-code-main { font-size:21.36px!important; line-height:1.05!important; }
-  .qr-grid { display:flex!important; flex-direction:row!important; flex-wrap:wrap!important; align-items:flex-start!important; justify-content:flex-start!important; gap:0!important; padding:0!important; margin:0!important; width:57mm!important; height:32mm!important; }
-  @media print {
-    body { width:57mm!important; height:32mm!important; }
-    @page { margin:0!important; size:57mm 32mm!important; padding:0!important; }
-    .qr-container { width:57mm!important; height:32mm!important; page-break-inside:avoid!important; border:1px solid #000!important; }
-    .qr-section { width:30mm!important; height:30mm!important; }
-    .qr-image { width:28mm!important; height:28mm!important; }
-    .info-section { font-size:9.6px!important; padding:1mm!important; }
-    .info-row.material-code { font-size:17.74px!important; }
-    .info-row.material-code.material-code-main { font-size:21.36px!important; }
-    .qr-grid { gap:0!important; padding:0!important; margin:0!important; width:57mm!important; height:32mm!important; }
-  }
-</style></head>
-<body><div class="qr-grid">${labels}</div>
-<script>window.onload=function(){setTimeout(function(){window.print();},500);};</script>
-</body></html>`);
-    printWindow.document.close();
-  }
-
-  // Create print window for QR codes — cùng layout/cỡ chữ/nội dung như inbound tem bịch
-  private createQRPrintWindow(
+  /**
+   * In tem QR nguyên liệu — cùng format tem Inbound (material-qr-label.util).
+   * Lô / Loại hình lấy theo dòng tồn kho khớp Mã + PO + IMD trên QR.
+   */
+  private async createQRPrintWindow(
     qrImages: any[],
-    material: InventoryMaterial,
+    material: InventoryMaterial | null,
     isPartialLabel: boolean = false,
-    hideQtyAndBag: boolean = false
-  ): void {
-    const printWindow = window.open('', '_blank');
+    hideQtyAndBag: boolean = false,
+    sourceRows: InventoryMaterial[] = [],
+    targetWindow: Window | null = null
+  ): Promise<void> {
+    const printWindow = targetWindow || window.open('', '_blank');
 
     if (!printWindow) {
       alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>QR Label - ASM1 - ${material.materialCode}</title>
-          <style>
-            * {
-              margin: 0 !important;
-              padding: 0 !important;
-              box-sizing: border-box !important;
-            }
+    try {
+      const labels = this.buildMaterialQrLabels(qrImages, [material, ...sourceRows], hideQtyAndBag);
+      await this.attachMaterialQrLabelHomeLocs(labels);
+      printWindow.document.write(buildMaterialQrLabelDocument(labels));
+      printWindow.document.close();
+      console.log(`✅ QR labels created with Inbound format - ${labels.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
+    } catch (e: any) {
+      console.error('❌ createQRPrintWindow error:', e);
+      try { printWindow.close(); } catch {}
+      alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
+    }
+  }
 
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0 !important;
-              padding: 0 !important;
-              background: white !important;
-              overflow: hidden !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
+  private buildMaterialQrLabels(
+    qrImages: any[],
+    rows: Array<InventoryMaterial | null | undefined>,
+    hideQtyAndBag: boolean
+  ): MaterialQrLabel[] {
+    const meta = new Map<string, { batchNumber: string; type: string }>();
+    const addRow = (m: InventoryMaterial | null | undefined) => {
+      if (!m?.id) return;
+      const code = this.normalizeMaterialCodeUpper(m.materialCode);
+      const po = String(m.poNumber || '').trim();
+      const value = { batchNumber: String(m.batchNumber || ''), type: String(m.type || '') };
+      const exact = `${code}|${po}|${this.getImdKeyForMaterial(m)}`;
+      if (!meta.has(exact)) meta.set(exact, value);
+      if (!meta.has(`${code}|${po}`)) meta.set(`${code}|${po}`, value);
+    };
+    rows.forEach(addRow);
+    (this.inventoryMaterials || []).forEach(addRow);
 
-            .qr-container {
-              display: flex !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              border: 1px solid #000 !important;
-              width: 57mm !important;
-              height: 32mm !important;
-              page-break-inside: avoid !important;
-              background: white !important;
-              box-sizing: border-box !important;
-            }
+    return qrImages.map((qr): MaterialQrLabel => {
+      if (qr?.kind === 'lsxHeader' || qr?.kind === 'spacer') {
+        return { kind: qr.kind, qrData: '', lsxText: qr.lsxText };
+      }
+      const qrData = String(qr?.qrData || '');
+      const f = parseMaterialQrLabelFields(qrData);
+      const code = this.normalizeMaterialCodeUpper(f.materialCode);
+      const found = meta.get(`${code}|${f.po}|${f.imd}`) || meta.get(`${code}|${f.po}`);
+      const batchNumber = qr?.batchNumber ?? found?.batchNumber ?? '';
+      const labelType = qr?.labelType ?? found?.type ?? '';
+      const isCarton = hideQtyAndBag || stripTemThungMarker(qrData.split('|')[0] || '').isTemThung;
+      const [ci, ct] = f.bag.split('/');
+      return {
+        kind: isCarton ? 'carton' : 'bag',
+        qrImage: qr?.image || qr?.qrImage || '',
+        qrData,
+        batchNumber,
+        labelType: formatMaterialLabelType(labelType),
+        iconType: materialLabelTraIconType(batchNumber),
+        displayPrefix: qr?.displayPrefix,
+        cartonIndex: isCarton ? Number(ci) || 1 : undefined,
+        cartonTotal: isCarton ? Number(ct) || 1 : undefined
+      };
+    });
+  }
 
-            .qr-section {
-              width: 30mm !important;
-              height: 30mm !important;
-              display: flex !important;
-              align-items: center !important;
-              justify-content: center !important;
-              border-right: 1px solid #ccc !important;
-              box-sizing: border-box !important;
-            }
-
-            .qr-image {
-              width: 28mm !important;
-              height: 28mm !important;
-              display: block !important;
-            }
-
-            .info-section {
-              flex: 1 !important;
-              padding: 1mm !important;
-              display: flex !important;
-              flex-direction: column !important;
-              justify-content: flex-start !important;
-              align-items: flex-start !important;
-              font-size: 9.6px !important;
-              line-height: 1.15 !important;
-              box-sizing: border-box !important;
-              color: #000000 !important;
-              text-align: left !important;
-            }
-
-            .info-row {
-              margin: 0.8mm 0 !important;
-              font-weight: bold !important;
-              color: #000000 !important;
-              text-align: left !important;
-              display: block !important;
-              white-space: nowrap !important;
-              font-family: Arial, sans-serif !important;
-              letter-spacing: 0 !important;
-            }
-
-            .info-row.material-code {
-              font-size: 17.7408px !important;
-              line-height: 1.05 !important;
-              font-weight: bold !important;
-            }
-
-            .info-row.material-code.material-code-main {
-              font-size: 21.356368px !important;
-              line-height: 1.05 !important;
-              font-weight: bold !important;
-            }
-
-            .qr-grid {
-              text-align: left !important;
-              display: flex !important;
-              flex-direction: row !important;
-              flex-wrap: wrap !important;
-              align-items: flex-start !important;
-              justify-content: flex-start !important;
-              gap: 0 !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              width: 57mm !important;
-              height: 32mm !important;
-            }
-
-            .qr-container.qr-container--lsx {
-              display: flex !important;
-              align-items: center !important;
-              justify-content: center !important;
-            }
-
-            .lsx-header-text {
-              font-size: 18px !important;
-              font-weight: bold !important;
-              text-align: center !important;
-              padding: 2mm !important;
-              word-break: break-all !important;
-              line-height: 1.15 !important;
-              color: #000000 !important;
-              font-family: Arial, sans-serif !important;
-            }
-
-            .qr-container.qr-container--blank {
-              background: white !important;
-            }
-
-            @media print {
-              body {
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: hidden !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-
-              @page {
-                margin: 0 !important;
-                size: 57mm 32mm !important;
-                padding: 0 !important;
-              }
-
-              .qr-container {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-                page-break-inside: avoid !important;
-                border: 1px solid #000 !important;
-              }
-
-              .qr-section {
-                width: 30mm !important;
-                height: 30mm !important;
-              }
-
-              .qr-image {
-                width: 28mm !important;
-                height: 28mm !important;
-              }
-
-              .info-section {
-                font-size: 9.6px !important;
-                padding: 1mm !important;
-                color: #000000 !important;
-                text-align: left !important;
-                justify-content: flex-start !important;
-                align-items: flex-start !important;
-                line-height: 1.15 !important;
-              }
-
-              .info-row {
-                text-align: left !important;
-                display: block !important;
-                white-space: nowrap !important;
-              }
-
-              .info-row.material-code {
-                font-size: 17.7408px !important;
-                line-height: 1.05 !important;
-                font-weight: bold !important;
-              }
-
-              .info-row.material-code.material-code-main {
-                font-size: 21.356368px !important;
-                line-height: 1.05 !important;
-                font-weight: bold !important;
-              }
-
-              .qr-grid {
-                gap: 0 !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                width: 57mm !important;
-                height: 32mm !important;
-              }
-
-              .qr-container.qr-container--lsx {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-              }
-
-              .lsx-header-text {
-                font-size: 18px !important;
-                font-weight: bold !important;
-                text-align: center !important;
-                padding: 2mm !important;
-                word-break: break-all !important;
-                line-height: 1.15 !important;
-                color: #000000 !important;
-                font-family: Arial, sans-serif !important;
-              }
-
-              .qr-container.qr-container--blank {
-                background: white !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="qr-grid">
-            ${qrImages
-              .map(qr => {
-                if (qr.kind === 'lsxHeader') {
-                  const t = this.escapeHtmlForPrint(String(qr.lsxText ?? '').trim());
-                  return `
-              <div class="qr-container qr-container--lsx">
-                <div class="lsx-header-text">${t}</div>
-              </div>
-            `;
-                }
-                if (qr.kind === 'spacer') {
-                  return `
-              <div class="qr-container qr-container--blank"></div>
-            `;
-                }
-                const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
-                const qtyLine = qr.displayPrefix
-                  ? `${qr.displayPrefix} ${this.formatInboundLabelQuantity(f.quantity)}`
-                  : this.formatInboundLabelQuantity(f.quantity);
-                const infoRows = hideQtyAndBag
-                  ? `
-                    <div class="info-row material-code material-code-main">${this.escapeHtmlForPrint(f.materialCode)}</div>
-                    <div class="info-row">PO: ${this.escapeHtmlForPrint(f.po)}</div>
-                    <div class="info-row">IMD: ${this.escapeHtmlForPrint(f.imd)}</div>`
-                  : `
-                    <div class="info-row material-code material-code-main">${f.materialCode}</div>
-                    <div class="info-row">PO: ${f.po}</div>
-                    <div class="info-row material-code">${qtyLine}</div>
-                    <div class="info-row">IMD: ${f.imd}</div>
-                    <div class="info-row">BAG: ${f.bag}</div>`;
-                return `
-              <div class="qr-container">
-                <div class="qr-section">
-                  <img src="${qr.image}" alt="QR Code" class="qr-image">
-                </div>
-                <div class="info-section">
-                  <div>${infoRows}</div>
-                </div>
-              </div>
-            `;
-              })
-              .join('')}
-          </div>
-          <script>
-            window.onload = function() {
-              setTimeout(() => {
-                window.print();
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    console.log(`✅ QR labels created for ASM1 with Inbound format - ${qrImages.length} labels${isPartialLabel ? ' (Tem lẻ)' : ' (Tem chuẩn)'}`);
+  /** Vị trí yêu cầu góc tem — theo Danh mục vị trí (giống Inbound). */
+  private async attachMaterialQrLabelHomeLocs(labels: MaterialQrLabel[]): Promise<void> {
+    const real = labels.filter((l) => l.kind === 'bag' || l.kind === 'carton');
+    if (!real.length) return;
+    try {
+      const [typeMap, homeLocs] = await Promise.all([
+        this.kkCatalog.loadAllAsMap(),
+        this.kkCatalog.loadHomeLocs()
+      ]);
+      const cache = new Map<string, string>();
+      for (const label of real) {
+        const code = parseMaterialQrLabelFields(label.qrData).materialCode;
+        if (!cache.has(code)) cache.set(code, this.kkCatalog.assignedLocForMaterial(code, typeMap, homeLocs));
+        label.homeLoc = cache.get(code) || '';
+      }
+    } catch (e) {
+      console.warn('attachMaterialQrLabelHomeLocs failed:', e);
+    }
   }
 
   // @deprecated Dùng ensureCatalogLoaded() — giữ để code cũ không gọi .get() riêng

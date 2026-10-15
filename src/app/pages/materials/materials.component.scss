@@ -1712,6 +1712,82 @@
   z-index: 10040;
 }
 
+.inv-shelf-pick-overlay {
+  z-index: 10040;
+}
+
+.inv-shelf-pick {
+  width: min(560px, 94vw);
+  max-height: min(85vh, 640px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.inv-shelf-pick__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 8px;
+}
+
+.inv-shelf-pick__section {
+  margin-top: 12px;
+
+  h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.inv-shelf-pick__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inv-shelf-pick__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  .material-icons {
+    font-size: 16px;
+    color: #94a3b8;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: #2563eb;
+    background: #eff6ff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.inv-shelf-pick__btn--on {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
 .inv-loc-list-modal {
   width: min(420px, 94vw);
   max-height: min(80vh, 560px);
@@ -6110,6 +6186,67 @@ $asm1-toolbar-h: 36px;
   word-break: break-all;
 }
 
+.kk-b009-mam--off {
+  opacity: 0.28;
+}
+
+.kk-b009-row--locked {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.kk-muc-loc-picker {
+  width: min(920px, 96vw);
+  max-height: min(86vh, 820px);
+  display: flex;
+  flex-direction: column;
+}
+
+.kk-muc-loc-picker__body {
+  overflow: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kk-muc-loc-picker__shelf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.kk-muc-loc-picker__level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 6px 22px;
+  font-size: 12px;
+
+  > span {
+    width: 28px;
+    font-weight: 800;
+    color: #0f766e;
+  }
+
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+.kk-muc-loc-picker__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
 .kk-b009-blocks {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -6210,6 +6347,11 @@ $asm1-toolbar-h: 36px;
 
   &:hover {
     background: #99f6e4;
+  }
+
+  &--on {
+    background: #0f766e;
+    color: #fff;
   }
 }
 
@@ -6370,6 +6512,114 @@ $asm1-toolbar-h: 36px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.kk-muc-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 10px 8px;
+  padding: 8px 10px;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+  background: #f0fdfa;
+}
+
+.kk-muc-summary__total {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 72px;
+  color: #0f766e;
+
+  strong {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  span {
+    font-size: 12px;
+    font-weight: 700;
+  }
+}
+
+.kk-muc-summary__kk {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid #99f6e4;
+  color: #115e59;
+
+  span {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  strong {
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.kk-muc-summary__shelves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  span {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #5eead4;
+    color: #115e59;
+    font-size: 12px;
+    font-weight: 800;
+  }
+}
+
+.kk-muc-shelf-menu {
+  min-width: 220px;
+
+  p {
+    margin: 2px 6px 8px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f766e;
+  }
+}
+
+.kk-muc-shelf-menu__add {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  button {
+    padding: 7px 10px;
+    border: none;
+    border-radius: 8px;
+    background: #0f766e;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
 }
 
 .kk-type-box-menu {
@@ -7659,34 +7909,6 @@ $asm1-toolbar-h: 36px;
   }
 }
 
-.kk-aisle-rule {
-  margin: 0 0 12px;
-
-  h4 {
-    margin: 0 0 4px;
-    font-size: 14px;
-    font-weight: 700;
-  }
-
-  p {
-    margin: 0 0 8px;
-    color: #64748b;
-    font-size: 12px;
-  }
-
-  &__scroll {
-    max-height: 240px;
-    overflow: auto;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #fff;
-  }
-
-  &__groups {
-    white-space: pre-line;
-  }
-}
-
 .hidden-table-wrap {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -7704,6 +7926,19 @@ $asm1-toolbar-h: 36px;
   font-weight: 700;
   text-transform: uppercase;
 }
+.kk-cat-loc--wide { width: min(100%, 420px); text-transform: none; }
+.kk-cat-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.kk-cat-tabs button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.kk-cat-tabs button.is-on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.kk-shelf-hint { margin: 0 0 10px; font-size: 13px; color: #475569; }
 
 .hidden-table {
   width: 100%;
@@ -11377,3 +11612,331 @@ $asm1-toolbar-h: 36px;
   }
 }
 
+
+/* =========================================================
+   Trang Quản lý Nguyên Liệu / Kiểm tra KK (desktop) — giao diện đơn giản (14/10/2026)
+   Trắng / xám / chữ đậm, không đổ bóng, không hiệu ứng nổi, không chuyển động.
+   Màu chỉ dùng cho trạng thái KK (vạch mảnh bên trái ô) và cảnh báo.
+   Thanh công cụ chỉ lộ 4 nút hay dùng, còn lại nằm trong menu "In & báo cáo" / "Công cụ".
+   Khối này nằm cuối file nên ghi đè style cũ của .kk-page.
+   ========================================================= */
+.kk-page {
+  --kk-bg: #FFFFFF;
+  --kk-surface: #FFFFFF;
+  --kk-surface-2: #F4F4F2;
+  --kk-text: #252823;
+  --kk-muted: #747770;
+  --kk-border: #E5E5E0;
+  --kk-border-strong: #C9C9C2;
+  --kk-accent: #252823;
+  --kk-done: #269B62;
+  --kk-partial: #D9A33A;
+  --kk-none: #C9C9C2;
+  --kk-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* Không hiệu ứng: bỏ chuyển động, nổi khối, đổ bóng (giữ vòng xoay "đang tải") */
+  *, *::before, *::after {
+    transition: none !important;
+  }
+
+  &.excel-container { background: var(--kk-bg); }
+
+  /* ── Header ── */
+  .excel-header,
+  .kk-page__head {
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--kk-border);
+    background: #fff;
+  }
+
+  .kk-page__ico { display: none; }
+
+  .excel-header h4,
+  h4 {
+    font-size: 20px;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em;
+  }
+
+  .kk-page__sub {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--kk-muted);
+  }
+
+  /* ── Nút: trắng, viền xám, chữ đậm; không màu ── */
+  .more-btn,
+  .factory-toggle-btn,
+  .kk-play-btn {
+    width: auto;
+    height: 34px;
+    padding: 0 12px;
+    gap: 6px;
+    border: 1px solid var(--kk-border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--kk-text);
+    font-family: var(--kk-font);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: none;
+    transform: none;
+    white-space: nowrap;
+
+    i, .material-icons { font-size: 18px; color: var(--kk-muted); }
+
+    &:hover:not(:disabled) {
+      background: var(--kk-surface-2);
+      border-color: var(--kk-border);
+      color: var(--kk-text);
+      box-shadow: none;
+      transform: none;
+      i, .material-icons { color: var(--kk-text); }
+    }
+    &:disabled { opacity: .5; cursor: not-allowed; }
+    &:focus-visible { outline: 2px solid var(--kk-accent); outline-offset: 1px; }
+  }
+
+  .factory-toggle-btn { font-weight: 600; }
+
+  /* nút quan trọng (Scan vị trí, Đọc tồn kho): chỉ đậm chữ + viền đậm hơn */
+  .more-btn--primary,
+  .kk-play-btn {
+    border-color: var(--kk-border-strong);
+    font-weight: 600;
+    i, .material-icons { color: var(--kk-text); }
+  }
+
+  /* trạng thái "đang bật" (Live, Đã đọc tồn, menu đang mở): nền xám */
+  .more-btn--open,
+  .kk-play-btn--on,
+  .kk-live-btn--on {
+    background: var(--kk-surface-2) !important;
+    border-color: var(--kk-border-strong) !important;
+    color: var(--kk-text) !important;
+    i, .material-icons { color: var(--kk-text) !important; }
+  }
+
+  /* ── Ô tìm kiếm ── */
+  .kk-toolbar__search {
+    height: 34px;
+    max-width: 260px;
+    border: 1px solid var(--kk-border);
+    border-radius: 6px;
+
+    &:focus-within { border-color: var(--kk-border-strong); }
+    input { font-size: 13px; }
+  }
+
+  /* ── Chế độ xem: nút liền nhau, chế độ đang chọn nền xám + chữ đậm ── */
+  .kk-loc-map__modes {
+    display: inline-flex;
+    border: 1px solid var(--kk-border);
+    border-radius: 6px;
+    background: #fff;
+    margin-left: auto;
+    overflow: hidden;
+
+    button {
+      height: 32px;
+      padding: 0 14px;
+      border: 0;
+      border-right: 1px solid var(--kk-border);
+      background: transparent;
+      color: var(--kk-muted);
+      font-family: var(--kk-font);
+      font-size: 13px;
+      font-weight: 500;
+
+      &:last-child { border-right: 0; }
+      &:hover:not(:disabled) { background: var(--kk-surface-2); color: var(--kk-text); }
+
+      &.kk-loc-map__mode--on {
+        background: var(--kk-surface-2);
+        color: var(--kk-text);
+        font-weight: 700;
+      }
+    }
+  }
+
+  /* ── Hàng công cụ + menu ── */
+  .kk-toolbar__row--tools,
+  .kk-toolbar__row--filters {
+    border-top: 1px solid var(--kk-border);
+  }
+
+  .kk-toolbar__sep {
+    width: 1px;
+    height: 22px;
+    background: var(--kk-border);
+    margin: 0 2px;
+  }
+
+  .kk-menu { position: relative; }
+  .kk-menu__caret { font-size: 18px !important; margin-left: -2px; }
+
+  .kk-menu__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+  }
+
+  .kk-menu__pop {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 40;
+    min-width: 290px;
+    padding: 4px;
+    background: #fff;
+    border: 1px solid var(--kk-border-strong);
+    border-radius: 8px;
+
+    button {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 6px;
+      background: none;
+      color: var(--kk-text);
+      font-family: var(--kk-font);
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+
+      .material-icons { font-size: 18px; color: var(--kk-muted); margin-top: 1px; }
+
+      small {
+        display: block;
+        margin-top: 1px;
+        font-size: 11.5px;
+        font-weight: 400;
+        color: var(--kk-muted);
+      }
+
+      &:hover:not(:disabled) { background: var(--kk-surface-2); }
+      &:disabled { opacity: .45; cursor: not-allowed; }
+    }
+  }
+
+  /* ── Bộ lọc còn lại ("Chỉ hiện chưa KK") ── */
+  .kk-loc-map__opts { margin-left: 0; }
+
+  .kk-loc-map__opt {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--kk-border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--kk-text);
+    font-family: var(--kk-font);
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+
+    input[type="checkbox"] { accent-color: var(--kk-text); margin: 0; }
+  }
+
+  /* ── Bảng Live: khung xám nhạt ── */
+  .kk-live-board {
+    border: 1px solid var(--kk-border);
+    border-radius: 8px;
+    background: #FAFAF8;
+    box-shadow: none;
+  }
+
+  /* ── Vùng nội dung ── */
+  .kk-loc-map__idle {
+    border: 1px dashed var(--kk-border-strong);
+    border-radius: 8px;
+    background: #fff;
+    .material-icons { color: var(--kk-border-strong); }
+  }
+
+  .kk-loc-map__loading,
+  .kk-loc-map__status {
+    border-radius: 8px;
+    border: 1px solid var(--kk-border);
+    color: var(--kk-muted);
+  }
+
+  .kk-loc-map__table-wrap {
+    border-radius: 8px;
+    border: 1px solid var(--kk-border);
+    box-shadow: none;
+  }
+
+  .kk-loc-map__table {
+    font-family: var(--kk-font);
+
+    th {
+      background: var(--kk-surface-2);
+      color: var(--kk-muted);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: .02em;
+      border-color: var(--kk-border);
+    }
+    td {
+      border-color: var(--kk-border);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* Mục (nhóm loại hàng): khung trắng, viền mảnh, không bóng */
+  .kk-type-muc {
+    border: 1px solid var(--kk-border);
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  .kk-type-muc__head:hover { background: var(--kk-surface-2); }
+
+  /* Ô loại hàng / ô vị trí: nền trắng, trạng thái KK = vạch 4px bên trái */
+  .kk-type-box,
+  .kk-loc-box {
+    background: #fff;
+    border: 1px solid var(--kk-border);
+    border-left: 4px solid var(--kk-none);
+    border-radius: 6px;
+    box-shadow: none;
+    transform: none;
+
+    &:hover {
+      background: #FAFAF8;
+      border-color: var(--kk-border-strong);
+      box-shadow: none;
+      transform: none;
+    }
+
+    &--done    { background: #fff; border-left-color: var(--kk-done); }
+    &--partial { background: #fff; border-left-color: var(--kk-partial); }
+    &--none    { background: #fff; border-left-color: var(--kk-none); }
+    &--empty   { background: #FAFAF8; }
+
+    span { color: var(--kk-muted); }
+    &--done span,
+    &--partial span,
+    &--none span { color: var(--kk-muted); }
+  }
+
+  .kk-type-box {
+    strong { font-weight: 700; }
+  }
+  .kk-type-box__code { color: var(--kk-text) !important; font-weight: 700 !important; }
+  .kk-type-box__home,
+  .kk-type-box__home-lab,
+  .kk-type-box__mgr,
+  .kk-type-box__mgr .material-icons { color: var(--kk-muted) !important; }
+
+  /* chú thích trạng thái (Đủ KK / Đang KK / Chưa KK) theo đúng 3 màu vạch */
+  .kk-loc-map__dot--done::before { background: var(--kk-done); }
+  .kk-loc-map__dot--partial::before { background: var(--kk-partial); }
+  .kk-loc-map__dot--none::before { background: var(--kk-none); }
+}

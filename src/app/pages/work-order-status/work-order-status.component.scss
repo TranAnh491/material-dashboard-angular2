@@ -5272,6 +5272,17 @@ textarea.mat-input-element {
     border-color: #2563eb;
     color: #1d4ed8;
   }
+
+  &--excel {
+    padding: 0 6px;
+    color: #166534;
+    border-color: #86efac;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
 }
 
 .wo-urgent-btn {

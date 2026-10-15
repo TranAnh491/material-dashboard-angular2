@@ -3,7 +3,7 @@ export type InspectionResult = 'PASS' | 'FAIL' | 'NA' | 'NOT_CHECKED';
 export type InspectionFrequency = 'daily' | 'weekly' | 'monthly';
 export type EquipmentCheckBy = 'computer' | 'qr';
 export type MaintenanceBy = 'internal' | 'external';
-export type MaintenanceCycle = 'quarter' | 'half' | 'year';
+export type MaintenanceCycle = 'month' | 'quarter' | 'half' | 'year' | 'custom';
 
 export interface Equipment {
   equipmentId: string;
@@ -21,8 +21,12 @@ export interface Equipment {
   checkBy?: EquipmentCheckBy;
   /** Nội bộ hoặc bên ngoài. Trống nếu chưa chọn. */
   maintenanceBy?: MaintenanceBy | null;
-  /** Chỉ khi bảo dưỡng nội bộ: quý, 6 tháng, 1 năm. */
+  /** Cả nội bộ và bên ngoài: 1 tháng, quý, 6 tháng, 1 năm, hoặc tùy chọn. */
   maintenanceCycle?: MaintenanceCycle | null;
+  /** Ngày bắt đầu khi chu kỳ là tùy chọn. */
+  maintenanceStartDate?: string | null;
+  /** Số ngày lặp lại khi chu kỳ là tùy chọn. */
+  maintenanceRepeatDays?: number | null;
   /** Hạng mục riêng của máy này. Không có thì dùng hạng mục của nhóm con. */
   inspectionItems?: string[];
   createdAt?: string;

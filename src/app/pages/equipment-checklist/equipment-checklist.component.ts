@@ -88,9 +88,21 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   form: Equipment = this.emptyEquipment();
   showDelete = false;
   deletePassword = '';
+  /** Mật khẩu mở mục Danh sách thiết bị (chỉ chặn trên giao diện, giống mật khẩu Xóa). */
+  private static readonly LIST_PASSWORD = '2026';
+  showListPassword = false;
+  listPassword = '';
+  listPasswordError = '';
+  private listUnlocked = false;
   deleteError = '';
   deleting = false;
   showInspect = false;
+  showMaintenanceForm = false;
+  maintenanceDoneKeys = new Set<string>();
+  readonly maintenanceGroups: Array<{ by: 'internal' | 'external'; title: string }> = [
+    { by: 'internal', title: 'Bảo dưỡng trong' },
+    { by: 'external', title: 'Bảo dưỡng ngoài' }
+  ];
 
   dialogOpen = false;
   dialogEquipment: Equipment | null = null;
@@ -103,6 +115,8 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   dialogImage = '';
   dialogChecks = new Set<string>();
   dialogSaving = false;
+  maintBoxes: Array<{ iso: string; internal: number; external: number; late: boolean }> = [];
+  maintKpi = { internal: 0, external: 0, internalSoon: 0, externalSoon: 0, internalLate: 0, externalLate: 0 };
 
   historyEquipment: Equipment | null = null;
   history: InspectionRecord[] = [];
@@ -113,9 +127,13 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   scanOn = false;
   scanError = '';
   mobileUi = false;
-  mobileStep: 'staff' | 'equip' | 'form' | 'done' = 'staff';
+  mobileStep: 'staff' | 'equip' | 'late' | 'form' | 'done' = 'equip';
+  mobileLateEquipment: Equipment | null = null;
+  mobileLateDates: string[] = [];
   mobileScanBy: 'pda' | 'camera' = 'pda';
   mobileStaff: EquipmentStaff | null = null;
+  private pdaDropUntilBreak = false;
+  private pdaDropTimer = 0;
   private scanner: { stop: () => Promise<void> } | null = null;
 
   zaloSending = false;
@@ -135,6 +153,18 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.userRole = user?.role || '';
     await this.reload();
     if (seeded) this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
+    try {
+      const filled = await this.api.fillPassedChecksUntil(this.equipment, '2026-10-10', (eq) => ({
+        inspector: eq.responsiblePerson?.trim() || this.staff[0]?.name || 'Nguyễn Hoàng Tuấn',
+        items: this.namesFor(eq)
+      }));
+      if (filled > 0) {
+        this.flash(`Đã ghi ${filled} lần kiểm tra Đạt đến 10/10/2026.`);
+        await this.reload();
+      }
+    } catch (e: unknown) {
+      this.flash(e instanceof Error ? e.message : 'Không ghi được dữ liệu kiểm tra Đạt.', true);
+    }
     this.mobileUi = this.isHandheld();
     if (this.mobileUi) {
       this.cdr.detectChanges();
@@ -286,19 +316,22 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.cdr.markForCheck();
     try {
-      const [equipment, records, staff, catalog] = await Promise.all([
+      const [equipment, records, staff, catalog, maintenanceDone] = await Promise.all([
         this.api.listEquipment(),
         this.api.listInspections(this.year, this.month),
         this.api.listStaff(),
-        this.api.loadItemCatalog()
+        this.api.loadItemCatalog(),
+        this.api.listMaintenanceDone(this.year)
       ]);
       this.equipment = equipment;
       this.records = records;
       this.staff = staff;
+      this.maintenanceDoneKeys = new Set(maintenanceDone.map(row => this.maintenanceDoneKey(row.equipmentId, row.dueDate)));
       this.applyCatalog(catalog.checklists, catalog.maintenanceItems);
       this.initCollapse();
       const max = daysOfMonth(this.year, this.month).length;
       if (this.selectedDay > max) this.selectedDay = max;
+      this.refreshMaintenanceBoard();
     } catch (e: unknown) {
       this.flash(e instanceof Error ? e.message : 'Không tải được dữ liệu.', true);
     } finally {
@@ -379,10 +412,236 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.api.exportMonth(this.filtered, this.records, this.year, this.month);
   }
 
+  printChecklistA3(download: boolean): void {
+    const logo = `${window.location.origin}/assets/img/logo.png`;
+    const days = this.days;
+    const issued = '01/10/2026';
+    const headDays = days.map(d => `<th class="${this.isSundayDay(d) ? 'sun' : ''}">${d}</th>`).join('');
+    const body = this.equipment.map((eq, i) => {
+      const cells = days.map(d => {
+        if (this.isCellLocked(eq, d)) return '<td class="sun"></td>';
+        const tone = this.dayTone(eq, d);
+        const mark = tone === 'pass' ? '✓' : tone === 'fail' ? '✕' : '';
+        return `<td class="${tone}">${mark}</td>`;
+      }).join('');
+      return `<tr><td>${i + 1}</td><td class="name">${this.escapePrint(eq.equipmentName)}</td><td>${this.escapePrint(eq.managementCode)}</td><td>${this.escapePrint(eq.responsiblePerson || '')}</td>${cells}</tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Danh sách kiểm tra thiết bị ${this.month}/${this.year}</title>
+<style>
+@page { size: A3 landscape; margin: 10mm; }
+body { font-family: Arial, sans-serif; color: #000; margin: 0; }
+.pxk-top-header { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 8px; }
+.pxk-top-header td { vertical-align: middle; border: 1px solid #000; padding: 6px; }
+.logo-cell { width: 180px; text-align: center; }
+.logo-cell img { max-width: 160px; max-height: 64px; object-fit: contain; }
+.title-cell { text-align: center; }
+.title-line1 { font-size: 18px; font-weight: 700; }
+.title-line2 { font-size: 14px; font-weight: 700; text-transform: uppercase; margin-top: 4px; }
+.meta-cell { width: 220px; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.meta-table td { border: 1px solid #000; padding: 3px 6px; }
+.meta-label { width: 46%; background: #f5f5f5; font-weight: 700; }
+.sub { margin: 0 0 8px; font-size: 12px; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 9px; }
+table.grid th, table.grid td { border: 1px solid #000; padding: 2px; text-align: center; }
+table.grid th { background: #f0f0f0; }
+table.grid td.name { text-align: left; white-space: nowrap; }
+td.pass { background: #bbf7d0; color: #166534; font-weight: 700; }
+td.fail { background: #fecaca; color: #991b1b; font-weight: 700; }
+td.open { background: #fef08a; }
+td.sun, th.sun { background: #e5e7eb; }
+.legend { margin-top: 8px; font-size: 11px; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin: 0 4px 0 10px; vertical-align: -2px; border: 1px solid #000; }
+.legend .g { background: #bbf7d0; } .legend .r { background: #fecaca; } .legend .y { background: #fef08a; }
+.actions { margin: 10px 0; }
+button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
+@media print { .actions { display: none; } }
+</style></head><body>
+<div class="actions"><button type="button" onclick="window.print()">In A3</button></div>
+<table class="pxk-top-header"><tr>
+<td class="logo-cell"><img src="${logo}" alt="AIRSPEED"></td>
+<td class="title-cell">
+  <div class="title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
+  <div class="title-line2">DANH SÁCH KIỂM TRA THIẾT BỊ KHO</div>
+</td>
+<td class="meta-cell"><table class="meta-table">
+  <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0030/F01</td></tr>
+  <tr><td class="meta-label">Phiên bản</td><td>05</td></tr>
+  <tr><td class="meta-label">Ngày ban hành</td><td>${issued}</td></tr>
+  <tr><td class="meta-label">Số trang</td><td>1/1</td></tr>
+</table></td>
+</tr></table>
+<p class="sub">Tháng ${this.month}/${this.year}. ✓ Đạt (xanh), chưa làm (vàng), ✕ Không đạt (đỏ). Chủ nhật không kiểm tra. Lịch tuần chỉ thứ 2.</p>
+<table class="grid"><thead><tr><th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Người phụ trách</th>${headDays}</tr></thead><tbody>${body}</tbody></table>
+<p class="legend"><i class="g"></i>Đạt<i class="y"></i>Chưa làm<i class="r"></i>Không đạt</p>
+</body></html>`;
+    if (download) {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `danh-sach-kiem-tra-${this.year}-${String(this.month).padStart(2, '0')}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      return;
+    }
+    const win = window.open('', '_blank');
+    if (!win) {
+      this.flash('Trình duyệt đang chặn cửa sổ in.', true);
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+  }
+
+  openMaintenanceForm(): void {
+    this.showInspect = false;
+    this.showMaintenanceForm = true;
+    this.cdr.markForCheck();
+  }
+
+  closeMaintenanceForm(): void {
+    this.showMaintenanceForm = false;
+    this.cdr.markForCheck();
+  }
+
+  maintenanceEquipment(by: 'internal' | 'external'): Equipment[] {
+    return this.equipment.filter(eq =>
+      eq.maintenanceBy === by
+      && !!eq.maintenanceCycle
+      && eq.status !== 'DISPOSED'
+      && eq.status !== 'INACTIVE'
+    );
+  }
+
+  maintenanceRounds(eq: Equipment): string[] {
+    return this.maintenanceDatesInYear(eq, this.year);
+  }
+
+  maintenanceCycleLabel(eq: Equipment): string {
+    if (eq.maintenanceCycle === 'month') return '1 tháng';
+    if (eq.maintenanceCycle === 'quarter') return '3 tháng';
+    if (eq.maintenanceCycle === 'half') return 'Theo 6 tháng';
+    if (eq.maintenanceCycle === 'year') return 'Theo 1 năm';
+    if (eq.maintenanceCycle === 'custom') {
+      const days = Math.floor(Number(eq.maintenanceRepeatDays) || 0);
+      return days > 0 ? `${days} ngày` : 'Tùy chọn';
+    }
+    return '';
+  }
+
+  maintenanceDoneHas(eq: Equipment, iso: string): boolean {
+    return this.maintenanceDoneKeys.has(this.maintenanceDoneKey(eq.equipmentId, iso));
+  }
+
+  async toggleMaintenanceDone(eq: Equipment, iso: string): Promise<void> {
+    const key = this.maintenanceDoneKey(eq.equipmentId, iso);
+    const done = !this.maintenanceDoneKeys.has(key);
+    const next = new Set(this.maintenanceDoneKeys);
+    if (done) next.add(key);
+    else next.delete(key);
+    this.maintenanceDoneKeys = next;
+    this.cdr.markForCheck();
+    try {
+      await this.api.setMaintenanceDone(eq.equipmentId, iso, done);
+    } catch (e: unknown) {
+      const rollback = new Set(this.maintenanceDoneKeys);
+      if (done) rollback.delete(key);
+      else rollback.add(key);
+      this.maintenanceDoneKeys = rollback;
+      this.flash(e instanceof Error ? e.message : 'Không lưu được lần bảo dưỡng.', true);
+      this.cdr.markForCheck();
+    }
+  }
+
+  printMaintenanceForm(download: boolean): void {
+    const logo = `${window.location.origin}/assets/img/logo.png`;
+    const section = (title: string, by: 'internal' | 'external') => {
+      const rows = this.maintenanceEquipment(by).map((eq, i) => {
+        const ticks = this.maintenanceRounds(eq).map(iso => {
+          const mark = this.maintenanceDoneHas(eq, iso) ? '☑' : '☐';
+          return `${mark} ${this.formatViDate(iso)}`;
+        }).join(' &nbsp; ');
+        return `<tr><td>${i + 1}</td><td class="name">${this.escapePrint(eq.equipmentName)}</td><td>${this.escapePrint(eq.managementCode)}</td><td>${this.escapePrint(this.maintenanceCycleLabel(eq))}</td><td class="ticks">${ticks || 'Chưa có lịch trong năm'}</td></tr>`;
+      }).join('');
+      const body = rows || '<tr><td colspan="5">Chưa có thiết bị.</td></tr>';
+      return `<h2>${title}</h2><table class="grid"><thead><tr><th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Chu kỳ</th><th>Các lần bảo dưỡng</th></tr></thead><tbody>${body}</tbody></table>`;
+    };
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bảo dưỡng định kỳ ${this.year}</title>
+<style>
+@page { size: A3 landscape; margin: 10mm; }
+body { font-family: Arial, sans-serif; color: #000; margin: 0; }
+.pxk-top-header { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 8px; }
+.pxk-top-header td { vertical-align: middle; border: 1px solid #000; padding: 6px; }
+.logo-cell { width: 180px; text-align: center; }
+.logo-cell img { max-width: 160px; max-height: 64px; object-fit: contain; }
+.title-cell { text-align: center; }
+.title-line1 { font-size: 18px; font-weight: 700; }
+.title-line2 { font-size: 14px; font-weight: 700; text-transform: uppercase; margin-top: 4px; }
+.meta-cell { width: 220px; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.meta-table td { border: 1px solid #000; padding: 3px 6px; }
+.meta-label { width: 46%; background: #f5f5f5; font-weight: 700; }
+h2 { font-size: 13px; margin: 12px 0 6px; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 11px; }
+table.grid th, table.grid td { border: 1px solid #000; padding: 4px; text-align: center; }
+table.grid th { background: #f0f0f0; }
+table.grid td.name, table.grid td.ticks { text-align: left; }
+.sub { margin: 0 0 8px; font-size: 12px; }
+.actions { margin: 10px 0; }
+button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
+@media print { .actions { display: none; } }
+</style></head><body>
+<div class="actions"><button type="button" onclick="window.print()">In A3</button></div>
+<table class="pxk-top-header"><tr>
+<td class="logo-cell"><img src="${logo}" alt="AIRSPEED"></td>
+<td class="title-cell">
+  <div class="title-line1">AIRSPEED MANUFACTURING VIET NAM</div>
+  <div class="title-line2">BẢO DƯỠNG ĐỊNH KỲ</div>
+</td>
+<td class="meta-cell"><table class="meta-table">
+  <tr><td class="meta-label">Mã quản lý</td><td>WH-WI0030/F02</td></tr>
+  <tr><td class="meta-label">Phiên bản</td><td>04</td></tr>
+  <tr><td class="meta-label">Ngày ban hành</td><td>01/10/2026</td></tr>
+  <tr><td class="meta-label">Số trang</td><td>1/1</td></tr>
+</table></td>
+</tr></table>
+<p class="sub">Năm ${this.year}. ☑ đã bảo dưỡng lần đó. ☐ chưa bảo dưỡng.</p>
+${section('Bảo dưỡng trong', 'internal')}
+${section('Bảo dưỡng ngoài', 'external')}
+</body></html>`;
+    if (download) {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `bao-duong-dinh-ky-${this.year}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      return;
+    }
+    const win = window.open('', '_blank');
+    if (!win) {
+      this.flash('Trình duyệt đang chặn cửa sổ in.', true);
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+  }
+
+  private maintenanceDoneKey(equipmentId: string, iso: string): string {
+    return `${equipmentId}|${iso}`;
+  }
+
+  private escapePrint(value: string): string {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   async openDay(eq: Equipment, day: number): Promise<boolean> {
     const date = dateKey(this.year, this.month, day);
-    if (!this.canInspectDate(date)) {
-      this.flash(this.inspectBlockReason(date), true);
+    if (!this.canInspectDate(date, eq)) {
+      this.flash(this.inspectBlockReason(date, eq), true);
       return false;
     }
     const existing = this.records.find(r => r.equipmentId === eq.equipmentId && r.inspectionDate === date);
@@ -412,8 +671,8 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   async onPanelDate(): Promise<void> {
     if (!this.dialogEquipment || !/^\d{4}-\d{2}-\d{2}$/.test(this.dialogDate)) return;
-    if (!this.canInspectDate(this.dialogDate)) {
-      this.flash(this.inspectBlockReason(this.dialogDate), true);
+    if (!this.canInspectDate(this.dialogDate, this.dialogEquipment)) {
+      this.flash(this.inspectBlockReason(this.dialogDate, this.dialogEquipment), true);
       this.dialogDate = this.cellDate(this.selectedDay);
       this.cdr.markForCheck();
       return;
@@ -452,8 +711,8 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   async saveInspection(): Promise<void> {
     if (!this.dialogEquipment) return;
-    if (!this.canInspectDate(this.dialogDate)) {
-      this.flash(this.inspectBlockReason(this.dialogDate), true);
+    if (!this.canInspectDate(this.dialogDate, this.dialogEquipment)) {
+      this.flash(this.inspectBlockReason(this.dialogDate, this.dialogEquipment), true);
       return;
     }
     if (this.dialogResult === 'FAIL' && !this.dialogDefect.trim()) {
@@ -475,18 +734,21 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
         checkedItems: this.itemRows.filter(row => row.result === 'PASS').map(row => row.name),
         itemResults: this.itemRows.map(row => ({ itemName: row.name, result: row.result, note: row.note.trim() }))
       });
-      const savedId = this.dialogEquipment.equipmentId;
-      const savedDate = this.dialogDate;
       await this.reload();
+      this.dialogOpen = false;
       if (this.mobileUi) {
-        this.dialogOpen = false;
-        this.mobileStep = 'done';
+        const rest = this.dialogEquipment ? this.lateDatesFor(this.dialogEquipment) : [];
         this.message = '';
+        if (rest.length && this.dialogEquipment) {
+          this.mobileLateEquipment = this.dialogEquipment;
+          this.mobileLateDates = rest;
+          this.mobileStep = 'late';
+          return;
+        }
+        this.mobileStep = 'done';
         return;
       }
       this.flash('Đã lưu kiểm tra.');
-      const fresh = this.equipment.find(item => item.equipmentId === savedId);
-      if (fresh) await this.openDay(fresh, Number(savedDate.slice(8, 10)));
     } catch (e: unknown) {
       this.flash(e instanceof Error ? e.message : 'Không lưu được kết quả.', true);
     } finally {
@@ -521,7 +783,34 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
       void this.startScan();
       return;
     }
+    if (view === 'list' && !this.listUnlocked) {
+      this.listPassword = '';
+      this.listPasswordError = '';
+      this.showListPassword = true;
+      this.cdr.markForCheck();
+      return;
+    }
     this.view = view;
+    this.cdr.markForCheck();
+  }
+
+  /** Mở mục Danh sách thiết bị: cần mật khẩu, nhập đúng 1 lần thì mở được tới khi rời tab. */
+  confirmListPassword(): void {
+    if (this.listPassword !== EquipmentChecklistComponent.LIST_PASSWORD) {
+      this.listPasswordError = 'Sai mật khẩu.';
+      this.cdr.markForCheck();
+      return;
+    }
+    this.listUnlocked = true;
+    this.showListPassword = false;
+    this.listPassword = '';
+    this.setView('list');
+  }
+
+  cancelListPassword(): void {
+    this.showListPassword = false;
+    this.listPassword = '';
+    this.listPasswordError = '';
     this.cdr.markForCheck();
   }
 
@@ -560,19 +849,22 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   }
 
   get monthBars(): Array<{ day: number; pass: number; fail: number; na: number; open: number; sunday: boolean }> {
+    const today = this.todayKey();
     return this.days.map(day => {
       const key = dateKey(this.year, this.month, day);
-      if (this.isSundayDate(key)) return { day, pass: 0, fail: 0, na: 0, open: 0, sunday: true };
+      if (this.isSundayDate(key) || this.isHolidayDate(key)) return { day, pass: 0, fail: 0, na: 0, open: 0, sunday: true };
       let pass = 0;
       let fail = 0;
       let na = 0;
       let open = 0;
+      const future = key > today;
       this.activePool.forEach(eq => {
-        const result = this.resultOn(eq, key);
+        if (!this.isChartDue(eq, key)) return;
+        const result = future ? this.resultOn(eq, key) : this.periodResult(eq, key);
         if (result === 'PASS') pass += 1;
         else if (result === 'FAIL') fail += 1;
         else if (result === 'NA') na += 1;
-        else open += 1;
+        else if (!future) open += 1;
       });
       return { day, pass, fail, na, open, sunday: false };
     });
@@ -725,16 +1017,208 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   async setMaintenance(eq: Equipment, value: string): Promise<void> {
     const by: MaintenanceBy | null = value === 'internal' || value === 'external' ? value : null;
     eq.maintenanceBy = by;
-    if (eq.maintenanceBy !== 'internal') eq.maintenanceCycle = null;
     await this.saveRow(eq);
+    this.refreshMaintenanceBoard();
     this.cdr.markForCheck();
   }
 
   async setMaintenanceCycle(eq: Equipment, value: string): Promise<void> {
-    const cycle: MaintenanceCycle | null = value === 'quarter' || value === 'half' || value === 'year' ? value : null;
-    eq.maintenanceCycle = cycle;
+    const allowed: MaintenanceCycle[] = ['month', 'quarter', 'half', 'year', 'custom'];
+    eq.maintenanceCycle = allowed.includes(value as MaintenanceCycle) ? value as MaintenanceCycle : null;
     await this.saveRow(eq);
+    this.refreshMaintenanceBoard();
     this.cdr.markForCheck();
+  }
+
+  async setMaintenanceStart(eq: Equipment, value: string): Promise<void> {
+    eq.maintenanceStartDate = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    await this.saveRow(eq);
+    this.refreshMaintenanceBoard();
+    this.cdr.markForCheck();
+  }
+
+  async setMaintenanceRepeat(eq: Equipment, value: string | number): Promise<void> {
+    const n = Math.floor(Number(value));
+    eq.maintenanceRepeatDays = n > 0 ? n : null;
+    await this.saveRow(eq);
+    this.refreshMaintenanceBoard();
+    this.cdr.markForCheck();
+  }
+
+  countStatus(status: Equipment['status']): number {
+    return this.equipment.filter(eq => eq.status === status).length;
+  }
+
+  countMaintenance(by: 'internal' | 'external'): number {
+    return this.equipment.filter(eq => eq.maintenanceBy === by).length;
+  }
+
+  countCheckBy(by: 'computer' | 'qr'): number {
+    return this.equipment.filter(eq => (eq.checkBy || 'computer') === by).length;
+  }
+
+  get maintWindowLabel(): string {
+    if (!this.maintBoxes.length) return '';
+    const first = this.maintBoxes[0].iso;
+    const last = this.maintBoxes[this.maintBoxes.length - 1].iso;
+    return `${this.formatViMonth(first)} – ${this.formatViMonth(last)}`;
+  }
+
+  get maintMonths(): Array<{ label: string; boxes: Array<{ iso: string; internal: number; external: number; late: boolean }> }> {
+    const groups: Array<{ label: string; boxes: typeof this.maintBoxes }> = [];
+    let key = '';
+    this.maintBoxes.forEach(box => {
+      const monthKey = box.iso.slice(0, 7);
+      if (monthKey !== key) {
+        key = monthKey;
+        groups.push({ label: this.formatViMonth(box.iso), boxes: [] });
+      }
+      groups[groups.length - 1].boxes.push(box);
+    });
+    return groups;
+  }
+
+  yearBoxTitle(box: { iso: string; internal: number; external: number }): string {
+    const [y, m, d] = box.iso.split('-');
+    const parts = [`${d}/${m}/${y}`];
+    if (box.internal) parts.push(`Trong: ${box.internal}`);
+    if (box.external) parts.push(`Ngoài: ${box.external}`);
+    if (!box.internal && !box.external) parts.push('Không tới hạn');
+    return parts.join(' · ');
+  }
+
+  private formatViMonth(iso: string): string {
+    const [y, m] = iso.split('-');
+    return `${m}/${y}`;
+  }
+
+  private refreshMaintenanceBoard(): void {
+    const today = this.todayKey();
+    const soon = this.shiftIso(today, 30);
+    const kpi = { internal: 0, external: 0, internalSoon: 0, externalSoon: 0, internalLate: 0, externalLate: 0 };
+    const [y, m] = today.split('-').map(Number);
+    const start = new Date(y, (m || 1) - 1, 1);
+    const end = new Date(y, (m || 1) - 1 + 12, 0);
+    const fromIso = this.isoDate(start);
+    const toIso = this.isoDate(end);
+    const boxes: Array<{ iso: string; internal: number; external: number; late: boolean }> = [];
+    const cursor = new Date(start);
+    while (this.isoDate(cursor) <= toIso) {
+      const iso = this.isoDate(cursor);
+      boxes.push({ iso, internal: 0, external: 0, late: iso < today });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    const index = new Map(boxes.map((box, i) => [box.iso, i]));
+    for (const eq of this.equipment) {
+      if (eq.maintenanceBy !== 'internal' && eq.maintenanceBy !== 'external') continue;
+      if (!eq.maintenanceCycle) continue;
+      if (eq.maintenanceBy === 'internal') kpi.internal += 1;
+      else kpi.external += 1;
+      const next = this.nextMaintenanceIso(eq, today);
+      if (next) {
+        const late = next < today;
+        const upcoming = next >= today && next <= soon;
+        if (eq.maintenanceBy === 'internal') {
+          if (late) kpi.internalLate += 1;
+          else if (upcoming) kpi.internalSoon += 1;
+        } else if (late) kpi.externalLate += 1;
+        else if (upcoming) kpi.externalSoon += 1;
+      }
+      for (const iso of this.maintenanceDatesBetween(eq, fromIso, toIso)) {
+        const at = index.get(iso);
+        if (at === undefined) continue;
+        if (eq.maintenanceBy === 'internal') boxes[at].internal += 1;
+        else boxes[at].external += 1;
+      }
+    }
+    this.maintBoxes = boxes;
+    this.maintKpi = kpi;
+  }
+
+  private nextMaintenanceIso(eq: Equipment, today: string): string | null {
+    const first = this.firstMaintenanceDate(eq);
+    if (!first) return null;
+    let cursor = first;
+    let last: string | null = null;
+    for (let i = 0; i < 500; i++) {
+      const iso = this.isoDate(cursor);
+      if (iso >= today) return iso;
+      last = iso;
+      const next = this.advanceMaintenance(eq, cursor);
+      if (!next || this.isoDate(next) === iso) return last;
+      cursor = next;
+    }
+    return last;
+  }
+
+  private maintenanceDatesInYear(eq: Equipment, year: number): string[] {
+    return this.maintenanceDatesBetween(eq, `${year}-01-01`, `${year}-12-31`);
+  }
+
+  private firstMaintenanceDate(eq: Equipment): Date | null {
+    const anchor = this.maintenanceAnchor(eq);
+    if (!anchor) return null;
+    return this.advanceMaintenance(eq, anchor);
+  }
+
+  private maintenanceDatesBetween(eq: Equipment, fromIso: string, toIso: string): string[] {
+    const first = this.firstMaintenanceDate(eq);
+    if (!first) return [];
+    let cursor = first;
+    const out: string[] = [];
+    for (let i = 0; i < 500 && this.isoDate(cursor) < fromIso; i++) {
+      const next = this.advanceMaintenance(eq, cursor);
+      if (!next) return out;
+      cursor = next;
+    }
+    for (let i = 0; i < 400; i++) {
+      const iso = this.isoDate(cursor);
+      if (iso > toIso) break;
+      if (iso >= fromIso) out.push(iso);
+      const next = this.advanceMaintenance(eq, cursor);
+      if (!next || this.isoDate(next) <= iso) break;
+      cursor = next;
+    }
+    return out;
+  }
+
+  private maintenanceAnchor(eq: Equipment): Date | null {
+    const raw = String(eq.maintenanceStartDate || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const [y, m, d] = raw.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  private advanceMaintenance(eq: Equipment, from: Date): Date | null {
+    if (eq.maintenanceCycle === 'month') return new Date(from.getFullYear(), from.getMonth() + 1, from.getDate());
+    if (eq.maintenanceCycle === 'quarter') return new Date(from.getFullYear(), from.getMonth() + 3, from.getDate());
+    if (eq.maintenanceCycle === 'half') return new Date(from.getFullYear(), from.getMonth() + 6, from.getDate());
+    if (eq.maintenanceCycle === 'year') return new Date(from.getFullYear() + 1, from.getMonth(), from.getDate());
+    const days = Math.floor(Number(eq.maintenanceRepeatDays) || 0);
+    if (eq.maintenanceCycle === 'custom' && days > 0) return new Date(from.getFullYear(), from.getMonth(), from.getDate() + days);
+    return null;
+  }
+
+  private isoDate(d: Date): string {
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  private shiftIso(iso: string, days: number): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    return this.isoDate(new Date(y, m - 1, d + days));
+  }
+
+  dayTone(eq: Equipment, day: number): '' | 'pass' | 'fail' | 'open' {
+    if (this.isCellLocked(eq, day)) return '';
+    const iso = this.cellDate(day);
+    const result = this.resultOn(eq, iso);
+    if (result === 'PASS') return 'pass';
+    if (result === 'FAIL') return 'fail';
+    if (result === 'NA') return '';
+    if (iso > this.todayKey()) return '';
+    return 'open';
   }
 
   addCheckItem(sub: { items: string[] }): void {
@@ -783,26 +1267,35 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return this.isSundayDate(this.cellDate(day));
   }
 
+  isWeeklyLockedDay(eq: Equipment, day: number): boolean {
+    return eq.frequency === 'weekly' && !this.isMondayDate(this.cellDate(day));
+  }
+
+  isCellLocked(eq: Equipment, day: number): boolean {
+    return this.isSundayDay(day) || this.isWeeklyLockedDay(eq, day);
+  }
+
   weekdayLabel(day: number): string {
     const [y, m, d] = this.cellDate(day).split('-').map(Number);
     return ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(y, m - 1, d).getDay()];
   }
 
-  canInspectDay(day: number): boolean {
-    return this.canInspectDate(this.cellDate(day));
+  canInspectDay(day: number, eq?: Equipment): boolean {
+    return this.canInspectDate(this.cellDate(day), eq);
   }
 
   dayLockTitle(day: number, eq?: Equipment): string {
     if (this.isSundayDay(day)) return 'Chủ nhật không kiểm tra.';
-    if (!this.canInspectDay(day)) return 'Không kiểm tra trước ngày.';
+    if (eq && this.isWeeklyLockedDay(eq, day)) return 'Lịch tuần: chỉ kiểm vào thứ 2.';
+    if (!this.canInspectDay(day, eq)) return 'Không kiểm tra trước ngày.';
     if (eq && this.checkedDay(eq, day)) return 'Đã kiểm';
     return eq ? 'Tick để kiểm tra' : 'Chưa kiểm';
   }
 
   openInspectDay(eq: Equipment, day: number): void {
     if (this.isQrCheck(eq)) return;
-    if (!this.canInspectDay(day)) {
-      this.flash(this.inspectBlockReason(this.cellDate(day)), true);
+    if (!this.canInspectDay(day, eq)) {
+      this.flash(this.inspectBlockReason(this.cellDate(day), eq), true);
       return;
     }
     void this.openDay(eq, day);
@@ -834,6 +1327,16 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     }
   }
 
+  itemTitle(name: string): string {
+    if (!this.showsPalletItemDetail()) return name;
+    return this.itemCopy(name).title;
+  }
+
+  itemDetail(name: string): string {
+    if (!this.showsPalletItemDetail()) return '';
+    return this.itemCopy(name).detail;
+  }
+
   resultLabel(result: string): string {
     if (result === 'PASS') return 'Đạt';
     if (result === 'FAIL') return 'Không đạt';
@@ -849,6 +1352,67 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   go(path: string): void {
     void this.router.navigate([path]);
+  }
+
+  goBack(): void {
+    if (this.mobileUi && this.mobileStep === 'form' && this.mobileLateEquipment) {
+      this.dialogOpen = false;
+      this.mobileLateDates = this.lateDatesFor(this.mobileLateEquipment);
+      this.mobileStep = this.mobileLateDates.length ? 'late' : 'equip';
+      if (this.mobileStep === 'equip') this.resumeMobileScan();
+      this.cdr.markForCheck();
+      return;
+    }
+    if (this.mobileUi && this.mobileStep === 'late') {
+      this.mobileLateEquipment = null;
+      this.mobileLateDates = [];
+      this.mobileStep = 'equip';
+      this.resumeMobileScan();
+      return;
+    }
+    if (this.mobileUi && (this.mobileStep === 'form' || this.mobileStep === 'done')) {
+      this.cancelMobileInspect();
+      return;
+    }
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    void this.router.navigate(['/menu']);
+  }
+
+  get pendingForStaff(): Equipment[] {
+    const id = this.pdaStaffCode(this.mobileStaff?.employeeId || '');
+    const day = this.todayKey();
+    return this.equipment.filter(eq => {
+      if (eq.status !== 'ACTIVE' && eq.status !== 'REPAIR') return false;
+      if (id && this.pdaStaffCode(eq.responsibleEmployeeId || '') !== id) return false;
+      if (eq.frequency === 'weekly' && !this.isMondayDate(day)) return false;
+      return !periodDone(eq, this.records, day);
+    });
+  }
+
+  async openPending(eq: Equipment): Promise<void> {
+    await this.beginEquipmentCheck(eq);
+  }
+
+  async openLateDay(iso: string): Promise<void> {
+    const eq = this.mobileLateEquipment;
+    if (!eq || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+    const [y, m, d] = iso.split('-').map(Number);
+    if (y !== this.year || m !== this.month) {
+      this.year = y;
+      this.month = m;
+      await this.reload();
+    }
+    const fresh = this.equipment.find(item => item.equipmentId === eq.equipmentId) || eq;
+    const opened = await this.openDay(fresh, d);
+    if (!opened) return;
+    this.dialogInspector = this.mobileStaff?.name || this.mobileStaff?.employeeId || this.dialogInspector;
+    this.dialogOpen = false;
+    this.mobileStep = 'form';
+    this.message = '';
+    this.cdr.markForCheck();
   }
 
   async openHistoryRecord(rec: InspectionRecord): Promise<void> {
@@ -936,22 +1500,57 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     this.resumeMobileScan();
   }
 
+  onMobileScanKey(event: KeyboardEvent): void {
+    const enter = event.key === 'Enter' || event.key === 'Tab';
+    if (this.pdaDropUntilBreak) {
+      event.preventDefault();
+      if (enter) this.clearPdaDrop();
+      return;
+    }
+    if (enter) {
+      event.preventDefault();
+      this.submitScan();
+      return;
+    }
+    if (!this.isPdaStaffScan() || event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return;
+    window.setTimeout(() => this.commitPdaStaffIfReady(), 0);
+  }
+
   @HostListener('document:keydown', ['$event'])
   onPdaKey(event: KeyboardEvent): void {
     if (!this.mobileUi || this.mobileScanBy !== 'pda') return;
     if (this.mobileStep !== 'staff' && this.mobileStep !== 'equip') return;
     const el = this.mobileScanBox?.nativeElement;
     if (!el || document.activeElement === el) return;
-    if (event.key === 'Enter' || event.key === 'Tab') {
+    const enter = event.key === 'Enter' || event.key === 'Tab';
+    if (this.pdaDropUntilBreak) {
+      event.preventDefault();
+      if (enter) this.clearPdaDrop();
+      return;
+    }
+    if (enter) {
       event.preventDefault();
       this.submitScan();
       return;
     }
-    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      event.preventDefault();
-      this.scanBuffer += event.key;
+    if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    if (this.mobileStep === 'staff') {
+      const next = this.scanBuffer + event.key;
+      const code = this.pdaStaffCode(next);
+      if (code) {
+        this.scanBuffer = code;
+        this.armPdaDrop();
+        this.cdr.markForCheck();
+        void this.onScanned(code);
+        return;
+      }
+      this.scanBuffer = next;
       this.cdr.markForCheck();
+      return;
     }
+    this.scanBuffer += event.key;
+    this.cdr.markForCheck();
   }
 
   private resumeMobileScan(): void {
@@ -1000,8 +1599,11 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   }
 
   submitScan(): void {
-    const text = this.scanBuffer;
+    const box = this.mobileUi ? this.mobileScanBox?.nativeElement : undefined;
+    let text = box?.value || this.scanBuffer;
+    if (this.mobileUi && this.mobileStep === 'staff') text = this.pdaStaffCode(text);
     this.scanBuffer = '';
+    if (box) box.value = '';
     void this.onScanned(text);
   }
 
@@ -1042,7 +1644,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
       const callable = this.fns.httpsCallable<Record<string, never>, { sent: number; due: number; offDay: boolean }>('sendEquipmentChecklistZaloRemindFn');
       const data = await firstValueFrom(callable({}));
       if (data?.offDay) this.flash('Chủ nhật hoặc ngày lễ, không nhắc kiểm tra.');
-      else if (!data?.due) this.flash('Đã kiểm tra đủ trước 11:00. Không nhắn nhóm Kho.');
+      else if (!data?.due) this.flash('Đã kiểm tra đủ. Không nhắn nhóm Kho.');
       else if (data.sent) this.flash(`Đã nhắn nhóm Kho ${data.due} thiết bị chưa kiểm tra.`);
       else this.flash('Không gửi được tin vào nhóm Kho.', true);
     } catch (e: unknown) {
@@ -1062,22 +1664,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     const code = raw.trim();
     if (!code || this.scanLock || this.mobileStep === 'form' || this.mobileStep === 'done') return;
     this.scanBuffer = '';
-    if (this.mobileStep === 'staff') {
-      const person = this.findStaff(code);
-      if (!person) {
-        this.flash('Không thấy mã nhân viên.', true);
-        this.focusMobileScan();
-        return;
-      }
-      this.mobileStaff = person;
-      this.mobileStep = 'equip';
-      this.message = '';
-      this.holdScan();
-      this.cdr.markForCheck();
-      return;
-    }
     const id = code.replace(/^EQ:/i, '');
-    if (this.findStaff(id)) return;
     const eq = this.equipment.find(e => e.managementCode.toLowerCase() === id.toLowerCase() || e.equipmentId.toLowerCase() === id.toLowerCase());
     if (!eq) {
       this.flash(`Không thấy thiết bị ${id}.`, true);
@@ -1086,31 +1673,125 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     }
     this.scanLock = true;
     try {
-      await this.stopScan();
-      const now = new Date();
-      this.year = now.getFullYear();
-      this.month = now.getMonth() + 1;
-      this.selectedDay = now.getDate();
-      await this.reload();
-      const fresh = this.equipment.find(item => item.equipmentId === eq.equipmentId) || eq;
-      const opened = await this.openDay(fresh, this.selectedDay);
-      if (!opened) {
-        this.resumeMobileScan();
-        return;
-      }
-      this.dialogInspector = this.mobileStaff?.name || this.mobileStaff?.employeeId || this.dialogInspector;
-      this.dialogOpen = false;
-      this.mobileStep = 'form';
-      this.message = '';
+      await this.beginEquipmentCheck(eq);
     } finally {
       this.scanLock = false;
       this.cdr.markForCheck();
     }
   }
 
+  private showsPalletItemDetail(): boolean {
+    if (this.dialogEquipment?.subcategoryId === 'CAT-01-01') return true;
+    const names = new Set(this.itemRows.map(row => row.name.trim().toLowerCase()));
+    return names.has('pin') && names.has('thủy lực') && names.has('bánh xe')
+      && (names.has('phanh') || names.has('hệ thống thắng'));
+  }
+
+  private itemCopy(name: string): { title: string; detail: string } {
+    const key = name.trim().toLowerCase();
+    const rows: Record<string, { title: string; detail: string }> = {
+      'pin': { title: 'Pin', detail: 'Pin có hiển thị % không' },
+      'phanh': { title: 'Hệ thống thắng', detail: 'Có dừng khi thả tay lái không' },
+      'hệ thống thắng': { title: 'Hệ thống thắng', detail: 'Có dừng khi thả tay lái không' },
+      'thủy lực': { title: 'Thủy lực', detail: 'Có nâng hạ không' },
+      'bánh xe': { title: 'Bánh xe', detail: 'Hoạt động bình thường không' }
+    };
+    return rows[key] || { title: name, detail: '' };
+  }
+
   private findStaff(raw: string): EquipmentStaff | null {
     const code = raw.trim().split(/\s+/)[0].toUpperCase();
-    return this.staff.find(person => person.employeeId.trim().toUpperCase() === code) || null;
+    const head = this.pdaStaffCode(code);
+    return this.staff.find(person => {
+      const id = person.employeeId.trim().toUpperCase();
+      return id === code || (!!head && (id === head || this.pdaStaffCode(id) === head));
+    }) || null;
+  }
+
+  private async beginEquipmentCheck(eq: Equipment): Promise<void> {
+    const now = new Date();
+    this.year = now.getFullYear();
+    this.month = now.getMonth() + 1;
+    this.selectedDay = now.getDate();
+    await this.stopScan();
+    await this.reload();
+    const fresh = this.equipment.find(item => item.equipmentId === eq.equipmentId) || eq;
+    const late = this.lateDatesFor(fresh);
+    if (late.length) {
+      this.mobileLateEquipment = fresh;
+      this.mobileLateDates = late;
+      this.dialogOpen = false;
+      this.mobileStep = 'late';
+      this.message = '';
+      this.cdr.markForCheck();
+      return;
+    }
+    this.mobileLateEquipment = null;
+    this.mobileLateDates = [];
+    const opened = await this.openDay(fresh, this.selectedDay);
+    if (!opened) {
+      this.resumeMobileScan();
+      return;
+    }
+    this.dialogInspector = this.mobileStaff?.name || this.mobileStaff?.employeeId || this.dialogInspector;
+    this.dialogOpen = false;
+    this.mobileStep = 'form';
+    this.message = '';
+    this.cdr.markForCheck();
+  }
+
+  private lateDatesFor(eq: Equipment): string[] {
+    if (eq.frequency === 'monthly') return [];
+    const today = this.todayKey();
+    let cursor = `${today.slice(0, 7)}-01`;
+    const end = this.shiftIso(today, -1);
+    const out: string[] = [];
+    while (cursor <= end && out.length < 31) {
+      const required = eq.frequency === 'weekly' ? this.isMondayDate(cursor) : !this.isSundayDate(cursor);
+      if (required && !this.isHolidayDate(cursor) && !periodDone(eq, this.records, cursor)) out.push(cursor);
+      cursor = this.shiftIso(cursor, 1);
+    }
+    return out;
+  }
+
+  private isHolidayDate(iso: string): boolean {
+    const fixed = ['01-01', '04-30', '05-01', '09-02'];
+    const extra = new Set(['2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-04-25', '2026-04-27', '2026-09-01']);
+    return fixed.includes(iso.slice(5)) || extra.has(iso);
+  }
+
+  private isPdaStaffScan(): boolean {
+    return this.mobileUi && this.mobileStep === 'staff';
+  }
+
+  private pdaStaffCode(raw: string): string {
+    const compact = String(raw || '').replace(/[\s\u0000-\u001F]+/g, '').toUpperCase();
+    const head = compact.slice(0, 7);
+    if (/^ASP\d{4}$/.test(head)) return head;
+    return compact.match(/ASP\d{4}/)?.[0] || '';
+  }
+
+  private commitPdaStaffIfReady(): void {
+    if (!this.isPdaStaffScan() || this.pdaDropUntilBreak || this.scanLock) return;
+    const box = this.mobileScanBox?.nativeElement;
+    const value = box?.value || this.scanBuffer;
+    const code = this.pdaStaffCode(value);
+    if (!code) return;
+    this.armPdaDrop();
+    this.scanBuffer = '';
+    if (box) box.value = '';
+    void this.onScanned(code);
+  }
+
+  private armPdaDrop(): void {
+    this.pdaDropUntilBreak = true;
+    window.clearTimeout(this.pdaDropTimer);
+    this.pdaDropTimer = window.setTimeout(() => this.clearPdaDrop(), 500);
+  }
+
+  private clearPdaDrop(): void {
+    this.pdaDropUntilBreak = false;
+    window.clearTimeout(this.pdaDropTimer);
   }
 
   private holdScan(ms = 1500): void {
@@ -1149,18 +1830,29 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   }
 
-  private canInspectDate(iso: string): boolean {
-    return /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso <= this.todayKey() && !this.isSundayDate(iso);
+  private canInspectDate(iso: string, eq?: Equipment | null): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || iso > this.todayKey() || this.isSundayDate(iso)) return false;
+    if (eq?.frequency === 'weekly' && !this.isMondayDate(iso)) return false;
+    return true;
   }
 
   private isSundayDate(iso: string): boolean {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-    const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).getDay() === 0;
+    return this.weekdayIndex(iso) === 0;
   }
 
-  private inspectBlockReason(iso: string): string {
+  private isMondayDate(iso: string): boolean {
+    return this.weekdayIndex(iso) === 1;
+  }
+
+  private weekdayIndex(iso: string): number {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return -1;
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  }
+
+  private inspectBlockReason(iso: string, eq?: Equipment | null): string {
     if (this.isSundayDate(iso)) return 'Chủ nhật không kiểm tra.';
+    if (eq?.frequency === 'weekly' && !this.isMondayDate(iso)) return 'Lịch tuần: chỉ kiểm vào thứ 2.';
     return 'Không kiểm tra trước ngày.';
   }
 
@@ -1173,6 +1865,12 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   private todayKey(): string {
     const n = new Date();
     return dateKey(n.getFullYear(), n.getMonth() + 1, n.getDate());
+  }
+
+  /** Ngày thực sự phải có kết quả trên chart: tuần chỉ thứ 2, ngày/tháng các ngày làm việc. */
+  private isChartDue(eq: Equipment, iso: string): boolean {
+    if (eq.frequency === 'weekly') return this.isMondayDate(iso);
+    return true;
   }
 
   private periodResult(eq: Equipment, day: string): InspectionResult {

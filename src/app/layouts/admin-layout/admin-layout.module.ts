@@ -9,11 +9,8 @@ import { AdminLayoutRoutes } from './admin-layout.routing';
 import { GoogleSheetService } from '../../services/google-sheet.service';
 
 // Các component mặc định của admin layout
-import { DashboardComponent } from '../../dashboard/dashboard.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { AccountComponent } from '../../pages/account/account.component';
-import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
-import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
 
 // Angular Material modules
 import { MatButtonModule } from '@angular/material/button';
@@ -43,24 +40,14 @@ import { SharedModule } from '../../shared/shared.module';
 import { ComponentsModule } from '../../components/components.module';
 
 // Các component materials mới
-import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 
-import { EquipmentComponent } from '../../pages/equipment/equipment.component';
-import { WarehouseManualComponent } from '../../pages/equipment/warehouse-manual.component';
-import { WarehouseTrainingQuizComponent } from '../../pages/equipment/warehouse-training-quiz.component';
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
 import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
-import { ShipmentComponent } from '../../pages/shipment/shipment.component';
-import { DocumentsComponent } from 'app/pages/documents/documents.component';
 import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
-import { SettingsComponent } from '../../pages/settings/settings.component';
-import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
-import { QCComponent } from '../../pages/qc/qc.component';
-import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
 import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted-materials.component';
 import { ReportComponent } from '../../pages/report/report.component';
@@ -71,9 +58,7 @@ import { LocationUnlockDialogComponent } from '../../components/location-unlock-
 
 import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
-import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { EquipmentChecklistComponent } from '../../pages/equipment-checklist/equipment-checklist.component';
-import { DanhMucNvlTpComponent } from '../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp.component';
 import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-schedule-shared.module';
 
 @NgModule({
@@ -110,29 +95,15 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
     TruckScheduleSharedModule
   ],
   declarations: [
-    DashboardComponent,
     MenuComponent,
     AccountComponent,
-    MaterialsDashboardComponent,
-    FgsDashboardComponent,
     KpiReportsComponent,
-    EquipmentComponent,
-    WarehouseManualComponent,
-    WarehouseTrainingQuizComponent,
     InboundFgsComponent,
     OutboundFgsComponent,
-    ShipmentComponent,
-    WorkOrderStatusComponent,
-
-    DocumentsComponent,
     StockCheckComponent,
-    SettingsComponent,
-    PrintLabelComponent,
     IndexComponent,
     SxxkComponent,
     ScrapComponent,
-    QCComponent,
-    QcTraceabilityComponent,
     Rm1DeliveryComponent,
     ShortedMaterialsComponent,
     ReportComponent,
@@ -142,9 +113,7 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
 
     ChartComponent,
     ZaloComponent,
-    NhietDoComponent,
     EquipmentChecklistComponent,
-    DanhMucNvlTpComponent
   ],
   providers: [
     GoogleSheetService,

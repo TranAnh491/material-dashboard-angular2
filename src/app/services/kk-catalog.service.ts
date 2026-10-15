@@ -3,6 +3,14 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
 import { firstValueFrom } from 'rxjs';
 import { timeout } from 'rxjs/operators';
+import {
+  B037_REQUIRED_LOCATION,
+  FRIDGE_NVL_CODES,
+  FRIDGE_NVL_TYPE,
+  isB037Code,
+  isFridgeNvlCode
+} from '../pages/materials/fridge-nvl-catalog';
+import { shelfGroupRows } from '../pages/materials/shelf-group-catalog';
 
 export interface KkCatalogEntry {
   id: string;
@@ -55,17 +63,21 @@ export class KkCatalogService {
       return this.cachedEntries;
     }
 
-    const snap = await firstValueFrom(
-      this.firestore
-        .collection(this.collectionName, (ref) => ref.limit(10000))
-        .get()
-        .pipe(timeout(30000))
-    );
+    const [snap] = await Promise.all([
+      firstValueFrom(
+        this.firestore
+          .collection(this.collectionName, (ref) => ref.limit(10000))
+          .get()
+          .pipe(timeout(30000))
+      ),
+      this.loadShelfMap()
+    ]);
 
-    const items = (snap?.docs || [])
-      .map((doc) => this.mapDoc(doc.id, doc.data() as Record<string, unknown>))
-      .filter((x) => x.groupCode && x.productType)
-      .sort((a, b) => a.groupCode.localeCompare(b.groupCode, 'en', { numeric: true }));
+    const items = this.applyFridgeCatalog(
+      (snap?.docs || [])
+        .map((doc) => this.mapDoc(doc.id, doc.data() as Record<string, unknown>))
+        .filter((x) => x.groupCode && x.productType)
+    );
 
     this.cachedEntries = items;
     this.cachedMap = new Map(items.map((x) => [x.groupCode, x.productType]));
@@ -81,6 +93,7 @@ export class KkCatalogService {
   productTypeOf(materialCode: string, map?: Map<string, string>): string {
     const group = this.groupCodeFromMaterial(materialCode);
     if (!group) return '';
+    if (isFridgeNvlCode(group)) return FRIDGE_NVL_TYPE;
     return (map || this.cachedMap || new Map()).get(group) || '';
   }
 
@@ -145,9 +158,68 @@ export class KkCatalogService {
     homeLocs?: Map<string, string>
   ): string {
     const group = this.groupCodeFromMaterial(materialCode);
+    if (isB037Code(group)) return B037_REQUIRED_LOCATION;
     const saved = this.savedGroupLocation(group);
-    if (saved) return saved;
-    return this.ruleLocForMaterial(materialCode, this.productTypeOf(materialCode, typeMap), typeMap, homeLocs);
+    const base = saved
+      || this.ruleLocForMaterial(materialCode, this.productTypeOf(materialCode, typeMap), typeMap, homeLocs);
+    return this.withShelfMapLocations(base, materialCode);
+  }
+
+  /**
+   * Cộng thêm kệ từ Danh mục dãy kệ (kk-shelf-group-map/layout) theo đầu mã (B018, R029…):
+   * - đã có vị trí (lưu trên nhóm mã / quy định kệ / vị trí loại hàng) → thêm các kệ R chưa có
+   *   (vd B009: S07-T3 → "S07-T3, R15" — được phép ở cả 2 nơi);
+   * - chưa có vị trí → lấy mọi kệ R và S ghi đầu mã đó.
+   * Bảng dãy kệ nạp cùng loadAll(); chưa nạp thì giữ nguyên vị trí cũ.
+   */
+  withShelfMapLocations(base: string, codeOrGroup: string | null | undefined): string {
+    const head = /^([BR]\d{3})/.exec(String(codeOrGroup || '').trim().toUpperCase());
+    const shelves = head ? (this.shelfMapByPrefix?.get(head[1]) || []) : [];
+    const tokens = String(base || '')
+      .split(/[\n\r,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!shelves.length) return tokens.join(', ');
+    if (!tokens.length) return shelves.join(', ');
+    const aisles = new Set(tokens.map((t) => this.aisleIdFromLocation(t)).filter(Boolean));
+    for (const shelf of shelves) {
+      if (shelf.startsWith('R') && !aisles.has(shelf)) {
+        tokens.push(shelf);
+        aisles.add(shelf);
+      }
+    }
+    return tokens.join(', ');
+  }
+
+  /** Đầu mã (B018, R029…) → các kệ ghi trong Danh mục dãy kệ, R trước S. */
+  private shelfMapByPrefix: Map<string, string[]> | null = null;
+
+  /** Nạp lại bảng dãy kệ (gọi sau khi lưu Danh mục dãy kệ). */
+  async loadShelfMap(): Promise<void> {
+    try {
+      const snap = await firstValueFrom(
+        this.firestore.collection('kk-shelf-group-map').doc('layout').get().pipe(timeout(20000))
+      );
+      const raw = (snap?.data() as { shelves?: unknown } | undefined)?.shelves;
+      const saved = raw && typeof raw === 'object' ? raw as Record<string, string> : null;
+      const map = new Map<string, string[]>();
+      for (const row of shelfGroupRows(saved)) {
+        if (!/^[RS]\d{2}$/.test(row.shelf)) continue;
+        for (const part of row.groups.split(',')) {
+          const token = part.trim().toUpperCase();
+          if (!/^[BR]\d{3}$/.test(token)) continue;
+          const list = map.get(token) || [];
+          if (!list.includes(row.shelf)) list.push(row.shelf);
+          map.set(token, list);
+        }
+      }
+      map.forEach((list) => list.sort((a, b) =>
+        a[0] !== b[0] ? (a[0] === 'R' ? -1 : 1) : Number(a.slice(1)) - Number(b.slice(1))
+      ));
+      this.shelfMapByPrefix = map;
+    } catch (e) {
+      console.warn('[KkCatalog] loadShelfMap failed', e);
+    }
   }
 
   /** Quy định kệ khi nhóm mã chưa gán vị trí riêng. Dây điện 28 AWG và 30 AWG → R02. */
@@ -216,13 +288,250 @@ export class KkCatalogService {
     return rows;
   }
 
+  /** Vị trí không phải dãy R/S: khu vực lưu trữ và nhóm mã được gán. */
+  storageAreas(
+    entries: KkCatalogEntry[],
+    typeMap?: Map<string, string>,
+    homeLocs?: Map<string, string>
+  ): Array<{ name: string; groups: string }> {
+    const byName = new Map<string, { name: string; codes: string[] }>();
+    for (const entry of entries) {
+      const code = this.normalizeGroupCode(entry.groupCode) || String(entry.groupCode || '').trim().toUpperCase();
+      if (!code) continue;
+      for (const token of this.locationTokensForEntry(entry, typeMap, homeLocs)) {
+        if (this.aisleIdFromLocation(token)) continue;
+        const name = token.replace(/\s+/g, ' ').trim().toUpperCase();
+        if (!name) continue;
+        const row = byName.get(name) || { name, codes: [] };
+        row.codes.push(code);
+        byName.set(name, row);
+      }
+    }
+    return [...byName.values()]
+      .map((row) => ({ name: row.name, groups: this.compressGroupCodes(row.codes) }))
+      .filter((row) => row.groups !== '—')
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  }
+
+  /**
+   * Nhãn sơ đồ lưu trữ: mỗi kệ / khu vực một dòng loại hàng.
+   * Dây 28AWG và 30 AWG trên cùng kệ → "Dây 28AWG, 30 AWG".
+   */
+  storageLayoutLabels(
+    entries: KkCatalogEntry[],
+    typeMap?: Map<string, string>,
+    homeLocs?: Map<string, string>
+  ): {
+    shelves: Array<{ shelf: string; groups: string; family: 'R' | 'S' }>;
+    areas: Array<{ name: string; groups: string }>;
+  } {
+    const aisleTypes = new Map<string, string[]>();
+    const areaTypes = new Map<string, string[]>();
+    for (const entry of entries) {
+      const type = String(entry.productType || '').trim();
+      if (!type) continue;
+      for (const token of this.locationTokensForEntry(entry, typeMap, homeLocs)) {
+        const aisle = this.aisleIdFromLocation(token);
+        if (aisle) {
+          if (this.isStagingLocation(token)) continue;
+          const list = aisleTypes.get(aisle) || [];
+          list.push(type);
+          aisleTypes.set(aisle, list);
+          continue;
+        }
+        const name = token.replace(/\s+/g, ' ').trim().toUpperCase();
+        if (!name) continue;
+        const list = areaTypes.get(name) || [];
+        list.push(type);
+        areaTypes.set(name, list);
+      }
+    }
+    const shelves: Array<{ shelf: string; groups: string; family: 'R' | 'S' }> = [];
+    aisleTypes.forEach((types, shelf) => {
+      const groups = this.summarizeStorageTypes(types);
+      if (!groups) return;
+      shelves.push({ shelf, groups, family: shelf.startsWith('S') ? 'S' : 'R' });
+    });
+    shelves.sort((a, b) => a.shelf.localeCompare(b.shelf, 'en', { numeric: true }));
+    const areas = [...areaTypes.entries()]
+      .map(([name, types]) => ({ name, groups: this.summarizeStorageTypes(types) }))
+      .filter((row) => row.groups)
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    return { shelves, areas };
+  }
+
+  /**
+   * Nhãn kệ R theo vị trí đã gán trong quản lý nguyên liệu.
+   * Dây điện 24/26/28/30 AWG trên cùng kệ → "Dây điện 24AWG, 26AWG, 28AWG, 30AWG".
+   */
+  rackStorageLabels(
+    entries: KkCatalogEntry[],
+    typeMap?: Map<string, string>,
+    homeLocs?: Map<string, string>
+  ): Map<string, string> {
+    const aisleTypes = new Map<string, string[]>();
+    for (const entry of entries) {
+      const type = String(entry.productType || '').trim();
+      if (!type) continue;
+      for (const token of this.locationTokensForEntry(entry, typeMap, homeLocs)) {
+        const aisle = this.aisleIdFromLocation(token);
+        if (!aisle || !aisle.startsWith('R') || this.isStagingLocation(token)) continue;
+        const list = aisleTypes.get(aisle) || [];
+        list.push(type);
+        aisleTypes.set(aisle, list);
+      }
+    }
+    const labels = new Map<string, string>();
+    aisleTypes.forEach((types, shelf) => {
+      const groups = this.summarizeRackProductTypes(types);
+      if (groups) labels.set(shelf, groups);
+    });
+    return labels;
+  }
+
+  /** Gộp loại hàng trên kệ R. Dây điện theo cỡ AWG thành một cụm. */
+  summarizeRackProductTypes(types: string[]): string {
+    const unique = Array.from(new Set(types.map((type) => String(type || '').trim()).filter(Boolean)));
+    const dien: number[] = [];
+    const cap: number[] = [];
+    const seenDien = new Set<number>();
+    const seenCap = new Set<number>();
+    const others: string[] = [];
+    const seenOther = new Set<string>();
+    for (const type of unique) {
+      const gauge = this.storageWireGauge(type);
+      if (gauge) {
+        const cable = this.isStorageCableType(type);
+        const bag = cable ? seenCap : seenDien;
+        const list = cable ? cap : dien;
+        if (!bag.has(gauge.n)) {
+          bag.add(gauge.n);
+          list.push(gauge.n);
+        }
+        continue;
+      }
+      if (this.isStorageWireType(type)) continue;
+      const short = this.shortStorageType(type);
+      if (!short || this.isStorageCodeOnly(short)) continue;
+      const key = this.foldStorageType(short);
+      if (!key || seenOther.has(key)) continue;
+      seenOther.add(key);
+      others.push(short);
+    }
+    dien.sort((a, b) => a - b);
+    cap.sort((a, b) => a - b);
+    const parts: string[] = [];
+    if (dien.length) parts.push(`Dây điện ${dien.map((n) => this.storageAwgToken(n)).join(', ')}`);
+    if (cap.length) parts.push(`Dây cáp ${cap.map((n) => this.storageAwgToken(n)).join(', ')}`);
+    parts.push(...others);
+    return parts.join(', ');
+  }
+
+  private isStorageCableType(productType: string): boolean {
+    const u = this.foldStorageType(productType);
+    return /DAY\s*CAP|\bCABLE\b/.test(u) && !/DAY\s*DIEN|\bWIRE\b/.test(u);
+  }
+
+  private storageAwgToken(n: number): string {
+    const text = Number.isInteger(n) ? String(n) : String(n);
+    return `${text}AWG`;
+  }
+
+  /** Gộp loại hàng trên một chỗ. Dây điện theo cỡ AWG thành một cụm. */
+  summarizeStorageTypes(types: string[]): string {
+    const unique = Array.from(new Set(types.map((type) => String(type || '').trim()).filter(Boolean)));
+    const gauges: Array<{ n: number; token: string }> = [];
+    const seenGauge = new Set<number>();
+    const others: string[] = [];
+    const seenOther = new Set<string>();
+    let bareWire = false;
+    for (const type of unique) {
+      const gauge = this.storageWireGauge(type);
+      if (gauge) {
+        if (!seenGauge.has(gauge.n)) {
+          seenGauge.add(gauge.n);
+          gauges.push(gauge);
+        }
+        continue;
+      }
+      if (this.isStorageWireType(type)) {
+        bareWire = true;
+        continue;
+      }
+      const short = this.shortStorageType(type);
+      if (!short || this.isStorageCodeOnly(short)) continue;
+      const key = this.foldStorageType(short);
+      if (!key || seenOther.has(key)) continue;
+      seenOther.add(key);
+      others.push(short);
+    }
+    gauges.sort((a, b) => a.n - b.n);
+    const parts: string[] = [];
+    if (gauges.length) parts.push(`Dây ${gauges.map((gauge) => gauge.token).join(', ')}`);
+    else if (bareWire) parts.push('Dây');
+    parts.push(...others);
+    return parts.join(', ');
+  }
+
+  private storageWireGauge(productType: string): { n: number; token: string } | null {
+    if (!this.isStorageWireType(productType)) return null;
+    const raw = String(productType || '');
+    const hit = /(\d+(?:\.\d+)?)\s*AWG/i.exec(raw) || /AWG\s*(\d+(?:\.\d+)?)/i.exec(raw);
+    if (!hit) return null;
+    const n = Number(hit[1]);
+    if (!Number.isFinite(n)) return null;
+    const token = /\d\s+AWG/i.test(hit[0]) ? `${hit[1]} AWG` : /AWG\s+\d/i.test(hit[0]) ? `AWG ${hit[1]}` : `${hit[1]}AWG`;
+    return { n, token };
+  }
+
+  private isStorageWireType(productType: string): boolean {
+    const u = this.foldStorageType(productType);
+    return /DAY\s*(DIEN|CAP)?|\bDAY\b|\bWIRE\b|\bCABLE\b/.test(u);
+  }
+
+  private shortStorageType(productType: string): string {
+    const raw = String(productType || '').trim().replace(/\s+/g, ' ');
+    const colors = new Set([
+      'DEN', 'TRANG', 'DO', 'XANH', 'VANG', 'NAU', 'XAM', 'CAM', 'HONG', 'TIM',
+      'BLACK', 'WHITE', 'RED', 'BLUE', 'YELLOW', 'GREEN', 'GREY', 'GRAY', 'BROWN', 'ORANGE'
+    ]);
+    const kept = raw
+      .split(' ')
+      .filter((token) => token && !colors.has(this.foldStorageType(token)) && !this.isStorageCodeToken(token));
+    return (kept.length ? kept : []).join(' ');
+  }
+
+  private isStorageCodeOnly(value: string): boolean {
+    const tokens = String(value || '').split(/[\s,;/]+/).filter(Boolean);
+    return tokens.length > 0 && tokens.every((token) => this.isStorageCodeToken(token));
+  }
+
+  private isStorageCodeToken(token: string): boolean {
+    const raw = String(token || '').trim().toUpperCase();
+    if (!raw) return false;
+    if (/^[A-Z]\d{3,}$/.test(raw)) return true;
+    if (/^[A-Z]\d{3,}[–-][A-Z]?\d{3,}$/.test(raw)) return true;
+    if (/^R\d{1,2}(-\d+)*[A-C]?$/.test(raw)) return true;
+    if (/^S\d{1,2}(-T?\d+)*$/.test(raw)) return true;
+    return false;
+  }
+
+  private foldStorageType(value: string): string {
+    return String(value || '')
+      .toUpperCase()
+      .replace(/Đ/g, 'D')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
   private locationTokensForEntry(
     entry: KkCatalogEntry,
     typeMap?: Map<string, string>,
     homeLocs?: Map<string, string>
   ): string[] {
     const saved = String(entry.location || '').trim();
-    const raw = saved || this.ruleLocForMaterial(entry.groupCode, entry.productType, typeMap, homeLocs);
+    const base = saved || this.ruleLocForMaterial(entry.groupCode, entry.productType, typeMap, homeLocs);
+    const raw = isB037Code(entry.groupCode) ? base : this.withShelfMapLocations(base, entry.groupCode);
     return String(raw || '')
       .split(/[\n\r,;]+/)
       .map((s) => s.trim())
@@ -411,6 +720,7 @@ export class KkCatalogService {
       const location = String(data['location'] || '').trim();
       if (productType && location) map.set(productType, location);
     }
+    map.set(FRIDGE_NVL_TYPE, B037_REQUIRED_LOCATION);
     this.cachedHomeLocs = map;
     return map;
   }
@@ -473,6 +783,31 @@ export class KkCatalogService {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     this.cachedManagers.set(type, name);
+  }
+
+  /** Mọi mã B037 gắn vị trí yêu cầu HOACHAT. Năm mã tủ lạnh giữ loại hàng Tủ lạnh. */
+  private applyFridgeCatalog(items: KkCatalogEntry[]): KkCatalogEntry[] {
+    const byCode = new Map(items.map((entry) => [entry.groupCode, entry]));
+    for (const entry of items) {
+      if (isB037Code(entry.groupCode)) entry.location = B037_REQUIRED_LOCATION;
+    }
+    for (const code of FRIDGE_NVL_CODES) {
+      const hit = byCode.get(code);
+      if (hit) {
+        hit.productType = FRIDGE_NVL_TYPE;
+        hit.location = B037_REQUIRED_LOCATION;
+        continue;
+      }
+      const row: KkCatalogEntry = {
+        id: `fridge-${code}`,
+        groupCode: code,
+        productType: FRIDGE_NVL_TYPE,
+        location: B037_REQUIRED_LOCATION
+      };
+      items.push(row);
+      byCode.set(code, row);
+    }
+    return items.sort((a, b) => a.groupCode.localeCompare(b.groupCode, 'en', { numeric: true }));
   }
 
   private mapDoc(id: string, data: Record<string, unknown>): KkCatalogEntry {

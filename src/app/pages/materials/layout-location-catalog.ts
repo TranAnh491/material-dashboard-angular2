@@ -263,7 +263,7 @@ export function getLayoutLocationGroups(wh: LayoutWhPick): LayoutLocGroup[] {
   groups.push({
     id: 'mix',
     label: 'Mixzone / khác',
-    slots: ['F7', 'F8', 'F9', 'G7', 'G8', 'G9', 'P', 'IQC', 'NG', 'F62', 'F62TRA', 'H11', 'Q1', 'Q2', 'Q3', 'Locker1', 'Locker2', 'Locker', 'Frigde']
+    slots: ['F7', 'F8', 'F9', 'G7', 'G8', 'G9', 'P', 'IQC', 'NG', 'F62', 'F62TRA', 'H11', 'Q1', 'Q2', 'Q3', 'Locker1', 'Locker2', 'Locker', 'Frigde', 'HOACHAT']
   });
   const quality: string[] = [];
   for (const L of QUALITY_LETTERS) {

@@ -1,17 +1,17 @@
 export type LocationWarehouseType = 'Kho Thường' | 'Kho Mát';
 
-/** Kệ một chữ — kho thường. */
-export const KHO_THUONG_RACK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'P', 'J'] as const;
+/** Kệ một chữ — kho thường. Layout J: dãy R01–R28 là kho thường. */
+export const KHO_THUONG_RACK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'P', 'J', 'R'] as const;
 
-/** Kệ Quality — kho mát. */
-export const KHO_MAT_RACK_LETTERS = ['Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O'] as const;
+/** Kệ Quality — kho mát. Layout J: dãy S là kho mát. */
+export const KHO_MAT_RACK_LETTERS = ['Q', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'O'] as const;
 
 /** Vị trí đặc biệt — kho mát (không coi là kệ một chữ). */
-export const KHO_MAT_NAMED_LOCATIONS = ['A12', 'H11', 'FRIDGE'] as const;
+export const KHO_MAT_NAMED_LOCATIONS = ['A12', 'H11', 'FRIDGE', 'HOACHAT'] as const;
 
 export function isNamedColdWarehouseLocation(loc: string): boolean {
   const raw = String(loc || '').replace(/\s/g, '').toUpperCase();
-  return raw === 'FRIDGE' || raw === 'FRIGDE' || raw.startsWith('FRIDGE');
+  return raw === 'FRIDGE' || raw === 'FRIGDE' || raw.startsWith('FRIDGE') || raw.startsWith('HOACHAT');
 }
 
 /** A12/H11/FRIDGE không khớp prefix một chữ (VD: A12 ≠ kệ A). */
@@ -39,7 +39,8 @@ export function getDefaultLocationByViTriMap(): Record<string, LocationWarehouse
     A12: 'Kho Mát',
     H11: 'Kho Mát',
     FRIDGE: 'Kho Mát',
-    FRIGDE: 'Kho Mát'
+    FRIGDE: 'Kho Mát',
+    HOACHAT: 'Kho Mát'
   };
 }
 
@@ -50,6 +51,17 @@ export function getDefaultLocationsForWarehouse(warehouseType: LocationWarehouse
   return [...KHO_MAT_NAMED_LOCATIONS, ...KHO_MAT_RACK_LETTERS];
 }
 
+/** Layout J: R = kho thường, S / HOACHAT / Frigde = kho mát — không cho dữ liệu cũ ghi đè. */
+const LAYOUT_J_FIXED_FIRST_CHAR: Record<string, LocationWarehouseType> = {
+  R: 'Kho Thường',
+  S: 'Kho Mát'
+};
+const LAYOUT_J_FIXED_VI_TRI: Record<string, LocationWarehouseType> = {
+  FRIDGE: 'Kho Mát',
+  FRIGDE: 'Kho Mát',
+  HOACHAT: 'Kho Mát'
+};
+
 export function mergeWarehouseMapsFromFirestore(
   locationByViTri: Record<string, LocationWarehouseType>,
   locationByFirstChar: Record<string, LocationWarehouseType>
@@ -58,7 +70,7 @@ export function mergeWarehouseMapsFromFirestore(
   legacyFirstCharMap: Record<string, LocationWarehouseType>;
 } {
   return {
-    locationByViTriMap: { ...getDefaultLocationByViTriMap(), ...locationByViTri },
-    legacyFirstCharMap: { ...getDefaultLegacyFirstCharMap(), ...locationByFirstChar }
+    locationByViTriMap: { ...getDefaultLocationByViTriMap(), ...locationByViTri, ...LAYOUT_J_FIXED_VI_TRI },
+    legacyFirstCharMap: { ...getDefaultLegacyFirstCharMap(), ...locationByFirstChar, ...LAYOUT_J_FIXED_FIRST_CHAR }
   };
 }

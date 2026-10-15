@@ -835,7 +835,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     const percentageText = percentage % 1 === 0 ? percentage.toFixed(0) + '%' : percentage.toFixed(2) + '%';
-    const trackColor = 'rgba(15,23,42,0.08)';
+    const trackColor = '#F0F0ED';
 
     new Chart(ctx, {
       type: 'doughnut',
@@ -2290,8 +2290,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private createCharts() {
-    this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', this.matAccuracyThisMonth, '#22c55e');
-    this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', this.fgAccuracyThisMonth, '#3b82f6');
+    this.createAccuracyDonutChart('dailySalesChart', 'Materials Accuracy (%)', this.matAccuracyThisMonth, '#269B62');
+    this.createAccuracyDonutChart('websiteViewsChart', 'Finished Goods Accuracy (%)', this.fgAccuracyThisMonth, '#3478F6');
 
     this.createFgTurnoverMonthlyBarChart('completedTasksChart');
   }
@@ -2386,8 +2386,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const numericBars = bars.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
     const yTop = Math.max(tgt, ...numericBars, 0.01) * 1.15;
 
-    const barBlue = '#2563eb';
-    const targetColor = '#ef4444';
+    const barBlue = '#3478F6';
+    const targetColor = '#E05252';
 
     this.fgTurnoverChart = new Chart(ctx, {
       type: 'bar',

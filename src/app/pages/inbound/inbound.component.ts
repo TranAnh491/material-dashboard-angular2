@@ -1720,6 +1720,300 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.showMorePopup = true;
   }
 
+  /** Dữ liệu một tem bịch đúng như lúc in. */
+  private async buildGuideQrObject(material: InboundMaterial, QRCode: any): Promise<any> {
+    const payloads = this.buildInboundQrLabelPayloads(material);
+    const first = payloads?.[0];
+    let qrData = first?.qrData || '';
+    if (!qrData) {
+      const code = String(material.materialCode || '').trim() || 'P001052';
+      const po = String(material.poNumber || '').trim() || '—';
+      const qty = Number(material.quantity) || 0;
+      const imd = this.getInboundQrImdString(material);
+      const bags = Math.max(1, Math.floor(Number(material.gwLdv) || 1));
+      qrData = `${code}|${po}|${qty}|${imd}-1/${bags}`;
+    }
+    const qrImage = await QRCode.toDataURL(qrData, {
+      width: 240,
+      margin: 1,
+      color: { dark: '#000000', light: '#FFFFFF' }
+    });
+    return {
+      qrImage,
+      qrData,
+      batchNumber: material.batchNumber || '',
+      materialCode: material.materialCode,
+      labelType: this.formatInboundLabelType(material.type),
+      iconType: this.getInboundTraIconType(material.batchNumber || ''),
+      kind: 'bag' as const
+    };
+  }
+
+  private guideDemoMaterial(): InboundMaterial {
+    return {
+      materialCode: 'P001052',
+      poNumber: '4500123456',
+      quantity: 10000,
+      batchNumber: '3793',
+      type: 'E31',
+      importDate: new Date(2026, 9, 9),
+      rollsOrBags: 500,
+      gwLdv: 20,
+      unit: '',
+      location: '',
+      expiryDate: null,
+      qualityCheck: false,
+      isReceived: false,
+      notes: '',
+      supplier: '',
+      remarks: ''
+    };
+  }
+
+  /** Mở file hướng dẫn đọc tem, khổ A4. */
+  async openLabelReadingGuide(): Promise<void> {
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Trình duyệt đang chặn cửa sổ mới. Hãy cho phép popup rồi mở lại Hướng dẫn đọc tem.');
+      return;
+    }
+    win.document.write('<!DOCTYPE html><title>Hướng Dẫn Đọc Tem Nguyên Liệu</title><p style="font-family:Arial,sans-serif;padding:24px">Đang tạo tem mẫu…</p>');
+    win.document.close();
+    const material = this.guideDemoMaterial();
+    const QRCode = await import('qrcode') as any;
+    const qr = await this.buildGuideQrObject(material, QRCode);
+    try {
+      await this.attachInboundLabelHomeLocs([qr]);
+    } catch (e) {
+      console.error('Guide label location error:', e);
+    }
+    const sampleHtml = this.renderInboundQrLabelContainerHtml(qr);
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Hướng Dẫn Đọc Tem Nguyên Liệu</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: #111;
+      background: #e5e7eb;
+    }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 8mm auto;
+      padding: 12mm 14mm;
+      background: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.12);
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.02em; }
+    .sub { margin: 0 0 14px; color: #374151; font-size: 13px; }
+    .layout { display: flex; gap: 16px; align-items: flex-start; }
+    .sample-wrap { flex: 0 0 92mm; }
+    .label {
+      position: relative;
+      width: 86mm;
+      height: 48mm;
+      border: 1.5px solid #111;
+      display: flex;
+      background: #fff;
+    }
+    .qr {
+      width: 40mm;
+      border-right: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .info { flex: 1; padding: 2mm 2mm 2mm 2.5mm; font-size: 11px; font-weight: 700; line-height: 1.25; }
+    .info .code { font-size: 16px; }
+    .info .qty { font-size: 15px; }
+    .info .type { font-size: 13px; margin-top: 1px; }
+    .bag-row { display: flex; gap: 8px; }
+    .loc {
+      position: absolute;
+      right: 2mm;
+      bottom: 1.2mm;
+      font-size: 9px;
+      font-weight: 800;
+    }
+    .mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #111;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      margin-right: 4px;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+    th, td { border: 1px solid #111; padding: 6px 8px; vertical-align: top; text-align: left; }
+    th { background: #f3f4f6; font-size: 12px; }
+    .no { width: 28px; text-align: center; font-weight: 800; }
+    .types { margin-top: 12px; font-size: 13px; }
+    .types strong { letter-spacing: 0.04em; }
+    .note { margin-top: 10px; font-size: 12px; color: #374151; }
+    .actions { margin-top: 14px; }
+    button {
+      height: 34px;
+      padding: 0 14px;
+      border: 1px solid #111;
+      background: #111;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    h2 { margin: 16px 0 6px; font-size: 15px; }
+    .kicker { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+    .size-note { margin: 6px 0 0; font-size: 13px; font-weight: 700; }
+    .zoom-box { width: 122.6mm; height: 68.8mm; overflow: hidden; }
+    .real-stage.zoom { transform: scale(2.15); transform-origin: top left; }
+    .real-stage, .real-stage * { margin: 0 !important; padding: 0 !important; box-sizing: border-box !important; }
+    .real-stage .qr-container {
+      display: flex !important; position: relative !important; border: 1px solid #000 !important;
+      width: 57mm !important; height: 32mm !important; background: #fff !important;
+    }
+    .real-stage .qr-section {
+      width: 30mm !important; height: 30mm !important; display: flex !important;
+      align-items: center !important; justify-content: center !important;
+      border-right: 1px solid #ccc !important;
+    }
+    .real-stage .qr-image { width: 28mm !important; height: 28mm !important; display: block !important; }
+    .real-stage .info-section {
+      flex: 1 !important; padding: 1mm !important; display: flex !important;
+      flex-direction: column !important; justify-content: flex-start !important;
+      align-items: flex-start !important; font-size: 9.6px !important; line-height: 1.15 !important;
+      color: #000 !important; text-align: left !important;
+    }
+    .real-stage .info-row {
+      margin: 0.8mm 0 !important; font-weight: bold !important; color: #000 !important;
+      text-align: left !important; display: block !important; white-space: nowrap !important;
+      font-family: Arial, sans-serif !important;
+    }
+    .real-stage .info-row.material-code { font-size: 17.7408px !important; line-height: 1.05 !important; }
+    .real-stage .info-row.material-code.material-code-main { font-size: 21.356368px !important; line-height: 1.05 !important; }
+    .real-stage .info-row.info-row-type { font-size: 11px !important; font-weight: 800 !important; margin: 0.15mm 0 0 0 !important; }
+    .real-stage .icon-badge {
+      position: absolute !important; bottom: 1mm !important; right: 1mm !important;
+      width: 6mm !important; height: 6mm !important; display: flex !important;
+      align-items: center !important; justify-content: center !important;
+      background: #000 !important; color: #fff !important; border-radius: 2mm !important;
+      font-size: 10px !important; font-weight: 700 !important;
+    }
+    .real-stage .req-loc {
+      position: absolute !important; right: 0.8mm !important; bottom: 0.5mm !important;
+      font-size: 7px !important; font-weight: 800 !important; color: #000 !important; line-height: 1 !important;
+    }
+    .real-stage .qr-container.has-icon .req-loc { right: 7.4mm !important; }
+    @media print {
+      body { background: #fff; }
+      .sheet { margin: 0; box-shadow: none; width: auto; min-height: auto; padding: 0; }
+      .actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <h1>Hướng Dẫn Đọc Tem Nguyên Liệu</h1>
+    <p class="sub">Tem mẫu cố định mã P001052. Hình bên dưới là tem phóng to. Sơ đồ chỉ để gọi tên từng chỗ.</p>
+    <h2>Tem mẫu</h2>
+    <div class="kicker">Size: 57 × 32 mm</div>
+    <div class="zoom-box"><div class="real-stage zoom">${sampleHtml}</div></div>
+    <p class="size-note">Size tem in: 57 × 32 mm</p>
+    <h2>Sơ đồ</h2>
+    <div class="layout">
+      <div class="sample-wrap">
+        <div class="label">
+          <div class="qr"><span class="mark">1</span>QR</div>
+          <div class="info">
+            <div class="code"><span class="mark">2</span>P001052</div>
+            <div><span class="mark">3</span>PO: 4500123456</div>
+            <div class="qty"><span class="mark">4</span>10,000</div>
+            <div><span class="mark">5</span>IMD: 09102026</div>
+            <div class="bag-row">
+              <span><span class="mark">6</span>BAG: 1/20</span>
+              <span><span class="mark">7</span>Lô: 3793</span>
+            </div>
+            <div class="type"><span class="mark">8</span>E31</div>
+          </div>
+          <div class="loc"><span class="mark">9</span>A-01</div>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="no">#</th><th>Chỗ trên tem</th><th>Nội dung</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="no">1</td>
+          <td>Mã QR</td>
+          <td>Quét khi nhập kho. Chuỗi gồm 4 phần, cách nhau bởi dấu | :<br>Mã hàng | Số PO | Số lượng trên tem | IMD-số bịch/tổng bịch.<br>Ví dụ: P001052|4500123456|10000|09102026-1/20.<br>Tem thùng: số lượng là 0, phần cuối là số thùng i/N.</td>
+        </tr>
+        <tr>
+          <td class="no">2</td>
+          <td>Mã hàng</td>
+          <td>Dòng chữ lớn nhất bên phải. Mã nguyên liệu</td>
+        </tr>
+        <tr>
+          <td class="no">3</td>
+          <td>PO</td>
+          <td>Số đơn hàng (P.O) của dòng nhập.</td>
+        </tr>
+        <tr>
+          <td class="no">4</td>
+          <td>Số lượng</td>
+          <td>Lượng trên đúng tem này. Hàng nghìn cách bằng dấu phẩy, ví dụ 10,000. Tem thùng in 0.</td>
+        </tr>
+        <tr>
+          <td class="no">5</td>
+          <td>IMD</td>
+          <td>Ngày nhập, dạng ngày tháng năm viết liền: DDMMYYYY. Ví dụ 09/10/2026 ghi 09102026.</td>
+        </tr>
+        <tr>
+          <td class="no">6</td>
+          <td>BAG</td>
+          <td>Số thứ tự bịch / tổng số bịch của dòng hàng. Ví dụ 1/20 là bịch 1 trong 20 bịch. Tem thùng ghi THÙNG i/N.</td>
+        </tr>
+        <tr>
+          <td class="no">7</td>
+          <td>Lô</td>
+          <td>Số lô hàng, cùng hàng với BAG. Chỉ lấy phần số của lô.</td>
+        </tr>
+        <tr>
+          <td class="no">8</td>
+          <td>Loại hình</td>
+          <td>Nằm ngay dưới dòng BAG. In đúng mã loại hình đã nhập ở cột Loại hình: E31, ND, A12 hoặc H11.</td>
+        </tr>
+        <tr>
+          <td class="no">9</td>
+          <td>Vị trí</td>
+          <td>Chữ nhỏ góc dưới phải. Vị trí cất của mã hàng. Lô hàng trả có thể thêm ô đen PD hoặc EN ở góc phải.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="types">Loại hình trên tem chỉ dùng 4 mã: <strong>E31</strong>, <strong>ND</strong>, <strong>A12</strong>, <strong>H11</strong>.</p>
+    <p class="note">Mã loại hình lấy từ cột Loại hình của dòng inbound. Dòng chưa nhập loại hình thì tem không in dòng này.</p>
+    <div class="actions">
+      <button type="button" onclick="window.print()">In trang A4</button>
+    </div>
+  </div>
+</body>
+</html>`);
+    win.document.close();
+  }
+
   openDvLuuTruCatalog(): void {
     this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'nvl' } });
   }
@@ -3181,6 +3475,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         batchNumber,
         index: startIndex + i + 1,
         iconType,
+        labelType: this.formatInboundLabelType(material.type),
         kind: 'carton' as const,
         cartonIndex: p.cartonIndex,
         cartonTotal: p.cartonTotal
@@ -3213,6 +3508,18 @@ export class InboundComponent implements OnInit, OnDestroy {
     return m ? m[1] : '';
   }
 
+  /** Loại hình in trên tem: E31, ND, A12, H11. */
+  private formatInboundLabelType(type: string | undefined | null): string {
+    return String(type || '').trim().toUpperCase();
+  }
+
+  /** Dòng loại hình, nằm ngay dưới BAG / THÙNG. */
+  private buildInboundLabelTypeRowHtml(type: string): string {
+    const value = this.formatInboundLabelType(type);
+    if (!value) return '';
+    return `<div class="info-row info-row-type">${this.escapeInboundLabelHtml(value)}</div>`;
+  }
+
   /** BAG/THÙNG và Lô trên cùng một hàng. (Ported từ ASM2) */
   private buildInboundBagLotRowHtml(
     unitLabel: string,
@@ -3234,9 +3541,11 @@ export class InboundComponent implements OnInit, OnDestroy {
     f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
     batchNumber: string,
     cartonIndex: number,
-    cartonTotal: number
+    cartonTotal: number,
+    labelType: string
   ): string {
     const bagLotRow = this.buildInboundBagLotRowHtml('THÙNG', `${cartonIndex}/${cartonTotal}`, batchNumber);
+    const typeRow = this.buildInboundLabelTypeRowHtml(labelType);
     return `
                       <div class="info-section">
                         <div>
@@ -3245,21 +3554,24 @@ export class InboundComponent implements OnInit, OnDestroy {
                           <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
                           <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
                           ${bagLotRow}
+                          ${typeRow}
                         </div>
                       </div>`;
   }
 
   private renderInboundQrLabelContainerHtml(qr: any): string {
     const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
+    const labelType = String(qr.labelType || '');
     const infoHtml =
       qr.kind === 'carton'
         ? this.buildInboundQrCartonLabelInfoSectionHtml(
             f,
             qr.batchNumber || '',
             qr.cartonIndex,
-            qr.cartonTotal
+            qr.cartonTotal,
+            labelType
           )
-        : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '');
+        : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '', labelType);
     const iconHtml = qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : '';
     const loc = this.formatInboundLabelHomeLoc(qr.homeLoc);
     const locHtml = loc ? `<div class="req-loc">${this.escapeInboundLabelHtml(loc)}</div>` : '';
@@ -3374,9 +3686,11 @@ export class InboundComponent implements OnInit, OnDestroy {
   /** Khối chữ bên phải tem bịch (QR giữ nguyên); BAG và Lô trên cùng một hàng. */
   private buildInboundQrBagLabelInfoSectionHtml(
     f: { materialCode: string; po: string; quantity: string; imd: string; bag: string },
-    batchNumber: string
+    batchNumber: string,
+    labelType: string
   ): string {
     const bagLotRow = this.buildInboundBagLotRowHtml('BAG', f.bag, batchNumber);
+    const typeRow = this.buildInboundLabelTypeRowHtml(labelType);
     return `
                       <div class="info-section">
                         <div>
@@ -3385,6 +3699,7 @@ export class InboundComponent implements OnInit, OnDestroy {
                           <div class="info-row material-code">${this.formatInboundLabelQuantity(f.quantity)}</div>
                           <div class="info-row">IMD: ${this.escapeInboundLabelHtml(f.imd)}</div>
                           ${bagLotRow}
+                          ${typeRow}
                         </div>
                       </div>`;
   }
@@ -3455,6 +3770,7 @@ export class InboundComponent implements OnInit, OnDestroy {
               printDate: printDate,
               printedBy: currentUser,
               iconType,
+              labelType: this.formatInboundLabelType(material.type),
               kind: 'bag' as const
             };
           })
@@ -3582,6 +3898,14 @@ export class InboundComponent implements OnInit, OnDestroy {
                   white-space: normal !important;
                   word-break: break-all !important;
                   max-width: 26mm !important;
+                }
+
+                .info-row.info-row-type {
+                  font-size: 11px !important;
+                  font-weight: 800 !important;
+                  margin: 0.15mm 0 0 0 !important;
+                  line-height: 1.05 !important;
+                  letter-spacing: 0.2px !important;
                 }
                 
                 .icon-badge {
@@ -4328,6 +4652,7 @@ export class InboundComponent implements OnInit, OnDestroy {
               printDate: printDate,
               printedBy: currentUser,
               iconType,
+              labelType: this.formatInboundLabelType(material?.type),
               kind: 'bag' as const
             } as any;
           })
@@ -4457,6 +4782,14 @@ export class InboundComponent implements OnInit, OnDestroy {
                   white-space: normal !important;
                   word-break: break-all !important;
                   max-width: 26mm !important;
+                }
+
+                .info-row.info-row-type {
+                  font-size: 11px !important;
+                  font-weight: 800 !important;
+                  margin: 0.15mm 0 0 0 !important;
+                  line-height: 1.05 !important;
+                  letter-spacing: 0.2px !important;
                 }
                 
                 .icon-badge {

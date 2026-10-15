@@ -61,8 +61,9 @@
                       [class.kk-play-btn--on]="kkStockLoaded"
                       title="Đọc tồn kho">
                 <i class="material-icons" [class.rotating]="kkLocMapLoading || kkLocMapBusy">
-                  {{ (kkLocMapLoading || kkLocMapBusy) ? 'sync' : 'play_arrow' }}
+                  {{ (kkLocMapLoading || kkLocMapBusy) ? 'sync' : (kkStockLoaded ? 'check' : 'play_arrow') }}
                 </i>
+                <span class="kk-play-btn__label">{{ (kkLocMapLoading || kkLocMapBusy) ? 'Đang đọc…' : (kkStockLoaded ? 'Đã đọc tồn' : 'Đọc tồn kho') }}</span>
               </button>
               <div class="kk-toolbar__search" *ngIf="kkLocMapView && !kkActiveProductType">
                 <i class="material-icons" aria-hidden="true">search</i>
@@ -102,18 +103,10 @@
                       [disabled]="kkLocMapLoading">Quản lý</button>
             </div>
           </div>
+          <!-- Hàng công cụ: 4 nút hay dùng để lộ ra; còn lại gom vào 2 menu "In & báo cáo" / "Công cụ" -->
           <div class="kk-toolbar__row kk-toolbar__row--tools" *ngIf="kkLocMapView && !kkActiveProductType">
               <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView === 'type' && kkActiveProductType"
-                      (click)="printKkTypeList()"
-                      [disabled]="kkLocMapLoading || !kkTypeDetailAll.length"
-                      title="In danh sách loại hàng">
-                <i class="material-icons">print</i>
-                <span class="btn-label">In</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
+                      class="more-btn more-btn--primary"
                       *ngIf="kkLocMapView === 'type'"
                       (click)="openKkTypeScanModal(undefined, 'location')"
                       [disabled]="!canEdit || kkLocMapBusy"
@@ -123,82 +116,6 @@
               </button>
               <button type="button"
                       class="more-btn"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkShelfLabelPicker()"
-                      [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length"
-                      title="In tem kệ 57×32mm — chọn nhóm, mỗi loại một tem (tên + vị trí)">
-                <i class="material-icons">print</i>
-                <span class="btn-label">Tem kệ</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkMucReportPicker()"
-                      [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length"
-                      title="In giấy kiểm kê A4 — tick đầu mã, mỗi kệ một trang, theo mâm">
-                <i class="material-icons">fact_check</i>
-                <span class="btn-label">In giấy kiểm kê</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="printKkSShelfMap()"
-                      [disabled]="kkTypePrintBusy"
-                      title="Danh sách kệ S (tới S25) và kệ R — kệ + nhóm mã / khoảng mã">
-                <i class="material-icons">map</i>
-                <span class="btn-label">Hình Sơ Đồ</span>
-              </button>
-              <button type="button"
-                      class="more-btn more-btn--info"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkScanGuide()"
-                      title="Hướng dẫn sử dụng Scan">
-                <i class="material-icons">info</i>
-                <span class="btn-label">Hướng dẫn</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="showKkTypeReportMenu = true"
-                      [disabled]="kkLocMapLoading || kkTypeReportBusy"
-                      title="Tải báo cáo Excel lưu trữ">
-                <i class="material-icons">download</i>
-                <span class="btn-label">{{ kkTypeReportBusy ? 'Đang tải...' : 'Báo cáo' }}</span>
-              </button>
-              <button type="button" class="more-btn" *ngIf="kkLocMapView" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading">
-                <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
-                <span class="btn-label">Làm mới</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView"
-                      (click)="refreshNvlCatalogNow()"
-                      [disabled]="isCatalogLoading"
-                      title="Đọc lại Danh mục NVL — cập nhật Standard Packing và trạng thái Lock">
-                <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
-                <span class="btn-label">{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật' }}</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView"
-                      (click)="openKkPalletCheck()"
-                      [disabled]="kkPalletCheckBusy"
-                      title="Số pallet theo từng kho">
-                <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
-                <span class="btn-label">{{ kkPalletCheckBusy ? 'Đang đếm...' : 'Pallet' }}</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkAllStockDetail()"
-                      [disabled]="kkLocMapLoading || kkLocMapBusy"
-                      title="Xem toàn bộ tồn kho — không phân loại · 50 dòng/trang · tìm mã / vị trí">
-                <i class="material-icons">view_list</i>
-                <span class="btn-label">Chi tiết KK</span>
-              </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView"
                       (click)="openKkCodeLookup()"
                       title="Tìm mã — xem tồn kho và loại hàng">
                 <i class="material-icons">search</i>
@@ -206,120 +123,125 @@
               </button>
               <button type="button"
                       class="more-btn"
-                      *ngIf="kkLocMapView"
                       (click)="toggleKkLive()"
                       [class.kk-live-btn--on]="kkLiveActive"
                       [title]="kkLiveActive ? 'Tắt danh sách KK live' : 'Hiện mã vừa tick KK, mới nhất trên đầu'">
                 <i class="material-icons" [class.rotating]="kkLiveLoading">{{ kkLiveLoading ? 'sync' : 'sensors' }}</i>
                 <span class="btn-label">{{ kkLiveActive ? ('Live (' + kkLiveRows.length + ')') : 'Live' }}</span>
               </button>
-              <button type="button"
-                      class="more-btn"
-                      *ngIf="kkLocMapView"
-                      (click)="openKkIdReport()"
-                      title="Báo cáo KK theo ngày / khoảng thời gian — số mã mỗi ID đã tick">
-                <i class="material-icons">assignment_ind</i>
-                <span class="btn-label">KK Report</span>
+              <button type="button" class="more-btn" (click)="refreshKkLocMap()" [disabled]="kkLocMapLoading" title="Đọc lại tồn kho">
+                <i class="material-icons" [class.rotating]="kkLocMapLoading">refresh</i>
+                <span class="btn-label">Làm mới</span>
               </button>
-              <button type="button"
-                      class="more-btn"
-                      (click)="openKkCatalogPopup()"
-                      title="Danh mục nhóm mã và vị trí được gán">
-                <i class="material-icons">category</i>
-                <span class="btn-label">Danh mục</span>
-              </button>
+
+              <span class="kk-toolbar__sep" aria-hidden="true"></span>
+
+              <!-- Menu: In & báo cáo -->
+              <div class="kk-menu">
+                <button type="button"
+                        class="more-btn"
+                        [class.more-btn--open]="kkToolMenu === 'print'"
+                        (click)="toggleKkToolMenu('print')"
+                        aria-haspopup="menu"
+                        [attr.aria-expanded]="kkToolMenu === 'print'">
+                  <i class="material-icons">print</i>
+                  <span class="btn-label">In &amp; báo cáo</span>
+                  <i class="material-icons kk-menu__caret">expand_more</i>
+                </button>
+                <div class="kk-menu__pop" role="menu" *ngIf="kkToolMenu === 'print'" (click)="kkToolMenu = null">
+                  <ng-container *ngIf="kkLocMapView === 'type'">
+                    <button type="button" role="menuitem"
+                            (click)="openKkShelfLabelPicker()"
+                            [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length">
+                      <i class="material-icons">label</i>
+                      <span>Tem kệ<small>57×32mm — mỗi loại một tem (tên + vị trí)</small></span>
+                    </button>
+                    <button type="button" role="menuitem"
+                            (click)="openKkMucReportPicker()"
+                            [disabled]="kkTypePrintBusy || !kkTypeBoxGroups.length">
+                      <i class="material-icons">fact_check</i>
+                      <span>In giấy kiểm kê<small>A4 — tick đầu mã, mỗi kệ một trang</small></span>
+                    </button>
+                    <button type="button" role="menuitem"
+                            (click)="printKkSShelfMap()"
+                            [disabled]="kkTypePrintBusy">
+                      <i class="material-icons">map</i>
+                      <span>Hình sơ đồ kệ<small>Kệ S (tới S25), kệ R + nhóm mã</small></span>
+                    </button>
+                    <button type="button" role="menuitem"
+                            (click)="showKkTypeReportMenu = true"
+                            [disabled]="kkLocMapLoading || kkTypeReportBusy">
+                      <i class="material-icons">download</i>
+                      <span>{{ kkTypeReportBusy ? 'Đang tải báo cáo...' : 'Báo cáo Excel' }}<small>Tải báo cáo lưu trữ</small></span>
+                    </button>
+                  </ng-container>
+                  <button type="button" role="menuitem" (click)="openKkIdReport()">
+                    <i class="material-icons">assignment_ind</i>
+                    <span>KK Report<small>Số mã mỗi ID đã tick theo ngày</small></span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Menu: Công cụ -->
+              <div class="kk-menu">
+                <button type="button"
+                        class="more-btn"
+                        [class.more-btn--open]="kkToolMenu === 'tools'"
+                        (click)="toggleKkToolMenu('tools')"
+                        aria-haspopup="menu"
+                        [attr.aria-expanded]="kkToolMenu === 'tools'">
+                  <i class="material-icons">build</i>
+                  <span class="btn-label">Công cụ</span>
+                  <i class="material-icons kk-menu__caret">expand_more</i>
+                </button>
+                <div class="kk-menu__pop" role="menu" *ngIf="kkToolMenu === 'tools'" (click)="kkToolMenu = null">
+                  <button type="button" role="menuitem"
+                          *ngIf="kkLocMapView === 'type'"
+                          (click)="openKkAllStockDetail()"
+                          [disabled]="kkLocMapLoading || kkLocMapBusy">
+                    <i class="material-icons">view_list</i>
+                    <span>Chi tiết KK<small>Toàn bộ tồn kho, không phân loại</small></span>
+                  </button>
+                  <button type="button" role="menuitem"
+                          (click)="openKkPalletCheck()"
+                          [disabled]="kkPalletCheckBusy">
+                    <i class="material-icons" [class.rotating]="kkPalletCheckBusy">{{ kkPalletCheckBusy ? 'sync' : 'widgets' }}</i>
+                    <span>{{ kkPalletCheckBusy ? 'Đang đếm pallet...' : 'Đếm pallet' }}<small>Số pallet theo từng kho</small></span>
+                  </button>
+                  <button type="button" role="menuitem" (click)="openKkCatalogPopup()">
+                    <i class="material-icons">category</i>
+                    <span>Danh mục<small>Nhóm mã và vị trí được gán</small></span>
+                  </button>
+                  <button type="button" role="menuitem"
+                          (click)="refreshNvlCatalogNow()"
+                          [disabled]="isCatalogLoading">
+                    <i class="material-icons" [class.rotating]="isCatalogLoading">{{ isCatalogLoading ? 'sync' : 'cloud_sync' }}</i>
+                    <span>{{ isCatalogLoading ? 'Đang cập nhật...' : 'Cập nhật danh mục NVL' }}<small>Đọc lại Standard Packing và Lock</small></span>
+                  </button>
+                  <button type="button" role="menuitem"
+                          *ngIf="kkLocMapView === 'type'"
+                          (click)="openKkScanGuide()">
+                    <i class="material-icons">info</i>
+                    <span>Hướng dẫn Scan</span>
+                  </button>
+                </div>
+              </div>
+              <div class="kk-menu__backdrop" *ngIf="kkToolMenu" (click)="kkToolMenu = null"></div>
             </div>
 
-          <div class="kk-toolbar__row kk-toolbar__row--filters" *ngIf="kkLocMapView && !kkActiveProductType">
-            <div class="kk-loc-map__zones">
-              <span class="kk-loc-map__toolbar-label">Zone</span>
-              <button type="button"
-                      class="kk-loc-map__zone"
-                      [class.kk-loc-map__zone--on]="!kkLocMapWarehouseFilter && !kkJOnly"
-                      (click)="setKkTypeZone('')"
-                      [disabled]="kkLocMapLoading">Tất cả</button>
-              <button type="button"
-                      *ngFor="let w of kkLocMapWarehouseOptions"
-                      class="kk-loc-map__zone"
-                      [class.kk-loc-map__zone--on]="kkLocMapWarehouseFilter === w.id"
-                      [class.kk-loc-map__zone--j]="w.id === 'J'"
-                      (click)="setKkTypeZone(w.id)"
-                      [disabled]="kkLocMapLoading"
-                      [title]="w.id === 'J' ? ('Kho J gồm J5 và vị trí R1–R99 / S1–S99 — ' + kkJMovedSummary.codes + ' mã') : (w.id === 'ASM3' ? 'ASM3 / WH3' : w.label)">
-                {{ w.label }}
-                <span class="kk-loc-map__zone-n" *ngIf="w.id === 'J'">{{ kkJMovedSummary.codes }}</span>
-              </button>
-            </div>
+          <!-- Bộ lọc: từ 14/10/2026 chỉ còn Kho J nên bỏ Zone / WH3 / ASM3 / Chỉ kho J; còn lọc "Chưa KK" -->
+          <div class="kk-toolbar__row kk-toolbar__row--filters"
+               *ngIf="kkLocMapView && !kkActiveProductType && (kkLocMapView === 'type' || kkLocMapView === 'material')">
             <div class="kk-loc-map__opts">
-              <ng-container *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material' || kkLocMapView === 'manager'">
-                <label class="kk-loc-map__opt" title="Bỏ tick thì không tính các mã đang ở kho WH3/ASM3">
-                  <input type="checkbox"
-                         [ngModel]="kkCountWh3"
-                         (ngModelChange)="kkCountWh3 = $event; onKkCountWh3Change()">
-                  Tính WH3
-                </label>
-                <label class="kk-loc-map__opt"
-                       [class.kk-loc-map__opt--off]="!kkCountWh3"
-                       title="Chỉ hiện dòng đang ở kho WH3/ASM3">
-                  <input type="checkbox"
-                         [ngModel]="kkWh3Only"
-                         [disabled]="!kkCountWh3"
-                         (ngModelChange)="kkWh3Only = $event; onKkWh3OnlyChange()">
-                  Chỉ ASM3
-                </label>
-              </ng-container>
-              <button type="button"
-                      class="kk-loc-map__j-btn"
-                      [class.kk-loc-map__j-btn--on]="kkJOnly"
-                      (click)="toggleKkJOnly()"
-                      [disabled]="kkLocMapLoading"
-                      title="Chỉ hiện mã kho J (gồm J5 và vị trí R1–R99 / S1–S99)">
-                <i class="material-icons">warehouse</i>
-                Chỉ hiện kho J
-                <span class="kk-loc-map__j-btn-n">{{ kkJMovedSummary.codes }} mã</span>
-              </button>
-              <label class="kk-loc-map__opt"
-                     *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'"
-                     title="Chỉ hiện loại / dòng chưa tick KK">
+              <label class="kk-loc-map__opt" title="Chỉ hiện loại / dòng chưa tick KK">
                 <input type="checkbox"
                        [ngModel]="kkFilterUncheckedOnly"
                        (ngModelChange)="kkFilterUncheckedOnly = $event; onKkFilterUncheckedChange()">
-                Chưa KK
+                Chỉ hiện chưa KK
               </label>
             </div>
           </div>
 
-          <div class="kk-j-banner" *ngIf="kkJOnly && !kkActiveProductType">
-            <i class="material-icons">inventory_2</i>
-            <div class="kk-j-banner__text">
-              <strong>{{ kkJMovedSummary.codes | number }} mã</strong>
-              đã được đổi vị trí sang kho J
-            </div>
-            <span class="kk-j-banner__meta">{{ kkJMovedSummary.lines | number }} dòng · tồn {{ formatNumber(kkJMovedSummary.stock) }}</span>
-          </div>
-          <div class="kk-wh-share" *ngIf="kkSearchWhShare as sh">
-            <span class="kk-wh-share__q">{{ sh.query }}</span>
-            <span class="kk-wh-share__item kk-wh-share__item--j">
-              Kho J mới <strong>{{ sh.jPct }}%</strong>
-              <em>{{ sh.jQty | number:'1.0-0' }} mã</em>
-            </span>
-            <span class="kk-wh-share__item kk-wh-share__item--d1">
-              D1 <strong>{{ sh.d1Pct }}%</strong>
-              <em>{{ sh.d1Qty | number:'1.0-0' }} mã</em>
-            </span>
-            <span class="kk-wh-share__item kk-wh-share__item--asm3">
-              ASM3 <strong>{{ sh.asm3Pct }}%</strong>
-              <em>{{ sh.asm3Qty | number:'1.0-0' }} mã</em>
-            </span>
-            <span class="kk-wh-share__item kk-wh-share__item--other" *ngIf="sh.otherQty > 0">
-              Kho khác <strong>{{ sh.otherPct }}%</strong>
-              <em>{{ sh.otherQty | number:'1.0-0' }} mã</em>
-            </span>
-            <span class="kk-wh-share__rest">
-              Còn D1 + ASM3 <strong>{{ sh.leftoverPct }}%</strong>
-              ({{ sh.leftoverQty | number:'1.0-0' }} / {{ sh.total | number:'1.0-0' }} mã)
-            </span>
-          </div>
           <div class="kk-live-board" *ngIf="kkLiveActive">
             <div class="kk-live-board__head">
               <strong>KK live</strong>
@@ -402,15 +324,7 @@
               <th>KK</th>
               <th>Pallet</th>
               <th>Vị trí</th>
-              <th class="kk-loc-map__factory-col">
-                <span>Kho</span>
-                <select [(ngModel)]="kkLocMapWarehouseFilter"
-                        (ngModelChange)="onKkWarehouseFilterChange()"
-                        title="Lọc kho">
-                  <option value="">Tất cả</option>
-                  <option *ngFor="let w of kkLocMapWarehouseOptions" [value]="w.id">{{ w.label }}</option>
-                </select>
-              </th>
+              <th class="kk-loc-map__factory-col">Kho</th>
             </tr>
           </thead>
           <tbody>
@@ -495,15 +409,7 @@
                           </span>
                         </button>
                       </td>
-                      <td class="kk-loc-map__loc">
-                        <select class="kk-loc-map__pallet-input"
-                                [ngModel]="kkLineWhValue(line)"
-                                (ngModelChange)="saveKkDetailWarehouse(line, $event)"
-                                [disabled]="!canEdit || kkLocMapBusy"
-                                title="Đổi kho D1 / 00 / J / ASM3">
-                          <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
-                        </select>
-                      </td>
+                      <td class="kk-loc-map__loc">J</td>
                       <td class="kk-loc-map__pallet">
                         <input type="text" class="kk-loc-map__pallet-input" [(ngModel)]="line.palletId"
                                placeholder="Pallet" [disabled]="!canEdit || kkLocMapBusy"
@@ -603,12 +509,14 @@
             <div class="kk-type-muc__bar">
               <button type="button"
                       class="kk-type-muc__head"
-                      (click)="toggleKkTypeMuc(muc.category, $event)">
+                      (click)="toggleKkTypeMuc(muc.category, $event)"
+                      (contextmenu)="onKkMucContextMenu($event, muc.category)"
+                      title="Chuột phải: thêm kệ mẹ">
                 <i class="material-icons">{{ isKkTypeMucCollapsed(muc.category) ? 'expand_more' : 'expand_less' }}</i>
                 <strong>{{ muc.title }}</strong>
-                <span *ngIf="!(isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc))">{{ muc.boxes.length }} loại</span>
+                <span>{{ muc.boxes.length }} loại</span>
                 <span class="kk-b009-board__range"
-                      *ngIf="isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc) as s">
+                      *ngIf="isKkRackBoardMuc(muc.category) && kkB009ViewSub(muc) as s">
                   <ng-container *ngIf="!kkB009FloorEmpty(s)">
                     {{ kkConnectorViewShelf(muc.category) }}-T{{ kkConnectorViewLevel(muc.category) }}
                     · {{ kkB009SubFullRange(s) }} · {{ kkB009FloorCodeCount(s) }} mã
@@ -618,7 +526,15 @@
               </button>
               <button type="button"
                       class="kk-b009-detail-btn"
-                      *ngIf="isKkConnectorRackMuc(muc.category) && kkB009ViewSub(muc) as s"
+                      [class.kk-b009-detail-btn--on]="isKkConnectorBoardOpen(muc.category)"
+                      *ngIf="isKkRackBoardMuc(muc.category)"
+                      (click)="toggleKkConnectorBoard(muc.category, $event)">
+                <i class="material-icons">account_tree</i>
+                Sơ Đồ
+              </button>
+              <button type="button"
+                      class="kk-b009-detail-btn"
+                      *ngIf="isKkRackBoardMuc(muc.category) && kkB009ViewSub(muc) as s"
                       [disabled]="kkB009FloorEmpty(s)"
                       (click)="openKkConnectorFloorKkDetail(muc.category, $event)">
                 <i class="material-icons">fact_check</i>
@@ -633,17 +549,26 @@
                 Reset lần quét
               </button>
             </div>
-            <div class="kk-b017-racks" *ngIf="muc.category === 'B017' && !isKkTypeMucCollapsed(muc.category)">
-              <button type="button" class="kk-type-group__head" (click)="openKkB017Detail($event)">
-                <strong>Chi tiết</strong>
-                <span>Chọn vị trí tùy ý cho từng mã B017</span>
-              </button>
+            <div class="kk-muc-summary"
+                 (contextmenu)="onKkMucContextMenu($event, muc.category)"
+                 title="Chuột phải: thêm kệ mẹ">
+              <div class="kk-muc-summary__total">
+                <strong>{{ kkMucCodeTotal(muc) }}</strong>
+                <span>mã</span>
+              </div>
+              <div class="kk-muc-summary__kk">
+                <span>Đã KK</span>
+                <strong>{{ kkMucCheckedTotal(muc) }}/{{ kkMucCodeTotal(muc) }}</strong>
+              </div>
+              <div class="kk-muc-summary__shelves">
+                <span *ngFor="let shelf of kkMucParentShelves(muc.category)">{{ shelf }}</span>
+              </div>
             </div>
-            <ng-container *ngIf="muc.category !== 'B017' && !isKkTypeMucCollapsed(muc.category)">
-              <div class="kk-b009-board" *ngIf="isKkConnectorRackMuc(muc.category) && muc.groups?.length">
-                <p class="kk-b009-board__hint">Bấm ô vị trí để chọn tầng · bấm Chi tiết để mở bảng kiểm kê toàn bộ mã của vị trí đó.</p>
+            <ng-container *ngIf="!isKkTypeMucCollapsed(muc.category)">
+              <div class="kk-b009-board" *ngIf="isKkRackBoardMuc(muc.category) && isKkConnectorBoardOpen(muc.category) && muc.groups?.length">
+                <p class="kk-b009-board__hint">Bấm ô vị trí để chọn tầng. Chỉ vị trí đã cho phép mới chọn được.</p>
                 <div class="kk-b009-board__cols">
-                  <div class="kk-b009-col" *ngFor="let g of kkB009ShelfGroups(muc)">
+                  <div class="kk-b009-col" *ngFor="let g of kkB009VisibleShelfGroups(muc)">
                     <div class="kk-b009-col__head">
                       <strong>{{ g.key }}</strong>
                       <small>{{ kkB009ShelfShortRange(g) }} · {{ kkShelfBlockNos(g.key).length }} block</small>
@@ -654,18 +579,21 @@
                     </div>
                     <button type="button"
                             class="kk-b009-row"
-                            *ngFor="let s of kkB009LevelsTopDown(g)"
+                            *ngFor="let s of kkB009VisibleLevels(muc.category, g)"
                             [class.kk-b009-row--on]="isKkB009FloorOn(muc.category, g.key, s)"
                             [class.kk-b009-row--empty]="kkB009FloorEmpty(s)"
+                            [class.kk-b009-row--locked]="!kkB009FloorSelectable(muc.category, g.key, s)"
                             [title]="s.title"
                             (click)="selectKkB009Floor(muc.category, g.key, s)">
                       <span class="kk-b009-row__lv">T{{ kkB009SubLevel(s) }}</span>
-                      <span class="kk-b009-mam" *ngFor="let b of kkShelfBlockNos(g.key)">{{ kkB009LocOf(g.key, b, kkB009SubLevel(s)) }}</span>
+                      <span class="kk-b009-mam"
+                            *ngFor="let b of kkShelfBlockNos(g.key)"
+                            [class.kk-b009-mam--off]="!kkMucLocAllowed(muc.category, kkB009LocOf(g.key, b, kkB009SubLevel(s)))">{{ kkB009LocOf(g.key, b, kkB009SubLevel(s)) }}</span>
                     </button>
                   </div>
                 </div>
               </div>
-              <ng-container *ngIf="isKkConnectorRackMuc(muc.category)">
+              <ng-container *ngIf="isKkRackBoardMuc(muc.category)">
               <div class="kk-type-group"
                    *ngFor="let g of kkB009OtherGroups(muc)"
                    [class.kk-type-group--bare]="!g.title">
@@ -706,7 +634,7 @@
                 </ng-container>
               </div>
               </ng-container>
-              <ng-container *ngIf="!isKkConnectorRackMuc(muc.category)">
+              <ng-container *ngIf="!isKkRackBoardMuc(muc.category)">
               <div [class.kk-nhua-board]="isKkPrefixColsMuc(muc.category)"
                    [class.kk-nhua-board--row]="isKkNameColsMuc(muc.category)">
               <div class="kk-type-group"
@@ -763,7 +691,7 @@
             <ng-container *ngIf="kkCatalogEntries.length && kkLocMapWarehouseFilter">Không có loại hàng tồn trong Zone này.</ng-container>
             <ng-container *ngIf="kkCatalogEntries.length && !kkLocMapWarehouseFilter">Không khớp bộ lọc.</ng-container>
           </p>
-          <p class="kk-loc-map__hint" *ngIf="kkTypeBoxes.length && !kkLocMapWarehouseFilter">Chọn Zone rồi bấm một loại hàng để kiểm và đổi vị trí.</p>
+          <p class="kk-loc-map__hint" *ngIf="kkTypeBoxes.length && !kkLocMapWarehouseFilter">Bấm một loại hàng để kiểm kê và đổi vị trí.</p>
         </ng-container>
 
         <div class="kk-type-detail" *ngIf="kkActiveProductType">
@@ -829,12 +757,6 @@
                     (ngModelChange)="onKkTypeFilterChange()">
               <option value="">Tất cả vị trí</option>
               <option *ngFor="let loc of kkTypeLocationOptions" [ngValue]="loc">{{ loc }}</option>
-            </select>
-            <select class="kk-type-filter__select"
-                    [(ngModel)]="kkTypeFilterWh"
-                    (ngModelChange)="onKkTypeFilterChange()">
-              <option [ngValue]="''">Tất cả kho</option>
-              <option *ngFor="let w of kkLocMapWarehouseOptions" [ngValue]="w.id">{{ w.label }}</option>
             </select>
             <select class="kk-type-filter__select"
                     *ngIf="!kkAllStockDetail"
@@ -949,15 +871,7 @@
                         </span>
                       </button>
                     </td>
-                    <td class="wh-cell">
-                      <select class="editable-cell kk-type-wh-select"
-                              [ngModel]="kkLineWhValue(material)"
-                              (ngModelChange)="saveKkDetailWarehouse(material, $event)"
-                              [disabled]="!canEdit || kkLocMapBusy"
-                              title="Đổi kho D1 / 00 / J / ASM3">
-                        <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
-                      </select>
-                    </td>
+                    <td class="wh-cell">J</td>
                     <td class="pallet-cell">
                       <input type="text"
                              class="editable-cell"
@@ -1261,14 +1175,6 @@
         </div>
         <button type="button"
                 class="mat-m-filterbtn"
-                (click)="openGanPallet()"
-                [disabled]="ganPalletBusy"
-                aria-label="Gán pallet"
-                title="Gán pallet">
-          <i class="material-icons">widgets</i>
-        </button>
-        <button type="button"
-                class="mat-m-filterbtn"
                 [class.active]="searchByLocation"
                 (click)="openLocationFilterPopup()"
                 aria-label="Lọc vị trí"
@@ -1289,10 +1195,6 @@
     <div class="mat-m-empty" *ngIf="!isLoading && !searchTerm">
       <i class="material-icons">inventory_2</i>
       <p>Nhập mã hàng để xem tồn kho</p>
-      <button type="button" class="mat-m-empty__act" (click)="openGanPallet()" [disabled]="ganPalletBusy">
-        <i class="material-icons">widgets</i>
-        Gán pallet
-      </button>
     </div>
 
     <div class="mat-m-empty" *ngIf="!isLoading && searchTerm && searchTerm.length >= 3 && filteredInventory.length === 0">
@@ -1601,13 +1503,6 @@
             Tem Lẽ
           </button>
           <button type="button"
-                  class="more-btn tem-le-btn tem-reprint-btn"
-                  (click)="openTemInLaiPopup()"
-                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
-            <i class="material-icons">print</i>
-            In Lại Tem
-          </button>
-          <button type="button"
                   class="more-btn tem-le-btn tem-thung-btn"
                   (click)="openTemThungPopup()"
                   title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
@@ -1690,13 +1585,6 @@
             <span class="btn-label">Tem lẻ</span>
           </button>
           <button type="button"
-                  class="more-btn tem-le-btn tem-reprint-btn"
-                  (click)="openTemInLaiPopup()"
-                  title="In lại tem theo LSX (chỉ IMD trước 01/04/2026)">
-            <i class="material-icons">print</i>
-            <span class="btn-label">In lại</span>
-          </button>
-          <button type="button"
                   class="more-btn tem-le-btn tem-thung-btn"
                   (click)="openTemThungPopup()"
                   title="In tem thùng 57×32mm (Mã, PO, IMD — không QTY)">
@@ -1719,26 +1607,11 @@
         <div class="action-buttons">
           <button class="more-btn kk-check-btn"
                   type="button"
-                  (click)="openGanPallet()"
-                  [disabled]="ganPalletBusy"
-                  title="Gán pallet — scan pallet, kho, vị trí, mã hàng">
-            <i class="material-icons">widgets</i>
-            <span class="btn-label">Gán pallet</span>
-          </button>
-          <button class="more-btn kk-check-btn"
-                  type="button"
                   (click)="openKkLocMapFromMore()"
                   [disabled]="kkLocMapLoading"
                   title="Mở tab Quản lý Nguyên Liệu — Kiểm tra KK">
             <i class="material-icons">{{ kkLocMapLoading ? 'sync' : 'grid_view' }}</i>
             <span class="btn-label">Quản lý NVL</span>
-          </button>
-          <button class="more-btn kk-check-btn"
-                  type="button"
-                  (click)="openDoiKho()"
-                  title="Dời kho — scan pallet, chọn J hoặc ASM3">
-            <i class="material-icons">local_shipping</i>
-            <span class="btn-label">Dời kho</span>
           </button>
           <button class="download-search-btn"
                   (click)="downloadSearchResultsExcel()"
@@ -2166,10 +2039,10 @@
             </td>
             <td class="location-cell location-cell--inv"
                 [class.iqc-location]="isIQCLocation(material.location)"
-                [title]="locationLocCount(material.location) > 1 ? ('Có ' + locationLocCount(material.location) + ' vị trí — bấm xem hết') : 'Bấm xem vị trí'">
+                [title]="locationLocCount(material.location) > 1 ? ('Có ' + locationLocCount(material.location) + ' vị trí — bấm chọn kệ') : 'Bấm chọn kệ'">
               <button type="button"
                       class="loc-col-btn location-display location-display--clickable loc-col-btn--inv-loc"
-                      (click)="openInvLocListPopup(material, $event)">
+                      (click)="openInvShelfPicker(material, $event)">
                 <span class="location-text">{{ primaryLocationDisplay(material.location) || 'Chọn vị trí' }}</span>
                 <span class="location-badge location-badge--corner"
                       *ngIf="locationLocCount(material.location) > 1">
@@ -3755,7 +3628,7 @@
         </span>
         <div>
           <h3>Danh mục vị trí</h3>
-          <p class="more-popup-header__sub">Nhóm mã, loại hàng và vị trí được gán. Sửa vị trí tại đây để quản lý toàn bộ.</p>
+          <p class="more-popup-header__sub">Nhóm mã, dãy kệ và nhóm đầu mã. Sửa tại đây để sơ đồ lưu trữ cập nhật theo.</p>
         </div>
       </div>
       <button type="button" class="more-popup-close" (click)="closeKkCatalogPopup()" aria-label="Đóng"
@@ -3764,51 +3637,36 @@
       </button>
     </div>
     <div class="modal-body hidden-inventory-body">
+      <div class="kk-cat-tabs">
+        <button type="button" [class.is-on]="kkCatalogTab === 'codes'" (click)="kkCatalogTab = 'codes'">Nhóm mã</button>
+        <button type="button" [class.is-on]="kkCatalogTab === 'shelves'" (click)="kkCatalogTab = 'shelves'">Dãy kệ</button>
+      </div>
       <div class="hidden-toolbar">
         <div class="hidden-search">
           <i class="material-icons">search</i>
-          <input type="search" [(ngModel)]="kkCatalogQuery" placeholder="Tìm nhóm mã, loại hàng, vị trí…" autocomplete="off" />
+          <input type="search" [(ngModel)]="kkCatalogQuery" [placeholder]="kkCatalogTab === 'shelves' ? 'Tìm dãy kệ, đầu mã…' : 'Tìm nhóm mã, loại hàng, vị trí…'" autocomplete="off" />
           <button type="button" class="hidden-search__clear" *ngIf="kkCatalogQuery" (click)="kkCatalogQuery = ''" aria-label="Xóa">
             <i class="material-icons">close</i>
           </button>
         </div>
         <div class="hidden-toolbar__meta">
-          <span>{{ kkCatalogFilteredEntries.length }} / {{ kkCatalogEntries.length }}</span>
-          <button type="button" class="hidden-refresh-btn" (click)="loadKkCatalogPopup(true)" [disabled]="kkCatalogLoading || kkCatalogImporting">
+          <span *ngIf="kkCatalogTab === 'codes'">{{ kkCatalogFilteredEntries.length }} / {{ kkCatalogEntries.length }}</span>
+          <span *ngIf="kkCatalogTab === 'shelves'">{{ kkShelfFilteredRows.length }} dãy kệ</span>
+          <button type="button" class="hidden-refresh-btn" (click)="kkCatalogTab === 'shelves' ? loadKkShelfGroups() : loadKkCatalogPopup(true)" [disabled]="kkCatalogLoading || kkCatalogImporting || kkShelfSaving">
             <i class="material-icons" [class.rotating]="kkCatalogLoading">refresh</i>
             Làm mới
           </button>
-          <button type="button" class="hidden-refresh-btn" (click)="downloadKkCatalogTemplate()" [disabled]="kkCatalogImporting">
+          <button type="button" class="hidden-refresh-btn" (click)="downloadKkCatalogTemplate()" [disabled]="kkCatalogImporting" *ngIf="kkCatalogTab === 'codes'">
             <i class="material-icons">download</i>
             Template
           </button>
-          <button type="button" class="hidden-refresh-btn" (click)="importKkCatalogFromExcel()" [disabled]="kkCatalogImporting || kkCatalogLoading">
+          <button type="button" class="hidden-refresh-btn" (click)="importKkCatalogFromExcel()" [disabled]="kkCatalogImporting || kkCatalogLoading" *ngIf="kkCatalogTab === 'codes'">
             <i class="material-icons">{{ kkCatalogImporting ? 'sync' : 'file_upload' }}</i>
             {{ kkCatalogImporting ? 'Đang import...' : 'Import' }}
           </button>
         </div>
       </div>
-      <div class="kk-aisle-rule" *ngIf="!kkCatalogLoading && kkCatalogAisleRows.length">
-        <h4>Theo dãy kệ</h4>
-        <p>R01 đến R26 và S01 đến S25. Mỗi dãy ghi nhóm mã được gán trong danh mục này.</p>
-        <div class="kk-aisle-rule__scroll">
-          <table class="hidden-table">
-            <thead>
-              <tr>
-                <th>Kệ</th>
-                <th>Nhóm mã</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of kkCatalogAisleRows">
-                <td><strong>{{ row.shelf }}</strong></td>
-                <td class="kk-aisle-rule__groups">{{ row.groups }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="hidden-table-wrap" *ngIf="!kkCatalogLoading">
+      <div class="hidden-table-wrap" *ngIf="kkCatalogTab === 'codes' && !kkCatalogLoading">
         <table class="hidden-table" *ngIf="kkCatalogFilteredEntries.length; else kkCatalogEmpty">
           <thead>
             <tr>
@@ -3841,7 +3699,35 @@
           </div>
         </ng-template>
       </div>
-      <div *ngIf="kkCatalogLoading" class="hidden-empty">Đang tải…</div>
+      <div *ngIf="kkCatalogTab === 'codes' && kkCatalogLoading" class="hidden-empty">Đang tải…</div>
+      <div class="hidden-table-wrap" *ngIf="kkCatalogTab === 'shelves'">
+        <p class="kk-shelf-hint">Mỗi dãy kệ một dòng. Nhóm đầu mã cách nhau bởi dấu phẩy. Sơ đồ lưu trữ dùng danh mục này.</p>
+        <table class="hidden-table" *ngIf="kkShelfFilteredRows.length; else kkShelfEmpty">
+          <thead>
+            <tr>
+              <th>Dãy kệ</th>
+              <th>Nhóm đầu mã</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of kkShelfFilteredRows">
+              <td><strong>{{ row.shelf }}</strong></td>
+              <td>
+                <input class="kk-cat-loc kk-cat-loc--wide" type="text" [(ngModel)]="row.groups"
+                       placeholder="B030, B031"
+                       [disabled]="kkShelfSaving"
+                       (change)="saveKkShelfGroups()" (keyup.enter)="saveKkShelfGroups()" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <ng-template #kkShelfEmpty>
+          <div class="hidden-empty">
+            <i class="material-icons">inventory_2</i>
+            <p>Không khớp “{{ kkCatalogQuery }}”.</p>
+          </div>
+        </ng-template>
+      </div>
       <div class="hidden-footer">
         <button type="button" class="cancel-btn" (click)="closeKkCatalogPopup()" [disabled]="kkCatalogImporting">Đóng</button>
       </div>
@@ -4024,6 +3910,65 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay more-overlay" *ngIf="kkMucLocPicker" (click)="closeKkMucLocPicker()">
+  <div class="modal-content kk-muc-loc-picker" (click)="$event.stopPropagation()" role="dialog" aria-label="Vị trí cho phép">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true"><i class="material-icons">place</i></span>
+        <div>
+          <h3>Vị trí cho phép — Mục {{ kkMucLocPicker.category }}</h3>
+          <p class="more-popup-header__sub">Tick vị trí được chọn trên sơ đồ. Bấm Sơ Đồ để xem.</p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeKkMucLocPicker()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="kk-muc-loc-picker__body">
+      <section *ngFor="let shelf of kkMucLocPicker.shelves">
+        <label class="kk-muc-loc-picker__shelf">
+          <input type="checkbox" [checked]="kkMucShelfAllOn(shelf)" (change)="toggleKkMucShelf(shelf, $any($event.target).checked)" />
+          <strong>{{ shelf.shelf }}</strong>
+        </label>
+        <div class="kk-muc-loc-picker__level" *ngFor="let lv of shelf.levels">
+          <span>T{{ lv.level }}</span>
+          <label *ngFor="let loc of lv.locs">
+            <input type="checkbox" [(ngModel)]="kkMucLocPickerOn[loc]" />
+            {{ loc }}
+          </label>
+        </div>
+      </section>
+    </div>
+    <div class="kk-muc-loc-picker__foot">
+      <button type="button" class="cancel-btn" (click)="closeKkMucLocPicker()" [disabled]="kkMucLocPickerSaving">Hủy</button>
+      <button type="button" class="kk-b009-detail-btn" (click)="saveKkMucAllowedLocs()" [disabled]="!canEdit || kkMucLocPickerSaving">
+        {{ kkMucLocPickerSaving ? 'Đang lưu…' : 'Lưu' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="kk-type-box-menu kk-muc-shelf-menu"
+     *ngIf="kkMucShelfMenuCategory"
+     [style.left.px]="kkMucShelfMenuX"
+     [style.top.px]="kkMucShelfMenuY"
+     (click)="$event.stopPropagation()"
+     (contextmenu)="$event.preventDefault(); $event.stopPropagation()">
+  <p>Kệ mẹ — {{ kkMucShelfMenuCategory }}</p>
+  <div class="kk-muc-shelf-menu__add">
+    <input type="text" [(ngModel)]="kkMucShelfDraft" placeholder="S11, R02, PASS, BACKUP" (keydown.enter)="addKkMucParentShelf()" />
+    <button type="button" (click)="addKkMucParentShelf()" [disabled]="!canEdit || kkMucShelfSaving">Thêm</button>
+  </div>
+  <button type="button"
+          class="kk-type-box-menu__item"
+          *ngFor="let shelf of kkMucParentShelves(kkMucShelfMenuCategory)"
+          (click)="removeKkMucParentShelf(shelf)"
+          [disabled]="!canEdit || kkMucShelfSaving">
+    <i class="material-icons">close</i>
+    Bỏ {{ shelf }}
+  </button>
 </div>
 
 <div class="kk-type-box-menu"
@@ -4212,6 +4157,78 @@
               [disabled]="!canEditInvLocation()">
         <i class="material-icons">edit_location_alt</i>
         Sửa vị trí
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Cột Vị trí: chọn kệ mẹ → kệ con -->
+<div class="modal-overlay more-overlay inv-shelf-pick-overlay"
+     *ngIf="showInvShelfPicker && invShelfPickMaterial"
+     (click)="closeInvShelfPicker()">
+  <div class="modal-content inv-shelf-pick" (click)="$event.stopPropagation()" role="dialog" aria-label="Chọn kệ">
+    <div class="more-popup-header">
+      <div class="more-popup-header__left">
+        <span class="more-popup-header__icon" aria-hidden="true">
+          <i class="material-icons">view_module</i>
+        </span>
+        <div>
+          <h3>{{ invShelfPickParent ? ('Chọn kệ con — ' + invShelfPickParent) : 'Chọn kệ mẹ' }}</h3>
+          <p class="more-popup-header__sub">
+            {{ invShelfPickMaterial.materialCode }}
+            · {{ invShelfPickMaterial.poNumber || '—' }}
+            · Đang ở: {{ primaryLocationDisplay(invShelfPickMaterial.location) || '—' }}
+          </p>
+        </div>
+      </div>
+      <button type="button" class="more-popup-close" (click)="closeInvShelfPicker()" aria-label="Đóng">
+        <i class="material-icons">close</i>
+      </button>
+    </div>
+    <div class="modal-body inv-shelf-pick__body">
+      <ng-container *ngIf="!invShelfPickParent">
+        <div class="layout-loc-filter">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="invShelfPickQuery" placeholder="Lọc kệ mẹ…" autocomplete="off" />
+        </div>
+        <section class="inv-shelf-pick__section" *ngFor="let s of invShelfParentSections">
+          <h4>{{ s.title }}</h4>
+          <div class="inv-shelf-pick__grid">
+            <button type="button"
+                    class="inv-shelf-pick__btn"
+                    *ngFor="let p of s.parents"
+                    [class.inv-shelf-pick__btn--on]="isInvShelfCurrent(p.id)"
+                    [disabled]="invShelfPickSaving || !canEditInvLocation()"
+                    (click)="pickInvShelfParent(p)">
+              {{ p.id }}
+              <i class="material-icons" *ngIf="p.hasChildren">chevron_right</i>
+            </button>
+          </div>
+        </section>
+        <p class="hidden-empty" *ngIf="!invShelfParentSections.length">Không có kệ khớp.</p>
+      </ng-container>
+      <ng-container *ngIf="invShelfPickParent">
+        <button type="button" class="layout-j-back" (click)="backInvShelfParent()" [disabled]="invShelfPickSaving">
+          <i class="material-icons">arrow_back</i> Kệ mẹ
+        </button>
+        <div class="inv-shelf-pick__grid">
+          <button type="button"
+                  class="inv-shelf-pick__btn"
+                  *ngFor="let c of invShelfChildren"
+                  [class.inv-shelf-pick__btn--on]="isInvShelfCurrent(c)"
+                  [disabled]="invShelfPickSaving || !canEditInvLocation()"
+                  (click)="applyInvShelfPick(c)">
+            {{ c }}
+          </button>
+        </div>
+      </ng-container>
+      <p class="inv-loc-list-modal__hint" *ngIf="!canEditInvLocation()">Cần quyền sửa vị trí để đổi kệ.</p>
+    </div>
+    <div class="modal-footer inv-loc-list-modal__footer">
+      <button type="button" class="btn-cancel" (click)="closeInvShelfPicker()" [disabled]="invShelfPickSaving">Đóng</button>
+      <button type="button" class="btn-inv-loc-clean" (click)="openInvLocListFromShelfPicker()" [disabled]="invShelfPickSaving">
+        <i class="material-icons">list</i>
+        Vị trí hiện tại
       </button>
     </div>
   </div>

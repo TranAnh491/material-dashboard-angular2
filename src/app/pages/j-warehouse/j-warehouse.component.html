@@ -1,4 +1,4 @@
-<div class="jw" [class.jw--label-pick]="labelPick" [class.jw--kho]="drawMode === 'kho'">
+<div class="jw" [class.jw--label-pick]="labelPick" [class.jw--kho]="warehouseSheet">
   <div class="jw-shell">
     <header class="jw-header">
       <div class="jw-header__brand">
@@ -148,6 +148,25 @@
           </div>
           <div class="jw-map__tools" (click)="$event.stopPropagation()">
             <button
+              *ngIf="!labelPick && drawMode === 'kho' && !show3D && !showUtilization"
+              type="button"
+              class="jw-btn jw-btn--outline"
+              [class.jw-btn--on]="storageOverlay"
+              (click)="toggleStorageOverlay($event)"
+              [title]="drawModeLabel('luu-tru')">
+              <i class="material-icons">{{ storageOverlay ? 'check_box' : 'check_box_outline_blank' }}</i>
+              {{ drawModeLabel('luu-tru') }}
+            </button>
+            <button
+              *ngIf="!labelPick && drawMode === 'kho' && !show3D && !showUtilization"
+              type="button"
+              class="jw-btn jw-btn--outline"
+              [class.jw-btn--on]="fiveSExport"
+              (click)="toggleFiveSExport($event)"
+              [title]="t('fiveS.hint')">
+              <i class="material-icons">assignment_ind</i> {{ t('btn.assign5s') }}
+            </button>
+            <button
               *ngIf="!viewOnly"
               type="button"
               class="jw-btn jw-btn--work"
@@ -205,7 +224,7 @@
 
         <aside class="jw-print-block" *ngIf="drawMode === 'kho' && !show3D && !showUtilization">
           <img [src]="khoLogoSrc" alt="AIRSPEED">
-          <h1>{{ t('print.sheetTitle') }}</h1>
+          <h1>{{ khoSheetTitle }}</h1>
           <p>{{ t('print.rev') }}: 1.0</p>
           <p>{{ t('print.date') }}: {{ khoPrintDate }}</p>
           <table>
@@ -485,8 +504,8 @@
                     <g
                       *ngFor="let block of rack.blocks; trackBy: trackBlock"
                       class="jw-j4-rack-block"
-                      [class.jw-block--nvl]="drawMode === 'kho' && rack.num <= 18"
-                      [class.jw-block--fg]="drawMode === 'kho' && rack.num >= 19"
+                      [class.jw-block--nvl]="warehouseSheet && rack.num <= 18"
+                      [class.jw-block--fg]="warehouseSheet && rack.num >= 19"
                       [attr.data-jw-loc]="blockPickAttr(block, true)">
                       <rect
                         class="jw-block__body"
@@ -868,7 +887,7 @@
                   </ng-template>
                 </g>
                 <rect
-                  *ngIf="drawMode === 'kho'"
+                  *ngIf="warehouseSheet"
                   class="jw-kho-mat-outline"
                   [attr.x]="meterX(khoMatUnionZone.xM)"
                   [attr.y]="meterY(khoMatUnionZone.yM)"
@@ -926,7 +945,7 @@
               </g>
 
               <!-- Kệ trong Kho mát: 7 tầng, không chia A/B/C — ẩn trên bản vẽ kỹ thuật -->
-              <g class="jw-kho-mat" [class.jw-kho-mat--nvl]="drawMode === 'kho'" *ngIf="racksReady && khoMatRows.length && !showTechDims">
+              <g class="jw-kho-mat" [class.jw-kho-mat--nvl]="warehouseSheet" *ngIf="racksReady && khoMatRows.length && !showTechDims">
                 <g *ngFor="let row of khoMatRows; trackBy: trackKhoMatRow">
                   <rect
                     class="jw-kho-mat__row"
@@ -1150,8 +1169,8 @@
                 <g
                   *ngFor="let block of rack.blocks; trackBy: trackBlock"
                   class="jw-block"
-                  [class.jw-block--nvl]="drawMode === 'kho' && rack.num <= 18"
-                  [class.jw-block--fg]="drawMode === 'kho' && rack.num >= 19"
+                  [class.jw-block--nvl]="warehouseSheet && rack.num <= 18"
+                  [class.jw-block--fg]="warehouseSheet && rack.num >= 19"
                   [class.jw-block--selected]="isBlockSelected(block)"
                   [class.jw-block--occupied]="blockOccupiedCount(block) > 0"
                   (pointerdown)="onBlockPointerDown(block, $event)"
@@ -2074,7 +2093,7 @@
             <h3>{{ t('info.title') }}</h3>
             <i class="material-icons">{{ infoPanelOpen ? 'expand_more' : 'chevron_right' }}</i>
           </button>
-          <div class="jw-zone-key" *ngIf="drawMode === 'kho' && infoPanelOpen">
+          <div class="jw-zone-key" *ngIf="warehouseSheet && infoPanelOpen && !storageOverlay">
             <h4 class="jw-zone-key__title">{{ t('info.zoneColors') }}</h4>
             <div class="jw-zone-key__item" *ngFor="let item of zoneLegend">
               <span class="jw-zone-key__no">{{ item.no }}</span>
@@ -2086,6 +2105,17 @@
                 [style.--c2]="item.color2"></span>
               <span class="jw-zone-key__name">{{ item.label }}</span>
             </div>
+          </div>
+          <div class="jw-zone-key jw-storage-key" *ngIf="warehouseSheet && infoPanelOpen && storageOverlay">
+            <h4 class="jw-zone-key__title">{{ drawModeLabel('luu-tru') }}</h4>
+            <p class="jw-storage-sheet__status" *ngIf="!storagePlanReady">{{ t('storage.loading') }}</p>
+            <p class="jw-storage-sheet__status" *ngIf="storagePlanError">{{ storagePlanError }}</p>
+            <ul *ngIf="storagePlanReady">
+              <li *ngFor="let row of storageShelfRows">
+                <span>{{ row.shelf }}</span>
+                <span>{{ row.groups }}</span>
+              </li>
+            </ul>
           </div>
           <dl class="jw-fields" *ngIf="infoPanelOpen">
             <div class="jw-fields__row" *ngFor="let row of warehouseInfoRows">
@@ -2121,6 +2151,63 @@
       </header>
       <div class="jw-modal__preview">
         <img *ngIf="downloadPreviewUrl" [src]="downloadPreviewUrl" [alt]="t('title.preview')" />
+      </div>
+    </div>
+  </div>
+
+  <div class="jw-modal-backdrop" *ngIf="showFiveSModal" (click)="closeFiveSModal()">
+    <div class="jw-modal jw-modal--fives" role="dialog" (click)="$event.stopPropagation()">
+      <header class="jw-modal__head">
+        <h2 class="jw-modal__title">
+          <i class="material-icons">assignment_ind</i> {{ t('fiveS.title') }}
+        </h2>
+        <button type="button" class="jw-modal__close" (click)="closeFiveSModal()" [title]="t('title.close')">
+          <i class="material-icons">close</i>
+        </button>
+      </header>
+      <div class="jw-fives">
+        <p class="jw-fives__hint">{{ t('fiveS.hint') }}</p>
+        <h3>{{ t('fiveS.racks') }}</h3>
+        <div class="jw-fives__row" *ngFor="let group of fiveSRackGroups; trackBy: trackFiveSGroup">
+          <span class="jw-fives__no">{{ group.label }}</span>
+          <span></span>
+          <input
+            type="text"
+            [disabled]="viewOnly"
+            [attr.placeholder]="t('fiveS.person')"
+            [(ngModel)]="fiveSNames[group.id]" />
+        </div>
+        <h3>{{ t('fiveS.shelves') }}</h3>
+        <div class="jw-fives__row" *ngFor="let group of fiveSShelfGroups; trackBy: trackFiveSGroup">
+          <span class="jw-fives__no">{{ group.label }}</span>
+          <span></span>
+          <input
+            type="text"
+            [disabled]="viewOnly"
+            [attr.placeholder]="t('fiveS.person')"
+            [(ngModel)]="fiveSNames[group.id]" />
+        </div>
+        <h3>{{ t('fiveS.zones') }}</h3>
+        <div class="jw-fives__head">
+          <span>{{ t('fiveS.no') }}</span>
+          <span>{{ t('fiveS.area') }}</span>
+          <span>{{ t('fiveS.person') }}</span>
+        </div>
+        <div class="jw-fives__row" *ngFor="let item of fiveSZoneRows; trackBy: trackFiveSZone">
+          <span class="jw-fives__no">{{ item.no }}</span>
+          <span class="jw-fives__name">{{ item.label }}</span>
+          <input
+            type="text"
+            [disabled]="viewOnly"
+            [attr.placeholder]="t('fiveS.person')"
+            [(ngModel)]="fiveSNames[item.id]" />
+        </div>
+        <div class="jw-fives__btns">
+          <span class="jw-fives__msg" *ngIf="fiveSSaveMessage">{{ fiveSSaveMessage }}</span>
+          <button *ngIf="!viewOnly" type="button" class="jw-btn jw-btn--work" [disabled]="fiveSSaving" (click)="saveFiveSAssignments($event)">
+            {{ fiveSSaving ? t('fiveS.saving') : t('fiveS.save') }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

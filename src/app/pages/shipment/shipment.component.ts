@@ -60,7 +60,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   displayedShipments: ShipmentItem[] = [];
   currentPage = 1;
   totalPages = 1;
-  groupsPerPage = 20;
+  groupsPerPage = 10;
   readonly groupsPerPageOptions = [10, 20, 50, 100];
 
   /** UI: group header per shipmentCode */
@@ -1024,7 +1024,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   onGroupsPerPageChange(size: number | string): void {
     const n = Number(size);
-    this.groupsPerPage = this.groupsPerPageOptions.includes(n) ? n : 20;
+    this.groupsPerPage = this.groupsPerPageOptions.includes(n) ? n : 10;
     this.currentPage = 1;
     this.updatePagination();
   }

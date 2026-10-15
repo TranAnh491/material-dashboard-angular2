@@ -915,6 +915,9 @@
                                 <i class="material-icons">print</i>
                                 In PXK
                               </button>
+                              <button type="button" class="wo-print-btn wo-print-btn--excel" (click)="downloadPxkExcel(wo)" [disabled]="pxkExcelDownloadingLsx === wo.productionOrder" title="Tải PXK Excel">
+                                <i class="material-icons">download</i>
+                              </button>
                               <button type="button" class="wo-weight-check-flag"
                                       *ngIf="lsxNeedsWeightCheck(wo)"
                                       [class.wo-weight-check-flag--ok]="lsxWeightIcon(wo) === 'green'"

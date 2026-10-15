@@ -1,226 +1,128 @@
 <!-- Shipment - Dashboard layout -->
 <div class="shipment-layout shipment-layout--no-sidebar">
   <div class="shipment-body">
-    <div class="main-content">
+    <div class="main-content wo-dash">
   <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-12">
-        <div class="card">
-          <!-- Sticky Header Wrapper -->
-          <div class="sticky-header-wrapper">
-            <!-- Summary Cards -->
-            <div class="row summary-row">
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive(null)"
-                   (click)="setStatusFilter(null)"
-                   role="button" tabindex="0" title="Xem tất cả">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">local_shipping</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">TỔNG SHIPMENT</p>
-                    <p class="card-category-en">TOTAL SHIPMENT</p>
-                  </div>
-                  <h3 class="card-title">{{getTotalShipments()}}</h3>
+    <div class="wo-dash__main">
+            <div class="wo-stats">
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive(null)"
+                      (click)="setStatusFilter(null)" title="Xem tất cả">
+                <i class="material-icons">local_shipping</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Tổng shipment</span>
+                  <strong class="wo-stat__value">{{ getTotalShipments() }}</strong>
                 </div>
+              </button>
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive('Đã Check')"
+                      (click)="setStatusFilter('Đã Check')" title="Lọc: Đã Check">
+                <i class="material-icons">check_circle</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Đã soạn xong</span>
+                  <strong class="wo-stat__value">{{ getCompletedShipments() }}</strong>
+                </div>
+              </button>
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive('Chưa Đủ')"
+                      (click)="setStatusFilter('Chưa Đủ')" title="Lọc: Chưa đủ hàng">
+                <i class="material-icons">warning</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Chưa đủ hàng</span>
+                  <strong class="wo-stat__value">{{ getMissingItemsShipments() }}</strong>
+                </div>
+              </button>
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive('Đang soạn')"
+                      (click)="setStatusFilter('Đang soạn')" title="Lọc: Đang soạn">
+                <i class="material-icons">work</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Đang soạn</span>
+                  <strong class="wo-stat__value">{{ getInProgressShipments() }}</strong>
+                </div>
+              </button>
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive('Chờ soạn')"
+                      (click)="setStatusFilter('Chờ soạn')" title="Lọc: Chờ soạn">
+                <i class="material-icons">schedule</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Chờ soạn</span>
+                  <strong class="wo-stat__value">{{ getPendingShipments() }}</strong>
+                </div>
+              </button>
+              <button type="button" class="wo-stat wo-stat--btn"
+                      [class.wo-stat--on]="isStatusFilterActive('Delay')"
+                      (click)="setStatusFilter('Delay')" title="Lọc: Delay">
+                <i class="material-icons">error</i>
+                <div class="wo-stat__body">
+                  <span class="wo-stat__label">Delay</span>
+                  <strong class="wo-stat__value">{{ getDelayShipments() }}</strong>
+                </div>
+              </button>
+            </div>
+
+            <div class="wo-toolbar">
+              <div class="wo-tabs">
+                <button type="button" class="wo-tab" (click)="goToMenu()" title="Về Menu">HOME</button>
+              </div>
+              <div class="wo-actions">
+                <button type="button" class="wo-action" (click)="toggleDropdown()">
+                  <i class="material-icons">more_vert</i> MORE
+                </button>
+                <button type="button" class="wo-action" (click)="importFile()">
+                  <i class="material-icons">file_upload</i> IMPORT FILE
+                </button>
+                <button type="button" class="wo-action" (click)="openMonthViewDialog()"
+                        title="Chọn tháng để chỉ hiển thị shipment có CS Date trong tháng đó">
+                  <i class="material-icons">calendar_view_month</i> HIỆN TẤT CẢ
+                </button>
+                <button type="button" class="wo-action" (click)="downloadFullShipmentHistoryExcel()"
+                        title="Tải Excel toàn bộ shipment đã tải từ hệ thống (mọi tháng)">
+                  <i class="material-icons">cloud_download</i> TẢI LỊCH SỬ
+                </button>
+                <button type="button" class="wo-action" (click)="openSchedulesFromSidebar()" title="Calendar / Schedules">
+                  <i class="material-icons">event</i>
+                </button>
+                <button type="button" class="wo-action" (click)="openKhFilterDialog()" title="Danh mục KH (khách hàng)">
+                  KH
+                </button>
+                <button type="button" class="wo-action" (click)="openChartFromSidebar()" title="Analytics">
+                  <i class="material-icons">bar_chart</i>
+                </button>
               </div>
             </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive('Đã Check')"
-                   (click)="setStatusFilter('Đã Check')"
-                   role="button" tabindex="0" title="Lọc: Đã Check">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">check_circle</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">ĐÃ SOẠN XONG</p>
-                    <p class="card-category-en">COMPLETED</p>
-                  </div>
-                  <h3 class="card-title">{{getCompletedShipments()}}</h3>
-                </div>
+
+            <div class="wo-filters">
+              <label class="wo-filter">
+                <span>Từ</span>
+                <input type="date" [value]="formatDateForInput(startDate)"
+                       (change)="startDate = parseDateForRange($event.target.value); applyFilters()"
+                       (click)="$event.target.showPicker()" title="Ngày bắt đầu">
+              </label>
+              <label class="wo-filter">
+                <span>Đến</span>
+                <input type="date" [value]="formatDateForInput(endDate)"
+                       (change)="endDate = parseDateForRange($event.target.value); applyFilters()"
+                       (click)="$event.target.showPicker()" title="Ngày kết thúc">
+              </label>
+              <label class="wo-search">
+                <i class="material-icons">search</i>
+                <input type="text" placeholder="Tìm kiếm..." [(ngModel)]="searchTerm" (input)="onSearchInput()">
+              </label>
+              <button type="button" class="wo-action"
+                      *ngIf="olderShipmentOffer || olderShipmentSearching"
+                      (click)="searchOlderShipment()"
+                      [disabled]="olderShipmentSearching">
+                {{ olderShipmentSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
+              </button>
+              <div class="wo-filter" *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
+                <span>Tổng thùng</span>
+                <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
               </div>
             </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive('Chưa Đủ')"
-                   (click)="setStatusFilter('Chưa Đủ')"
-                   role="button" tabindex="0" title="Lọc: Chưa đủ hàng">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">warning</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">CHƯA ĐỦ HÀNG</p>
-                    <p class="card-category-en">INSUFFICIENT</p>
-                  </div>
-                  <h3 class="card-title">{{getMissingItemsShipments()}}</h3>
-                </div>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive('Đang soạn')"
-                   (click)="setStatusFilter('Đang soạn')"
-                   role="button" tabindex="0" title="Lọc: Đang soạn">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">work</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">ĐANG SOẠN</p>
-                    <p class="card-category-en">IN PROGRESS</p>
-                  </div>
-                  <h3 class="card-title">{{getInProgressShipments()}}</h3>
-                </div>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive('Chờ soạn')"
-                   (click)="setStatusFilter('Chờ soạn')"
-                   role="button" tabindex="0" title="Lọc: Chờ soạn">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">schedule</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">CHỜ SOẠN</p>
-                    <p class="card-category-en">PENDING</p>
-                  </div>
-                  <h3 class="card-title">{{getPendingShipments()}}</h3>
-                </div>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4 col-sm-6">
-              <div class="card card-stats compact-stats summary-card summary-card-clickable"
-                   [class.summary-card-active]="isStatusFilterActive('Delay')"
-                   (click)="setStatusFilter('Delay')"
-                   role="button" tabindex="0" title="Lọc: Delay">
-                <div class="card-header">
-                  <div class="card-header-icon">
-                    <i class="material-icons">error</i>
-                  </div>
-                  <div class="card-content">
-                    <p class="card-category">DELAY</p>
-                    <p class="card-category-en">DELAY</p>
-                  </div>
-                  <h3 class="card-title">{{getDelayShipments()}}</h3>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Toolbar: filter trái — thao tác phải (cạnh Tải lịch sử) -->
-          <div class="more-button-row">
-            <div class="col-12">
-              <div class="more-button-container">
-                <div class="toolbar-left">
-                  <!-- Date Range Filter -->
-                  <div class="date-range-container">
-                    <label class="date-range-label">Từ:</label>
-                    <input type="date"
-                           class="date-range-input"
-                           [value]="formatDateForInput(startDate)"
-                           (change)="startDate = parseDateForRange($event.target.value); applyFilters()"
-                           (click)="$event.target.showPicker()"
-                           title="Ngày bắt đầu">
-                    <label class="date-range-label">Đến:</label>
-                    <input type="date"
-                           class="date-range-input"
-                           [value]="formatDateForInput(endDate)"
-                           (change)="endDate = parseDateForRange($event.target.value); applyFilters()"
-                           (click)="$event.target.showPicker()"
-                           title="Ngày kết thúc">
-                  </div>
 
-                  <div class="search-container">
-                    <input type="text"
-                           class="search-input"
-                           placeholder="Tìm kiếm..."
-                           [(ngModel)]="searchTerm"
-                           (input)="onSearchInput()">
-                    <i class="material-icons search-icon">search</i>
-                  </div>
-                  <button type="button"
-                          class="btn btn-outline-primary"
-                          *ngIf="olderShipmentOffer || olderShipmentSearching"
-                          (click)="searchOlderShipment()"
-                          [disabled]="olderShipmentSearching">
-                    {{ olderShipmentSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
-                  </button>
-
-                  <div class="search-total-carton-box"
-                       *ngIf="isShipmentSearchActive && filteredShipments.length > 0">
-                    Tổng thùng (Carton): <strong>{{ getTotalCartonFilteredShipments() | number }}</strong>
-                  </div>
-                </div>
-
-                <div class="toolbar-right">
-                  <button class="btn btn-outline-secondary" type="button" (click)="toggleDropdown()">
-                    <i class="material-icons">more_vert</i>
-                    More
-                  </button>
-
-                  <button class="btn btn-outline-secondary" type="button" (click)="importFile()">
-                    <i class="material-icons">file_upload</i>
-                    Import File
-                  </button>
-
-                  <button class="btn btn-outline-secondary"
-                          type="button"
-                          (click)="openMonthViewDialog()"
-                          title="Chọn tháng để chỉ hiển thị shipment có CS Date trong tháng đó">
-                    <i class="material-icons">calendar_view_month</i>
-                    Hiện tất cả
-                  </button>
-
-                  <button class="btn btn-outline-primary"
-                          type="button"
-                          (click)="downloadFullShipmentHistoryExcel()"
-                          title="Tải Excel toàn bộ shipment đã tải từ hệ thống (mọi tháng)">
-                    <i class="material-icons">cloud_download</i>
-                    Tải lịch sử
-                  </button>
-
-                  <button class="btn btn-outline-secondary toolbar-icon-btn"
-                          type="button"
-                          (click)="openSchedulesFromSidebar()"
-                          title="Calendar / Schedules">
-                    <i class="material-icons">event</i>
-                  </button>
-                  <button class="btn btn-outline-secondary toolbar-icon-btn toolbar-kh-btn"
-                          type="button"
-                          (click)="openKhFilterDialog()"
-                          title="Danh mục KH (khách hàng)">
-                    <span class="toolbar-kh-label">KH</span>
-                  </button>
-                  <button class="btn btn-outline-secondary toolbar-icon-btn"
-                          type="button"
-                          (click)="openChartFromSidebar()"
-                          title="Analytics">
-                    <i class="material-icons">bar_chart</i>
-                  </button>
-                  <button class="btn btn-outline-secondary toolbar-icon-btn"
-                          type="button"
-                          (click)="goToMenu()"
-                          title="Về Menu">
-                    <i class="material-icons">home</i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          </div>
-          <!-- End Sticky Header Wrapper -->
-          
-          <div class="card-body shipment-content">
-    
-            <!-- Data Table -->
-            <div class="table-responsive">
+          <div class="wo-table-card shipment-content">
+            <div class="wo-table-scroll">
               <div class="table-scroll-wrapper">
               <table class="table shipment-data-table">
                 <thead>
@@ -307,25 +209,23 @@
                                 </div>
                                 <div class="stat-label">STATUS</div>
                               </div>
-                            </div>
-                            </div>
-                            <div class="shipment-carton-mismatch-warn" *ngIf="isCartonCheckMatched(shipment) === false">
-                              <ng-container *ngIf="!hasFgOutRecordsForShipment(shipment); else cartonMismatchDetailTpl">
-                                ⚠️ FG-Out chưa có phiếu xuất nào cho shipment này — chưa thể so sánh, không phải do sai dữ liệu.
-                              </ng-container>
-                              <ng-template #cartonMismatchDetailTpl>
-                                Lượng thùng ở Fg-Out đang sai
-                                <span class="shipment-carton-mismatch-detail">
-                                  (Shipment {{ g.totalCarton | number : '1.0-0' }} · FG-Out {{ getFgOutCartonTotalForGroup(shipment) | number : '1.0-0' }})
-                                </span>
-                                <div class="shipment-carton-mismatch-list">
-                                  <div class="shipment-carton-mismatch-item" *ngFor="let m of getCartonMismatchDetails(shipment)">
+                              <div class="shipment-carton-mismatch-warn" *ngIf="isCartonCheckMatched(shipment) === false">
+                                <ng-container *ngIf="!hasFgOutRecordsForShipment(shipment); else cartonMismatchDetailTpl">
+                                  ⚠️ FG-Out chưa có phiếu xuất nào cho shipment này — chưa thể so sánh, không phải do sai dữ liệu.
+                                </ng-container>
+                                <ng-template #cartonMismatchDetailTpl>
+                                  <span>Lượng thùng ở Fg-Out đang sai</span>
+                                  <span class="shipment-carton-mismatch-detail">
+                                    (Shipment {{ g.totalCarton | number : '1.0-0' }} · FG-Out {{ getFgOutCartonTotalForGroup(shipment) | number : '1.0-0' }})
+                                  </span>
+                                  <span class="shipment-carton-mismatch-item" *ngFor="let m of getCartonMismatchDetails(shipment)">
                                     <strong>{{ m.materialCode }}</strong>:
                                     <span *ngIf="m.fgOutCarton === 0">chưa có phiếu xuất cho mã này</span>
                                     <span *ngIf="m.fgOutCarton > 0">Shipment {{ m.shipmentCarton | number : '1.0-0' }} · FG-Out {{ m.fgOutCarton | number : '1.0-0' }}</span>
-                                  </div>
-                                </div>
-                              </ng-template>
+                                  </span>
+                                </ng-template>
+                              </div>
+                            </div>
                             </div>
                           </div>
                           </ng-container>
@@ -580,6 +480,8 @@
                     </ng-container>
         </tbody>
       </table>
+              </div>
+            </div>
 
       <div class="shipment-pager" *ngIf="totalShipmentGroupsCount > 0">
         <span class="shipment-pager__info">
@@ -598,15 +500,10 @@
           </button>
         </div>
       </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
-
   </div>
 </div>
 

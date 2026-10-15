@@ -12,6 +12,7 @@ import { ReadTrackerService } from '../../services/read-tracker.service';
 import { FgDailyBackupService } from '../../services/fg-daily-backup.service';
 import { TpCatalogFullService } from '../../services/tp-catalog-full.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
+import { FgOutLocalCacheService } from '../../services/fg-out-local-cache.service';
 import firebase from 'firebase/compat/app';
 
 export interface FgOutItem {
@@ -166,6 +167,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   /** Tránh hai subscription fg-out cùng lúc (valueChanges + snapshotChanges) */
   private fgOutDataSub: Subscription | null = null;
   private locationCache = new Map<string, string>(); // Cache for locations
+  /** Khoá vị trí đang truy vấn — tránh gửi trùng khi bảng dựng lại liên tục */
+  private locationLoadingKeys = new Set<string>();
   private loadLocationsSubject = new Subject<void>(); // Subject for debouncing location loading
 
   // Cache cho tồn kho từ fg-inventory (key = materialCode, value = tổng tồn cộng dồn)
@@ -196,8 +199,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
   
   // Customer Code Mapping (Tên Khách Hàng = description)
   mappingItems: CustomerCodeMappingItem[] = [];
+  /** Mã TP → tên khách (description); dựng lại khi mảng mappingItems được thay mới. */
+  private customerNameByCode = new Map<string, string>();
+  private customerNameByCodeSource: CustomerCodeMappingItem[] | null = null;
   // Danh mục (fg-catalog) – Standard theo Mã TP để tính Carton/ODD
   catalogItems: FgCatalogItem[] = [];
+  /** 7 ký tự đầu Mã TP → Standard (SL SP/thùng); dựng lại mỗi khi catalogItems đổi. */
+  private catalogStandardByCode7 = new Map<string, number | null>();
   // Lượng Đóng Thùng (danh mục riêng của Kho, collection carton-packing-qty) – ưu tiên hơn Standard khi tính Carton/ODD
   cartonPackingQtyMap: Map<string, number> = new Map();
 
@@ -318,7 +326,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
     private router: Router,
     private route: ActivatedRoute,
     private tpCatalogService: TpCatalogFullService,
-    private cartonPackingQtyService: CartonPackingQtyService
+    private cartonPackingQtyService: CartonPackingQtyService,
+    private fgOutLocalCache: FgOutLocalCacheService
   ) {}
 
   goToMenu(): void {
@@ -384,6 +393,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     this.loadLocationsSubject.complete();
     this.locationCache.clear();
+    this.locationLoadingKeys.clear();
     this.inventoryStockCache.clear();
     this.inventoryStockByBatchCache.clear();
     this.inventoryStockByBatchMaterialCache.clear();
@@ -442,7 +452,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   refreshAllData(): void {
-    this.loadMaterialsFromFirebase();
+    // Làm mới = tải đủ lại từ Firestore (bỏ bản sao trên máy)
+    this.loadMaterialsFromFirebase(true);
   }
 
   async refreshFgInventoryCache(): Promise<void> {
@@ -647,13 +658,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // Load materials — chỉ cửa sổ 30 ngày (exportDate) + delta hôm nay; lô cũ tìm on-demand
-  loadMaterialsFromFirebase(): void {
+  // Load materials — chỉ cửa sổ 30 ngày (exportDate) + delta hôm nay; lô cũ tìm on-demand.
+  // forceFull = true (nút Làm mới): bỏ bản sao trên máy, tải đủ lại từ Firestore.
+  loadMaterialsFromFirebase(forceFull = false): void {
     this.isLoadingMaterials = true;
     this.materialsLoadHint = 'Đang tải 30 ngày gần nhất...';
     this.cdr.markForCheck();
 
-    void this.loadFgOutRollingWindow()
+    void this.loadFgOutRollingWindow(forceFull)
       .then(() => {
         this.isLoadingMaterials = false;
         this.materialsLoadHint = '';
@@ -678,32 +690,137 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Dữ liệu 30 ngày: ưu tiên bản sao trên máy (IndexedDB) + chỉ tải phần thay đổi —
+   * cách của dự án SXXK (mở trang không đọc lại hàng nghìn document).
+   * Không có bản sao / bản sao quá cũ / forceFull → tải đủ như trước rồi lưu bản sao.
+   */
+  private async loadFgOutRollingWindow(forceFull = false): Promise<void> {
+    if (forceFull) {
+      await this.fgOutLocalCache.clear();
+    } else {
+      const cached = await this.fgOutLocalCache.read<FgOutItem>();
+      if (cached && Date.now() - cached.syncedAt < FgOutComponent.LOCAL_CACHE_MAX_AGE_MS) {
+        const ok = await this.applyCachedFgOutWindow(cached.items, cached.syncedAt);
+        if (ok) return;
+      }
+    }
+    await this.loadFgOutRollingWindowFull();
+  }
+
+  /** Bản sao trên máy quá tuổi này thì tải đủ lại (phòng tombstone xoá bị lỡ). */
+  private static readonly LOCAL_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  /** Lùi mốc delta để bù lệch đồng hồ máy so với server. */
+  private static readonly LOCAL_CACHE_SKEW_MS = 15 * 60 * 1000;
+  private static readonly LOCAL_CACHE_DELTA_LIMIT = 2000;
+
+  /** Dòng còn thuộc cửa sổ hiển thị: xuất trong 30 ngày, hoặc được sửa hôm nay (giống tải đủ). */
+  private isInFgOutWindow(m: FgOutItem, start: Date, todayStart: Date): boolean {
+    const exp = new Date(m.exportDate).getTime();
+    if (!isNaN(exp) && exp >= start.getTime()) return true;
+    const upd = m.updatedAt ? new Date(m.updatedAt).getTime() : NaN;
+    return !isNaN(upd) && upd >= todayStart.getTime();
+  }
+
+  /**
+   * Hiện ngay bản sao, rồi tải các dòng có updatedAt mới hơn lần đồng bộ trước + tombstone xoá.
+   * Trả false nếu phần delta quá lớn / lỗi → để gọi tải đủ.
+   */
+  private async applyCachedFgOutWindow(items: FgOutItem[], syncedAt: number): Promise<boolean> {
+    const start = this.getFgOutRollingWindowStart();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // 1) Hiện ngay từ bản sao (không chờ mạng)
+    this.materials = items.filter(m => this.isInFgOutWindow(m, start, todayStart));
+    this.materialsLoadHint = 'Đang cập nhật thay đổi mới...';
+    this.applyFilters();
+    this.cdr.markForCheck();
+
+    // 2) Chỉ tải phần thay đổi kể từ lần đồng bộ trước
+    const syncStart = Date.now();
+    const since = new Date(syncedAt - FgOutComponent.LOCAL_CACHE_SKEW_MS);
+    let changedSnap: any;
+    let deletedSnap: any;
+    try {
+      [changedSnap, deletedSnap] = await Promise.all([
+        firstValueFrom(
+          this.firestore
+            .collection('fg-out', ref =>
+              ref.where('updatedAt', '>=', since).limit(FgOutComponent.LOCAL_CACHE_DELTA_LIMIT)
+            )
+            .get()
+        ),
+        firstValueFrom(
+          this.firestore
+            .collection('fg-deleted-docs', ref =>
+              ref.where('collectionKey', '==', 'fg-out')
+                .where('deletedAt', '>=', firebase.firestore.Timestamp.fromDate(since))
+            )
+            .get()
+        )
+      ]);
+    } catch (e) {
+      console.warn('fg-out local cache delta failed → full load', e);
+      return false;
+    }
+    if ((changedSnap?.docs?.length || 0) >= FgOutComponent.LOCAL_CACHE_DELTA_LIMIT) return false;
+
+    // 3) Gộp vào đúng các object đang hiển thị (giữ nguyên tham chiếu để không mất ô đang gõ)
+    const byId = new Map<string, FgOutItem>();
+    this.materials.forEach(m => { if (m.id) byId.set(m.id, m); });
+    (changedSnap?.docs || []).forEach((doc: any) => {
+      const fresh = this.mapFgOutDoc(doc.id, doc.data());
+      const cur = byId.get(doc.id);
+      if (cur) {
+        // doc chưa lưu vị trí → giữ vị trí đã tra từ fg-inventory trước đó
+        if (!fresh.location && cur.location) fresh.location = cur.location;
+        Object.assign(cur, fresh);
+      } else {
+        byId.set(doc.id, fresh);
+      }
+    });
+    (deletedSnap?.docs || []).forEach((doc: any) => {
+      const id = (doc.data() as { docId?: string })?.docId;
+      if (id) byId.delete(id);
+    });
+    this.materials = Array.from(byId.values()).filter(m => this.isInFgOutWindow(m, start, todayStart));
+    this.readTracker.track(
+      'fg-out',
+      'fg-out-local-cache-delta',
+      (changedSnap?.docs?.length || 0) + (deletedSnap?.docs?.length || 0)
+    );
+    void this.fgOutLocalCache.write(syncStart, this.materials);
+    return true;
+  }
+
   /** Query fg-out theo exportDate (30 ngày) + cập nhật hôm nay theo updatedAt. */
-  private async loadFgOutRollingWindow(): Promise<void> {
+  private async loadFgOutRollingWindowFull(): Promise<void> {
     const start = this.getFgOutRollingWindowStart();
     const end = new Date();
     end.setHours(23, 59, 59, 999);
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const syncStart = Date.now();
 
-    const rangeSnap = await firstValueFrom(
-      this.firestore
-        .collection('fg-out', (ref) =>
-          ref.where('exportDate', '>=', start).where('exportDate', '<=', end).limit(2500)
-        )
-        .get()
-    );
-
-    let deltaSnap: any = null;
-    try {
-      deltaSnap = await firstValueFrom(
+    // Hai truy vấn độc lập → chạy song song (trước đây chờ lần lượt)
+    const [rangeSnap, deltaSnap] = await Promise.all([
+      firstValueFrom(
+        this.firestore
+          .collection('fg-out', (ref) =>
+            ref.where('exportDate', '>=', start).where('exportDate', '<=', end).limit(2500)
+          )
+          .get()
+      ),
+      firstValueFrom(
         this.firestore
           .collection('fg-out', (ref) => ref.where('updatedAt', '>=', todayStart).limit(800))
           .get()
-      );
-    } catch (deltaErr) {
-      console.warn('fg-out updatedAt delta skipped:', deltaErr);
-    }
+      ).catch((deltaErr): any => {
+        console.warn('fg-out updatedAt delta skipped:', deltaErr);
+        return null;
+      })
+    ]);
 
     const byId = new Map<string, FgOutItem>();
     (rangeSnap?.docs || []).forEach((doc) => {
@@ -714,6 +831,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     });
     this.materials = Array.from(byId.values());
     this.readTracker.track('fg-out', 'fg-out-rolling-30d', byId.size);
+    void this.fgOutLocalCache.write(syncStart, this.materials);
   }
 
   // Load Customer Code Mapping — dùng cache dùng chung (TpCatalogFullService) thay vì tự đọc thẳng Firestore
@@ -732,6 +850,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       .getCatalogItemsCached(forceRefresh)
       .then(items => {
         this.catalogItems = items;
+        this.rebuildCatalogStandardMap();
       })
       .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
@@ -760,11 +879,23 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const override = this.cartonPackingQtyMap.get(code7);
     if (override && override > 0) return override;
 
-    if (!this.catalogItems.length) return null;
-    const item = this.catalogItems.find(c => (c.materialCode || '').trim().toUpperCase().slice(0, 7) === code7);
-    if (!item || !item.standard) return null;
-    const num = parseFloat(item.standard);
-    return !isNaN(num) && num > 0 ? num : null;
+    return this.catalogStandardByCode7.get(code7) ?? null;
+  }
+
+  /**
+   * Dựng Map 7 ký tự đầu Mã TP → SL SP/thùng (Standard) từ Danh mục TP.
+   * getStandardForMaterial được template gọi nhiều lần cho mỗi dòng ở mỗi lần render,
+   * nên tra Map thay vì dò tuần tự cả danh mục. Mã trùng 7 ký tự: lấy mục đầu tiên (giống find cũ).
+   */
+  private rebuildCatalogStandardMap(): void {
+    const map = new Map<string, number | null>();
+    this.catalogItems.forEach(c => {
+      const code7 = (c.materialCode || '').trim().toUpperCase().slice(0, 7);
+      if (!code7 || map.has(code7)) return;
+      const num = c.standard ? parseFloat(c.standard) : NaN;
+      map.set(code7, !isNaN(num) && num > 0 ? num : null);
+    });
+    this.catalogStandardByCode7 = map;
   }
 
   /** Tính Carton (số thùng chẵn) và ODD (số lẻ) từ QTY xuất / Standard. */
@@ -927,8 +1058,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Lấy Tên khách hàng từ Mapping (cột Tên Khách Hàng = description)
   getCustomerNameFromMapping(materialCode: string): string {
-    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
-    return mapping ? (mapping.description || '') : '';
+    // Template gọi cho mỗi dòng ở mỗi lần render → tra Map (mã trùng: lấy mục đầu, giống find cũ)
+    if (this.customerNameByCodeSource !== this.mappingItems) {
+      this.customerNameByCode = new Map();
+      this.mappingItems.forEach(item => {
+        if (!this.customerNameByCode.has(item.materialCode)) {
+          this.customerNameByCode.set(item.materialCode, item.description || '');
+        }
+      });
+      this.customerNameByCodeSource = this.mappingItems;
+    }
+    return this.customerNameByCode.get(materialCode) ?? '';
   }
 
   /**
@@ -1943,12 +2083,42 @@ export class FgOutComponent implements OnInit, OnDestroy {
               ? d.approvedAt
               : new Date(d.approvedAt)
         : undefined,
-      mergeCarton: d.mergeCarton || ''
+      mergeCarton: d.mergeCarton || '',
+      updatedAt: this.toDateOrUndefined(d.updatedAt)
     } as FgOutItem;
+  }
+
+  /** Timestamp Firestore / Date / chuỗi / số → Date (không hợp lệ → undefined). */
+  private toDateOrUndefined(v: any): Date | undefined {
+    if (!v) return undefined;
+    if (typeof v.toDate === 'function') return v.toDate();
+    if (v.seconds != null) return new Date(v.seconds * 1000);
+    const d = v instanceof Date ? v : new Date(v);
+    return isNaN(d.getTime()) ? undefined : d;
+  }
+
+  /** Số dòng bảng vẽ ra mỗi lần (như SXXK: 300 dòng + "Xem thêm"). Tổng / in / xuất vẫn tính trên toàn bộ displayRows. */
+  readonly rowStep = 300;
+  rowLimit = 300;
+  private rowLimitViewKey = '';
+
+  showMoreRows(): void {
+    this.rowLimit += this.rowStep;
+  }
+
+  showAllRows(): void {
+    this.rowLimit = this.displayRows.length;
   }
 
   /** Lọc cột dropdown + sắp xếp + dựng displayRows (dùng chung search shipment / mã TP). */
   private applyColumnFiltersAndBuildDisplay(baseFiltered: FgOutItem[]): void {
+    // Chỉ thu về 300 dòng khi đổi tìm kiếm / bộ lọc — sửa 1 ô (cũng dựng lại bảng) thì giữ nguyên số dòng đang mở
+    const viewKey = [this.searchTerm, this.selectedFactory, this.colFilterShipment, this.colFilterPallet,
+      this.colFilterBatch, this.colFilterMaterialCode].join('|');
+    if (viewKey !== this.rowLimitViewKey) {
+      this.rowLimitViewKey = viewKey;
+      this.rowLimit = this.rowStep;
+    }
     const shipSet = new Set<string>();
     const palletSet = new Set<string>();
     const batchSet = new Set<string>();
@@ -2093,6 +2263,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
     // Khi lọc theo shipment: load số lượng kỳ vọng từ tab Shipment để so sánh
     this.loadShipmentExpectedQtys();
 
+    // Vị trí chỉ tải cho các dòng vừa hiển thị (debounce 500ms)
+    this.loadLocationsSubject.next();
+
     console.log('FG Out search results:', {
       searchTerm: this.searchTerm,
       totalMaterials: this.materials.length,
@@ -2227,6 +2400,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
   /** Build displayRows từ historyItems (khi historyMode) */
   private buildDisplayFromHistory(): void {
     const src = this.historyItems;
+    this.rowLimit = this.rowStep;
+    this.rowLimitViewKey = '';
     this.filteredMaterials = src;
     this.displayRows = src.map((m, i) => ({ type: 'detail', material: m, matIdx: i } as FgOutDisplayRow));
     // Dựng map "dòng đầu tiên theo mergeCarton" trước khi tính palletTotal
@@ -2272,6 +2447,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       seenShipment.add(ship || '__empty__');
       if (r.type === 'detail') (r as { renderShipmentCell?: boolean }).renderShipmentCell = true;
     });
+    this.loadLocationsSubject.next();
   }
 
   onColumnFilterChange(): void {
@@ -4066,39 +4242,49 @@ export class FgOutComponent implements OnInit, OnDestroy {
     return 'Đang tải...';
   }
 
-  // Load locations for all materials - OPTIMIZED with caching
+  /**
+   * Tải vị trí cho các dòng ĐANG HIỂN THỊ (filteredMaterials) còn trống vị trí.
+   * Trước đây chạy cho toàn bộ this.materials (cửa sổ 30 ngày, có thể hàng nghìn dòng)
+   * → mỗi dòng 1 truy vấn fg-inventory mỗi lần mở tab, làm tab rất chậm.
+   * Gọi lại (qua loadLocationsSubject) mỗi khi bảng được dựng lại.
+   */
   private loadLocationsForMaterials(): void {
-    // Only load locations for materials that don't have location yet
-    const materialsNeedingLocation = this.materials.filter(material => !material.location);
-    
-    if (materialsNeedingLocation.length === 0) {
-      return; // No need to load if all have locations
-    }
-    
-    console.log(`Loading locations for ${materialsNeedingLocation.length} materials`);
-    
+    const materialsNeedingLocation = this.filteredMaterials.filter(material => !material.location);
+    if (materialsNeedingLocation.length === 0) return;
+
+    // Gom các dòng cùng (mã TP, batch, LSX, LOT) để mỗi khoá chỉ truy vấn 1 lần
+    const pending = new Map<string, FgOutItem[]>();
     materialsNeedingLocation.forEach(material => {
       const cacheKey = `${material.materialCode}-${material.batchNumber}-${material.lsx}-${material.lot}`;
-      
-      // Check cache first
       if (this.locationCache.has(cacheKey)) {
         material.location = this.locationCache.get(cacheKey)!;
         return;
       }
-      
-      // Load from API if not in cache
-      this.fgInventoryLocationService.getLocation(
-        material.materialCode,
-        material.batchNumber,
-        material.lsx,
-        material.lot
-      ).pipe(takeUntil(this.destroy$))
-      .subscribe(location => {
-        material.location = location;
-        this.locationCache.set(cacheKey, location); // Cache the result
-        console.log(`Loaded location for ${material.materialCode}: ${location}`);
-      });
+      if (this.locationLoadingKeys.has(cacheKey)) return;
+      const list = pending.get(cacheKey);
+      if (list) list.push(material);
+      else pending.set(cacheKey, [material]);
     });
+
+    pending.forEach((list, cacheKey) => {
+      const m = list[0];
+      this.locationLoadingKeys.add(cacheKey);
+      this.fgInventoryLocationService.getLocation(m.materialCode, m.batchNumber, m.lsx, m.lot)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: location => {
+            this.locationCache.set(cacheKey, location);
+            list.forEach(x => { if (!x.location) x.location = location; });
+            this.cdr.markForCheck();
+          },
+          error: err => {
+            console.warn('Load location failed:', cacheKey, err);
+            this.locationLoadingKeys.delete(cacheKey);
+          },
+          complete: () => this.locationLoadingKeys.delete(cacheKey)
+        });
+    });
+    this.readTracker.track('fg-out', 'fg-inventory-location', pending.size);
   }
 
   // ==================== XUẤT KHO FUNCTIONS ====================

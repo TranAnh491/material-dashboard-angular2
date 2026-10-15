@@ -106,7 +106,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037001'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 10,
@@ -114,7 +115,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037002'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 11,
@@ -122,7 +124,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037012'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 12,
@@ -130,7 +133,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037013'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 13,
@@ -138,7 +142,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037017'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 14,
@@ -146,7 +151,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037033'
     ],
-    environment: 'COOL'
+    environment: 'COOL',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 15,
@@ -154,7 +160,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037005'
     ],
-    environment: 'COLD'
+    environment: 'COLD',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 16,
@@ -162,7 +169,8 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037015'
     ],
-    environment: 'COLD'
+    environment: 'COLD',
+    note: 'Vị trí: HOACHAT'
   },
   {
     no: 17,
@@ -170,7 +178,18 @@ export const STORAGE_MATERIAL_GROUPS: StorageMaterialGroup[] = [
     materialCodes: [
       'B037016'
     ],
-    environment: 'COLD'
+    environment: 'COLD',
+    note: 'Vị trí: HOACHAT'
+  },
+  {
+    no: 18,
+    materialType: 'NVL tủ lạnh',
+    materialCodes: [
+      'B037034',
+      'B037030'
+    ],
+    environment: 'COLD',
+    note: 'Vị trí: HOACHAT'
   }
 ];
 

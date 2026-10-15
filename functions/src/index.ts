@@ -209,7 +209,7 @@ export const sendNhietDoZaloRemindTestFn = functions
 
 /**
  * 11:00 các ngày làm việc (thứ 2–thứ 7). Chủ nhật và ngày lễ không nhắc.
- * Nếu còn thiết bị đến hạn chưa kiểm tra thì nhắn vào nhóm Kho.
+ * Nhắn nhóm Kho nếu hôm nay hoặc các ngày trước trong tháng còn mã chưa kiểm tra.
  */
 export const notifyEquipmentChecklistZalo = functions
   .runWith({ secrets: [zaloBotToken] })
@@ -217,23 +217,64 @@ export const notifyEquipmentChecklistZalo = functions
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
     const { sendEquipmentChecklistZaloRemind } = await import('./equipment-checklist-zalo');
-    await sendEquipmentChecklistZaloRemind(admin.firestore());
+    const result = await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), '1100');
+    console.log('equipment checklist zalo 11:00', result);
+    return result;
+  });
+
+/** 13:15 các ngày làm việc. Còn mã chưa kiểm sau nhắc 11:00 thì nhắc lại nhóm Kho. */
+export const notifyEquipmentChecklistZalo1315 = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .pubsub.schedule('15 13 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { sendEquipmentChecklistZaloRemind } = await import('./equipment-checklist-zalo');
+    const result = await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), '1315');
+    console.log('equipment checklist zalo 13:15', result);
+    return result;
   });
 
 /** Gửi ngay vào nhóm Kho nếu còn thiết bị đến hạn chưa kiểm tra. */
 export const sendEquipmentChecklistZaloRemindFn = functions
   .runWith({ secrets: [zaloBotToken] })
-  .https.onCall(async (_data: Record<string, unknown>, context) => {
+  .https.onCall(async (data: Record<string, unknown>, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
     }
+    const slot = data?.slot === '1315' ? '1315' : 'push';
     try {
       const { sendEquipmentChecklistZaloRemind } = await import('./equipment-checklist-zalo');
-      return await sendEquipmentChecklistZaloRemind(admin.firestore());
+      return await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), slot);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError('internal', msg);
     }
+  });
+
+/**
+ * B037: 8:00 thứ 2–thứ 7, báo nhóm Kho nếu mã B037
+ * của ASM1 hoặc ASM2 không nằm ở HOACHAT.
+ */
+export const notifyFridgeLocationZaloDaily = functions
+  .runWith({ secrets: [zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+  .pubsub.schedule('0 8 * * 1-6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { sendFridgeLocationZaloReport } = await import('./fridge-location-zalo');
+    const result = await sendFridgeLocationZaloReport(admin.firestore());
+    console.log('fridge location zalo', result);
+    return result;
+  });
+
+/** B037: báo ngay khi vị trí tồn kho đổi khỏi HOACHAT. */
+export const notifyFridgeWrongLocationZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .firestore.document('inventory-materials/{docId}')
+  .onWrite(async (change) => {
+    const { notifyFridgeLocationOnWrite } = await import('./fridge-location-zalo');
+    const before = change.before.exists ? (change.before.data() as Record<string, unknown>) : null;
+    const after = change.after.exists ? (change.after.data() as Record<string, unknown>) : null;
+    return notifyFridgeLocationOnWrite(admin.firestore(), before, after);
   });
 
 /** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */

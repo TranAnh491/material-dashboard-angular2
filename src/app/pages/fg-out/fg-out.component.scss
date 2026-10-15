@@ -2712,9 +2712,447 @@ mat-checkbox {
   background-color: #17a2b8;
   border-color: #17a2b8;
   color: white;
-  
+
   &:hover {
     background-color: #138496;
     border-color: #117a8b;
   }
+}
+
+/* =========================================================
+   Giao diện dễ nhìn (14/10/2026) — cùng tông FlowSpace với Dashboard.
+   Viền xám nhạt thay viền đen, đầu bảng xám nhạt, số căn đều,
+   màu nhóm pallet dịu hơn. Khối này nằm cuối file nên ghi đè style cũ.
+   ========================================================= */
+$fo-line: #DEDED8;        // viền ô bảng (đậm hơn #E5E5E0 một chút cho bảng dày)
+$fo-line-soft: #E5E5E0;
+$fo-surface-2: #F4F4F2;
+$fo-fg: #252823;
+$fo-muted: #747770;
+$fo-blue: #3478F6;
+$fo-blue-l: #EAF2FF;
+$fo-blue-d: #2057B5;
+$fo-green: #269B62;
+$fo-green-l: #E5F5EB;
+$fo-green-d: #176B43;
+$fo-orange: #F28C28;
+$fo-orange-d: #B95E0C;
+$fo-red: #E05252;
+$fo-red-l: #FDEAEA;
+$fo-red-d: #A92F2F;
+$fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, Arial, sans-serif;
+
+.excel-container {
+  border: 0 !important;
+  font-family: $fo-font;
+}
+
+/* ── Header: tiêu đề + nút điều hướng ── */
+.excel-container .excel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 10px;
+  border-bottom: 0;
+
+  .fo-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+  h4 {
+    font-family: $fo-font;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: $fo-fg;
+  }
+  .fo-sub {
+    font-size: 13px;
+    color: $fo-muted;
+  }
+}
+
+/* ── Nút: viền mảnh, bo 6px; dùng chung cho header và thanh công cụ ── */
+.excel-header .custom-btn,
+.excel-actions .custom-btn {
+  height: 34px !important;
+  padding: 0 12px !important;
+  border: 1px solid $fo-line-soft !important;
+  background: #fff !important;
+  color: $fo-fg !important;
+  font-family: $fo-font !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  cursor: pointer;
+
+  .material-icons { font-size: 17px !important; color: $fo-muted !important; }
+
+  &:hover { background: $fo-surface-2 !important; border-color: $fo-line-soft !important; color: $fo-fg !important; }
+  &:focus, &:active { background: $fo-surface-2 !important; border-color: $fo-line-soft !important; color: $fo-fg !important; }
+  &:focus-visible { outline: 2px solid $fo-blue !important; outline-offset: 1px !important; }
+
+  &.active {
+    background: $fo-blue-l !important;
+    border-color: $fo-blue !important;
+    color: $fo-blue-d !important;
+    font-weight: 600 !important;
+    .material-icons { color: $fo-blue-d !important; }
+    &:hover { background: $fo-blue-l !important; border-color: $fo-blue !important; }
+  }
+
+  // Print = nút chính (xanh dương)
+  &.btn-print {
+    background: $fo-blue !important;
+    border-color: $fo-blue !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    .material-icons { color: #fff !important; }
+    &:hover, &:focus { background: $fo-blue-d !important; border-color: $fo-blue-d !important; color: #fff !important; }
+  }
+
+  // Xuất Kho / Thoát History = cam
+  &.btn-warning {
+    background: $fo-orange !important;
+    border-color: $fo-orange !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    .material-icons { color: #fff !important; }
+    &:hover, &:focus { background: $fo-orange-d !important; border-color: $fo-orange-d !important; color: #fff !important; }
+  }
+}
+
+/* ── Thanh công cụ ── */
+.excel-actions {
+  border-bottom: 0 !important;
+
+  .action-controls {
+    gap: 8px;
+    padding: 0 16px 10px;
+  }
+
+  .search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+
+    .search-ico {
+      position: absolute;
+      left: 10px;
+      font-size: 18px;
+      color: $fo-muted;
+      pointer-events: none;
+    }
+  }
+
+  .custom-input {
+    height: 34px !important;
+    width: 300px;
+    max-width: 100%;
+    padding: 0 10px 0 34px !important;
+    border: 1px solid $fo-line-soft !important;
+    border-radius: 6px !important;
+    font-family: $fo-font !important;
+    font-size: 13px !important;
+    color: $fo-fg !important;
+
+    &:focus {
+      outline: none !important;
+      border-color: $fo-blue !important;
+      box-shadow: 0 0 0 3px $fo-blue-l !important;
+    }
+    &.search-input-uppercase::placeholder {
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      font-weight: 400 !important;
+      color: #9A9D95 !important;
+    }
+  }
+
+  .factory-filter {
+    gap: 0;
+    .factory-btn {
+      min-width: 0;
+      border-radius: 0 !important;
+      margin-left: -1px;
+      &:first-child { border-radius: 6px 0 0 6px !important; margin-left: 0; }
+      &:last-child { border-radius: 0 6px 6px 0 !important; }
+      &.active { position: relative; z-index: 1; }
+    }
+  }
+
+  .toolbar-spacer { flex: 1 1 auto; }
+  .toolbar-divider { background: $fo-line-soft; min-height: 22px; margin: 0 2px; }
+}
+
+.load-hint {
+  color: $fo-muted;
+  font-size: 12.5px;
+}
+
+/* ── Dải tổng hợp (Shipment, tổng QTY / thùng, so sánh) ── */
+.fo-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex-shrink: 0;
+  max-height: 132px;      // nhiều mã TP thì cuộn trong dải, không đẩy bảng xuống
+  overflow-y: auto;
+}
+
+.fo-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 12px;
+  border: 1px solid $fo-line-soft;
+  border-radius: 10px;
+  background: #fff;
+  min-width: 0;
+
+  span { font-size: 11.5px; color: $fo-muted; white-space: nowrap; }
+  b {
+    font-size: 16px;
+    font-weight: 650;
+    color: $fo-fg;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  &--ship b { font-size: 14px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+  &--ok b { color: $fo-green-d; }
+  &--bad { border-color: rgba(224, 82, 82, .4); background: $fo-red-l; }
+  &--bad b { color: $fo-red-d; }
+}
+
+.fo-compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+
+  &__label { font-size: 12px; color: $fo-muted; }
+}
+
+.fo-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 980px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid $fo-line-soft;
+  background: #fff;
+  color: $fo-fg;
+  white-space: nowrap;
+
+  b { font-weight: 600; }
+  &__vs { color: $fo-muted; }
+
+  &--ok { background: $fo-green-l; border-color: rgba(38, 155, 98, .34); color: $fo-green-d; }
+  &--ok .fo-chip__vs { color: $fo-green-d; opacity: .75; }
+  &--bad { background: $fo-red-l; border-color: rgba(224, 82, 82, .4); color: $fo-red-d; }
+  &--bad .fo-chip__vs { color: $fo-red-d; opacity: .8; }
+}
+
+/* ── Vùng bảng: tách khỏi phần trên bằng 1 đường mảnh; contain giúp trình duyệt
+      chỉ vẽ lại vùng bảng khi cuộn / gõ ── */
+.excel-container .excel-body {
+  border-top: 1px solid $fo-line-soft;
+  contain: layout paint;
+  scrollbar-color: #C9C9C2 transparent;
+
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: #C9C9C2; border-radius: 4px; }
+  &::-webkit-scrollbar-thumb:hover { background: #9A9D95; }
+}
+
+/* ── Bảng ── */
+.excel-table {
+  font-family: $fo-font;
+
+  th, td {
+    border: 0 !important;
+    border-right: 1px solid $fo-line !important;
+    border-bottom: 1px solid $fo-line !important;
+    color: $fo-fg;
+    font-family: $fo-font;
+  }
+
+  thead tr:first-child th {
+    background: $fo-surface-2 !important;
+    color: $fo-muted !important;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    padding: 9px 6px;
+    box-shadow: none;
+    border-bottom: 1px solid $fo-line !important;
+
+    &.row-header { background: $fo-surface-2 !important; color: $fo-muted !important; }
+  }
+
+  td {
+    color: $fo-fg;
+    border-color: $fo-line;
+
+    &.row-header { color: $fo-muted; font-variant-numeric: tabular-nums; }
+    &.number-cell { font-variant-numeric: tabular-nums; }
+    &.code-cell { color: $fo-fg; }
+    &.qty-cell .editable-input { font-weight: 600; font-variant-numeric: tabular-nums; }
+  }
+
+  tbody tr {
+    &:nth-child(even), &:nth-child(odd) { background-color: #fff; }
+    &:hover { background: #F7F7F5; }
+  }
+}
+
+.filter-row th {
+  background: #FAFAF8 !important;
+  border: 0 !important;
+  border-right: 1px solid $fo-line !important;
+  border-bottom: 1px solid $fo-line !important;
+  text-transform: none;
+}
+
+.col-filter-input,
+.col-filter-select {
+  border: 1px solid $fo-line-soft !important;
+  border-radius: 6px !important;
+  background: #fff !important;
+  color: $fo-fg !important;
+  font-family: $fo-font !important;
+  font-size: 12px !important;
+
+  &:focus { outline: none !important; border-color: $fo-blue !important; box-shadow: 0 0 0 2px $fo-blue-l !important; }
+}
+
+.clear-filter-btn-small {
+  border: 1px solid $fo-line-soft !important;
+  background: #fff !important;
+  color: $fo-muted !important;
+  border-radius: 6px !important;
+  &:hover { background: $fo-surface-2 !important; color: $fo-fg !important; }
+}
+
+/* ô nhập trong bảng: trong suốt, khi focus có viền xanh bên trong */
+.editable-input {
+  font-family: $fo-font;
+  color: $fo-fg;
+  border-radius: 4px;
+
+  &:focus {
+    background: #fff;
+    box-shadow: inset 0 0 0 2px $fo-blue;
+  }
+  &::placeholder { color: #B5B7B0; font-style: normal; }
+  &.readonly-auto { color: $fo-muted; background: transparent; }
+  &.readonly-auto:focus { background: transparent; box-shadow: none; }
+}
+
+/* màu nhóm pallet: dịu hơn hồng/xanh lá cũ, vẫn phân biệt được 2 nhóm liền kề */
+tr.pallet-odd td  { background-color: #FBF7EF !important; }   // be rất nhạt
+tr.pallet-even td { background-color: #F1F6FE !important; }   // xanh dương rất nhạt
+tr.pallet-odd:hover td  { background-color: #F5EFE5 !important; }
+tr.pallet-even:hover td { background-color: #E6EFFD !important; }
+
+.pallet-total-row {
+  td {
+    border-top: 0 !important;
+    border-bottom: 1px solid $fo-line !important;
+    color: $fo-fg;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .pallet-total-label { color: $fo-muted; font-weight: 500; text-align: right; }
+}
+
+/* tồn kho / cảnh báo */
+.stock-cell {
+  color: $fo-blue-d;
+  font-variant-numeric: tabular-nums;
+  &.stock-empty { color: $fo-red-d; }
+  &.stock-unloaded { color: #B5B7B0; }
+}
+.carton-warning {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 980px;
+  background: $fo-red-l;
+  border: 1px solid rgba(224, 82, 82, .34);
+  color: $fo-red-d;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* nút xóa mỗi dòng: nút thường (không ripple/tooltip Material) */
+.fo-del-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9A9D95;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+
+  .material-icons { font-size: 18px; }
+  &:hover { background: $fo-red-l; color: $fo-red-d; }
+  &:focus-visible { outline: 2px solid $fo-red; outline-offset: 1px; }
+}
+
+.approval-checkbox { accent-color: $fo-green; }
+
+/* dòng "Xem thêm" cuối bảng (vẽ 300 dòng mỗi lần) */
+.excel-table tr.fo-more-row td {
+  max-width: none;
+  padding: 10px 12px;
+  text-align: left;
+  background: #FAFAF8;
+  border-right: 0 !important;
+
+  .fo-more-text { color: $fo-muted; font-size: 12.5px; margin-right: 12px; }
+}
+.fo-more-btn {
+  height: 30px;
+  padding: 0 12px;
+  margin-right: 8px;
+  border: 1px solid $fo-line-soft;
+  border-radius: 6px;
+  background: #fff;
+  color: $fo-blue-d;
+  font-family: $fo-font;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover { background: $fo-blue-l; border-color: $fo-blue; }
+}
+
+/* bảng trống */
+.excel-empty {
+  color: $fo-muted;
+  .material-icons { color: #C9C9C2; }
+}
+
+@media (max-width: 900px) {
+  .excel-container .excel-header { flex-wrap: wrap; }
+  .excel-actions .custom-input { width: 100%; }
+  .excel-actions .search-box { flex: 1 1 100%; }
+  .excel-actions .toolbar-spacer { display: none; }
 }

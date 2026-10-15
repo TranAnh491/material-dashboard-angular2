@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = void 0;
+exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.notifyFridgeWrongLocationZalo = exports.notifyFridgeLocationZaloDaily = exports.sendEquipmentChecklistZaloRemindFn = exports.notifyEquipmentChecklistZalo1315 = exports.notifyEquipmentChecklistZalo = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -218,6 +218,72 @@ exports.sendNhietDoZaloRemindTestFn = functions
             ? 'failed-precondition'
             : 'internal', msg);
     }
+});
+/**
+ * 11:00 các ngày làm việc (thứ 2–thứ 7). Chủ nhật và ngày lễ không nhắc.
+ * Nhắn nhóm Kho nếu hôm nay hoặc các ngày trước trong tháng còn mã chưa kiểm tra.
+ */
+exports.notifyEquipmentChecklistZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .pubsub.schedule('0 11 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { sendEquipmentChecklistZaloRemind } = await Promise.resolve().then(() => __importStar(require('./equipment-checklist-zalo')));
+    const result = await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), '1100');
+    console.log('equipment checklist zalo 11:00', result);
+    return result;
+});
+/** 13:15 các ngày làm việc. Còn mã chưa kiểm sau nhắc 11:00 thì nhắc lại nhóm Kho. */
+exports.notifyEquipmentChecklistZalo1315 = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .pubsub.schedule('15 13 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { sendEquipmentChecklistZaloRemind } = await Promise.resolve().then(() => __importStar(require('./equipment-checklist-zalo')));
+    const result = await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), '1315');
+    console.log('equipment checklist zalo 13:15', result);
+    return result;
+});
+/** Gửi ngay vào nhóm Kho nếu còn thiết bị đến hạn chưa kiểm tra. */
+exports.sendEquipmentChecklistZaloRemindFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const slot = (data === null || data === void 0 ? void 0 : data.slot) === '1315' ? '1315' : 'push';
+    try {
+        const { sendEquipmentChecklistZaloRemind } = await Promise.resolve().then(() => __importStar(require('./equipment-checklist-zalo')));
+        return await sendEquipmentChecklistZaloRemind(admin.firestore(), new Date(), slot);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError('internal', msg);
+    }
+});
+/**
+ * B037: 8:00 thứ 2–thứ 7, báo nhóm Kho nếu mã B037
+ * của ASM1 hoặc ASM2 không nằm ở HOACHAT.
+ */
+exports.notifyFridgeLocationZaloDaily = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken], timeoutSeconds: 180, memory: '512MB' })
+    .pubsub.schedule('0 8 * * 1-6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { sendFridgeLocationZaloReport } = await Promise.resolve().then(() => __importStar(require('./fridge-location-zalo')));
+    const result = await sendFridgeLocationZaloReport(admin.firestore());
+    console.log('fridge location zalo', result);
+    return result;
+});
+/** B037: báo ngay khi vị trí tồn kho đổi khỏi HOACHAT. */
+exports.notifyFridgeWrongLocationZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .firestore.document('inventory-materials/{docId}')
+    .onWrite(async (change) => {
+    const { notifyFridgeLocationOnWrite } = await Promise.resolve().then(() => __importStar(require('./fridge-location-zalo')));
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    return notifyFridgeLocationOnWrite(admin.firestore(), before, after);
 });
 /** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */
 exports.sendKkScanGuideToKhoGroupFn = functions

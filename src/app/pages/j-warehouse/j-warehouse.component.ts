@@ -18,6 +18,8 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subscription } from 'rxjs';
+import { KkCatalogService } from '../../services/kk-catalog.service';
+import { shelfGroupText } from '../materials/shelf-group-catalog';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 export interface JwBlock {
   /** VD: R11 hoặc S01-1 (kho mát) */
@@ -47,7 +49,7 @@ export interface JwRack {
 export type JwPos = 'A' | 'B' | 'C';
 
 /** Chế độ bản vẽ hiển thị trên mặt bằng */
-export type JwDrawMode = 'ky-thuat' | 'hai-quan' | 'camera' | 'kho' | 'dang-ky';
+export type JwDrawMode = 'ky-thuat' | 'hai-quan' | 'camera' | 'kho' | 'luu-tru' | 'dang-ky';
 export type JwMapTool = 'overview' | 'pan' | 'select' | 'measure' | 'note' | 'layers';
 
 export type JwLayoutDragKind = 'move' | 'resize';
@@ -231,6 +233,14 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'drawMode.haiQuan': 'Bản vẽ hải quan',
     'drawMode.camera': 'Sơ đồ Camera',
     'drawMode.kho': 'Sơ đồ Kho',
+    'drawMode.luuTru': 'Sơ Đồ Lưu Trữ',
+    'storage.shelves': 'Kệ',
+    'storage.zones': 'Khu vực',
+    'storage.groups': 'Nhóm mã',
+    'storage.loading': 'Đang tải nhóm mã…',
+    'storage.emptyShelf': 'Chưa gán nhóm mã cho kệ.',
+    'storage.emptyZone': 'Chưa gán nhóm mã cho khu vực.',
+    'storage.error': 'Không tải được nhóm mã.',
     'drawMode.dangKy': 'Bản vẽ Đăng ký',
     'header.crumb': 'Sơ đồ kho / Bản vẽ',
     'kpi.racks': 'Dãy kệ',
@@ -240,6 +250,19 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.download': 'Tải về',
     'btn.downloading': 'Đang xuất…',
     'btn.work': 'Work',
+    'btn.assign5s': 'Phân công',
+    'fiveS.title': 'Phân công 5S',
+    'fiveS.hint': 'Nhập tên nhân viên chịu trách nhiệm 5S cho từng khu vực.',
+    'fiveS.racks': 'Kệ R',
+    'fiveS.shelves': 'Kệ S',
+    'fiveS.zones': 'Khu vực',
+    'fiveS.no': 'Số',
+    'fiveS.area': 'Khu vực',
+    'fiveS.person': 'Người chịu trách nhiệm',
+    'fiveS.save': 'Lưu',
+    'fiveS.saving': 'Đang lưu…',
+    'fiveS.saved': 'Đã lưu phân công.',
+    'fiveS.saveError': 'Không lưu được. Thử lại.',
     'btn.back': 'Quay lại',
     'tool.overview': 'Tổng quan',
     'tool.pan': 'Pan',
@@ -309,6 +332,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'j4.title': 'XƯỞNG J4',
     'info.title': 'Thông tin kho',
     'print.sheetTitle': 'Sơ đồ Kho J',
+    'print.sheetTitle5s': 'Sơ đồ phân công 5S Kho',
     'print.rev': 'Rev',
     'print.date': 'Ngày in',
     'print.nvl': 'Nguyên vật liệu',
@@ -491,6 +515,14 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'drawMode.haiQuan': 'Customs Drawing',
     'drawMode.camera': 'Camera Layout',
     'drawMode.kho': 'Warehouse Layout',
+    'drawMode.luuTru': 'Storage Layout',
+    'storage.shelves': 'Shelves',
+    'storage.zones': 'Areas',
+    'storage.groups': 'Code groups',
+    'storage.loading': 'Loading code groups…',
+    'storage.emptyShelf': 'No code groups assigned to shelves.',
+    'storage.emptyZone': 'No code groups assigned to areas.',
+    'storage.error': 'Could not load code groups.',
     'drawMode.dangKy': 'Registration Drawing',
     'header.crumb': 'Warehouse layout / Drawing',
     'kpi.racks': 'Rack rows',
@@ -500,6 +532,19 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'btn.download': 'Download',
     'btn.downloading': 'Exporting…',
     'btn.work': 'Work',
+    'btn.assign5s': 'Assign',
+    'fiveS.title': '5S assignment',
+    'fiveS.hint': 'Enter the employee responsible for 5S in each area.',
+    'fiveS.racks': 'R racks',
+    'fiveS.shelves': 'S shelves',
+    'fiveS.zones': 'Areas',
+    'fiveS.no': 'No.',
+    'fiveS.area': 'Area',
+    'fiveS.person': 'Responsible person',
+    'fiveS.save': 'Save',
+    'fiveS.saving': 'Saving…',
+    'fiveS.saved': 'Assignments saved.',
+    'fiveS.saveError': 'Could not save. Try again.',
     'btn.back': 'Back',
     'tool.overview': 'Overview',
     'tool.pan': 'Pan',
@@ -569,6 +614,7 @@ const JW_I18N: Record<JwLang, Record<string, string>> = {
     'j4.title': 'BUILDING J4',
     'info.title': 'Warehouse info',
     'print.sheetTitle': 'J Warehouse Layout',
+    'print.sheetTitle5s': 'Warehouse 5S Assignment Layout',
     'print.rev': 'Rev',
     'print.date': 'Printed',
     'print.nvl': 'Raw materials',
@@ -978,6 +1024,27 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Chế độ Work — gán pallet vào vị trí kệ */
   workMode = false;
 
+  /** Phân công người chịu trách nhiệm 5S theo khu đánh số và 3 nhóm kệ R. */
+  showFiveSModal = false;
+  /** Bật thì bản tải về / xem trước có thêm mục phân công. */
+  fiveSExport = false;
+  fiveSSaving = false;
+  fiveSSaveMessage = '';
+  fiveSNames: Record<string, string> = {};
+  readonly fiveSRackGroups: Array<{ id: string; label: string }> = [
+    { id: 'rack-r1-r10', label: 'R1–R10' },
+    { id: 'rack-r11-r18', label: 'R11–R18' },
+    { id: 'rack-r19-end', label: 'R19 tới hết' }
+  ];
+
+  /** S1–S12, rồi S13 đến dãy S cuối. Mảng cố định để mở popup không tạo lại danh sách. */
+  readonly fiveSShelfGroups: Array<{ id: string; label: string }> = this.buildFiveSShelfGroups();
+  /** Không phân công 5S cho văn phòng kho và nhà vệ sinh. */
+  private readonly fiveSSkipZoneIds = new Set(['vp-kho-1', 'vp-kho-2', 'j4-wc-male', 'wc-female']);
+  /** Bản sao khu vực lúc mở popup, không đọc lại chú giải mỗi vòng kiểm tra giao diện. */
+  fiveSZoneRows: Array<{ id: string; no: number; label: string }> = [];
+  private readonly FIVE_S_COLLECTION = 'j-warehouse-5s';
+
   layoutEditMode = false;
   layoutDirty = false;
   layoutCustomized = false;
@@ -994,7 +1061,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.edgeFeatures.filter((f) => {
       if (f.kind !== 'roller') return false;
       if (f.edge === 'D') {
-        return this.drawMode === 'dang-ky' || this.drawMode === 'ky-thuat' || this.drawMode === 'kho';
+        return this.drawMode === 'dang-ky' || this.drawMode === 'ky-thuat' || this.warehouseSheet;
       }
       return true;
     });
@@ -2295,6 +2362,10 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       );
   }
 
+  get khoSheetTitle(): string {
+    return this.fiveSExport ? this.t('print.sheetTitle5s') : this.t('print.sheetTitle');
+  }
+
   get drawModeTitle(): string {
     if (this.workMode) return this.t('work.title');
     return this.drawModeLabel(this.drawMode);
@@ -2306,9 +2377,34 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       'hai-quan': 'drawMode.haiQuan',
       camera: 'drawMode.camera',
       kho: 'drawMode.kho',
+      'luu-tru': 'drawMode.luuTru',
       'dang-ky': 'drawMode.dangKy'
     };
     return this.t(keys[id]);
+  }
+
+  get warehouseSheet(): boolean {
+    return this.drawMode === 'kho';
+  }
+
+  storageTagLines(shelfId: string): string[] | null {
+    const label = this.storageShelfById[shelfId];
+    if (!label) return null;
+    return this.clipStorageLines(`${shelfId}: ${label}`);
+  }
+
+  storageZoneTagLines(zoneId: string): string[] | null {
+    return this.clipStorageLines(this.storageZoneById[zoneId]);
+  }
+
+  storageShelfId(code: string): string {
+    const hit = /^(S\d{2})/i.exec(String(code || '').trim());
+    return hit ? hit[1].toUpperCase() : '';
+  }
+
+  storageShelfHead(code: string): boolean {
+    const c = String(code || '').trim().toUpperCase();
+    return /-1$/.test(c) || /^S\d{2}$/.test(c);
   }
 
   get headerCrumb(): string {
@@ -2609,6 +2705,14 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   /** Mặc định Sơ đồ Kho; chỉ Bản vẽ Kỹ Thuật hiện kích thước/khoảng cách */
   drawMode: JwDrawMode = 'kho';
   readonly drawModeIds: JwDrawMode[] = ['ky-thuat', 'hai-quan', 'camera', 'kho', 'dang-ky'];
+  storageOverlay = false;
+  storagePlanReady = false;
+  storagePlanError = '';
+  storageShelfRows: Array<{ shelf: string; groups: string; family: 'R' | 'S' | 'AREA' }> = [];
+  storageZoneRows: Array<{ id: string; name: string; groups: string }> = [];
+  private storageShelfById: Record<string, string> = {};
+  private storageZoneById: Record<string, string> = {};
+  private storagePlanSeq = 0;
 
   /** Mặc định chỉ xem J5; có thể bật xem thêm J4 (nằm sát J5, phía vách C) */
   buildingView: JwBuildingView = 'j5';
@@ -3815,7 +3919,8 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private ngZone: NgZone,
     private cdr: ChangeDetectorRef,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private kk: KkCatalogService
   ) {}
 
   ngOnInit(): void {
@@ -3832,6 +3937,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     this.loadOutletLayout();
     this.loadNetOutletLayout();
     this.loadExtraPallets();
+    void this.loadFiveSAssignments();
     this.ensureKhoPrintPageStyle();
     this.prepareKhoLogo();
     // Đăng ký ngoài Angular zone — tránh mỗi lần di chuột trên TOÀN trang kích hoạt change detection
@@ -3885,34 +3991,173 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   ];
 
   zoneColor(id: string): string | null {
-    if (this.drawMode !== 'kho') return null;
+    if (!this.warehouseSheet) return null;
     const row = this.zoneSwatches.find((item) => item.ids.includes(id));
     return row ? row.color : null;
   }
 
   /** Vạch thứ hai khi viền hai màu (đỏ–vàng, vàng–đen, cam–trắng). */
   zoneColor2(id: string): string | null {
-    if (this.drawMode !== 'kho') return null;
+    if (!this.warehouseSheet) return null;
     const row = this.zoneSwatches.find((item) => item.ids.includes(id));
     return row && row.color2 ? row.color2 : null;
   }
 
-  get zoneLegend(): Array<{ label: string; color: string; color2?: string; no: number }> {
-    if (this.drawMode !== 'kho') return [];
+  get zoneLegend(): Array<{ id: string; label: string; color: string; color2?: string; no: number }> {
+    if (!this.warehouseSheet) return [];
     this.ensureZoneBadges();
     return this.zoneBadgeRows;
   }
 
   /** Số của khu vực. Kệ không đánh số. */
   zoneBadge(id: string): number | null {
-    if (this.drawMode !== 'kho') return null;
+    if (!this.warehouseSheet) return null;
     this.ensureZoneBadges();
     return this.zoneBadgeById.get(id) ?? null;
   }
 
   /** Tên vẫn hiện khi vừa ô. Số luôn hiện. */
+  toggleStorageOverlay(event?: Event): void {
+    event?.stopPropagation();
+    event?.preventDefault();
+    this.storageOverlay = !this.storageOverlay;
+    if (this.storageOverlay) void this.loadStoragePlan();
+    this.cdr.markForCheck();
+  }
+
+  private async loadStoragePlan(): Promise<void> {
+    const seq = ++this.storagePlanSeq;
+    this.storagePlanReady = false;
+    this.storagePlanError = '';
+    this.cdr.markForCheck();
+    try {
+      let rackLabels = new Map<string, string>();
+      let savedShelves: Record<string, string> | null = null;
+      try {
+        const [entries, homeLocs, mapSnap] = await Promise.all([
+          this.kk.loadAll(),
+          this.kk.loadHomeLocs(),
+          this.firestore.collection('kk-shelf-group-map').doc('layout').get().toPromise()
+        ]);
+        const raw = (mapSnap?.data() as { shelves?: unknown } | undefined)?.shelves;
+        if (raw && typeof raw === 'object') savedShelves = raw as Record<string, string>;
+        const typeMap = await this.kk.loadAllAsMap();
+        rackLabels = this.kk.rackStorageLabels(entries, typeMap, homeLocs);
+      } catch (readErr) {
+        console.error('storage plan read', readErr);
+      }
+      if (seq !== this.storagePlanSeq || this.drawMode !== 'kho') return;
+      const shelves = [
+        ...this.khoMatRows.map((row) => ({
+          shelf: row.id,
+          family: 'S' as const,
+          groups: shelfGroupText(row.id, savedShelves).text
+        })),
+        ...Array.from({ length: 28 }, (_, index) => {
+          const shelf = this.rackRowLabel(index + 1);
+          const assigned = shelfGroupText(shelf, savedShelves);
+          const fromCatalog = rackLabels.get(shelf) || '';
+          return { shelf, family: 'R' as const, groups: assigned.set ? assigned.text : fromCatalog };
+        }),
+        {
+          shelf: 'HOACHAT',
+          family: 'AREA' as const,
+          groups: shelfGroupText('HOACHAT', savedShelves).text
+        }
+      ];
+      this.ngZone.run(() => {
+        if (seq !== this.storagePlanSeq) return;
+        this.storageShelfRows = shelves;
+        this.storageZoneRows = [];
+        this.storageShelfById = {};
+        for (const row of shelves) {
+          if (row.groups) this.storageShelfById[row.shelf] = row.groups;
+        }
+        this.storageZoneById = {};
+        this.storagePlanReady = true;
+        this.cdr.markForCheck();
+      });
+    } catch (err) {
+      console.error('storage plan', err);
+      this.ngZone.run(() => {
+        if (seq !== this.storagePlanSeq) return;
+        this.storagePlanError = this.t('storage.error');
+        this.storagePlanReady = true;
+        this.cdr.markForCheck();
+      });
+    }
+  }
+
+  private normalizeStorageShelf(raw: string): string {
+    const text = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    const match = /^([RS])0*(\d{1,2})$/.exec(text);
+    if (!match) return '';
+    const n = Number(match[2]);
+    if (!n || n > 99) return '';
+    return `${match[1]}${String(n).padStart(2, '0')}`;
+  }
+
+  private matchStorageZone(name: string, zones: JwFloorZone[]): JwFloorZone | null {
+    const key = this.foldStorageKey(name);
+    if (key.length < 2) return null;
+    const aliases: Record<string, string> = {
+      PASS: 'incoming-inspect',
+      KHOMAT: 'j4-cold-storage',
+      SECUREDWH: 'j4-cold-storage',
+      HOACHAT: 'kho-hoa-chat',
+      KHOHOACHAT: 'kho-hoa-chat',
+      ESD: 'kho-esd',
+      KHOESD: 'kho-esd'
+    };
+    const aliasId = aliases[key];
+    if (aliasId) {
+      const zoned = zones.find((zone) => zone.id === aliasId);
+      if (zoned) return zoned;
+    }
+    let best: JwFloorZone | null = null;
+    let bestLen = 0;
+    for (const zone of zones) {
+      const label = this.foldStorageKey(zone.label);
+      const id = this.foldStorageKey(zone.id);
+      if ((label && label === key) || (id && id === key)) return zone;
+      if (label.length >= 4 && (label.includes(key) || key.includes(label)) && label.length > bestLen) {
+        best = zone;
+        bestLen = label.length;
+      }
+    }
+    return best;
+  }
+
+  private foldStorageKey(value: string): string {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/gi, 'd')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+
+  private mergeStorageGroups(current: string, extra: string): string {
+    const parts = `${current}\n${extra}`
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && line !== '—');
+    return Array.from(new Set(parts)).join('\n');
+  }
+
+  private clipStorageLines(raw: string | undefined): string[] | null {
+    if (!raw) return null;
+    const lines = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((line) => (line.length > 42 ? `${line.slice(0, 40)}…` : line));
+    return lines.length ? lines : null;
+  }
+
   zoneShowsName(id: string): boolean {
-    if (this.drawMode !== 'kho') return true;
+    if (!this.warehouseSheet) return true;
     if (id === 'kho-hoa-chat') return false;
     this.ensureZoneBadges();
     return this.zoneNameFit.get(id) !== false;
@@ -3968,7 +4213,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private zoneBadgeKey = '';
   private zoneBadgeById = new Map<string, number>();
   private zoneNameFit = new Map<string, boolean>();
-  private zoneBadgeRows: Array<{ label: string; color: string; color2?: string; no: number }> = [];
+  private zoneBadgeRows: Array<{ id: string; label: string; color: string; color2?: string; no: number }> = [];
 
   private ensureZoneBadges(): void {
     const key = `${this.lang}|${this.drawMode}`;
@@ -3987,7 +4232,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     }
     const map = new Map<string, number>();
     const fit = new Map<string, boolean>();
-    const rows: Array<{ label: string; color: string; color2?: string; no: number }> = [];
+    const rows: Array<{ id: string; label: string; color: string; color2?: string; no: number }> = [];
     const rank = new Map(this.zoneBadgeOrder.map((id, index) => [id, index]));
     const ordered = [...zones].sort((a, b) => (rank.get(a.id) ?? 1000) - (rank.get(b.id) ?? 1000));
     let next = 0;
@@ -4000,6 +4245,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       fit.set(zone.id, zone.labelLines.length > 0 && this.zoneTextFits(zone));
       const color2 = this.zoneColor2(zone.id);
       rows.push({
+        id: zone.id,
         no: next,
         label,
         color: this.zoneColor(zone.id) || '#334155',
@@ -4036,6 +4282,99 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       if (raw === 'vi' || raw === 'en') this.lang = raw;
     } catch {
       /* ignore */
+    }
+  }
+
+  toggleFiveSExport(event?: Event): void {
+    event?.stopPropagation();
+    this.fiveSExport = !this.fiveSExport;
+    if (this.fiveSExport) this.openFiveSModal();
+    else this.closeFiveSModal();
+    this.cdr.markForCheck();
+  }
+
+  openFiveSModal(event?: Event): void {
+    event?.stopPropagation();
+    this.fiveSSaveMessage = '';
+    this.syncFiveSKeys();
+    this.fiveSZoneRows = this.zoneLegend
+      .filter((item) => !this.fiveSSkipZoneIds.has(item.id))
+      .map((item) => ({ id: item.id, no: item.no, label: item.label }));
+    this.showFiveSModal = true;
+  }
+
+  closeFiveSModal(): void {
+    this.showFiveSModal = false;
+  }
+
+  async saveFiveSAssignments(event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (this.viewOnly || this.fiveSSaving) return;
+    this.fiveSSaving = true;
+    this.fiveSSaveMessage = '';
+    this.syncFiveSKeys();
+    const names: Record<string, string> = {};
+    for (const [key, value] of Object.entries(this.fiveSNames)) {
+      names[key] = (value || '').trim();
+    }
+    try {
+      await this.firestore.collection(this.FIVE_S_COLLECTION).doc('assignments').set({
+        names,
+        updatedAt: new Date().toISOString()
+      });
+      this.fiveSNames = names;
+      this.fiveSSaveMessage = this.t('fiveS.saved');
+    } catch (e) {
+      console.error('[JWarehouse] saveFiveS failed', e);
+      this.fiveSSaveMessage = this.t('fiveS.saveError');
+    } finally {
+      this.fiveSSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async loadFiveSAssignments(): Promise<void> {
+    try {
+      const snap = await this.firestore.collection(this.FIVE_S_COLLECTION).doc('assignments').get().toPromise();
+      const data = snap?.data() as { names?: Record<string, string> } | undefined;
+      const names: Record<string, string> = {};
+      const raw = data?.names || {};
+      for (const [key, value] of Object.entries(raw)) {
+        names[key] = typeof value === 'string' ? value : '';
+      }
+      this.fiveSNames = names;
+      this.syncFiveSKeys();
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.error('[JWarehouse] loadFiveS failed', e);
+    }
+  }
+
+  private buildFiveSShelfGroups(): Array<{ id: string; label: string }> {
+    const last = this.khoMatRows.length;
+    const end = last > 12 ? `S13–S${last}` : 'S13 tới hết';
+    return [
+      { id: 'rack-s1-s12', label: 'S1–S12' },
+      { id: 'rack-s13-end', label: end }
+    ];
+  }
+
+  trackFiveSGroup(_: number, group: { id: string }): string {
+    return group.id;
+  }
+
+  trackFiveSZone(_: number, item: { id: string }): string {
+    return item.id;
+  }
+
+  private syncFiveSKeys(): void {
+    this.ensureZoneBadges();
+    for (const item of this.zoneBadgeRows) {
+      if (this.fiveSSkipZoneIds.has(item.id)) continue;
+      if (this.fiveSNames[item.id] == null) this.fiveSNames[item.id] = '';
+    }
+    for (const group of [...this.fiveSRackGroups, ...this.fiveSShelfGroups]) {
+      if (this.fiveSNames[group.id] == null) this.fiveSNames[group.id] = '';
     }
   }
 
@@ -4923,7 +5262,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const cap = forDownload ? 8 : 6;
     const a3LongPx = (420 / 25.4) * dpi;
     const a3ShortPx = (297 / 25.4) * dpi;
-    const baseW = this.viewBoxW + 16 + 360;
+    const baseW = this.viewBoxW + 16 + this.exportInfoWidth();
     const baseH = Math.max(1, this.viewBoxH);
     const aspect = baseW / baseH;
     const pageAspect = a3LongPx / a3ShortPx;
@@ -4947,7 +5286,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
     const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
     const scale = this.exportPngScale(forDownload);
-    const infoW = 360 * scale;
+    const infoW = this.exportInfoWidth() * scale;
     const gap = 16 * scale;
 
     return new Promise((resolve, reject) => {
@@ -5052,12 +5391,49 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     h += 28 * 1.3 * scale;
     h += 22 * scale;
     h += 18 * scale;
-    h += 3 * (10 + 8 + 18) * scale;
+    h += this.khoSheetRackRows().length * (10 + 8 + 18) * scale;
     h += 8 * scale;
-    h += 22 * scale;
-    h += this.zoneLegend.length * (18 * scale);
+    if (this.storageOverlay && this.drawMode === 'kho') {
+      h += 22 * scale;
+      h += this.storageExportLineCount() * (16 * scale);
+    } else {
+      h += 22 * scale;
+      h += this.zoneLegend.length * (18 * scale);
+    }
     h += pad;
     return Math.ceil(h);
+  }
+
+  /** Cột chú thích bên phải. Rộng thêm để hiện đủ tên người 5S. */
+  private exportInfoWidth(): number {
+    if (this.storageOverlay && this.drawMode === 'kho') return 420;
+    if (this.drawMode !== 'kho' || !this.fiveSExport) return 360;
+    return Math.max(480, 320 + this.fiveSPersonColumn());
+  }
+
+  /** Bề rộng cột tên người, đo theo tên dài nhất, không cắt chữ. */
+  private fiveSPersonColumn(): number {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const font = '600 13px "Segoe UI", system-ui, sans-serif';
+    let max = 160;
+    const measure = (text: string) => {
+      if (!text) return;
+      if (ctx) {
+        ctx.font = font;
+        max = Math.max(max, Math.ceil(ctx.measureText(text).width) + 8);
+      } else {
+        max = Math.max(max, text.length * 8);
+      }
+    };
+    for (const row of this.khoSheetRackRows()) {
+      measure(row.personIds.map((id) => (this.fiveSNames[id] || '').trim()).filter((name) => !!name).join(' / '));
+    }
+    for (const item of this.zoneLegend) {
+      if (this.fiveSSkipZoneIds.has(item.id)) continue;
+      measure((this.fiveSNames[item.id] || '').trim());
+    }
+    return max;
   }
 
   /** Cột phải của file tải về Sơ đồ Kho: logo, tên bản vẽ, Rev, ngày in, quy định kệ, danh sách khu. */
@@ -5090,20 +5466,16 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     }
     ctx.fillStyle = '#000000';
     ctx.font = `700 ${18 * 1.3 * scale}px "Segoe UI", system-ui, sans-serif`;
-    ctx.fillText(this.t('print.sheetTitle'), x + pad, cy);
+    ctx.fillText(this.khoSheetTitle, x + pad, cy);
     cy += 28 * 1.3 * scale;
     ctx.font = `${14 * scale}px "Segoe UI", system-ui, sans-serif`;
     ctx.fillText(`${this.t('print.rev')}: 1.0`, x + pad, cy);
     cy += 22 * scale;
     ctx.fillText(`${this.t('print.date')}: ${this.khoPrintDate}`, x + pad, cy);
     cy += 18 * scale;
-    const rows: Array<[string, string]> = [
-      ['R1–R18', this.t('print.nvl')],
-      [this.t('print.shelfS'), this.t('print.nvl')],
-      ['R19–R26', this.t('print.fg')]
-    ];
+    const rows = this.khoSheetRackRows();
     const labelW = 120 * scale;
-    for (const [label, value] of rows) {
+    for (const row of rows) {
       cy += 10 * scale;
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 1 * scale;
@@ -5114,12 +5486,23 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       cy += 8 * scale;
       ctx.fillStyle = '#000000';
       ctx.font = `700 ${14 * scale}px "Segoe UI", system-ui, sans-serif`;
-      ctx.fillText(label, x + pad, cy);
+      ctx.fillText(row.label, x + pad, cy);
       ctx.font = `${14 * scale}px "Segoe UI", system-ui, sans-serif`;
-      ctx.fillText(value, x + pad + labelW, cy);
+      ctx.fillText(row.value, x + pad + labelW, cy);
+      if (this.fiveSExport && row.personIds.length) {
+        const who = row.personIds
+          .map((id) => (this.fiveSNames[id] || '').trim())
+          .filter((name) => !!name)
+          .join(' / ');
+        if (who) this.fillRightText(ctx, who, x + w - pad, cy, `600 ${13 * scale}px "Segoe UI", system-ui, sans-serif`);
+      }
       cy += 18 * scale;
     }
     cy += 8 * scale;
+    if (this.storageOverlay) {
+      this.drawStorageSheetOnCanvas(ctx, x, w, pad, scale, cy);
+      return;
+    }
     ctx.fillStyle = '#000000';
     ctx.font = `700 ${14 * scale}px "Segoe UI", system-ui, sans-serif`;
     ctx.fillText(this.t('info.zoneColors'), x + pad, cy);
@@ -5127,7 +5510,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     const sw = 12 * scale;
     const noW = 28 * scale;
     const nameX = x + pad + noW + sw + 8 * scale;
-    const nameMax = x + w - pad - nameX;
+    const personMax = this.fiveSExport ? this.fiveSPersonColumn() * scale : 0;
     for (const item of this.zoneLegend) {
       ctx.fillStyle = '#000000';
       ctx.font = `700 ${12 * scale}px "Segoe UI", system-ui, sans-serif`;
@@ -5147,14 +5530,118 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
         ctx.strokeRect(sx + scale, cy + scale, sw - 2 * scale, sw - 2 * scale);
         ctx.setLineDash([]);
       }
+      const person = this.fiveSExport && !this.fiveSSkipZoneIds.has(item.id)
+        ? (this.fiveSNames[item.id] || '').trim()
+        : '';
+      const nameMax = x + w - pad - nameX - (person ? personMax + 8 * scale : 0);
       ctx.fillStyle = '#000000';
       ctx.font = `${12 * scale}px "Segoe UI", system-ui, sans-serif`;
       let name = item.label;
       while (name.length > 1 && ctx.measureText(name).width > nameMax) name = name.slice(0, -2);
       if (name !== item.label) name = `${name.slice(0, -1)}…`;
       ctx.fillText(name, nameX, cy);
+      if (person) this.fillRightText(ctx, person, x + w - pad, cy, `600 ${12 * scale}px "Segoe UI", system-ui, sans-serif`);
       cy += 18 * scale;
     }
+  }
+
+  /** Phần lưu trữ nối sau khối thông tin của Sơ đồ Kho. */
+  private storageExportEntries(): Array<{ heading: boolean; text: string }> {
+    const shelfLines = this.storageShelfRows.map((row) => `${row.shelf}    ${row.groups}`.trimEnd());
+    return [
+      { heading: true, text: this.t('drawMode.luuTru') },
+      ...shelfLines.map((text) => ({ heading: false, text }))
+    ];
+  }
+
+  private storageExportLineCount(): number {
+    const max = this.exportInfoWidth() - 36;
+    let count = 0;
+    for (const row of this.storageExportEntries()) {
+      count += this.wrapExportLine(row.text, max, row.heading ? 14 : 12).length;
+    }
+    return count;
+  }
+
+  private wrapExportLine(text: string, maxPx: number, fontPx: number): string[] {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return [text];
+    ctx.font = `${fontPx}px "Segoe UI", system-ui, sans-serif`;
+    const lines: string[] = [];
+    let current = '';
+    for (const word of String(text || '').split(' ')) {
+      const next = current ? `${current} ${word}` : word;
+      if (current && ctx.measureText(next).width > maxPx) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = next;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+  }
+
+  private drawStorageSheetOnCanvas(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    w: number,
+    pad: number,
+    scale: number,
+    cy: number
+  ): void {
+    cy += 12 * scale;
+    const max = (w - pad * 2) / scale;
+    for (const row of this.storageExportEntries()) {
+      const fontPx = row.heading ? 14 : 12;
+      const lines = this.wrapExportLine(row.text, max, fontPx);
+      ctx.fillStyle = '#000000';
+      ctx.font = `${row.heading ? '700 ' : ''}${fontPx * scale}px "Segoe UI", system-ui, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      for (const line of lines) {
+        ctx.fillText(line, x + pad, cy);
+        cy += 16 * scale;
+      }
+    }
+  }
+
+  /** Dòng kệ trên bản tải. Khi phân công, kệ S tách từng nhóm như kệ R. */
+  private khoSheetRackRows(): Array<{ label: string; value: string; personIds: string[] }> {
+    const nvl = this.t('print.nvl');
+    const fg = this.t('print.fg');
+    if (!this.fiveSExport) {
+      return [
+        { label: 'R1–R18', value: nvl, personIds: [] },
+        { label: this.t('print.shelfS'), value: nvl, personIds: [] },
+        { label: 'R19–R26', value: fg, personIds: [] }
+      ];
+    }
+    return [
+      { label: 'R1–R18', value: nvl, personIds: ['rack-r1-r10', 'rack-r11-r18'] },
+      ...this.fiveSShelfGroups.map((group) => ({
+        label: group.label,
+        value: nvl,
+        personIds: [group.id]
+      })),
+      { label: 'R19–R26', value: fg, personIds: ['rack-r19-end'] }
+    ];
+  }
+
+  private fillRightText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    rightX: number,
+    y: number,
+    font: string
+  ): void {
+    ctx.save();
+    ctx.fillStyle = '#000000';
+    ctx.font = font;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, rightX, y);
+    ctx.restore();
   }
 
   /** Gom CSS từ các stylesheet đang tải để nhúng vào SVG xuất ra (bỏ qua sheet chặn CORS). */

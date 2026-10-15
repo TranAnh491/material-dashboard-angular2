@@ -409,6 +409,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   isBsImport: boolean = false;
   pxkDownloadDate: Date = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   pxkDownloadAllMonths: boolean = false; // true = tải tất cả, false = lọc theo tháng
+  pxkExcelDownloadingLsx = '';
   isDownloadingPxk: boolean = false;
   
   
@@ -3859,6 +3860,585 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     }
   }
 
+  /** Tải PXK của một LSX ra Excel, cùng cột với phiếu In PXK. */
+  async downloadPxkExcel(workOrder: WorkOrder): Promise<void> {
+    const lsx = String(workOrder?.productionOrder || '').trim();
+    if (!lsx || this.pxkExcelDownloadingLsx) return;
+    this.pxkExcelDownloadingLsx = lsx;
+    try {
+      const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx);
+      if (!hasPxk || lines.length === 0) {
+        alert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
+        return;
+      }
+      const factoryFilter = this.resolveOutboundFactoryFilterForPxk(workOrder);
+      const isAsm1 = factoryFilter === 'ASM1';
+      const productionLineRaw = (workOrder.productionLine || '').trim();
+      const lineNhan = productionLineRaw || '-';
+      const locationMap = new Map<string, string>();
+      const iqcStatusMap = new Map<string, string>();
+      const scanQtyMap = new Map<string, number>();
+      const employeeIds = new Set<string>();
+      let nhanVienGiaoStr = '-';
+      let nhanVienNhanStr = '-';
+      const deliveryQtyMap = new Map<string, number>();
+      const catalogWeightMap = new Map<string, { standard: number; unitWeight: number }>();
+      const savedWeightChecks = new Map<string, any>();
+      let logoPng = '';
+      let qrLsxPng = '';
+      let qrLinePng = '';
+
+      await Promise.all([
+        (async () => {
+          try {
+            const maps = await this.loadPxkLocationIqcMaps(
+              isAsm1 ? 'ASM1' : 'ASM2',
+              lines.map((l) => l.materialCode)
+            );
+            maps.locationMap.forEach((v, k) => locationMap.set(k, v));
+            maps.iqcStatusMap.forEach((v, k) => iqcStatusMap.set(k, v));
+          } catch (e) {
+            console.warn('Không load được vị trí / IQC từ inventory:', e);
+          }
+        })(),
+        (async () => {
+          try {
+            const woLsxNorm = this.normLsxForMatch(lsx);
+            const variants = this.collectLsxQueryVariants(lsx);
+            const outboundSnapshot = await firstValueFrom(
+              this.firestore.collection('outbound-materials', ref =>
+                ref.where('factory', '==', factoryFilter).where('productionOrder', 'in', variants)
+              ).get()
+            );
+            outboundSnapshot.docs.forEach((doc: any) => {
+              const d = doc.data() as any;
+              const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
+              if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+              const empId = String(d.employeeId || d.exportedBy || '').trim();
+              if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
+              const mat = String(d.materialCode || '').trim().toUpperCase();
+              const po = this.pxkPoKey(d.poNumber || d.po);
+              const exportQty = Number(d.exportQuantity || 0);
+              if (mat && po) {
+                const key = `${mat}|${po}`;
+                scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
+              }
+            });
+          } catch (e) {
+            console.warn('Không load được Lượng Scan từ outbound:', e);
+          }
+        })(),
+        (async () => {
+          try {
+            const deliverySnapshot = await firstValueFrom(this.firestore.collection('rm1-delivery-records', ref =>
+              ref.where('lsx', '==', lsx)
+            ).get());
+            const deliveryDoc: any = deliverySnapshot.empty ? null : deliverySnapshot.docs[0].data();
+            if (deliveryDoc) {
+              nhanVienGiaoStr = (deliveryDoc.employeeName || deliveryDoc.employeeId || '').trim() || '-';
+              nhanVienNhanStr = (deliveryDoc.receiverEmployeeName || deliveryDoc.receiverEmployeeId || '').trim() || '-';
+              (deliveryDoc.pxkLines || []).forEach((line: any) => {
+                const mat = String(line.materialCode || '').trim().toUpperCase();
+                const po = this.pxkPoKey(line.poNumber || line.po);
+                const qty = Number(line.checkQuantity ?? 0);
+                if (mat && po) {
+                  const key = `${mat}|${po}`;
+                  deliveryQtyMap.set(key, (deliveryQtyMap.get(key) || 0) + qty);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('Không load được dữ liệu Delivery từ RM1 Delivery:', e);
+          }
+        })(),
+        (async () => {
+          try {
+            const [catalog, checks] = await Promise.all([
+              this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode)),
+              this.loadPxkWeightChecks(lsx, lines)
+            ]);
+            catalog.forEach((v, k) => catalogWeightMap.set(k, v));
+            checks.forEach((v, k) => savedWeightChecks.set(k, v));
+          } catch (e) {
+            console.warn('Không load Standard / trọng lượng cho PXK:', e);
+          }
+        })(),
+        (async () => {
+          try {
+            logoPng = await this.loadPxkExcelLogoPng();
+            qrLsxPng = this.pxkDataUrlToBase64(await QRCode.toDataURL(lsx, { width: 180, margin: 1 }));
+            if (lineNhan !== '-') {
+              qrLinePng = this.pxkDataUrlToBase64(await QRCode.toDataURL(lineNhan, { width: 180, margin: 1 }));
+            }
+          } catch (e) {
+            console.warn('Không tạo được logo / QR cho file Excel:', e);
+          }
+        })()
+      ]);
+
+      const invKey = (materialCode: string, po: string): string =>
+        `${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`;
+      const getScanQty = (materialCode: string, po: string): number =>
+        scanQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
+      const getDeliveryQty = (materialCode: string, po: string): number =>
+        deliveryQtyMap.get(`${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`) || 0;
+      const getSoSanh = (xuat: number, scan: number): string => {
+        const diff = scan - xuat;
+        if (Math.abs(diff) < 0.005) return 'Đủ';
+        if (diff < 0) return 'Thiếu ' + this.formatQuantityForPxk(xuat - scan);
+        return 'Dư ' + this.formatQuantityForPxk(scan - xuat);
+      };
+      const TOP_MA_KHO = new Set(['NVL', 'NVL_E31', 'NVL_KE31', 'NVL_EXPIRED', '00']);
+      const sortByMat = (a: PxkLine, b: PxkLine) => (a.materialCode || '').localeCompare(b.materialCode || '');
+      const group1 = lines.filter(l => TOP_MA_KHO.has(String(l.maKho || '').trim().toUpperCase())).sort(sortByMat);
+      const group2 = lines.filter(l => !TOP_MA_KHO.has(String(l.maKho || '').trim().toUpperCase())).sort(sortByMat);
+      const sortedLines: Array<PxkLine | null> = group1.length > 0 && group2.length > 0
+        ? [...group1, null, ...group2]
+        : [...group1, ...group2];
+      const soChungTu = [...new Set(lines.map(l => (l.soChungTu || '').trim()).filter(Boolean))].sort().join(', ') || '-';
+      const tenTP = lines.length > 0 ? String(lines[0].tenTP || '').trim() : '';
+      const soPOKH = lines.map(l => String(l.soPOKH || '').trim()).find(v => v) || '';
+      const phanTramHaoHut = lines.length > 0 ? String(lines[0].phanTramHaoHut || '').trim() : '';
+      const maKhachHang = lines.map(l => String(l.maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
+      const nhanVienSoan = employeeIds.size > 0 ? [...employeeIds].filter(Boolean).join(', ') : '-';
+      const deliveryDateStr = workOrder.deliveryDate
+        ? (workOrder.deliveryDate instanceof Date ? workOrder.deliveryDate : new Date(workOrder.deliveryDate)).toLocaleDateString('vi-VN')
+        : '-';
+      const hasAnyScanData = lines.some(l => {
+        const code = String(l.materialCode || '').trim().toUpperCase();
+        if (this.isPxkAutoFullExportCode(code)) return false;
+        return getScanQty(l.materialCode, l.po) > 0;
+      });
+
+      const excelLines: Array<{
+        blank?: boolean;
+        stt: number;
+        materialCode: string;
+        tenVatTu: string;
+        unit: string;
+        dinhMuc: string;
+        tongSL: string;
+        luongYC: string;
+        po: string;
+        qty: number | '';
+        maKho: string;
+        location: string;
+        loaiHinh: string;
+        scan: number | '';
+        soSanh: string;
+        delivery: number | '';
+        ghiChu: string;
+        iqc: 'pass' | 'dac_cach' | 'other';
+        checkLabel: string;
+        compareLabel: string;
+        weightLink: boolean;
+      }> = [];
+      let stt = 0;
+      for (const line of sortedLines) {
+        if (!line) {
+          excelLines.push({
+            blank: true, stt: 0, materialCode: '', tenVatTu: '', unit: '', dinhMuc: '', tongSL: '',
+            luongYC: '', po: '', qty: '', maKho: '', location: '', loaiHinh: '', scan: '', soSanh: '',
+            delivery: '', ghiChu: '', iqc: 'other', checkLabel: '', compareLabel: '', weightLink: false
+          });
+          continue;
+        }
+        stt++;
+        const matCode = String(line.materialCode || '').trim().toUpperCase();
+        const maKho = String(line.maKho || '').trim().toUpperCase();
+        const po = String(line.po || '').trim();
+        const qtyPxk = Number(line.quantity) || 0;
+        let scanQty: number;
+        if (this.isPxkSkipWarehouse(maKho) || this.isPxkAlwaysFullExportCode(matCode)) {
+          scanQty = qtyPxk;
+        } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
+          scanQty = qtyPxk;
+        } else {
+          scanQty = getScanQty(line.materialCode, po);
+        }
+        const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
+        const deliveryQty = getDeliveryQty(line.materialCode, po);
+        const iqcRaw = iqcStatusMap.get(invKey(line.materialCode, po)) || '';
+        const weightCheck = this.isPxkWeightCheckLine(matCode, maKho);
+        const cat = catalogWeightMap.get(matCode) || { standard: 0, unitWeight: 0 };
+        const split = this.splitPxkRollQty(qtyPxk, cat.standard);
+        const saved = weightCheck ? savedWeightChecks.get(`${matCode}|${this.pxkPoKey(po)}`) : null;
+        const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
+        const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
+        const weightPercent = weightFull != null && weightOdd != null
+          ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+          : null;
+        const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
+        const checkLabel = !weightCheck
+          ? ''
+          : (!(cat.standard > 0)
+            ? 'Thiếu Standard'
+            : (weightFull != null && weightFull > 0
+              ? (split.oddQty > 0 && !(weightOdd != null && weightOdd > 0) ? 'Nhập lẻ' : 'Đã nhập')
+              : 'Nhập'));
+        const compareLabel = !weightCheck
+          ? ''
+          : (!(cat.standard > 0)
+            ? 'Thiếu Standard'
+            : (!(split.oddQty > 0)
+              ? (weightFull != null && weightFull > 0 ? 'Không có lẻ' : '—')
+              : (weightPercent == null
+                ? '—'
+                : `${this.formatPxkPercent(weightPercent)} · ${weightOk ? 'OK' : 'Không đạt'}`)));
+        excelLines.push({
+          stt,
+          materialCode: line.materialCode || '',
+          tenVatTu: String(line.tenVatTu || '').trim() || '-',
+          unit: line.unit || '',
+          dinhMuc: String(line.dinhMuc || '').trim() || '-',
+          tongSL: String(line.tongSLYCau || '').trim() || '-',
+          luongYC: String(line.luongYeuCau || '').trim() || '-',
+          po,
+          qty: qtyPxk,
+          maKho,
+          location: locationMap.get(invKey(line.materialCode, line.po)) || '-',
+          loaiHinh: String(line.loaiHinh || '').trim(),
+          scan: scanQty > 0 ? scanQty : '',
+          soSanh,
+          delivery: deliveryQty > 0 ? deliveryQty : '',
+          ghiChu: String(line.ghiChu || '').trim(),
+          iqc: iqcRaw ? this.normalizePxkIqcStatus(iqcRaw) : 'other',
+          checkLabel,
+          compareLabel,
+          weightLink: weightCheck
+        });
+      }
+
+      const safeLsx = lsx.replace(/[\\/:*?"<>|]+/g, '_');
+      await this.writeFormattedPxkExcel({
+        filename: `PXK_${safeLsx}.xlsx`,
+        logoPng,
+        qrLsxPng,
+        qrLinePng,
+        factoryBadge: this.resolvePxkFactoryBadge(lsx, productionLineRaw) || '',
+        boxes: [
+          ['Mã TP VN', workOrder.productCode || '-'],
+          ['Mã Khách Hàng', maKhachHang],
+          ['Phần Trăm Hao Hụt', phanTramHaoHut ? `${phanTramHaoHut}%` : ''],
+          ['Lượng sản phẩm', this.formatQuantityForPxk(workOrder.quantity || 0), deliveryDateStr !== '-' ? `Ngày giao: ${deliveryDateStr}` : ''],
+          ['Lệnh Sản Xuất', lsx],
+          ['Line Nhận', lineNhan],
+          ['Tên TP', tenTP || ''],
+          ['Số PO KH', soPOKH || ''],
+          ['Số Chứng Từ', soChungTu],
+          ['Nhân Viên Soạn', nhanVienSoan],
+          ['Nhân viên Giao', nhanVienGiaoStr],
+          ['Nhân viên Nhận', nhanVienNhanStr]
+        ],
+        lines: excelLines
+      });
+    } catch (e) {
+      console.error('[PXK Excel]', e);
+      alert('Lỗi khi tải PXK Excel: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+    } finally {
+      this.pxkExcelDownloadingLsx = '';
+    }
+  }
+
+  private pxkDataUrlToBase64(dataUrl: string): string {
+    const raw = String(dataUrl || '');
+    const comma = raw.indexOf(',');
+    return comma >= 0 ? raw.slice(comma + 1) : raw;
+  }
+
+  private async loadPxkExcelLogoPng(): Promise<string> {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const png = await this.fetchPxkImageBase64(`${origin}/assets/img/logo.png`);
+    if (png) return png;
+    try {
+      const res = await fetch(`${origin}/assets/img/company-logo.svg`);
+      if (!res.ok) return '';
+      return await this.svgTextToPngBase64(await res.text());
+    } catch {
+      return '';
+    }
+  }
+
+  private async fetchPxkImageBase64(url: string): Promise<string> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return '';
+      const type = (res.headers.get('content-type') || '').toLowerCase();
+      if (!type.includes('image') || type.includes('svg')) return '';
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    } catch {
+      return '';
+    }
+  }
+
+  private svgTextToPngBase64(svg: string): Promise<string> {
+    return new Promise((resolve) => {
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 520;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 16, 16, canvas.width - 32, canvas.height - 32);
+        }
+        URL.revokeObjectURL(url);
+        resolve(this.pxkDataUrlToBase64(canvas.toDataURL('image/png')));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve('');
+      };
+      img.src = url;
+    });
+  }
+
+  private pxkExcelBorder(): any {
+    const side = { style: 'thin', color: { argb: 'FF000000' } };
+    return { top: side, left: side, bottom: side, right: side };
+  }
+
+  private pxkExcelPaintRange(sheet: any, r1: number, c1: number, r2: number, c2: number, fill?: string): void {
+    const border = this.pxkExcelBorder();
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        const cell = sheet.getCell(r, c);
+        cell.border = border;
+        if (fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      }
+    }
+  }
+
+  private pxkExcelRich(label: string, value: string, extra = '', badge = ''): any {
+    const parts: any[] = [];
+    if (badge) parts.push({ text: badge + '\n', font: { name: 'Arial', size: 12, bold: true } });
+    parts.push({ text: label.toUpperCase() + '\n', font: { name: 'Arial', size: 8, bold: true } });
+    parts.push({ text: value || ' ', font: { name: 'Arial', size: 12, bold: true } });
+    if (extra) parts.push({ text: '\n' + extra, font: { name: 'Arial', size: 9 } });
+    return { richText: parts };
+  }
+
+  private pxkSoSanhFont(text: string): any {
+    const base = { name: 'Arial', size: 9, bold: true };
+    if (text.startsWith('Thiếu')) return { ...base, color: { argb: 'FFC62828' } };
+    if (text === 'Đủ') return { ...base, color: { argb: 'FF1B5E20' } };
+    if (text.startsWith('Dư')) return { ...base, color: { argb: 'FFE65100' } };
+    return { name: 'Arial', size: 9 };
+  }
+
+  private pxkCompareFont(text: string): any {
+    const base = { name: 'Arial', size: 8, bold: true };
+    if (/Không đạt|Thiếu Standard|Nhập lẻ|^Nhập$/.test(text)) return { ...base, color: { argb: 'FFC62828' } };
+    if (/OK|Đã nhập|Không có lẻ/.test(text)) return { ...base, color: { argb: 'FF1B5E20' } };
+    return { name: 'Arial', size: 8 };
+  }
+
+  private async writeFormattedPxkExcel(input: {
+    filename: string;
+    logoPng: string;
+    qrLsxPng: string;
+    qrLinePng: string;
+    factoryBadge: string;
+    boxes: Array<[string, string, string?]>;
+    lines: Array<{
+      blank?: boolean;
+      stt: number;
+      materialCode: string;
+      tenVatTu: string;
+      unit: string;
+      dinhMuc: string;
+      tongSL: string;
+      luongYC: string;
+      po: string;
+      qty: number | '';
+      maKho: string;
+      location: string;
+      loaiHinh: string;
+      scan: number | '';
+      soSanh: string;
+      delivery: number | '';
+      ghiChu: string;
+      iqc: 'pass' | 'dac_cach' | 'other';
+      checkLabel: string;
+      compareLabel: string;
+      weightLink: boolean;
+    }>;
+  }): Promise<void> {
+    const exceljs = await import('exceljs');
+    const WorkbookCtor = (exceljs as any).Workbook || (exceljs as any).default?.Workbook;
+    if (!WorkbookCtor) throw new Error('Không tạo được file Excel.');
+    const workbook = new WorkbookCtor();
+    const sheet = workbook.addWorksheet('PXK', {
+      views: [{ showGridLines: false }],
+      pageSetup: {
+        orientation: 'landscape',
+        paperSize: 9,
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        horizontalCentered: true,
+        margins: { left: 0.25, right: 0.25, top: 0.3, bottom: 0.3, header: 0, footer: 0 }
+      }
+    });
+    const widths = [6, 15, 22, 8, 11, 12, 13, 12, 11, 12, 16, 10, 11, 12, 10, 18, 9, 13, 16];
+    widths.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
+    for (let r = 1; r <= 6; r++) sheet.getRow(r).height = 16;
+
+    sheet.mergeCells(1, 1, 6, 4);
+    sheet.mergeCells(1, 5, 6, 15);
+    this.pxkExcelPaintRange(sheet, 1, 1, 6, 19, 'FFFFFFFF');
+    const title = sheet.getCell(1, 5);
+    title.value = {
+      richText: [
+        { text: 'AIRSPEED MANUFACTURING VIET NAM\n', font: { name: 'Arial', size: 16, bold: true } },
+        { text: 'DANH SÁCH VẬT TƯ THEO LỆNH SẢN XUẤT', font: { name: 'Arial', size: 12, bold: true } }
+      ]
+    };
+    title.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    const meta = [
+      ['Mã quản lý', 'WH-WI0005/F07'],
+      ['Phiên bản', '00'],
+      ['Ngày ban hành', '05/03/2026'],
+      ['Số Trang', '01']
+    ];
+    meta.forEach((pair, i) => {
+      const row = i + 2;
+      sheet.mergeCells(row, 16, row, 17);
+      sheet.mergeCells(row, 18, row, 19);
+      const label = sheet.getCell(row, 16);
+      const value = sheet.getCell(row, 18);
+      label.value = pair[0];
+      value.value = pair[1];
+      label.font = { name: 'Arial', size: 9, bold: true };
+      value.font = { name: 'Arial', size: 9 };
+      label.alignment = { vertical: 'middle', horizontal: 'left' };
+      value.alignment = { vertical: 'middle', horizontal: 'center' };
+      label.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+      sheet.getCell(row, 17).fill = label.fill;
+    });
+    sheet.mergeCells(1, 16, 1, 19);
+    sheet.mergeCells(6, 16, 6, 19);
+
+    const spans = [3, 3, 3, 3, 3, 4];
+    const paintBoxes = (startRow: number, boxes: Array<[string, string, string?]>, badgeOnLast = false) => {
+      let col = 1;
+      boxes.forEach((box, i) => {
+        const span = spans[i];
+        const r2 = startRow + 4;
+        sheet.mergeCells(startRow, col, r2, col + span - 1);
+        this.pxkExcelPaintRange(sheet, startRow, col, r2, col + span - 1, 'FFFFFFFF');
+        const cell = sheet.getCell(startRow, col);
+        const badge = badgeOnLast && i === boxes.length - 1 ? input.factoryBadge : '';
+        cell.value = this.pxkExcelRich(box[0], box[1], box[2] || '', badge);
+        const pinLeft = startRow === 8 && (i === 4 || i === 5);
+        cell.alignment = { vertical: 'middle', horizontal: pinLeft ? 'left' : 'center', wrapText: true, indent: pinLeft ? 1 : 0 };
+        col += span;
+      });
+      for (let r = startRow; r <= startRow + 4; r++) sheet.getRow(r).height = 18;
+    };
+    paintBoxes(8, input.boxes.slice(0, 6), true);
+    paintBoxes(13, input.boxes.slice(6, 12));
+
+    const headers = ['STT', 'Mã vật tư', 'Tên Vật Tư', 'Đơn vị tính', 'Định Mức', 'T/L Định Mức', 'Lượng yêu cầu', 'PO', 'Xuất Kho', 'Mã Kho', 'Vị trí', 'Loại Hình', 'Lượng Scan', 'So Sánh', 'Giao SX', 'Ghi chú', 'SX trả', 'Check lượng', 'So sánh TL'];
+    const headerRow = 19;
+    headers.forEach((text, i) => {
+      const cell = sheet.getCell(headerRow, i + 1);
+      cell.value = text.toUpperCase();
+      cell.font = { name: 'Arial', size: 8, bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    });
+    this.pxkExcelPaintRange(sheet, headerRow, 1, headerRow, 19, 'FFF0F0F0');
+    sheet.getRow(headerRow).height = 28;
+
+    let row = headerRow + 1;
+    for (const line of input.lines) {
+      if (line.blank) {
+        sheet.mergeCells(row, 1, row, 19);
+        this.pxkExcelPaintRange(sheet, row, 1, row, 19, 'FFFFFFFF');
+        sheet.getRow(row).height = 12;
+        row++;
+        continue;
+      }
+      const iqcMark = line.iqc === 'pass' ? '✓' : line.iqc === 'dac_cach' ? '!' : '--';
+      const iqcColor = line.iqc === 'pass' ? 'FF1B5E20' : line.iqc === 'dac_cach' ? 'FFE65100' : 'FF757575';
+      const values: any[] = [
+        line.stt,
+        line.materialCode,
+        line.tenVatTu,
+        line.unit,
+        line.dinhMuc,
+        line.tongSL,
+        line.luongYC,
+        line.po,
+        line.qty,
+        line.maKho,
+        line.location,
+        line.loaiHinh,
+        line.scan,
+        line.soSanh,
+        line.delivery,
+        '',
+        '',
+        line.checkLabel,
+        line.compareLabel
+      ];
+      values.forEach((value, i) => {
+        const cell = sheet.getCell(row, i + 1);
+        cell.value = value;
+        cell.font = { name: 'Arial', size: 9 };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: [1, 4, 5, 6, 7, 8, 12, 14, 17, 18, 19].includes(i + 1) ? 'center' : ( [9, 13, 15].includes(i + 1) ? 'right' : 'left'),
+          wrapText: true
+        };
+      });
+      const note = sheet.getCell(row, 16);
+      const noteText = line.ghiChu ? `${line.ghiChu}\n` : '';
+      note.value = {
+        richText: [
+          { text: noteText, font: { name: 'Arial', size: 8 } },
+          { text: iqcMark, font: { name: 'Arial', size: 10, bold: true, color: { argb: iqcColor } } }
+        ]
+      };
+      note.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+      sheet.getCell(row, 2).font = line.weightLink
+        ? { name: 'Arial', size: 9, color: { argb: 'FF1565C0' }, underline: true }
+        : { name: 'Arial', size: 9 };
+      sheet.getCell(row, 14).font = this.pxkSoSanhFont(line.soSanh);
+      sheet.getCell(row, 18).font = this.pxkCompareFont(line.checkLabel);
+      sheet.getCell(row, 19).font = this.pxkCompareFont(line.compareLabel);
+      this.pxkExcelPaintRange(sheet, row, 1, row, 19, 'FFFFFFFF');
+      sheet.getRow(row).height = 22;
+      row++;
+    }
+
+    const addPng = (base64: string, col: number, rowIndex: number, width: number, height: number) => {
+      if (!base64) return;
+      const id = workbook.addImage({ base64, extension: 'png' });
+      sheet.addImage(id, { tl: { col, row: rowIndex }, ext: { width, height }, editAs: 'oneCell' });
+    };
+    addPng(input.logoPng, 0.25, 0.35, 168, 72);
+    addPng(input.qrLsxPng, 13.65, 8.05, 64, 64);
+    addPng(input.qrLinePng, 17.35, 8.05, 64, 64);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = input.filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Selection functionality methods
   isSelected(workOrder: WorkOrder): boolean {
     return this.selectedWorkOrders.some(wo => wo.id === workOrder.id);
@@ -5705,8 +6285,97 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         break;
       }
     }
+    result = this.mergePxkLinesByCodePoKho(result);
     this._pxkLinesCache.set(woLsx, result);
     return result;
+  }
+
+  /**
+   * Cùng mã + cùng PO + cùng kho = 1 dòng PXK.
+   * File import có 2 dòng vẫn gộp khi hiển thị / so sánh / số mã.
+   * Số lượng xuất cộng dồn. Định mức, lượng yêu cầu, tổng SL giống nhau thì giữ một giá trị.
+   */
+  private mergePxkLinesByCodePoKho(lines: PxkLine[]): PxkLine[] {
+    if (!lines || lines.length < 2) return lines || [];
+    const order: string[] = [];
+    const map = new Map<string, PxkLine>();
+    for (const line of lines) {
+      const mat = String(line.materialCode || '').trim().toUpperCase();
+      const po = this.pxkPoKey(line.po);
+      const kho = String(line.maKho || '').trim().toUpperCase();
+      const key = `${mat}|${po}|${kho}`;
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, { ...line });
+        order.push(key);
+        continue;
+      }
+      prev.quantity = this.addPxkQty(prev.quantity, line.quantity);
+      prev.soChungTu = this.mergePxkUniqueText(prev.soChungTu, line.soChungTu);
+      prev.ghiChu = this.mergePxkUniqueText(prev.ghiChu, line.ghiChu, ' | ');
+      prev.unit = this.firstPxkText(prev.unit, line.unit) || prev.unit;
+      prev.loaiHinh = this.firstPxkText(prev.loaiHinh, line.loaiHinh);
+      prev.tenVatTu = this.firstPxkText(prev.tenVatTu, line.tenVatTu);
+      prev.tenTP = this.firstPxkText(prev.tenTP, line.tenTP);
+      prev.soPOKH = this.firstPxkText(prev.soPOKH, line.soPOKH);
+      prev.phanTramHaoHut = this.firstPxkText(prev.phanTramHaoHut, line.phanTramHaoHut);
+      prev.maKhachHang = this.firstPxkText(prev.maKhachHang, line.maKhachHang);
+      prev.dinhMuc = this.mergePxkSameOrSumAmount(prev.dinhMuc, line.dinhMuc, false);
+      prev.tongSLYCau = this.mergePxkSameOrSumAmount(prev.tongSLYCau, line.tongSLYCau, true);
+      prev.luongYeuCau = this.mergePxkSameOrSumAmount(prev.luongYeuCau, line.luongYeuCau, true);
+      if (!String(prev.po || '').trim() && line.po) prev.po = line.po;
+      if (!String(prev.maKho || '').trim() && line.maKho) prev.maKho = line.maKho;
+      if (!String(prev.materialCode || '').trim() && line.materialCode) prev.materialCode = line.materialCode;
+    }
+    return order.map((key) => map.get(key)!);
+  }
+
+  private addPxkQty(a: number, b: number): number {
+    const sum = (Number(a) || 0) + (Number(b) || 0);
+    return Math.round((sum + Number.EPSILON) * 1e6) / 1e6;
+  }
+
+  private firstPxkText(current: string | undefined, incoming: string | undefined): string | undefined {
+    if (String(current ?? '').trim()) return current;
+    const next = String(incoming ?? '').trim();
+    return next ? incoming : current;
+  }
+
+  private mergePxkUniqueText(current: string | undefined, incoming: string | undefined, sep = ', '): string | undefined {
+    const parts = [current, incoming]
+      .flatMap((value) => String(value ?? '').split(/[,|]/))
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const uniq: string[] = [];
+    const seen = new Set<string>();
+    for (const part of parts) {
+      const key = part.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniq.push(part);
+    }
+    return uniq.length ? uniq.join(sep) : undefined;
+  }
+
+  private parsePxkAmountText(raw: string | undefined): number | null {
+    const text = String(raw ?? '').trim().replace(/\s/g, '').replace(/,/g, '');
+    if (!text || !/^-?\d+(\.\d+)?$/.test(text)) return null;
+    const n = Number(text);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Giống nhau thì giữ một. Khác nhau: cộng nếu là lượng, giữ dòng đầu nếu là định mức. */
+  private mergePxkSameOrSumAmount(current: string | undefined, incoming: string | undefined, sumWhenDifferent: boolean): string | undefined {
+    const a = String(current ?? '').trim();
+    const b = String(incoming ?? '').trim();
+    if (!a) return b || undefined;
+    if (!b || a === b) return a;
+    const na = this.parsePxkAmountText(a);
+    const nb = this.parsePxkAmountText(b);
+    if (na == null || nb == null) return a;
+    if (Math.abs(na - nb) < 0.0000005) return a;
+    if (!sumWhenDifferent) return a;
+    return String(this.addPxkQty(na, nb));
   }
 
   private isPxkSoMaExcludedLine(maKho: string | undefined | null): boolean {

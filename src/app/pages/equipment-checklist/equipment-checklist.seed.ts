@@ -29,7 +29,7 @@ export const SEED_CATEGORIES: SeedCategory[] = [
         id: 'CAT-01-01',
         name: 'Nhóm thiết bị xe nâng điện thấp (Pallet Truck)',
         description: 'Chuyên kéo đi mặt đất, không nâng cao xếp kệ',
-        inspectionItems: ['Pin', 'Phanh', 'Thủy lực', 'Bánh xe'],
+        inspectionItems: ['Pin', 'Hệ thống thắng', 'Thủy lực', 'Bánh xe'],
         equipment: [
           { stt: 1, name: 'Xe nâng điện PTE15N (tải 1500 kg/càng rộng)', managementCode: 'WH-XNĐ_002', responsiblePerson: 'Nguyễn Hoàng Tuấn' },
           { stt: 2, name: 'Xe nâng điện PTE15N (tải 1500 kg/càng rộng)', managementCode: 'WH-XNĐ_003', responsiblePerson: 'Nguyễn Hoàng Tuấn' },

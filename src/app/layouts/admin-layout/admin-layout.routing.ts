@@ -1,27 +1,17 @@
 import { Routes } from '@angular/router';
 
-import { DashboardComponent } from '../../dashboard/dashboard.component';
-import { DocumentsComponent } from 'app/pages/documents/documents.component';
 
 import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
-import { EquipmentComponent } from '../../pages/equipment/equipment.component';
 import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
 import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
-import { ShipmentComponent } from '../../pages/shipment/shipment.component';
 
-import { WorkOrderStatusComponent } from '../../pages/work-order-status/work-order-status.component';
 
-import { DanhMucNvlTpComponent } from '../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp.component';
 
 import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 
-import { SettingsComponent } from '../../pages/settings/settings.component';
-import { PrintLabelComponent } from '../../pages/print-label/print-label.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
-import { QCComponent } from '../../pages/qc/qc.component';
-import { QcTraceabilityComponent } from '../../pages/qc/qc-traceability.component';
 import { MenuComponent } from '../../pages/menu/menu.component';
 import { AccountComponent } from '../../pages/account/account.component';
 import { Rm1DeliveryComponent } from '../../pages/rm1-delivery/rm1-delivery.component';
@@ -29,9 +19,6 @@ import { ShortedMaterialsComponent } from '../../pages/shorted-materials/shorted
 import { ReportComponent } from '../../pages/report/report.component';
 import { BagHistoryComponent } from '../../pages/bag-history/bag-history.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
-import { MaterialsDashboardComponent } from '../../pages/materials-dashboard/materials-dashboard.component';
-import { FgsDashboardComponent } from '../../pages/fgs-dashboard/fgs-dashboard.component';
-import { NhietDoComponent } from '../../pages/nhiet-do/nhiet-do.component';
 import { EquipmentChecklistComponent } from '../../pages/equipment-checklist/equipment-checklist.component';
 import { TruckScheduleComponent } from '../../pages/truck-schedule/truck-schedule.component';
 import { AuthGuard } from '../../guards/auth.guard';
@@ -47,15 +34,15 @@ export const AdminLayoutRoutes: Routes = [
   },
   { path: 'menu',                 component: MenuComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'tai-khoan',            component: AccountComponent, canActivate: [AuthGuard] },
-  { path: 'dashboard',            component: DashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'materials-dashboard',  component: MaterialsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'dashboard',            loadChildren: () => import('../../dashboard/dashboard-page.module').then(m => m.DashboardPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'materials-dashboard',  loadChildren: () => import('../../pages/materials-dashboard/materials-dashboard-page.module').then(m => m.MaterialsDashboardPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'lich-lam-viec',        loadChildren: () => import('../../pages/work-schedule/work-schedule.module').then(m => m.WorkScheduleModule), canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'fgs-dashboard',          component: FgsDashboardComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'fgs-dashboard',          loadChildren: () => import('../../pages/fgs-dashboard/fgs-dashboard-page.module').then(m => m.FgsDashboardPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials',            loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
   { path: 'quan-ly-nguyen-lieu',  loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
   { path: 'inventory-overview',   loadChildren: () => import('../../pages/inventory-overview/inventory-overview.module').then(m => m.InventoryOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound',              loadChildren: () => import('../../pages/inbound/inbound.module').then(m => m.InboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'danh-muc-nvl-tp',      component: DanhMucNvlTpComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'danh-muc-nvl-tp',      loadChildren: () => import('../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp-page.module').then(m => m.DanhMucNvlTpPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound',             loadChildren: () => import('../../pages/outbound/outbound.module').then(m => m.OutboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pd-control',           loadChildren: () => import('../../pages/pd-control/pd-control.module').then(m => m.PdControlModule), canActivate: [AuthGuard, TabPermissionGuard] },
@@ -70,21 +57,21 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'fg-location',          loadChildren: () => import('../../pages/fg-location/fg-location.module').then(m => m.FgLocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pallet-id',            loadChildren: () => import('../../pages/pallet-id/pallet-id.module').then(m => m.PalletIdModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
-  { path: 'checklist',            component: DocumentsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'equipment',            component: EquipmentComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'label',                component: PrintLabelComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'checklist',            loadChildren: () => import('../../pages/documents/documents.module').then(m => m.DocumentsModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'equipment',            loadChildren: () => import('../../pages/equipment/equipment-page.module').then(m => m.EquipmentPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'label',                loadChildren: () => import('../../pages/print-label/print-label.module').then(m => m.PrintLabelModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'index',                component: IndexComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'documents',            component: DocumentsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'documents',            loadChildren: () => import('../../pages/documents/documents.module').then(m => m.DocumentsModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'kpi-reports',          component: KpiReportsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'work-order-status',    component: WorkOrderStatusComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'shipment',             component: ShipmentComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'work-order-status',    loadChildren: () => import('../../pages/work-order-status/work-order-status.module').then(m => m.WorkOrderStatusModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'shipment',             loadChildren: () => import('../../pages/shipment/shipment.module').then(m => m.ShipmentModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
 
   { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'sxxk',                component: SxxkComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'scrap',               component: ScrapComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'qc',                   component: QCComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'qc-traceability',      component: QcTraceabilityComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'qc',                   loadChildren: () => import('../../pages/qc/qc-page.module').then(m => m.QcPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'qc-traceability',      loadChildren: () => import('../../pages/qc/qc-traceability.module').then(m => m.QcTraceabilityModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'rm1-delivery',         component: Rm1DeliveryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'shorted-materials',    component: ShortedMaterialsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'report',               component: ReportComponent, canActivate: [AuthGuard, TabPermissionGuard] },
@@ -93,7 +80,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'xe-tai',               component: TruckScheduleComponent, canActivate: [AuthGuard] },
   { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'settings',             component: SettingsComponent, canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
-  { path: 'nhiet-do',             component: NhietDoComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'settings',             loadChildren: () => import('../../pages/settings/settings-page.module').then(m => m.SettingsPageModule), canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
+  { path: 'nhiet-do',             loadChildren: () => import('../../pages/nhiet-do/nhiet-do-page.module').then(m => m.NhietDoPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'equipment-checklist',  component: EquipmentChecklistComponent, canActivate: [AuthGuard, TabPermissionGuard] }
 ];
