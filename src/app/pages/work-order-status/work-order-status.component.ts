@@ -27,6 +27,7 @@ import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
 import { ReadyIqcZaloService } from '../../services/ready-iqc-zalo.service';
+import { WEIGH_REQUIRED_PREFIXES, WEIGH_TOLERANCE_PERCENT, catalogBagWeight, weighPercentOk } from '../../services/weigh-exempt-report';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -388,7 +389,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
   showPxkImportDialog: boolean = false;
 
-  private readonly PXK_WEIGHT_OK_PERCENT = 98;
   private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
   private pxkWeightExemptCodes = new Set<string>();
   private pxkWeightIncludeCodes = new Set<string>();
@@ -1777,6 +1777,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     if (this.pxkSkipCatalogSaving) return;
     this.showPxkSkipCatalogDialog = false;
     this.pxkSkipCatalogDraft = '';
+  }
+
+  /** Danh mục check lượng đã gộp về Danh mục NVL/TP → tab Check lượng / Cân (1 nguồn). */
+  goToWeighCatalog(): void {
+    this.showMoreDialog = false;
+    void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'weigh' } });
   }
 
   openPxkWeightReportDialog(): void {
@@ -4067,7 +4073,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
         const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
         const weightPercent = weightFull != null && weightOdd != null
-          ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+          ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty))
           : null;
         const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
         const checkLabel = !weightCheck
@@ -7621,7 +7627,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       ? this.pxkOddWeightPercent(weightFull, weightOdd, standard, oddQty)
       : null;
     const okFlag = percent == null ? null : this.pxkWeightIsOk(percent);
-    await this.nvlCatalog.update(code, { unitWeight: weightFull });
+    await this.nvlCatalog.update(code, { gwBag: weightFull });
     await this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION).doc(this.pxkWeightCheckDocId(lsx, code, po)).set({
       lsx,
       lsxNorm: this.normLsxForMatch(lsx),
@@ -7637,6 +7643,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       weightOdd: oddQty > 0 ? weightOdd : null,
       percent: percent == null ? null : Math.round(percent * 10) / 10,
       ok: okFlag,
+      oddBagQty: oddQty > 0 ? oddQty : null,
       updatedAt: new Date()
     }, { merge: true });
     return {
@@ -7662,6 +7669,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     <p id="pxkWMeta" style="margin:0 0 6px;font-size:13px;color:#37474f;"></p>
     <p id="pxkWSplit" style="margin:0 0 10px;font-size:13px;line-height:1.4;"></p>
     <p id="pxkWSaved" style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1b5e20;"></p>
+    <p id="pxkWPhoto" style="display:none;margin:0 0 10px;font-size:13px;">
+      <a id="pxkWPhotoLink" href="#" target="_blank" rel="noopener" style="color:#1565c0;font-weight:700;">📷 Xem hình bag lẻ đã cân</a>
+      <span id="pxkWPhotoBy" style="color:#607d8b;"></span>
+    </p>
     <label style="display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:13px;font-weight:700;">
       <span id="pxkWFullLabel">Trọng lượng chẵn cuộn</span>
       <input id="pxkWFull" type="text" inputmode="decimal" autocomplete="off" style="height:36px;border:1px solid #90a4ae;border-radius:4px;padding:0 8px;font-size:14px;">
@@ -7729,7 +7740,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!(expected > 0)) return null;
     return (odd / expected) * 100;
   }
-  function isOk(p) { return Math.round(p * 10) / 10 >= 98; }
+  function isOk(p) { return Math.abs(Math.round(p * 10) / 10 - 100) <= ${WEIGH_TOLERANCE_PERCENT}; }
   function pctLabel(p) { return (Math.round(p * 10) / 10).toFixed(1) + '%'; }
   function rowIsCheckOk(r) {
     if (r.ok === true) return true;
@@ -7789,7 +7800,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     expEl.textContent = 'Trọng lượng lẻ kỳ vọng: ' + gram(expected);
     if (pct == null) { resEl.textContent = ''; return; }
     var ok = isOk(pct);
-    resEl.textContent = ok ? (pctLabel(pct) + ' · OK') : (pctLabel(pct) + ' · Không đạt (cần ≥ 98%)');
+    resEl.textContent = ok ? (pctLabel(pct) + ' · OK') : (pctLabel(pct) + ' · Không đạt (lệch > ±${WEIGH_TOLERANCE_PERCENT}%)');
     resEl.style.color = ok ? '#1b5e20' : '#c62828';
   }
   function openEditor(idx) {
@@ -7809,6 +7820,12 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       if (r.oddQty > 0 && r.weightOdd > 0) savedText += ' · Lẻ: ' + gram(r.weightOdd);
     }
     document.getElementById('pxkWSaved').textContent = savedText;
+    document.getElementById('pxkWPhoto').style.display = r.photoUrl ? 'block' : 'none';
+    document.getElementById('pxkWPhotoLink').setAttribute('href', r.photoUrl || '#');
+    document.getElementById('pxkWPhotoBy').textContent = r.photoUrl
+      ? (r.photoSource === 'tach-tem-le' ? ' · cân lúc tách tem lẻ ' + (r.photoTag || '') : ' · cân ở Outbound')
+        + (r.weighedBy ? ' bởi ' + r.weighedBy : '') + ' (hình lưu 6 tháng)'
+      : '';
     var full = r.weightFull > 0 ? r.weightFull : (r.catalogWeight > 0 ? r.catalogWeight : '');
     document.getElementById('pxkWFull').value = full === '' ? '' : String(full);
     document.getElementById('pxkWOdd').value = r.weightOdd > 0 ? String(r.weightOdd) : '';
@@ -7920,7 +7937,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         const item = await this.nvlCatalog.getByCode(code);
         map.set(code, {
           standard: Number(item?.standardPacking) || 0,
-          unitWeight: Number(item?.unitWeight) || 0
+          unitWeight: catalogBagWeight(item)
         });
       } catch (e) {
         console.warn('[PXK Check lượng] Không đọc danh mục:', code, e);
@@ -8014,7 +8031,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       if (!(cat.standard > 0) || !(weightFull > 0)) return 'red';
       if (split.oddQty > 0) {
         if (!(weightOdd > 0)) return 'red';
-        const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+        const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty));
         if (pct == null) return 'red';
         if (Math.round(pct * 10) / 10 > this.PXK_WEIGHT_HIGH_PERCENT) over = true;
       }
@@ -8024,7 +8041,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 
   /**
    * Dòng thuộc Check lượng phải OK mới được sang Ready / Done.
-   * Không có lẻ: đã lưu trọng lượng chẵn là đủ. Có lẻ: % phải từ 98% trở lên.
+   * Không có lẻ: đã lưu trọng lượng chẵn là đủ. Có lẻ: % lệch không quá ±5%.
    */
   private async getPxkWeightCheckBlockMessage(workOrder: WorkOrder): Promise<string | null> {
     const lsx = String(workOrder?.productionOrder || '').trim();
@@ -8056,7 +8073,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         if (cat.standard > 0 && !(split.oddQty > 0)) {
           ok = weightFull > 0;
         } else if (cat.standard > 0) {
-          const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+          const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty));
           ok = pct != null && this.pxkWeightIsOk(pct);
         }
         if (!ok) failed.push(code);
@@ -8071,7 +8088,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     }
   }
 
-  /** Check lượng: mã đầu B018/B009/B016/B008/B021/B023/B024, hoặc mã được thêm trong danh mục. Không kho trống / NVL_SX / NVL_KS. */
+  /** Check lượng: đầu mã trong WEIGH_REQUIRED_PREFIXES, hoặc mã được thêm trong danh mục. Không kho trống / NVL_SX / NVL_KS. */
   private isPxkWeightCheckLine(materialCode: string, maKho: string | undefined | null): boolean {
     const kho = String(maKho || '').trim().toUpperCase();
     if (!kho || kho === 'NVL_SX' || kho === 'NVL_KS' || kho.includes('NVL_SX') || kho.includes('NVL_KS')) return false;
@@ -8079,7 +8096,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!code || this.pxkWeightExemptCodes.has(code)) return false;
     if (this.pxkWeightIncludeCodes.has(code)) return true;
     if (code.startsWith('R') || code.startsWith('A')) return false;
-    return ['B018', 'B009', 'B016', 'B008', 'B021', 'B023', 'B024'].some((prefix) => code.startsWith(prefix));
+    return WEIGH_REQUIRED_PREFIXES.some((prefix) => code.startsWith(prefix));
   }
 
   private pxkNeedCheckIconHtml(tone: 'red' | 'green' | 'orange'): string {
@@ -8163,9 +8180,14 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return (Math.round(percent * 10) / 10).toFixed(1) + '%';
   }
 
-  /** So với số % đang hiện (1 chữ số). Từ 98.0% trở lên là OK. */
+  /** So với số % đang hiện (1 chữ số). Lệch không quá ±5% là OK. */
   private pxkWeightIsOk(percent: number): boolean {
-    return Math.round(percent * 10) / 10 >= this.PXK_WEIGHT_OK_PERCENT;
+    return weighPercentOk(percent);
+  }
+
+  /** Lượng ứng với trọng lượng lẻ đã cân: bag lẻ cân ở Outbound / lúc tách tem (oddBagQty), không có thì lẻ theo PXK. */
+  private pxkOddBasis(saved: any, oddQty: number): number {
+    return Number(saved?.oddBagQty) > 0 ? Number(saved.oddBagQty) : oddQty;
   }
 
   private pxkWeightCheckDocId(lsx: string, materialCode: string, po: string): string {
@@ -8379,7 +8401,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
       const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
       const weightPercent = weightFull != null && weightOdd != null
-        ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+        ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty))
         : null;
       const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
       if (weightCheck) {
@@ -8398,7 +8420,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           weightFull,
           weightOdd,
           percent: weightPercent,
-          ok: weightOk
+          ok: weightOk,
+          photoUrl: String(saved?.oddPhotoUrl || ''),
+          photoSource: String(saved?.oddWeighSource || ''),
+          photoTag: String(saved?.oddSplitTag || ''),
+          weighedBy: String(saved?.oddWeighedBy || '')
         });
       }
       const lineCheckOk = weightCheck && (
@@ -8758,68 +8784,6 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
 
   closeScanDialog(): void {
     this.backToMainView();
-  }
-
-  async loadAllWorkOrdersForScan(): Promise<void> {
-    try {
-      console.log('🔍 Loading all work orders for scan lookup...');
-      
-      // Use AngularFirestore instead of native Firestore
-      const querySnapshot = await this.firestore.collection('work-orders', ref => 
-        ref.orderBy('createdDate', 'desc')
-      ).get().toPromise();
-      
-      if (querySnapshot) {
-        console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
-        
-        this.allWorkOrdersForScan = [];
-        this.workOrderScanIndex.clear();
-        querySnapshot.forEach((doc) => {
-          const data = doc.data() as WorkOrder;
-          const wo: WorkOrder = {
-            id: doc.id,
-            ...data
-          } as WorkOrder;
-          this.allWorkOrdersForScan.push(wo);
-          const key = String(wo.productionOrder || '').trim().toUpperCase();
-          if (key) this.workOrderScanIndex.set(key, wo);
-        });
-
-        console.log(`✅ Loaded ${this.allWorkOrdersForScan.length} work orders for scan lookup`);
-      } else {
-        console.log('❌ QuerySnapshot is null');
-      }
-    } catch (error) {
-      console.error('❌ Error loading all work orders for scan:', error);
-    }
-  }
-
-  private async loadWorkOrdersByFactory(factory: string): Promise<WorkOrder[]> {
-    try {
-      console.log(`🔍 Loading work orders for factory: ${factory}`);
-      const db = getFirestore();
-      const workOrdersCollection = collection(db, 'workOrders');
-      const q = query(workOrdersCollection, orderBy('createdDate', 'desc'));
-      const querySnapshot = await getDocs(q);
-      
-      console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
-      
-      const workOrders: WorkOrder[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as WorkOrder;
-        // Load ALL work orders for scan (don't filter by factory)
-        workOrders.push({
-          id: doc.id,
-          ...data
-        } as WorkOrder);
-      });
-      
-      console.log(`✅ Loaded ${workOrders.length} work orders from ${factory}`);
-      return workOrders;
-    } catch (error) {
-      console.error(`❌ Error loading work orders for factory ${factory}:`, error);
-      return [];
-    }
   }
 
   async startScanner(): Promise<void> {

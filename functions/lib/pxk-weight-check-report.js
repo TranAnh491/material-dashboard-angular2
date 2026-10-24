@@ -29,7 +29,8 @@ async function notifyPxkWeightCheckReport(db, opts) {
         clip(opts === null || opts === void 0 ? void 0 : opts.maKho, 40) ? `Kho: ${clip(opts === null || opts === void 0 ? void 0 : opts.maKho, 40)}` : '',
         clip(opts === null || opts === void 0 ? void 0 : opts.po, 80) ? `PO: ${clip(opts === null || opts === void 0 ? void 0 : opts.po, 80)}` : '',
         clip(opts === null || opts === void 0 ? void 0 : opts.reason, 400) ? `Lý do: ${clip(opts === null || opts === void 0 ? void 0 : opts.reason, 400)}` : '',
-        'Nhóm Quản lý kho: Work Order Status → KHÁC → Danh mục check lượng → Duyệt hoặc Từ chối.'
+        'Duyệt: Danh mục NVL/TP → tab Check lượng / Cân → Duyệt hoặc Từ chối.',
+        `Hoặc rep tin này: duyệt (hoặc gõ: duyệt ${clip(opts === null || opts === void 0 ? void 0 : opts.materialCode, 40) || '<Mã hàng>'})`
     ].filter(Boolean);
     const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
     const res = await fetch(url, {

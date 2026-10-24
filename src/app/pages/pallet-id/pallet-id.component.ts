@@ -1356,14 +1356,22 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     const widthMm = 57;
     const heightMm = 32;
 
+    // Dòng ngày in nhỏ ở dưới tem
+    const now = new Date();
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const printedAt = `Ngày in: ${p2(now.getDate())}/${p2(now.getMonth() + 1)}/${now.getFullYear()} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+
     try {
       const labelHtml = Array.from({ length: qty }, () => `
         <div class="pass-label-container">
           <div class="pass-label-fit">
             <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="Đã Kiểm">
-              <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
+              <text x="50%" y="44%" text-anchor="middle" dominant-baseline="central"
                     font-family="Arial, Helvetica, sans-serif" font-weight="900"
                     font-size="9.8" letter-spacing="0.15">Đã Kiểm</text>
+              <text x="50%" y="${heightMm - 2}" text-anchor="middle"
+                    font-family="Arial, Helvetica, sans-serif" font-weight="600"
+                    font-size="3">${printedAt}</text>
             </svg>
           </div>
         </div>`).join('');

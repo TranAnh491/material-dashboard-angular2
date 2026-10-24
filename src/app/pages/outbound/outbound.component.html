@@ -26,7 +26,7 @@
   </div>
 
   <!-- ═══ Mobile: Apple-style WMS shell (logic unchanged) ═══ -->
-  <div class="ob-m" *ngIf="isMobile">
+  <div class="ob-m" *ngIf="isMobile" [class.ob-m--scanning]="isBatchScanningMode && exportMode === 'NL'">
     <header class="ob-m-header ob-m-header--mock">
       <div class="ob-m-header__row1">
         <button type="button" class="ob-m-header__iconbtn" (click)="goMobileMenu()" aria-label="Menu">
@@ -127,17 +127,65 @@
               <span>Đang cập nhật…</span>
             </div>
             <ng-container *ngIf="!isSavingBatchData">
-              <div class="ob-m-scan__chiprow">
-                <span class="ob-m-chip-pill">
-                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                  <b>LSX</b>&nbsp;{{ batchProductionOrder || '…' }}
-                </span>
-                <span class="ob-m-chiprow__sep" aria-hidden="true">·</span>
-                <span class="ob-m-chip-pill">
-                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                  <b>NV</b>&nbsp;{{ batchEmployeeId || '…' }}
-                </span>
+              <!-- PDA: 1 màn hình — mã vừa scan + đã xuất/cần trong LSX, danh sách PXK cuộn bên trong -->
+              <div class="ob-pda__flash"
+                   [class.ob-pda__flash--ok]="scanFlash?.kind === 'ok'"
+                   [class.ob-pda__flash--err]="scanFlash?.kind === 'err'">
+                <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+                <span>{{ scanFlash?.text || 'Sẵn sàng — scan tem bag' }}</span>
               </div>
+
+              <div class="ob-pda__cur" *ngIf="scanIdentity as id">
+                <div class="ob-pda__cur-head">
+                  <strong>{{ id.code }}</strong>
+                  <span>PO {{ id.po || '—' }} · bag {{ id.bag || '—' }} · +{{ id.qty | number:'1.0-4' }}</span>
+                </div>
+                <ng-container *ngIf="mobileScanCurrentRow as r; else obPdaNoPxk">
+                  <div class="ob-pda__nums">
+                    <div class="ob-pda__num ob-pda__num--done">
+                      <span>Đã xuất</span>
+                      <b>{{ r.exported + r.scanned | number:'1.0-4' }}</b>
+                    </div>
+                    <div class="ob-pda__num">
+                      <span>Cần</span>
+                      <b>{{ r.need | number:'1.0-4' }}</b>
+                    </div>
+                    <div class="ob-pda__num"
+                         [class.ob-pda__num--ok]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                         [class.ob-pda__num--over]="r.remain < -0.0001">
+                      <span>{{ r.remain < -0.0001 ? 'Vượt' : 'Còn' }}</span>
+                      <b>{{ (r.remain < 0 ? -r.remain : r.remain) | number:'1.0-4' }}</b>
+                    </div>
+                  </div>
+                  <div class="ob-pda__cur-bag" *ngIf="r.std > 0">Bag {{ r.doneBags }}/{{ r.needBags }} · còn {{ scanRemainBagText(r) }}</div>
+                </ng-container>
+                <ng-template #obPdaNoPxk>
+                  <div class="ob-pda__cur-bag ob-pda__cur-bag--warn">Mã này không có trên PXK của LSX</div>
+                </ng-template>
+                <div class="ob-pda__tags" *ngIf="id.tags.length">
+                  <span *ngFor="let t of id.tags" class="ob-pda__tag ob-pda__tag--{{ t.tone }}">{{ t.text }}</span>
+                </div>
+              </div>
+
+              <div class="ob-pda__lsx">
+                <span class="ob-pda__lsx-id"><b>{{ batchProductionOrder || '…' }}</b> · NV {{ batchEmployeeId || '…' }}</span>
+                <div class="ob-pda__bar" *ngIf="scanPxkProgress.length"><div [style.width.%]="scanLsxBagStats.percent"></div></div>
+                <span class="ob-pda__lsx-pct" *ngIf="scanPxkProgress.length">{{ scanPxkDoneCount }}/{{ scanPxkProgress.length }} mã đủ</span>
+              </div>
+
+              <div class="ob-pda__list">
+                <p class="ob-pda__empty" *ngIf="!scanPxkProgress.length">{{ isProductionOrderScanned ? 'LSX chưa có PXK (hoặc đang tải)…' : 'Chưa scan LSX.' }}</p>
+                <div class="ob-pda__row"
+                     *ngFor="let r of scanPxkProgress; trackBy: trackScanPxkRow"
+                     [class.is-cur]="scanIdentity?.code === r.code"
+                     [class.is-done]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                     [class.is-over]="r.remain < -0.0001">
+                  <span class="ob-pda__row-code">{{ r.code }}<small>{{ r.po || '—' }}</small></span>
+                  <span class="ob-pda__row-qty">{{ r.exported + r.scanned | number:'1.0-4' }}/{{ r.need | number:'1.0-4' }}</span>
+                  <span class="ob-pda__row-remain">{{ r.remain < -0.0001 ? '+' + ((-r.remain) | number:'1.0-4') : (r.remain <= 0.0001 ? '✓' : (r.remain | number:'1.0-4')) }}</span>
+                </div>
+              </div>
+
               <div class="ob-m-scan__acts">
                 <button type="button" class="ob-m-btn ob-m-btn--ghost" (click)="showScanReview()" *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
                   <i class="material-icons">fact_check</i>
@@ -485,6 +533,7 @@
                  (blur)="onScannerInputBlur()"
                  placeholder="Quét barcode / QR…"
                  class="scanner-input ob-toolbar__scan"
+                 [class.ob-toolbar__scan--big]="isBatchScanningMode"
                  [class.active]="isScannerInputActive || showScanningSetupModal"
                  autocomplete="off">
 
@@ -572,6 +621,112 @@
             <i class="material-icons">refresh</i>
             Refresh
           </button>
+          <button type="button" class="refresh-btn" (click)="openLsxLog()" title="Xem log chi tiết từng bag đã scan của 1 LSX (1–3 lượt đọc)">
+            <i class="material-icons">receipt_long</i>
+            Log LSX
+          </button>
+        </div>
+
+        <!-- Bảng scan (máy tính): báo xanh/đỏ + âm thanh, tiến độ PXK, danh sách bag vừa scan -->
+        <div class="ob-scan-board" *ngIf="isBatchScanningMode && !isMobile">
+          <div class="ob-scan-flash"
+               [class.ob-scan-flash--ok]="scanFlash?.kind === 'ok'"
+               [class.ob-scan-flash--err]="scanFlash?.kind === 'err'">
+            <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+            <span>{{ scanFlash?.text || (isProductionOrderScanned && isEmployeeIdScanned ? 'Sẵn sàng — scan tem bag' : 'Scan LSX và mã nhân viên để bắt đầu') }}</span>
+          </div>
+          <div class="ob-scan-meta">
+            <div class="ob-scan-progress" *ngIf="scanPxkProgress.length" [title]="'Theo bag (Standard Packing) · theo lượng ' + scanLsxPercent + '%'">
+              <span class="ob-scan-progress__label">{{ batchProductionOrder }}</span>
+              <div class="ob-scan-progress__bar"><div [style.width.%]="scanLsxBagStats.percent"></div></div>
+              <strong>{{ scanLsxBagStats.percent }}%</strong>
+              <span class="ob-scan-progress__bags" *ngIf="scanLsxBagStats.total">{{ scanLsxBagStats.done }}/{{ scanLsxBagStats.total }} bag</span>
+            </div>
+            <button type="button" class="ob-scan-act" (click)="pauseSaveBatch()" [disabled]="!pendingScanData.length || isSavingBatchData"
+                    title="Lưu các bag đã scan, giữ nguyên LSX + NV để scan tiếp">
+              <i class="material-icons">pause_circle</i> Tạm dừng &amp; lưu ({{ pendingScanData.length }})
+            </button>
+            <button type="button" class="ob-scan-act" (click)="downloadLsxLog(batchProductionOrder)" [disabled]="!batchProductionOrder"
+                    title="Tải Excel log từng bag đã lưu của LSX">
+              <i class="material-icons">download</i> Tải log LSX
+            </button>
+          </div>
+          <div class="ob-scan-id" *ngIf="scanIdentity">
+            <div class="ob-scan-id__main">
+              <strong>{{ scanIdentity.code }}</strong>
+              <span>{{ scanIdentity.name || '—' }}</span>
+              <small>PO {{ scanIdentity.po }} · bag {{ scanIdentity.bag || '—' }} · {{ scanIdentity.qty | number }}</small>
+            </div>
+            <div class="ob-scan-id__tags">
+              <button type="button" class="ob-scan-act" (click)="openWeighReport(scanIdentity.code, scanIdentity.po, batchProductionOrder)"
+                      title="Báo mã này không cân được (dây rút, lá đồng, theo bộ, để trong khay…) — gửi duyệt như Check lượng PXK">
+                <i class="material-icons">flag</i> Report
+              </button>
+              <span *ngFor="let t of scanIdentity.tags" class="ob-scan-tag ob-scan-tag--{{ t.tone }}" [title]="t.title || ''">{{ t.text }}</span>
+              <span class="ob-scan-tag ob-scan-tag--gray" *ngIf="!scanIdentity.tags.length">Không có ghi chú</span>
+            </div>
+          </div>
+          <div class="ob-scan-board__cols">
+            <section class="ob-scan-card">
+              <header>
+                <strong>Tiến độ theo PXK</strong>
+                <span *ngIf="batchProductionOrder">{{ batchProductionOrder }}</span>
+                <span class="ob-scan-card__sum" *ngIf="scanPxkProgress.length">{{ scanPxkDoneCount }}/{{ scanPxkProgress.length }} dòng đủ</span>
+              </header>
+              <p class="ob-scan-card__empty" *ngIf="!scanPxkProgress.length">{{ isProductionOrderScanned ? 'LSX chưa có PXK (hoặc đang tải).' : 'Chưa scan LSX.' }}</p>
+              <div class="ob-scan-card__body" *ngIf="scanPxkProgress.length">
+                <table>
+                  <thead><tr><th>Mã</th><th>PO</th><th class="n">Cần</th><th title="Lượng cần theo bag: bag chẵn × Standard + lẻ">Bag cần</th><th class="n">Đã xuất</th><th class="n">Vừa scan</th><th class="n">Còn</th><th class="n" title="Bag đã xuất + vừa scan / tổng bag (theo Standard Packing)">Bag</th><th title="Bag còn phải xuất: chẵn + lẻ">Còn bag</th><th></th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let r of scanPxkProgress; trackBy: trackScanPxkRow"
+                        [class.is-done]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                        [class.is-over]="r.remain < -0.0001"
+                        [class.is-active]="r.scanned > 0">
+                      <td><strong>{{ r.code }}</strong></td>
+                      <td [class.ob-scan-po--nostock]="r.stock !== null && r.stock <= 0.0001"
+                          [title]="r.stock === null ? '' : (r.stock <= 0.0001 ? 'Mã + PO này không còn tồn kho' : ('Tồn kho: ' + (r.stock | number)))">{{ r.po || '—' }}</td>
+                      <td class="n">{{ r.need | number }}</td>
+                      <td [title]="r.std > 0 ? ('Standard ' + r.std) : 'Chưa có Standard Packing'">{{ scanNeedBagText(r) }}</td>
+                      <td class="n">{{ r.exported | number }}</td>
+                      <td class="n">{{ r.scanned | number }}</td>
+                      <td class="n">{{ r.remain | number }}</td>
+                      <td class="n">{{ r.std > 0 ? (r.doneBags + '/' + r.needBags) : r.doneBags }}</td>
+                      <td [title]="r.std > 0 ? ('Standard ' + r.std) : 'Chưa có Standard Packing'">{{ scanRemainBagText(r) }}</td>
+                      <td>
+                        <button type="button" class="ob-scan-temle" *ngIf="r.std > 0 && r.remainOddQty > 0"
+                                (click)="openTemLeOb(r)" title="Tự lấy bịch trong tồn kho, tách và in tem lẻ TL (phần xuất) + CL (phần còn lại)">
+                          <i class="material-icons">print</i> Tem lẻ
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section class="ob-scan-card">
+              <header>
+                <strong>Vừa scan</strong>
+                <span class="ob-scan-card__sum">{{ pendingScanData.length }} bag · {{ pendingScanTotalQty | number }}</span>
+              </header>
+              <p class="ob-scan-card__empty" *ngIf="!pendingScanData.length">Chưa có bag nào.</p>
+              <div class="ob-scan-card__body" *ngIf="pendingScanData.length">
+                <table>
+                  <thead><tr><th>#</th><th>Giờ</th><th>Mã</th><th>PO</th><th>IMD / bag</th><th class="n">Lượng</th><th></th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let it of pendingScanNewestFirst; let i = index">
+                      <td>{{ pendingScanData.length - i }}</td>
+                      <td>{{ it.scanTime | date:'HH:mm:ss' }}</td>
+                      <td><strong>{{ it.materialCode }}</strong></td>
+                      <td>{{ it.poNumber }}</td>
+                      <td>{{ it.importDate }}</td>
+                      <td class="n">{{ it.quantity | number }}</td>
+                      <td><button type="button" class="ob-scan-del" (click)="removePendingScan(it)" title="Xóa dòng scan sai">✕</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </div>
 
         <div class="ob-toolbar__row ob-toolbar__row--hist">
@@ -1278,6 +1433,208 @@
       <button type="button" class="px-import-dialog__apply" (click)="saveBsImportRows()"
               [disabled]="bsImportBusy || !bsImportRows.length">
         {{ bsImportBusy ? 'Đang lưu…' : 'Lưu vào Xuất BS' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Log LSX kiểu notepad: chi tiết từng bag đã scan xuất -->
+<div class="lsx-log-overlay" *ngIf="showLsxLog" (click)="showLsxLog = false">
+  <div class="lsx-log" (click)="$event.stopPropagation()" role="dialog" aria-label="Log LSX">
+    <div class="lsx-log__head">
+      <h3>Log LSX — chi tiết từng bag</h3>
+      <button class="lsx-log__close" type="button" (click)="showLsxLog = false">✕</button>
+    </div>
+    <div class="lsx-log__bar">
+      <input type="text" [(ngModel)]="lsxLogQuery" (keyup.enter)="loadLsxLog()" placeholder="Nhập / scan LSX…" autocomplete="off">
+      <button type="button" class="refresh-btn" (click)="loadLsxLog()" [disabled]="lsxLogLoading || !lsxLogQuery.trim()">
+        {{ lsxLogLoading ? 'Đang đọc…' : 'Xem' }}
+      </button>
+      <button type="button" class="refresh-btn" (click)="downloadLsxLog(lsxLogShownLsx)" *ngIf="lsxLogLines.length">Tải .txt</button>
+      <span class="lsx-log__sum" *ngIf="lsxLogLines.length">
+        {{ lsxLogShownLsx }} · {{ lsxLogLines.length }} lần scan · tổng {{ lsxLogTotalQty | number }}
+      </span>
+    </div>
+    <p class="lsx-log__err" *ngIf="lsxLogError">{{ lsxLogError }}</p>
+    <div class="lsx-log__table" *ngIf="lsxLogLines.length">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Thời gian</th><th>Người</th><th>Mã hàng</th><th>PO</th><th>IMD</th><th>Bag</th><th>Tem</th><th>Lượng</th><th>Vị trí</th><th>Cách</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let l of lsxLogLines; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ lsxLogTime(l.t) }}</td>
+            <td>{{ l.by || '—' }}</td>
+            <td><strong>{{ l.code }}</strong></td>
+            <td>{{ l.po || '—' }}</td>
+            <td>{{ l.imd || '—' }}</td>
+            <td>{{ l.bag || '—' }}</td>
+            <td>{{ l.tag || '' }}</td>
+            <td class="lsx-log__num">{{ l.qty | number }}</td>
+            <td>{{ l.loc || '—' }}</td>
+            <td>{{ l.m }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- In tem lẻ từ dòng PXK: tự lấy bịch trong tồn kho → tách TL (xuất) + CL (còn lại), nhập GW CL -->
+<div class="wx-overlay" *ngIf="temLeOb">
+  <div class="wx" role="dialog" aria-label="In tem lẻ">
+    <div class="wx__head">
+      <h3>🏷 In tem lẻ — {{ temLeOb.code }}</h3>
+      <button type="button" class="wx__x" (click)="closeTemLeOb()" [disabled]="temLeOb.busy">✕</button>
+    </div>
+    <p class="wx__info">
+      PO {{ temLeOb.po || '—' }} · Standard {{ temLeOb.std | number }} ·
+      Lẻ cần xuất <strong>{{ temLeOb.oddQty | number }}</strong>
+    </p>
+    <p class="wx__info" *ngIf="temLeOb.loading">Đang đọc tồn kho…</p>
+    <ng-container *ngIf="!temLeOb.loading && temLeOb.picks.length">
+      <label class="ob-temle__row">
+        <span>Bịch lấy ra tách (IMD cũ trước)</span>
+        <select class="wx__input" [(ngModel)]="temLeOb.pickIdx" [disabled]="temLeOb.busy">
+          <option *ngFor="let p of temLeOb.picks; let i = index" [ngValue]="i">{{ temLeObPickLabel(p) }}</option>
+        </select>
+      </label>
+      <ng-container *ngIf="temLeObPick as p">
+        <p class="wx__info" *ngIf="p.kind === 'EXACT'">
+          Bịch <strong>{{ p.clTag }}</strong> (IMD {{ p.imd }}) đúng bằng lượng lẻ — không cần tách, scan tem {{ p.clTag }} để xuất.
+        </p>
+        <p class="wx__info" *ngIf="p.kind === 'LAST'">
+          PO {{ p.po }} chỉ còn <strong>1 bag lẻ</strong> (IMD {{ p.imd }}, {{ p.sourceQty | number }}) — xuất nguyên bag,
+          <strong>không cần tách, không có CL</strong>. Scan tem hiện có của bag này{{ p.clTag ? ' (' + p.clTag + ')' : '' }} để xuất.
+        </p>
+        <ng-container *ngIf="p.kind !== 'EXACT' && p.kind !== 'LAST'">
+          <p class="wx__info">
+            Tem in ra: <strong>TL</strong> {{ temLeOb.oddQty | number }} (xuất — chụp hình khi scan) ·
+            <strong>CL</strong> {{ temLeObClQty | number }} (để lại kho)
+          </p>
+          <ng-container *ngIf="temLeOb.needWeigh">
+            <label class="ob-temle__row">
+              <span>GW bịch CL (gram)</span>
+              <input type="number" class="wx__input" min="0" [(ngModel)]="temLeOb.gwClInput" [disabled]="temLeOb.busy"
+                     (keyup.enter)="confirmTemLeOb()">
+            </label>
+            <label class="ob-temle__row" *ngIf="!(temLeOb.gwFullKnown > 0)">
+              <span>GW bag nguyên (gram) — danh mục chưa có</span>
+              <input type="number" class="wx__input" min="0" [(ngModel)]="temLeOb.gwFullInput" [disabled]="temLeOb.busy">
+            </label>
+            <p class="ow__muted" *ngIf="temLeOb.gwFullKnown > 0">GW bag nguyên theo danh mục: {{ temLeOb.gwFullKnown | number }} g</p>
+          </ng-container>
+          <p class="ow__muted" *ngIf="!temLeOb.needWeigh">Mã không thuộc danh mục cân — không cần nhập GW.</p>
+        </ng-container>
+      </ng-container>
+    </ng-container>
+    <p class="wx__msg" *ngIf="temLeOb.error">{{ temLeOb.error }}</p>
+    <div class="wx__foot">
+      <button type="button" class="wx__btn" (click)="closeTemLeOb()" [disabled]="temLeOb.busy">Đóng</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="confirmTemLeOb()"
+              [disabled]="temLeOb.busy || temLeOb.loading || !temLeObPick || temLeObPick.kind === 'EXACT' || temLeObPick.kind === 'LAST'">
+        {{ temLeOb.busy ? 'Đang in…' : 'Tách & in tem' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Bag lẻ (Check lượng PXK): chụp hình bag trên cân + nhập trọng lượng → mới nhận bag -->
+<div class="wx-overlay" *ngIf="oddWeigh">
+  <div class="wx ow" role="dialog" aria-label="Cân bag lẻ">
+    <div class="wx__head">
+      <h3>⚖ Cân bag lẻ — {{ oddWeigh.code }}</h3>
+      <button type="button" class="wx__x" (click)="cancelOddWeigh()" [disabled]="oddWeigh.busy">✕</button>
+    </div>
+    <p class="wx__info">
+      PO {{ oddWeigh.po || '—' }} · {{ oddWeigh.lsx }}<br>
+      Bag vừa scan <strong>{{ oddWeigh.bagQty | number }}</strong> · Standard {{ oddWeigh.std | number }} ·
+      Lẻ theo PXK <strong>{{ oddWeigh.oddQty | number }}</strong>
+      <span class="ow__warn" *ngIf="oddWeigh.bagQty !== oddWeigh.oddQty"> (khác lượng bag vừa scan — % tính theo bag vừa scan)</span>
+    </p>
+
+    <label class="ow__nocam" title="Máy không có / không dùng camera: chỉ nhập số gram, không chụp hình (lưu theo máy)">
+      <input type="checkbox" [checked]="oddWeighNoCamera" (change)="toggleOddWeighNoCamera()">
+      <span>Không dùng camera — chỉ nhập số</span>
+    </label>
+    <div class="ow__body" [class.ow__body--nocam]="oddWeighNoCamera">
+    <div class="ow__left" *ngIf="!oddWeighNoCamera">
+    <div class="ow__cam">
+      <video #oddWeighVideo [hidden]="oddWeigh.photo" playsinline muted autoplay></video>
+      <img *ngIf="oddWeigh.photoPreview" [src]="oddWeigh.photoPreview" alt="Hình bag lẻ">
+      <span class="ow__cam-hint" *ngIf="!oddWeigh.photo && !oddWeigh.cameraOn">Đặt bag lẻ lên cân, thấy rõ số cân rồi chụp.</span>
+      <div class="ow__frame" *ngIf="!oddWeigh.photo && oddWeigh.cameraOn" aria-hidden="true">
+        <span>Đặt màn hình cân + bag vào khung · Space = chụp</span>
+      </div>
+    </div>
+    <div class="ow__cam-act">
+      <button type="button" class="wx__btn wx__btn--primary" *ngIf="!oddWeigh.photo" (click)="captureOddWeighPhoto()" [disabled]="!oddWeigh.cameraOn">📷 Chụp</button>
+      <button type="button" class="wx__btn" *ngIf="oddWeigh.photo" (click)="retakeOddWeighPhoto()" [disabled]="oddWeigh.busy">Chụp lại</button>
+      <label class="wx__btn ow__file">
+        Chọn / chụp ảnh
+        <input type="file" accept="image/*" capture="environment" (change)="onOddWeighFile($event)">
+      </label>
+    </div>
+    </div>
+    <div class="ow__right">
+
+    <div class="ow__fields">
+      <label>
+        <span>Trọng lượng bag lẻ (gram)</span>
+        <input id="oddWeighOdd" type="text" inputmode="decimal" class="wx__input" autocomplete="off"
+               [(ngModel)]="oddWeigh.weightOddInput" (keyup.enter)="saveOddWeigh()">
+      </label>
+      <label *ngIf="!(oddWeigh.catalogWeight > 0)">
+        <span>Trọng lượng chẵn cuộn (gram) — danh mục chưa có</span>
+        <input type="text" inputmode="decimal" class="wx__input" autocomplete="off"
+               [(ngModel)]="oddWeigh.weightFullInput" (keyup.enter)="saveOddWeigh()">
+      </label>
+      <p class="ow__muted" *ngIf="oddWeigh.catalogWeight > 0">Chẵn cuộn theo danh mục: {{ oddWeigh.catalogWeight | number }} g</p>
+      <p class="ow__pct" *ngIf="oddWeighPercent != null" [class.ow__pct--bad]="!oddWeighPercentOk(oddWeighPercent!)">
+        {{ oddWeighPercent! | number:'1.1-1' }}% · {{ oddWeighPercentOk(oddWeighPercent!) ? 'OK' : 'Không đạt (lệch > ±5%)' }}
+      </p>
+    </div>
+    </div>
+    </div>
+
+    <p class="wx__msg" *ngIf="oddWeigh.error">{{ oddWeigh.error }}</p>
+    <div class="wx__foot ow__foot">
+      <button type="button" class="wx__btn" (click)="openWeighReport(oddWeigh.code, oddWeigh.po, oddWeigh.lsx, oddWeigh.maKho)" [disabled]="oddWeigh.busy"
+              title="Mã không cân được (dây rút, lá đồng, theo bộ…) — gửi duyệt">Báo không cân được</button>
+      <button type="button" class="wx__btn" *ngIf="oddWeighReported" (click)="acceptOddWeighWithoutWeight()">Nhận bag (đã báo)</button>
+      <span class="ow__spacer"></span>
+      <button type="button" class="wx__btn" (click)="cancelOddWeigh()" [disabled]="oddWeigh.busy">Hủy bag</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="saveOddWeigh()" [disabled]="oddWeigh.busy || (!oddWeigh.photo && !oddWeighNoCamera)">
+        {{ oddWeigh.busy ? 'Đang lưu…' : 'Lưu & nhận bag' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Report: mã không cân được (tách lẻ & cân) → danh sách Check lượng PXK chờ duyệt -->
+<div class="wx-overlay" *ngIf="weighReport" [class.wx-overlay--top]="!!oddWeigh" (click)="weighReport = null">
+  <div class="wx" (click)="$event.stopPropagation()" role="dialog" aria-label="Report không cân">
+    <div class="wx__head">
+      <h3>Report — không cân được</h3>
+      <button type="button" class="wx__x" (click)="weighReport = null">✕</button>
+    </div>
+    <p class="wx__info"><strong>{{ weighReport.code }}</strong><ng-container *ngIf="weighReport.po"> · PO {{ weighReport.po }}</ng-container><ng-container *ngIf="weighReport.lsx"> · {{ weighReport.lsx }}</ng-container></p>
+    <div class="wx__opts">
+      <label *ngFor="let r of weighReasons" class="wx__opt">
+        <input type="radio" name="wxReason" [value]="r" [(ngModel)]="weighReport.choice"> {{ r }}
+      </label>
+      <label class="wx__opt">
+        <input type="radio" name="wxReason" [value]="weighOther" [(ngModel)]="weighReport.choice"> Lý do khác
+      </label>
+      <input *ngIf="weighReport.choice === weighOther" type="text" class="wx__input" [(ngModel)]="weighReport.other"
+             placeholder="Nhập lý do…" maxlength="200" autocomplete="off">
+    </div>
+    <p class="wx__msg" *ngIf="weighReport.msg" [class.wx__msg--ok]="weighReport.ok">{{ weighReport.msg }}</p>
+    <div class="wx__foot">
+      <button type="button" class="wx__btn" (click)="weighReport = null">{{ weighReport.ok ? 'Đóng' : 'Hủy' }}</button>
+      <button type="button" class="wx__btn wx__btn--primary" *ngIf="!weighReport.ok" [disabled]="weighReport.busy" (click)="submitWeighReport()">
+        {{ weighReport.busy ? 'Đang gửi…' : 'Gửi' }}
       </button>
     </div>
   </div>

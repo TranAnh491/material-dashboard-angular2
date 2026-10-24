@@ -35,16 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminUpdateUserProfile = adminUpdateUserProfile;
 const admin = __importStar(require("firebase-admin"));
-function isAdminOrManager(role) {
-    const r = (role || '').toString().trim().toLowerCase();
-    const normalized = r
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '');
-    return (normalized === 'admin' ||
-        normalized === 'quan ly' ||
-        r === 'admin' ||
-        r === 'quản lý');
-}
+const authz_1 = require("./authz");
 function isValidEmail(s) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
@@ -64,15 +55,11 @@ function normalizeAspEmployeeId(input) {
  * Admin: cập nhật tên, bộ phận, email đăng nhập, mã ASP (Firebase Auth + Firestore).
  */
 async function adminUpdateUserProfile(callerUid, targetUid, patch) {
-    var _a, _b;
+    var _a;
     if (!callerUid || !targetUid) {
         throw new Error('Thiếu callerUid hoặc targetUid.');
     }
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     const emailRaw = typeof patch.email === 'string' ? patch.email.trim().toLowerCase() : undefined;
     if (emailRaw !== undefined && emailRaw.length > 0 && !isValidEmail(emailRaw)) {
         throw new Error('Email không hợp lệ.');
@@ -142,7 +129,7 @@ async function adminUpdateUserProfile(callerUid, targetUid, patch) {
     await admin.firestore().collection('user-tab-permissions').doc(targetUid).set(tabMerge, { merge: true });
     const after = await admin.auth().getUser(targetUid);
     const userDoc = await admin.firestore().collection('users').doc(targetUid).get();
-    const savedEmployeeId = ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.employeeId) || undefined;
+    const savedEmployeeId = ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.employeeId) || undefined;
     return { email: (after.email || emailRaw || '').toLowerCase(), employeeId: savedEmployeeId };
 }
 //# sourceMappingURL=admin-update-user-profile.js.map

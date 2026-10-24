@@ -7,69 +7,39 @@
 
 .eq-shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   background: #f4f7fb;
   overflow: hidden;
 }
 
-.eq-side {
-  width: 248px;
-  flex: 0 0 248px;
-  background: #0e2340;
-  color: #dbe7f5;
+.eq-tabs {
   display: flex;
-  flex-direction: column;
-  overflow: auto;
+  gap: 4px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #e6edf5;
+  overflow-x: auto;
+  flex: 0 0 auto;
 }
-
-.eq-brand {
-  display: flex;
-  gap: 10px;
+.eq-tabs button {
+  display: inline-flex;
   align-items: center;
-  padding: 18px 16px 12px;
-}
-
-.eq-brand strong { display: block; color: #fff; font-size: 16px; }
-.eq-brand small { color: #93a4bd; font-size: 12px; }
-
-.eq-brand__mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #2563eb;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-}
-
-.eq-nav { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
-.eq-nav__label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 14px 8px 4px;
-  color: #9fb0c7;
-  font-size: 13px;
-}
-.eq-nav button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
+  gap: 6px;
+  height: 42px;
+  padding: 0 14px;
   border: 0;
+  border-bottom: 3px solid transparent;
   background: transparent;
-  color: #d5e2f2;
-  text-align: left;
-  border-radius: 8px;
-  padding: 9px 12px;
+  color: #475569;
   font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
-.eq-nav button .material-icons,
-.eq-nav__label .material-icons { font-size: 18px; }
-.eq-nav button:hover { background: rgba(255,255,255,.06); }
-.eq-nav button.is-on { background: #2563eb; color: #fff; }
+.eq-tabs button .material-icons { font-size: 18px; }
+.eq-tabs button:hover { color: #0f172a; background: #f8fafc; }
+.eq-tabs button.is-on { color: #2563eb; border-bottom-color: #2563eb; }
 
 .eq-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .eq-scroll { flex: 1; overflow: auto; padding: 16px 18px 28px; }
@@ -528,9 +498,6 @@
 @media (max-width: 1200px) {
   .eq-cards { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
   .eq-charts, .eq-work.has-panel { grid-template-columns: 1fr; }
-  .eq-side { width: 72px; flex-basis: 72px; }
-  .eq-brand div, .eq-nav button, .eq-nav__label { font-size: 0; }
-  .eq-nav button .material-icons, .eq-nav__label .material-icons, .eq-brand__mark { font-size: 18px; }
 }
 
 .eq-mobile__nav {
@@ -639,7 +606,7 @@
 
 @media print {
   .eq-mobile { display: none !important; }
-  .eq-side, .eq-top, .eq-scroll > :not(.eq-labels), .no-print, .eq-modal { display: none !important; }
+  .eq-tabs, .eq-top, .eq-scroll > :not(.eq-labels), .no-print, .eq-modal { display: none !important; }
   .eq-shell, :host, .eq-main, .eq-scroll { height: auto; overflow: visible; background: #fff; }
   .eq-label, .eq-label__logo {
     -webkit-print-color-adjust: exact;
@@ -856,3 +823,23 @@
   .eq-list-dash .wo-stats,
   .eq-maint .wo-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+.eq-sum { margin-left: auto; font-size: 13px; color: #475569; }
+.eq-sum b { font-size: 15px; }
+.eq-sum .ok { color: #16a34a; }
+.eq-sum .bad { color: #dc2626; }
+.eq-sum .open { color: #d97706; }
+
+.eq-panel__title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.eq-panel__title h2 { margin: 0; font-size: 16px; }
+.eq-panel__title p { margin: 2px 0 0; color: #64748b; font-size: 12px; }
+.eq-panel__itemhead { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+.eq-item-row { padding: 6px 0; border-bottom: 1px solid #eef2f7; }
+.eq-item-row__main { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.eq-item-row__name { font-size: 13.5px; font-weight: 600; }
+.eq-choice { display: inline-flex; gap: 6px; flex: 0 0 auto; }
+.eq-choice .eq-pill { height: 36px; min-width: 76px; justify-content: center; font-size: 13px; }
+.eq-item-row__note { width: 100%; margin-top: 6px; height: 32px; }
+.eq-more { margin: 8px 0; }
+.eq-more summary { cursor: pointer; color: #2563eb; font-size: 13px; padding: 4px 0; }
+.eq-panel__actions .eq-btn { height: 40px; min-width: 88px; justify-content: center; }

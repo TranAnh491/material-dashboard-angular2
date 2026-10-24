@@ -2104,3 +2104,82 @@
   .material-icons { font-size: 20px; }
 }
 
+
+/* ===== Bảng scan máy tính (giống Outbound) ===== */
+.fgc-big-input { height: 46px !important; font-size: 19px !important; font-weight: 600; min-width: 320px; }
+.fgc-board { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; width: 100%; }
+.fgc-flash { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; background: #F4F4F2; border: 2px solid #E5E5E0;
+  font-size: 18px; font-weight: 700; color: #252823;
+  .material-icons { font-size: 28px; }
+  &--ok { background: #E8F6EE; border-color: #269B62; color: #1B6E46; }
+  &--err { background: #FDEAEA; border-color: #E05252; color: #A92F2F; animation: fgcErr 0.6s 2; } }
+@keyframes fgcErr { 50% { background: #F8C9C9; } }
+.fgc-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fgc-progress { flex: 1 1 360px; display: flex; align-items: center; gap: 10px; font-size: 14px;
+  span { font-weight: 600; } strong { font-size: 18px; min-width: 64px; text-align: right; }
+  &__bar { flex: 1; height: 14px; border-radius: 7px; background: #E5E5E0; overflow: hidden; div { height: 100%; background: #269B62; } } }
+.fgc-act { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 1px solid #252823; border-radius: 6px;
+  background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; .material-icons { font-size: 18px; } }
+.fgc-id { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid #E5E5E0; border-radius: 8px; background: #fff;
+  strong { font-size: 22px; } span { font-size: 13px; color: #555; }
+  &__tags { margin-left: auto; display: flex; gap: 6px; } }
+.fgc-tag { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 800;
+  &--red { background: #D32F2F; color: #fff; } &--amber { background: #FFF3D6; color: #8A5A00; }
+  &--blue { background: #E6F0FB; color: #1F5FA8; } &--gray { background: #F4F4F2; color: #555; } }
+.fgc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.fgc-card { border: 1px solid #E5E5E0; border-radius: 8px; background: #fff;
+  header { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #E5E5E0; font-size: 14px; span { color: #747770; font-size: 12px; } }
+  &__empty { margin: 12px; color: #747770; font-size: 13px; }
+  &__body { max-height: 300px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid #F0F0EC; text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #F9F9F7; font-size: 12px; }
+  .n { text-align: right; }
+  tr.is-done td { background: #E8F6EE; } tr.is-over td { background: #FDEAEA; color: #A92F2F; font-weight: 700; } tr.is-active td { background: #FFF8E6; } }
+@media (max-width: 899px) { .fgc-board { display: none; } }
+
+/* ===== Giao diện kiểu Excel (giống FG Out): lưới kẻ đủ, cột đủ rộng, tối giản ===== */
+.excel-table {
+  border-collapse: collapse !important;
+  font-size: 13px !important;
+  color: #000;
+}
+.excel-table th,
+.excel-table td {
+  border: 1px solid #d4d4d4 !important;
+  padding: 0 8px !important;
+  height: 28px;
+  background: #fff;
+  color: #000;
+  white-space: nowrap;
+  min-width: 90px;
+  max-width: none !important;
+  text-overflow: ellipsis;
+}
+.excel-table thead th {
+  background: #f1f1f1 !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0 !important;
+  text-transform: none;
+  text-align: center;
+  padding: 4px 8px !important;
+}
+.excel-table th.row-header, .excel-table td.row-header { min-width: 48px; text-align: center; background: #f1f1f1 !important; }
+.excel-table tbody tr:hover td { background: #eaf1fb !important; }
+.excel-table td input,
+.excel-table td select {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  height: 26px;
+  padding: 0 !important;
+  font-size: 13px;
+  width: 100%;
+}
+.excel-table td input:focus,
+.excel-table td select:focus { outline: 2px solid #1a73e8; outline-offset: -2px; background: #fff !important; }
+.excel-table td button { box-shadow: none !important; border-radius: 0 !important; }
+.excel-table td.number-cell { text-align: right; }
+.excel-table tr.factory-section-header-row td { background: #f1f1f1 !important; text-align: left; font-weight: 600; }

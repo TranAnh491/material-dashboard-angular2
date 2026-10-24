@@ -1,4 +1,9 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef, NgZone } from '@angular/core';
+import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, RM_QTY_DECIMALS_4 } from '../../services/rm-scan-qty.util';
+import { PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
+import { WEIGH_EXEMPT_REASONS, WEIGH_EXEMPT_OTHER, buildWeighExemptReason, temLeMustWeigh, catalogBagWeight, WEIGH_TOLERANCE_PERCENT } from '../../services/weigh-exempt-report';
+import { PxkOddWeighService } from '../../services/pxk-odd-weigh.service';
+import { readScaleNumber } from '../../services/scale-ocr.util';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef, NgZone, ViewChild, ElementRef } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { Subject, BehaviorSubject, Subscription, firstValueFrom } from 'rxjs';
@@ -13,7 +18,8 @@ import { TabPermissionService } from '../../services/tab-permission.service';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { ExcelImportService } from '../../services/excel-import.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
-import { TemXuatKhoService, PxkLineExport } from '../../services/tem-xuat-kho.service';
+import { TemLeSplitLog, TemLeSplitResult, TemLeClService } from '../../services/tem-le-cl.service';
+import { TemXuatKhoService } from '../../services/tem-xuat-kho.service';
 import { LabelReprintFlagService } from '../../services/label-reprint-flag.service';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
@@ -31,35 +37,35 @@ import {
   splitMultiLocations,
   joinMultiLocations
 } from '../layout-warehouse/layout-warehouse-location.util';
-import {
-  LayoutWhPick,
-  LayoutLocGroup,
-  getLayoutLocationGroups,
-  normalizeLayoutLocToken,
-  isJWarehouseLocation,
-  jKhoMatSRuleLabel,
-  jKhoMatSRuleOfRow,
-  jKhoMatSFirstRowForPrefix,
-  jKhoMatSRowIdFromSlot,
-  jKhoMatBlocksForRow,
-  parseJRackLocation,
-  normalizeJRackLocation,
-  formatJRackAisle,
-  formatJRackBlock,
-  compactJRackLocations
-} from './layout-location-catalog';
+import { LayoutWhPick, LayoutLocGroup, getLayoutLocationGroups, normalizeLayoutLocToken, isJWarehouseLocation, jKhoMatSRuleLabel, jKhoMatSRuleOfRow, jKhoMatSFirstRowForPrefix, jKhoMatSRowIdFromSlot, parseJRackLocation, normalizeJRackLocation, formatJRackAisle, formatJRackBlock, compactJRackLocations } from './layout-location-catalog';
 import { normalizeShelfGroups, shelfGroupRows } from './shelf-group-catalog';
+import {
+  ACTION_DEFS,
+  MATERIALS_MATRIX_DOC_PREFIX,
+  MATERIALS_MATRIX_PASS,
+  MATRIX_DEFAULT_ROW,
+  MatrixFactory,
+  MatrixRuleValue,
+  RULE_DEFS,
+  matrixDateMs,
+  matrixList,
+  normalizePerms,
+  normalizeRuleValues
+} from './materials-matrix';
 import { B037_REQUIRED_LOCATION, isB037Code } from './fridge-nvl-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
+import { LinkQPendingPxkService, PendingPxkInfo } from '../../services/linkq-pending-pxk.service';
 import { KkCatalogService, KkCatalogEntry } from '../../services/kk-catalog.service';
+import { SxxkSuspectService } from '../../services/sxxk-suspect.service';
+import { InventoryStockReportService } from '../../services/inventory-stock-report.service';
 // xlsx (~nặng) chỉ dùng khi bấm nút xuất/nhập Excel — nạp động tại chỗ dùng
 // (`const XLSX = await import('xlsx')`), không nhồi vào chunk materials.
 import { ReadTrackerService } from '../../services/read-tracker.service';
+import { KkHistoryLogService, kkLogDateKey } from '../../services/kk-history-log.service';
 import { StorageUnitSize } from '../../models/storage-unit.model';
 import { ImportProgressDialogComponent } from '../../components/import-progress-dialog/import-progress-dialog.component';
-import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { buildTemThungQrData, stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import {
   MaterialQrLabel,
@@ -162,9 +168,15 @@ export interface InventoryBagRow {
   selected?: boolean;
   exported?: boolean;
   leQty?: number | null;
+  /** Bag đã tách lẻ (xuất 1 phần / đang là bịch CL) — popup bag ghi chữ "Lẻ" */
+  isLe?: boolean;
+  /** Lượng còn lại của bag lẻ */
+  leRemain?: number;
+  /** GW (gram) bịch CL cân lúc tách tem lẻ */
+  clGw?: number;
 }
 
-type ResetLowStockRow = {
+export type ResetLowStockRow = {
   id: string;
   materialCode: string;
   poNumber: string;
@@ -175,8 +187,8 @@ type ResetLowStockRow = {
 };
 
 /** Dòng tổng hợp Kiểm tra KK theo mã hàng. */
-type KkWarehouse = 'D1' | '00' | 'J' | 'ASM3';
-type KkLocMaterialRow = {
+export type KkWarehouse = 'D1' | '00' | 'J' | 'ASM3';
+export type KkLocMaterialRow = {
   materialCode: string;
   warehouse: KkWarehouse;
   stock: number;
@@ -191,7 +203,7 @@ type KkLocMaterialRow = {
 };
 
 /** Dòng tổng hợp Kiểm tra KK theo loại hàng (trong 1 Zone). */
-type KkTypeRow = {
+export type KkTypeRow = {
   productType: string;
   groupCodes: string[];
   warehouse: KkWarehouse;
@@ -204,7 +216,7 @@ type KkTypeRow = {
 };
 
 /** Dòng kết quả tìm trong popup Dời kho (search theo mã pallet hoặc vị trí). */
-type DoiKhoRow = {
+export type DoiKhoRow = {
   id: string;
   materialCode: string;
   poNumber: string;
@@ -215,20 +227,22 @@ type DoiKhoRow = {
 };
 
 /** Kho đích khi Dời kho — tiền tố gắn vào đầu Vị trí. */
-type DoiKhoWh = 'J' | 'ASM3';
+export type DoiKhoWh = 'J' | 'ASM3';
 
-type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
+export type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
 
-type MaterialsOtpAction =
+export type MaterialsOtpAction =
   | 'import'
   | 'consolidate'
   | 'reset-all'
   | 'fix-batch'
   | 'snapshot'
   | 'hidden-list'
-  | 'manual-on';
+  | 'manual-on'
+  | 'unlock-xt'
+  | 'clear-kk-warning';
 
-type HiddenInventoryRow = {
+export type HiddenInventoryRow = {
   id: string;
   factory: string;
   materialCode: string;
@@ -243,6 +257,50 @@ type HiddenInventoryRow = {
   daysLeft: number;
 };
 
+/** So sánh tồn LinkQ với tổng tồn web theo mã. */
+/** Tab trang so sánh LinkQ. diffPos = lệch dương (web > LinkQ), diffNeg = lệch âm (LinkQ > web). */
+export type LinkQCompareTab = 'all' | 'linkq' | 'diff' | 'diffPos' | 'diffNeg' | 'linkqOnly' | 'webOnly';
+
+export type LinkQCompareRow = {
+  code: string;
+  linkQ: number | null;
+  web: number;
+  /** Web − LinkQ */
+  diff: number;
+  kind: 'both' | 'linkqOnly' | 'webOnly';
+  isDiff: boolean;
+  linkQText: string;
+  webText: string;
+  diffText: string;
+  statusLabel: string;
+  statusCls: string;
+  pos: Array<{ po: string; location: string; stock: number; stockText: string }>;
+};
+
+export type KkTypeByCodeRow = {
+  code: string;
+  name: string;
+  lines: number;
+  /** Aging PO cũ nhất của mã (tháng) */
+  aging: number | null;
+  web: number;
+  linkQ: number | null;
+  diff: number | null;
+  warn: boolean;
+  checked: number;
+  /** Số dòng cần KK (bỏ dòng Aging < 1 tháng) */
+  kkLines: number;
+  locs: string;
+};
+
+export type KkStockBoxRef = {
+  productType: string;
+  sourceProductType?: string;
+  sourceProductTypes?: string[];
+  pinSplit?: string;
+  groupCodes?: string[];
+};
+
 @Component({
   selector: 'app-materials',
   templateUrl: './materials.component.html',
@@ -251,7 +309,6 @@ type HiddenInventoryRow = {
 export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Nhà máy đang xem (ASM1 ⇄ ASM2) — đổi qua factory-switcher trên UI, đồng bộ với query param `factory`. */
   selectedFactory: 'ASM1' | 'ASM2' = 'ASM1';
-  readonly factoryOptions: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
 
   /** Mobile / PDA: giao diện chỉ xem tồn kho (không sửa bảng). */
   isMobile = false;
@@ -279,7 +336,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   isSavingStorageUnit = false;
   private storageUnitCatalogMap = new Map<string, StorageUnitSize>();
   /** Danh mục NVLKH: mã NVL (đã chuẩn hóa) → khách hàng (hoặc "Shared"). */
-  private nvlkhCustomerMap = new Map<string, string>();
+  protected nvlkhCustomerMap = new Map<string, string>();
   isCatalogLoading = false;
   isResetting = false; // Loading state for reset operation
   isDownloadingSearch = false;
@@ -290,22 +347,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Trang Kiểm tra KK (tab Quản lý Nguyên Liệu). */
   showKkLocMap = false;
   kkLocMapLoading = false;
-  kkLocMapStatus = '';
   kkLocMapQuery = '';
   /** Đã đọc tồn kho (Play hoặc search đủ 4 số). Mở trang không tự đọc. */
   kkStockLoaded = false;
   kkLocMapView: 'location' | 'material' | 'type' | 'manager' | null = null;
   kkLocMapWarehouseFilter: '' | KkWarehouse = '';
-  kkLocMapBoxes: Array<{ loc: string; checked: number; total: number }> = [];
-  kkLocMapByMaterial: KkLocMaterialRow[] = [];
   kkLocMapByType: KkTypeRow[] = [];
-  private kkLocMapRowCache = new Map<string, InventoryMaterial[]>();
-  private kkLocMapMaterialCache = new Map<string, InventoryMaterial[]>();
-  private kkLocMapTypeCache = new Map<string, InventoryMaterial[]>();
-  private kkLocMapLoadId = 0;
-  kkLocMapBusy = false;
-  /** Menu thả xuống trên thanh công cụ trang KK: 'print' = In & báo cáo, 'tools' = Công cụ */
-  kkToolMenu: 'print' | 'tools' | null = null;
+  protected kkLocMapMaterialCache = new Map<string, InventoryMaterial[]>();
+  protected kkLocMapTypeCache = new Map<string, InventoryMaterial[]>();
   kkLiveActive = false;
   kkLiveLoading = false;
   kkLiveError = '';
@@ -331,13 +380,40 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     lastAt: Date;
     codes: string[];
   }> = [];
-  /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
-  /** warehouse|mã — dòng tổng đang xổ chi tiết PO/IMD trong popup. */
-  kkLocMapExpandedKey: string | null = null;
   showKkCatalogPopup = false;
   kkCatalogTab: 'codes' | 'shelves' = 'codes';
   kkShelfRows: Array<{ shelf: string; groups: string }> = [];
   kkShelfSaving = false;
+  /** Đã lọc + sắp xếp theo tab / ô tìm. */
+  linkQCompareVisibleRows: LinkQCompareRow[] = [];
+  /** Phần đang render (tăng dần khi cuộn). */
+  linkQCompareShownRows: LinkQCompareRow[] = [];
+  protected static readonly LINKQ_COMPARE_PAGE = 200;
+  protected static readonly LINKQ_COMPARE_TTL_MS = 90_000;
+  private static readonly LINKQ_PACK_TTL_MS = 5 * 60_000;
+  private linkQPackCache = new Map<string, { pack: { map: Map<string, number>; label: string }; ts: number }>();
+  linkQCheckOnly = false;
+  protected linkQCheckSet = new Set<string>();
+  protected linkQSheetEl: HTMLElement | null = null;
+  private linkQSheetUnlisten: (() => void) | null = null;
+
+  @ViewChild('lqsSheet') set linkQSheetRef(ref: ElementRef<HTMLElement> | undefined) {
+    this.linkQSheetUnlisten?.();
+    this.linkQSheetUnlisten = null;
+    const el = ref?.nativeElement || null;
+    this.linkQSheetEl = el;
+    if (!el) return;
+    this.ngZone.runOutsideAngular(() => {
+      const onScroll = () => {
+        if (el.scrollTop + el.clientHeight < el.scrollHeight - 400) return;
+        if (this.linkQCompareShownRows.length >= this.linkQCompareVisibleRows.length) return;
+        this.ngZone.run(() => this.growLinkQCompareShown());
+      };
+      el.addEventListener('scroll', onScroll, { passive: true });
+      this.linkQSheetUnlisten = () => el.removeEventListener('scroll', onScroll);
+    });
+  }
+
   showTieuHuyPopup = false;
   tieuHuyImporting = false;
   tieuHuyBusy = false;
@@ -369,38 +445,37 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkCatalogImporting = false;
   kkCatalogSavingCode = '';
   private kkCatalogLocCommitted = new Map<string, string>();
-  private kkCatalogTypeMap = new Map<string, string>();
+  protected kkCatalogTypeMap = new Map<string, string>();
   kkActiveProductType: string | null = null;
-  private kkActiveTypeDraft: KkTypeRow | null = null;
-  kkTypePage = 1;
-  kkTypePageSize = 20;
-  readonly kkTypePageSizeOptions = [20, 50, 100];
+  protected kkActiveTypeDraft: KkTypeRow | null = null;
   /** Ô search mã / tên / pallet trong bảng chi tiết KK theo loại hàng. */
   kkTypeDetailQuery = '';
-  kkTypeSearchDraft = '';
+  /** Ô tìm trong trang chi tiết box / Xem toàn bộ mục: mã, PO, IMD, vị trí, pallet, tên. */
+  kkTypeInnerQuery = '';
+  /** Lọc cảnh báo trong chi tiết box: '' = tất cả, 'any' = có cảnh báo, hoặc 1 loại cảnh báo. */
+  kkTypeWarnFilter = '';
+  kkWarnClearPending = '';
+  /** Lọc theo LinkQ: '' = tất cả, 'yes' = mã có trong LinkQ, 'no' = không có. */
+  kkTypeLinkQFilter = '';
+  /** Lọc trạng thái KK: '' tất cả · 'done' đã KK · 'todo' chưa KK. */
+  kkTypeKkFilter: '' | 'done' | 'todo' = '';
+  /** Lọc cột chênh lệch (Web − LinkQ − PXK): '' tất cả · bad |diff|>1 · ok · pos · neg. */
+  kkTypeDiffFilter: '' | 'bad' | 'ok' | 'pos' | 'neg' = '';
   kkTypeFilterLoc = '';
   /** Lọc Chi tiết KK theo mã vừa scan vị trí. */
   kkLocScanDay: '' | 'today' | 'yesterday' = '';
-  kkLocScanLoading = false;
-  private kkLocScanIds = new Set<string>();
-  private kkLocScanReady = false;
-  private kkLocScanReq = 0;
+  protected kkLocScanIds = new Set<string>();
+  protected kkLocScanReady = false;
+  protected kkLocScanReq = 0;
   kkTypeFilterWh: '' | KkWarehouse = '';
   kkTypeFilterRolls = '';
   kkTypeSortQtyDesc = false;
-  kkTypeShowExtraFilter = false;
-  private kkTypeCacheRev = 0;
-  private kkTypeBoxesSig = '';
-  private kkManagerRowsSig = '';
-  private kkManagerRowsCached: Array<{
-    name: string;
-    codeCount: number;
-    typeCount: number;
-    types: string[];
-    prefixes: string[];
-    mucs: string[];
-  }> = [];
-  private kkTypeBoxesCached: Array<{
+  /** Chi tiết box: mã vừa tick KK mới nhất lên đầu. */
+  kkTypeSortKkTimeDesc = false;
+  protected kkTypeCacheRev = 0;
+  protected kkTypeBoxesSig = '';
+  protected kkManagerRowsSig = '';
+  protected kkTypeBoxesCached: Array<{
     productType: string;
     sourceProductType?: string;
     sourceProductTypes?: string[];
@@ -414,43 +489,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }> = [];
   /** Cache cho getter `kkTypeBoxGroups` — khoá theo `kkTypeBoxesSig` để không gom nhóm
    * lại (Map mới + regex/normalize cho ~100 loại) mỗi lần change detection. */
-  private kkTypeBoxGroupsSig = ' ';
-  private kkTypeBoxGroupsCached: Array<{
-    category: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }> = [];
-  kkTypeMucCollapsed: Record<string, boolean> = {};
-  kkConnectorRackView: Record<string, { shelf: string; level: number }> = {
-    B009: { shelf: 'S07', level: 1 },
-    B016: { shelf: 'S11', level: 1 },
-    B017: { shelf: 'S23', level: 1 },
-    B018: { shelf: 'S01', level: 1 }
-  };
-  /** Mở danh sách mã phẳng (Chi tiết) theo đầu mã B009/B016/B018 — đã thay bằng bảng KK */
-  kkConnectorFloorCodesOpen: Record<string, boolean> = {};
-  /** Sơ đồ kệ B009/B016/B018 chỉ mở khi bấm Sơ Đồ. */
-  kkConnectorBoardOpen: Record<string, boolean> = {};
-  /** null = chưa set, mọi vị trí đều chọn được. */
-  kkMucAllowedLocs: Record<string, string[] | null> = {};
-  kkMucLocPicker: {
-    category: string;
-    shelves: Array<{ shelf: string; levels: Array<{ level: number; locs: string[] }> }>;
-  } | null = null;
-  kkMucLocPickerOn: Record<string, boolean> = {};
-  kkMucLocPickerSaving = false;
-  private kkMucAllowedLoaded = false;
-  kkMucExtraShelves: Record<string, string[]> = {};
-  kkMucRemovedShelves: Record<string, string[]> = {};
+  protected kkTypeBoxGroupsSig = ' ';
   kkMucShelfMenuCategory = '';
-  kkMucShelfMenuX = 0;
-  kkMucShelfMenuY = 0;
   kkMucShelfDraft = '';
   kkMucShelfSaving = false;
   /** Chi tiết KK theo tầng mâm (B009/B016/B018) — hiện bảng kiểm kê mọi mã trong dải */
@@ -468,33 +508,26 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Chi tiết KK — toàn bộ tồn kho, không phân loại theo loại hàng */
   kkAllStockDetail = false;
   readonly kkAllStockDetailTitle = 'Chi tiết KK';
-  readonly kkB009Blocks = [1, 2, 3] as const;
   kkActivePinSplit: '1-4' | '5-10' | null = null;
   kkActiveSourceProductType: string | null = null;
-  private kkTypeDetailSig = '';
+  protected kkTypeDetailSig = '';
   private kkTypeDetailAllCached: InventoryMaterial[] = [];
-  private kkTypeDetailFilteredCached: InventoryMaterial[] = [];
+  protected kkTypeDetailFilteredCached: InventoryMaterial[] = [];
   private kkTypeFilteredRollsCached = 0;
   private kkTypeLiveStock = 0;
   private kkTypeLiveChecked = 0;
+  private kkTypeLiveTotal = 0;
   private kkTypePalletNotesSig = '';
   private kkTypePalletNotesCached = new Map<string, string>();
   showKkTypeScanModal = false;
-  showKkScanGuide = false;
-  kkScanGuideSending = false;
-  kkScanGuideSendMsg = '';
-  kkScanGuideSendErr = false;
   /** inventory = Scan kiểm kê (đếm box + KK); location = Scan vị trí (chỉ cập nhật vị trí) */
   kkTypeScanMode: 'inventory' | 'location' = 'inventory';
   kkTypeScanStep: 'operator' | 'location' | 'codes' = 'location';
-  /** Tab UI màn scan pro: Scan | Vị trí | Nhật ký */
-  kkTypeScanUiTab: 'scan' | 'shelf' | 'log' = 'scan';
   kkTypeScanOperator = '';
   kkTypeScanOperatorInput = '';
   kkTypeScanLocation = '';
   kkTypeScanLocationInput = '';
   kkTypeScanQrInput = '';
-  kkTypeScanBusy = false;
   kkTypeScanMaterialCode = '';
   kkTypeScanStandardDraft: number | '' = '';
   kkTypeScanOkCount = 0;
@@ -504,24 +537,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeScanLastReadMs: number | null = null;
   kkTypeScanLastSaveMs: number | null = null;
   kkTypeScanLastSavePending = false;
-  nlScanLastReadMs: number | null = null;
   kkTypeScanOpUntil: Date | null = null;
-  private kkTypeScanExtraLines: InventoryMaterial[] = [];
-  private kkTypeScanCartons: Record<string, number> = {};
+  protected kkTypeScanExtraLines: InventoryMaterial[] = [];
+  protected kkTypeScanCartons: Record<string, number> = {};
   /** Hàng đợi QR khi user scan tiếp lúc đang ghi. */
-  private kkHidQrQueue: Array<{ raw: string; readMs: number }> = [];
-  private kkHidQrDraining = false;
+  protected kkHidQrQueue: Array<{ raw: string; readMs: number }> = [];
+  protected kkHidQrDraining = false;
   private kkScanLogSeq = 0;
   private kkScanWriteChain: Promise<void> = Promise.resolve();
   private kkScanWritesInFlight = 0;
   private kkBeepCtx: AudioContext | null = null;
   private hidScanTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
   private hidScanBound = new WeakSet<HTMLInputElement>();
-  private kkPrevViewport = '';
-  private kkDocScanHandler: ((e: KeyboardEvent) => void) | null = null;
-  private kkDocScanBuf = '';
-  private kkDocScanAt = 0;
-  private kkDocScanTimer: ReturnType<typeof setTimeout> | null = null;
+  protected kkPrevViewport = '';
+  protected kkDocScanHandler: ((e: KeyboardEvent) => void) | null = null;
+  protected kkDocScanBuf = '';
+  protected kkDocScanAt = 0;
+  protected kkDocScanTimer: ReturnType<typeof setTimeout> | null = null;
   kkTypeScanErr = '';
   /** Popup xác nhận sau mỗi lần scan mã — phải bấm Đồng ý mới scan tiếp (chỉ Scan kiểm kê) */
   showKkTypeScanConfirm = false;
@@ -540,31 +572,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     kind?: 'ok' | 'home' | 'over';
     scanned?: string;
   } | null = null;
-  private kkTypeScanLocToastTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
+  protected kkTypeScanLocToastTimer: ReturnType<typeof setTimeout> | null = null;
+  protected static readonly KK_SCAN_OP_KEY = 'rm-kk-scan-operator-session-v1';
   private kkScanOpTimer: any;
-  kkTypePrintBusy = false;
   showKkTypeReportMenu = false;
-  showKkShelfLabelPicker = false;
-  kkShelfLabelQuery = '';
-  showKkMucReportPicker = false;
-  kkMucReportQuery = '';
-  /** Tick đầu mã để in giấy kiểm kê. */
-  kkKiemKeSelectedPrefixes: Record<string, boolean> = {};
-  showKkCodeLookup = false;
   showKkPalletCheck = false;
   kkPalletCheckBusy = false;
   kkPalletCheckRows: Array<{ warehouse: KkWarehouse; label: string; pallets: number; lines: number; noPallet: number }> = [];
   kkPalletCheckTotal = 0;
-  kkCodeLookupInput = '';
-  kkCodeLookupBusy = false;
-  kkCodeLookupResult: {
-    code: string;
-    productType: string;
-    stock: number;
-    lines: number;
-    found: boolean;
-  } | null = null;
   kkTypeReportBusy = false;
   /** Tick: cộng các mã đang ở kho WH3/ASM3 vào số liệu KK. Bỏ tick thì không tính. */
   kkCountWh3 = true;
@@ -572,36 +587,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkWh3Only = false;
   /** Chỉ hiện mã / vị trí kho J (R1–R99, S1–S99, J5, TRA…). */
   kkJOnly = false;
-  private kkJMovedSig = '';
-  private kkJMovedCached = { codes: 0, lines: 0, stock: 0 };
   /** Lọc chỉ các dòng / loại còn chưa tick KK. */
   kkFilterUncheckedOnly = false;
   private inboundNameCache = new Map<string, string>();
-  readonly kkLocMapWarehouseOptions: Array<{ id: KkWarehouse; label: string }> = [
-    { id: 'D1', label: 'D1' },
-    { id: '00', label: '00' },
-    { id: 'J', label: 'Kho J' },
-    { id: 'ASM3', label: 'ASM3' }
-  ];
   readonly kkWhSelectOptions: Array<{ id: '' | '00' | 'J' | 'ASM3'; label: string }> = [
     { id: '', label: 'D1' },
     { id: '00', label: '00' },
     { id: 'J', label: 'J' },
     { id: 'ASM3', label: 'ASM3' }
   ];
-
-  /**
-   * Popup Dời kho: scan pallet → chọn J/ASM3 → Done.
-   * Đổi tiền tố vị trí sang kho mới, giữ nguyên mã pallet.
-   */
-  showDoiKho = false;
-  doiKhoBusy = false;
-  doiKhoLoading = false;
-  doiKhoScanInput = '';
-  doiKhoPallet = '';
-  doiKhoWh: DoiKhoWh | null = null;
-  doiKhoRows: DoiKhoRow[] = [];
-  doiKhoError = '';
 
   /** Popup Gán pallet: scan pallet → kho → vị trí → mã (+ lượng) → Gán tiếp / Dừng. */
   showGanPallet = false;
@@ -642,17 +636,35 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * nhà máy hoặc đổi view đều quét lại tới 10k doc từ mạng — đây là nguyên nhân chính
    * khiến phần Kiểm tra KK load chậm.
    */
-  private kkInvSnapCache = new Map<string, { docs: any[]; ts: number }>();
+  protected kkInvSnapCache = new Map<string, { docs: any[]; ts: number }>();
   private static readonly KK_INV_SNAP_TTL_MS = 90_000;
 
-  /** Đọc `inventory-materials` theo 1 factory, ưu tiên cache TTL. `force` = bỏ qua cache. */
-  private async getKkFactoryDocs(factory: string, force = false): Promise<any[]> {
+  /** Đầu mã không hiển thị / không kiểm KK — lấy từ Matrix (rule kkExcludedPrefixes). */
+  private static kkExcludedPrefixList: string[] = ['R', 'B033'];
+
+  static isKkExcludedCode(code: unknown): boolean {
+    const c = String(code ?? '').trim().toUpperCase();
+    return MaterialsComponent.kkExcludedPrefixList.some((p) => c.startsWith(p));
+  }
+
+  private filterKkExcludedDocs(docs: any[]): any[] {
+    return docs.filter((d) => {
+      const data = typeof d?.data === 'function' ? d.data() : d;
+      return !MaterialsComponent.isKkExcludedCode(data?.materialCode);
+    });
+  }
+
+  /**
+   * Đọc `inventory-materials` theo 1 factory, ưu tiên cache TTL. `force` = bỏ qua cache.
+   * Mặc định bỏ mã đầu R / B033 (không hiển thị, không kiểm); `includeExcluded` = lấy đủ (so LinkQ).
+   */
+  protected async getKkFactoryDocs(factory: string, force = false, includeExcluded = false): Promise<any[]> {
     const key = String(factory || '').trim().toUpperCase();
     if (!key) return [];
     const now = Date.now();
     const hit = this.kkInvSnapCache.get(key);
     if (!force && hit && now - hit.ts < MaterialsComponent.KK_INV_SNAP_TTL_MS) {
-      return hit.docs;
+      return includeExcluded ? hit.docs : this.filterKkExcludedDocs(hit.docs);
     }
     const snap = await firstValueFrom(
       this.firestore
@@ -662,20 +674,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
     const docs = snap?.docs || [];
     this.kkInvSnapCache.set(key, { docs, ts: now });
-    return docs;
-  }
-
-  private yieldUi(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-  }
-
-  /** Bỏ cache KK — gọi sau khi tick/bỏ tick KK hàng loạt hoặc khi người dùng bấm "Làm mới". */
-  private invalidateKkInvSnapCache(factory?: string): void {
-    if (factory) {
-      this.kkInvSnapCache.delete(String(factory).trim().toUpperCase());
-    } else {
-      this.kkInvSnapCache.clear();
-    }
+    return includeExcluded ? docs : this.filterKkExcludedDocs(docs);
   }
 
   /**
@@ -683,7 +682,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * xoá cả cache (khiến lần Kiểm tra KK kế tiếp phải nạp lại 10k doc từ mạng).
    * Doc trong cache chỉ được đọc qua `.id` / `.data()`, nên thay bằng shim là đủ.
    */
-  private patchKkInvSnapCache(docId: string, patch: Record<string, unknown>): void {
+  protected patchKkInvSnapCache(docId: string, patch: Record<string, unknown>): void {
     const id = String(docId || '');
     if (!id) return;
     this.kkInvSnapCache.forEach((entry) => {
@@ -712,19 +711,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Quản lý NVL: chỉ dùng máy scanner (PDA) — không camera. */
   nlScanDevice: 'pda' = 'pda';
-  showNlDevicePicker = false;
   showNlCamera = false;
-  showNlPdaScan = false;
-  nlPdaBuffer = '';
-  nlCameraPurpose: 'search' | 'location' | 'kk' = 'search';
-  private nlScanLock = false;
-  private nlPendingAction: 'search' | 'location' | 'kk' | null = null;
+  protected nlScanLock = false;
 
   /** Mobile: sheet Chi tiết dòng tồn. */
   showMobileDetail = false;
   mobileDetailMaterial: InventoryMaterial | null = null;
-  kkCatalogDate = new Date().toISOString().slice(0, 10);
-  kkCatalogExporting = false;
   /** Ghi snapshot TỒN từ kho → rm-bag-history */
   isSnapshottingBagHistory = false;
   /** Popup nhập danh sách mã trước khi snapshot (tránh quá tải) */
@@ -736,7 +728,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   showConsolidationMessage = false;
   
   // Catalog cache for faster access
-  private catalogCache = new Map<string, any>();
+  protected catalogCache = new Map<string, any>();
   public catalogLoaded = false;
   /** Ngày (YYYY-MM-DD) lần tải danh mục NVL gần nhất — sang ngày mới thì đọc lại. */
   private catalogLoadedDateKey = '';
@@ -815,7 +807,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Danh mục Ẩn (More) — các dòng đã ẩn, giữ 30 ngày rồi backup mail + tự xóa */
   private readonly hiddenInventoryCollection = 'inventory-materials-hidden';
-  private readonly hiddenRetentionDays = 30;
+  private get hiddenRetentionDays(): number {
+    return Math.max(1, this.ruleNum('hiddenRetentionDays'));
+  }
+
+  get hiddenRetentionDaysView(): number {
+    return this.hiddenRetentionDays;
+  }
   showHiddenInventoryPopup = false;
   isLoadingHiddenInventory = false;
   hiddenInventoryRows: HiddenInventoryRow[] = [];
@@ -833,7 +831,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   materialsOtpVerifying = false;
   materialsOtpActionLabel = '';
   materialsInventoryUnlocked = false;
-  private pendingMaterialsOtpAction: MaterialsOtpAction | null = null;
+  protected pendingMaterialsOtpAction: MaterialsOtpAction | null = null;
   /** More → Manual ON/OFF: nhập tồn đầu / xuất tay. Mặc định OFF, mỗi nhà máy riêng. */
   private manualStockEditByFactory: Record<'ASM1' | 'ASM2', boolean> = {
     ASM1: false,
@@ -892,33 +890,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   temLeParsed: { materialCode: string; po: string; quantity: number; p4: string } | null = null;
   private temLeSuffixPool: string[] = [];
 
-  // ===== Tem Xuất Kho (PXK + FIFO tồn → in loạt tem QR) =====
-  showTemXuatKhoPopup = false;
-  temXuatLsxInput = '';
-  temXuatError = '';
-  temXuatBusy = false;
-  /** Cutoff: từ ngày này trở đi là tem mẫu mới, không cần in lại. */
-  private readonly TEM_MOI_CUTOFF = new Date(2026, 3, 1); // 01/04/2026 (month is 0-based)
-  /** Rule "đã in lại tem mẫu mới" (label-reprint-flags). Tạm thời TẮT theo yêu cầu. */
-  private readonly REPRINT_FLAG_RULE_ENABLED = true;
-
-  // ===== In Lại Tem (theo LSX -> in toàn bộ tem theo mã hàng, chỉ IMD trước cutoff) =====
-  showTemInLaiPopup = false;
-  temInLaiLsxInput = '';
-  temInLaiError = '';
-  temInLaiBusy = false;
-  temInLaiItems: Array<{
-    materialCode: string;
-    eligibleRowCount: number;
-    alreadyPrinted: boolean;
-    blockedByRuleBag: boolean;
-  }> = [];
-  private temInLaiPrintedCodes = new Set<string>();
-  temInLaiShowAdd = false;
-  temInLaiAddCodeInput = '';
-  temInLaiImportBusy = false;
-  private readonly TEM_INLAI_PRINTED_COLLECTION = 'tem-inlai-printed-codes';
-
   // ===== In Tem Thùng (mã + PO + IMD, không QTY) =====
   showTemThungPopup = false;
   temThungCodeInput = '';
@@ -945,14 +916,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Mobile menu state
   showMobileMenu = false;
-  showMobileStats = false;
   
   // Show completed items
   // showCompleted = true; // Removed - replaced with Reset function
   
   // Lifecycle
-  private destroy$ = new Subject<void>();
-  private kkLiveStop$ = new Subject<void>();
+  protected destroy$ = new Subject<void>();
+  protected kkLiveStop$ = new Subject<void>();
   
   // QR Scanner
   private html5QrCode: Html5Qrcode | null = null;
@@ -964,11 +934,199 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   canExport = false;
   canDelete = false;
 
+  /** Luôn mở sửa tay cột Vị trí / WH / Pallet (không OTP) — Matrix rule locationAlwaysUnlocked. */
+  get TEMP_UNLOCK_LOCATION_WH_PALLET(): boolean {
+    return this.ruleBool('locationAlwaysUnlocked');
+  }
+  readonly matrixActionDefs = ACTION_DEFS;
+  readonly matrixDefaultRow = MATRIX_DEFAULT_ROW;
+  matrixRules: Record<string, MatrixRuleValue> = normalizeRuleValues('ASM1', undefined);
+  matrixPerms: Record<string, Record<string, boolean>> = normalizePerms(undefined);
+  private matrixSub: (() => void) | null = null;
+  private matrixFactory = '';
+  private tabCanAccess = false;
+  currentEmployeeId = '';
+
+  private matrixFactoryOf(): MatrixFactory {
+    return this.selectedFactory === 'ASM2' ? 'ASM2' : 'ASM1';
+  }
+
+  ruleBool(key: string): boolean {
+    return this.matrixRules[key] === true;
+  }
+
+  ruleNum(key: string): number {
+    return Number(this.matrixRules[key]) || 0;
+  }
+
+  /** Quyền thao tác của nhân viên đang đăng nhập — có dòng riêng thì theo dòng riêng, không thì theo dòng Mặc định. */
+  can(action: string): boolean {
+    const row = (this.currentEmployeeId && this.matrixPerms[this.currentEmployeeId]) || this.matrixPerms[MATRIX_DEFAULT_ROW];
+    return row?.[action] !== false;
+  }
+
+  /** true = bị chặn (đã báo). */
+  protected denyAction(action: string): boolean {
+    if (this.can(action)) return false;
+    const label = ACTION_DEFS.find((a) => a.key === action)?.label || action;
+    alert(`🔒 Bạn không có quyền: ${label}\n(${this.currentEmployeeId || 'chưa rõ mã NV'} · ${this.selectedFactory}) — chỉnh ở More → Matrix rule & quyền.`);
+    return true;
+  }
+
+  isLinkqDiffBad(diff: number | null | undefined): boolean {
+    return diff != null && Math.abs(diff) > this.ruleNum('linkqDiffThreshold');
+  }
+
+  private applyPermissionFlags(): void {
+    this.canView = this.tabCanAccess;
+    this.canEdit = this.tabCanAccess && this.can('edit');
+    this.canExport = this.tabCanAccess && this.can('export');
+    this.canDelete = this.tabCanAccess && this.can('delete');
+  }
+
+  private applyMatrixRuntime(): void {
+    MaterialsComponent.kkExcludedPrefixList = matrixList(this.matrixRules['kkExcludedPrefixes']);
+    MaterialsComponent.KK_HIDDEN_MUCS = matrixList(this.matrixRules['kkHiddenMucs']);
+    this.applyPermissionFlags();
+    this.isLocationColumnUnlocked = this.TEMP_UNLOCK_LOCATION_WH_PALLET || this.locationUnlock.isUnlocked();
+    this.invalidateKkTypeViewCache();
+    this.cdr.markForCheck();
+  }
+
+  private subscribeMaterialsMatrix(): void {
+    const factory = this.matrixFactoryOf();
+    if (this.matrixSub && this.matrixFactory === factory) return;
+    this.matrixSub?.();
+    this.matrixFactory = factory;
+    this.matrixRules = normalizeRuleValues(factory, undefined);
+    this.matrixPerms = normalizePerms(undefined);
+    this.applyMatrixRuntime();
+    this.matrixSub = this.firestore.firestore.doc(MATERIALS_MATRIX_DOC_PREFIX + factory).onSnapshot(
+      (snap) => {
+        const d = (snap.exists ? snap.data() : null) as { rules?: Record<string, unknown>; perms?: Record<string, unknown> } | null;
+        this.matrixRules = normalizeRuleValues(factory, d?.rules);
+        this.matrixPerms = normalizePerms(d?.perms);
+        this.applyMatrixRuntime();
+      },
+      (err) => console.warn('materials matrix:', err)
+    );
+  }
+
+  // --- More → Matrix rule & quyền (pass 2026) ---
+  showMatrix = false;
+  matrixUnlocked = false;
+  matrixPass = '';
+  matrixPassError = '';
+  matrixTab: 'rules' | 'perms' = 'rules';
+  matrixDraftRules: Record<string, MatrixRuleValue> = {};
+  matrixDraftPerms: Record<string, Record<string, boolean>> = {};
+  matrixNewEmp = '';
+  matrixSaving = false;
+  matrixMsg = '';
+
   /**
-   * Tạm: luôn mở sửa tay cột Vị trí / WH / Pallet (không OTP).
-   * Đặt `false` khi user báo lock lại như cũ.
+   * Nhóm rule — tính 1 lần (KHÔNG dùng getter): getter tạo mảng mới mỗi lần vẽ → *ngFor dựng lại ô ngModel
+   * → ngModel kích vẽ lại → vòng lặp vô tận, đứng máy khi mở Matrix.
    */
-  readonly TEMP_UNLOCK_LOCATION_WH_PALLET = true;
+  readonly matrixRuleGroups: Array<{ group: string; defs: typeof RULE_DEFS }> = (() => {
+    const groups: Array<{ group: string; defs: typeof RULE_DEFS }> = [];
+    for (const d of RULE_DEFS) {
+      let g = groups.find((x) => x.group === d.group);
+      if (!g) groups.push((g = { group: d.group, defs: [] }));
+      g.defs.push(d);
+    }
+    return groups;
+  })();
+
+  get matrixEmpRows(): string[] {
+    return Object.keys(this.matrixDraftPerms)
+      .filter((k) => k !== MATRIX_DEFAULT_ROW)
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  }
+
+  matrixRuleDefault(key: string): MatrixRuleValue {
+    return normalizeRuleValues(this.matrixFactoryOf(), undefined)[key];
+  }
+
+  openMatrix(): void {
+    this.closeMorePopup();
+    this.showMatrix = true;
+    this.matrixPass = '';
+    this.matrixPassError = '';
+    this.matrixMsg = '';
+    if (this.matrixUnlocked) this.resetMatrixDraft();
+    else setTimeout(() => (document.getElementById('matrix-pass') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  unlockMatrix(): void {
+    if (String(this.matrixPass || '').trim() !== MATERIALS_MATRIX_PASS) {
+      this.matrixPassError = 'Sai mật khẩu.';
+      return;
+    }
+    this.matrixUnlocked = true;
+    this.matrixPass = '';
+    this.matrixPassError = '';
+    this.resetMatrixDraft();
+  }
+
+  resetMatrixDraft(): void {
+    this.matrixDraftRules = { ...this.matrixRules };
+    this.matrixDraftPerms = Object.fromEntries(Object.entries(this.matrixPerms).map(([k, v]) => [k, { ...v }]));
+    this.matrixNewEmp = '';
+    this.matrixMsg = '';
+  }
+
+  resetMatrixRuleDefault(key: string): void {
+    this.matrixDraftRules[key] = this.matrixRuleDefault(key);
+  }
+
+  addMatrixEmp(): void {
+    const id = String(this.matrixNewEmp || '').trim().toUpperCase();
+    if (!/^ASP\d{4}$/.test(id)) { this.matrixMsg = 'Mã nhân viên dạng ASP + 4 số (VD: ASP0106).'; return; }
+    if (this.matrixDraftPerms[id]) { this.matrixMsg = `${id} đã có trong bảng.`; return; }
+    this.matrixDraftPerms[id] = { ...this.matrixDraftPerms[MATRIX_DEFAULT_ROW] };
+    this.matrixNewEmp = '';
+    this.matrixMsg = '';
+  }
+
+  removeMatrixEmp(id: string): void {
+    if (!confirm(`Xóa dòng quyền riêng của ${id}? (${id} sẽ theo dòng Mặc định)`)) return;
+    delete this.matrixDraftPerms[id];
+    this.matrixDraftPerms = { ...this.matrixDraftPerms };
+  }
+
+  setMatrixActionAll(action: string, value: boolean): void {
+    for (const row of Object.values(this.matrixDraftPerms)) row[action] = value;
+  }
+
+  async saveMatrix(): Promise<void> {
+    if (this.matrixSaving) return;
+    const factory = this.matrixFactoryOf();
+    const rules = normalizeRuleValues(factory, this.matrixDraftRules as Record<string, unknown>);
+    for (const d of RULE_DEFS) {
+      if (d.type === 'date' && !matrixDateMs(rules[d.key])) { this.matrixMsg = `"${d.label}" chưa có ngày hợp lệ.`; return; }
+    }
+    if (!String(rules['invAdjustPass'] || '').trim()) { this.matrixMsg = 'Mật khẩu Danh mục điều chỉnh không được để trống.'; return; }
+    this.matrixSaving = true;
+    this.matrixMsg = '';
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      await this.firestore.firestore.doc(MATERIALS_MATRIX_DOC_PREFIX + factory).set({
+        factory,
+        rules,
+        perms: normalizePerms(this.matrixDraftPerms as Record<string, unknown>),
+        updatedBy: by,
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+      this.matrixMsg = `✅ Đã lưu Matrix ${factory}.`;
+    } catch (e: any) {
+      console.error('saveMatrix:', e);
+      this.matrixMsg = '❌ Không lưu được: ' + (e?.message || e);
+    } finally {
+      this.matrixSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
   /** Dropdown cột WH — chọn kho đích. */
   readonly WH_SELECT_OPTIONS = [
     { id: 'ASM3', label: 'ASM3' },
@@ -1020,42 +1178,46 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   layoutJFocusBlock: number | null = null;
   /** Gán vị trí yêu cầu cho box loại (chuột phải). */
   layoutLocTypeAssign: string | null = null;
-  private layoutLocTypeAssignGroups: string[] = [];
+  protected layoutLocTypeAssignGroups: string[] = [];
   kkTypeHomeLocs = new Map<string, string>();
-  kkTypeManagers = new Map<string, string>();
   kkTypeBoxMenuVisible = false;
-  kkTypeBoxMenuX = 0;
-  kkTypeBoxMenuY = 0;
   kkTypeBoxMenuBox: { productType: string; groupCodes?: string[] } | null = null;
   kkTypeBoxMenuManagerDraft = '';
   kkTypeBoxMenuSaving = false;
-  private skipKkTypeBoxMenuClose = false;
+  protected skipKkTypeBoxMenuClose = false;
   // canEditHSD = false; // Removed - HSD column deleted
 
   constructor(
-    private firestore: AngularFirestore,
+    protected firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
-    private cdr: ChangeDetectorRef,
+    protected cdr: ChangeDetectorRef,
     private tabPermissionService: TabPermissionService,
     private factoryAccessService: FactoryAccessService,
     private excelImportService: ExcelImportService,
     private dialog: MatDialog,
-    private router: Router,
+    protected router: Router,
     private route: ActivatedRoute,
     private rmBagHistory: RmBagHistoryService,
+    private temLeCl: TemLeClService,
     private temXuatKho: TemXuatKhoService,
     private labelReprintFlags: LabelReprintFlagService,
     private materialsDashboard: MaterialsDashboardService,
     private locationUnlock: LocationUnlockService,
     private materialsInventoryUnlock: MaterialsInventoryUnlockService,
-    private kkScanGuideZalo: KkScanGuideZaloService,
+    protected kkScanGuideZalo: KkScanGuideZaloService,
     private dvLuuTruCatalog: DvLuuTruCatalogService,
-    private nvlkhCatalog: NvlkhCatalogService,
-    private nvlCatalogFull: NvlCatalogFullService,
-    private kkCatalog: KkCatalogService,
-    private readTracker: ReadTrackerService,
+    protected nvlkhCatalog: NvlkhCatalogService,
+    protected nvlCatalogFull: NvlCatalogFullService,
+    protected linkQPendingPxkSvc: LinkQPendingPxkService,
+    protected kkCatalog: KkCatalogService,
+    private sxxkSuspect: SxxkSuspectService,
+    private invStockReport: InventoryStockReportService,
+    private pxkWeightReports: PxkWeightCheckReportService,
+    private pxkOddWeigh: PxkOddWeighService,
+    protected readTracker: ReadTrackerService,
+    protected kkLog: KkHistoryLogService,
     private location: Location,
-    private authService: FirebaseAuthService,
+    protected authService: FirebaseAuthService,
     private ngZone: NgZone
   ) {}
 
@@ -1192,14 +1354,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.getImdKeyFromImportDate(material?.importDate);
   }
 
-  private buildReprintFlagItemFromInventoryRow(m: InventoryMaterial): { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string } {
-    const imdKey = this.getImdKeyForMaterial(m);
-    const factory = this.selectedFactory as 'ASM1' | 'ASM2';
-    const docId = this.labelReprintFlags.buildDocId(factory, m.materialCode, m.poNumber || '', imdKey);
-    return { docId, factory, materialCode: m.materialCode, poNumber: m.poNumber || '', imdKey };
-  }
-
   openTemLePopup(): void {
+    if (this.denyAction('printLabels')) return;
     this.showTemLePopup = true;
     this.temLeQrText = '';
     this.temLeSplitQty = null;
@@ -1219,64 +1375,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showTemLePopup = false;
     this.temLeQrText = '';
     this.temLeSplitQty = null;
+    this.temLeGwClInput = null;
+    this.temLeGwFullInput2 = null;
     this.temLeError = '';
     this.temLeParsed = null;
+    this.resetTemLeTl();
   }
 
   private normalizeMaterialCodeUpper(raw: string): string {
     return (raw || '').toString().trim().toUpperCase();
   }
 
-  private buildTemInLaiPrintedDocId(materialCode: string): string {
-    const mc = this.normalizeMaterialCodeUpper(materialCode);
-    return `${this.selectedFactory}__${mc}`.replace(/[\/\\\s]+/g, '_').slice(0, 200);
-  }
-
-  private async loadTemInLaiPrintedCodes(): Promise<void> {
-    try {
-      const snap = await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION, (ref) =>
-        ref.where('factory', '==', this.selectedFactory).limit(5000)
-      ).get().toPromise();
-      this.temInLaiPrintedCodes.clear();
-      if (snap && !snap.empty) {
-        for (const doc of snap.docs) {
-          const d = doc.data() as any;
-          const mc = this.normalizeMaterialCodeUpper(d?.materialCode || doc.id);
-          if (mc) this.temInLaiPrintedCodes.add(mc);
-        }
-      }
-    } catch (e) {
-      console.warn('[TemInLai] load printed codes failed', e);
-    }
-  }
-
-  openTemInLaiPopup(): void {
-    this.showTemInLaiPopup = true;
-    this.temInLaiLsxInput = '';
-    this.temInLaiError = '';
-    this.temInLaiBusy = false;
-    this.temInLaiItems = [];
-    this.temInLaiShowAdd = false;
-    this.temInLaiAddCodeInput = '';
-    void this.loadTemInLaiPrintedCodes();
-    setTimeout(() => {
-      const el = document.getElementById('tem-inlai-lsx-input-asm1') as HTMLInputElement | null;
-      el?.focus();
-      el?.select();
-    }, 50);
-  }
-
-  closeTemInLaiPopup(): void {
-    this.showTemInLaiPopup = false;
-    this.temInLaiLsxInput = '';
-    this.temInLaiError = '';
-    this.temInLaiBusy = false;
-    this.temInLaiItems = [];
-    this.temInLaiShowAdd = false;
-    this.temInLaiAddCodeInput = '';
-  }
-
   openTemThungPopup(): void {
+    if (this.denyAction('printLabels')) return;
     this.showTemThungPopup = true;
     this.temThungCodeInput = '';
     this.temThungError = '';
@@ -1414,6 +1525,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Mở popup Tem Thùng cho 1 dòng đã chọn sẵn trong bảng (cột Tem Thùng). */
   openTemThungColumnPopup(material: InventoryMaterial): void {
+    if (this.denyAction('printLabels')) return;
     this.temThungColumnMaterial = material;
     this.temThungColumnQtyInput = null;
     this.temThungColumnError = '';
@@ -1486,10 +1598,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  onTemInLaiLsxEnter(): void {
-    void this.loadTemInLaiListFromLsx();
-  }
-
   private async fetchInventoryRowsByMaterialCodes(materialCodes: string[]): Promise<InventoryMaterial[]> {
     const out: InventoryMaterial[] = [];
     const uniq = Array.from(new Set(materialCodes.map((x) => this.normalizeMaterialCodeUpper(x)).filter(Boolean)));
@@ -1538,294 +1646,455 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return out;
   }
 
-  private async loadTemInLaiListFromLsx(): Promise<void> {
-    this.temInLaiError = '';
-    const raw = this.temInLaiLsxInput.trim();
-    if (!raw) {
-      this.temInLaiError = 'Vui lòng scan hoặc nhập lệnh sản xuất (LSX).';
+  /** Trạng thái bịch CL của IMD vừa scan (hiện trong popup Tem lẻ). */
+  temLeClInfo = '';
+  /** Bắt buộc nhập GW bịch CL (gram) trước khi in; mã chưa có GW bag nguyên thì nhập luôn. */
+  temLeGwClInput: number | null = null;
+  temLeGwFullInput2: number | null = null;
+  temLeGwFullKnown = 0;
+  temLeGwFullFor = '';
+
+  /** Danh sách mã "không cần cân" (đã duyệt) — đọc 1 lần. */
+  private weighExemptCodes: Set<string> | null = null;
+  private weighIncludeCodes: Set<string> | null = null;
+  /** Đầu mã in tem lẻ không cần cân (Danh mục NVL/TP → Check lượng / Cân). */
+  private temLeNoWeighPrefixes: string[] | undefined;
+  private weighExemptLoading = false;
+
+  private ensureWeighExemptCodes(): void {
+    if (this.weighExemptCodes || this.weighExemptLoading) return;
+    this.weighExemptLoading = true;
+    const ids = (name: string) => this.firestore.firestore.collection(name).get()
+      .then((snap) => new Set(snap.docs.map((d) => d.id.trim().toUpperCase())))
+      .catch(() => new Set<string>());
+    Promise.all([
+      ids('pxk-weight-check-exempt'),
+      ids('pxk-weight-check-include'),
+      this.pxkWeightReports.loadTemLeNoWeighPrefixes().catch(() => undefined)
+    ])
+      .then(([exempt, include, noWeigh]) => {
+        this.weighIncludeCodes = include;
+        this.weighExemptCodes = exempt;
+        this.temLeNoWeighPrefixes = noWeigh;
+      })
+      .finally(() => { this.weighExemptLoading = false; this.cdr.markForCheck(); });
+  }
+
+  /** Mã đang tách có phải cân không — theo Danh mục Check lượng (nhóm đầu mã + mã thêm, trừ mã không cần cân). */
+  get temLeNeedsWeigh(): boolean {
+    if (!this.temLeParsed) return false;
+    this.ensureWeighExemptCodes();
+    return temLeMustWeigh(this.temLeParsed.materialCode, this.weighExemptCodes, this.weighIncludeCodes, this.temLeNoWeighPrefixes);
+  }
+
+  get temLeCanPrint(): boolean {
+    const qty = Number(this.temLeSplitQty);
+    if (!this.temLeParsed || !(qty > 0)) return false;
+    if (!this.temLeNeedsWeigh) return true;
+    if (!(Number(this.temLeGwClInput) > 0)) return false;
+    if (!this.temLeTlPhoto || !(Number(this.temLeGwTlInput) > 0)) return false;
+    return this.temLeGwFullKnown > 0 || Number(this.temLeGwFullInput2) > 0;
+  }
+
+  // ===== Chụp bịch TL trên cân lúc tách (đọc số cân từ hình) — Outbound kế thừa khi scan tem TL =====
+  temLeTlPhoto: Blob | null = null;
+  temLeTlPreview = '';
+  temLeGwTlInput: number | null = null;
+  /** Số đọc được từ hình (để biết người dùng có sửa tay không) */
+  temLeTlOcr: number | null = null;
+  temLeTlReading = false;
+  temLeTlMsg = '';
+  temLeTlCamOn = false;
+  private temLeTlStream: MediaStream | null = null;
+  @ViewChild('temLeTlVideo') temLeTlVideoRef?: ElementRef<HTMLVideoElement>;
+
+  /** GW TL dự kiến = GW bag nguyên × lượng TL ÷ Standard (null nếu chưa đủ dữ liệu). */
+  get temLeTlExpected(): number | null {
+    const code = this.temLeParsed?.materialCode || '';
+    const gwFull = this.temLeGwFullKnown > 0 ? this.temLeGwFullKnown : Number(this.temLeGwFullInput2) || 0;
+    const std = this.getStandardPacking(code) || 0;
+    const qty = Number(this.temLeSplitQty) || 0;
+    return gwFull > 0 && std > 0 && qty > 0 ? gwFull * qty / std : null;
+  }
+
+  async startTemLeTlCamera(): Promise<void> {
+    this.stopTemLeTlCamera();
+    this.temLeTlMsg = '';
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.temLeTlMsg = 'Trình duyệt không mở được camera — bấm "Chọn / chụp ảnh".';
       return;
     }
-    if (this.temInLaiBusy) return;
-    this.temInLaiBusy = true;
-    this.temInLaiItems = [];
     try {
-      await this.loadTemInLaiPrintedCodes();
-      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx(this.selectedFactory, raw);
-      if (!pxkRaw.length) {
-        this.temInLaiError = 'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK.';
-        return;
-      }
-      const merged = this.mergePxkLinesForTem(pxkRaw);
-      const codes = Array.from(new Set(merged.map((l) => this.normalizeMaterialCodeUpper(l.materialCode)).filter(Boolean)));
-      if (!codes.length) {
-        this.temInLaiError = 'Không có mã hàng trong PXK của LSX này.';
-        return;
-      }
-      const invRows = await this.fetchInventoryRowsByMaterialCodes(codes);
-      const cutoffMs = this.TEM_MOI_CUTOFF.getTime();
-      const eligibleByCode = new Map<string, number>();
-      for (const r of invRows) {
-        const mc = this.normalizeMaterialCodeUpper(r.materialCode);
-        const t = r.importDate?.getTime?.() || 0;
-        if (mc && t > 0 && t < cutoffMs) {
-          eligibleByCode.set(mc, (eligibleByCode.get(mc) || 0) + 1);
-        }
-      }
-      this.temInLaiItems = codes
-        .sort((a, b) => a.localeCompare(b, 'vi'))
-        .map((mc) => ({
-          materialCode: mc,
-          eligibleRowCount: eligibleByCode.get(mc) || 0,
-          alreadyPrinted: this.temInLaiPrintedCodes.has(mc),
-          blockedByRuleBag: this.shouldSkipMaterialForTemXuatKhoExport(mc)
-        }));
-      if (this.temInLaiItems.every((x) => x.eligibleRowCount === 0)) {
-        this.temInLaiError = 'Không có dòng kho IMD trước 01/04/2026 cho các mã trong LSX này.';
-      }
-    } catch (e) {
-      console.error('Tem In Lại error:', e);
-      this.temInLaiError = (e as Error)?.message || 'Lỗi khi đọc LSX.';
-    } finally {
-      this.temInLaiBusy = false;
-    }
-  }
-
-  async addPrintedCodeManual(): Promise<void> {
-    const mc = this.normalizeMaterialCodeUpper(this.temInLaiAddCodeInput);
-    if (!mc) return;
-    try {
-      await this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(this.buildTemInLaiPrintedDocId(mc)).set(
-        {
-          factory: this.selectedFactory,
-          materialCode: mc,
-          source: 'manual',
-          updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-        },
-        { merge: true }
-      );
-      this.temInLaiPrintedCodes.add(mc);
-      this.temInLaiAddCodeInput = '';
-      this.temInLaiItems = this.temInLaiItems.map((it) =>
-        it.materialCode === mc ? { ...it, alreadyPrinted: true } : it
-      );
-    } catch (e) {
-      console.warn('[TemInLai] manual add failed', e);
-    }
-  }
-
-  triggerPrintedCodesImport(): void {
-    const el = document.getElementById('tem-inlai-import-file-asm1') as HTMLInputElement | null;
-    if (!el) return;
-    el.value = '';
-    el.click();
-  }
-
-  async onPrintedCodesFileSelected(event: Event): Promise<void> {
-    const XLSX = await import('xlsx');
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (!file) return;
-    if (this.temInLaiImportBusy) return;
-    this.temInLaiImportBusy = true;
-    this.temInLaiError = '';
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const sheetName = wb.SheetNames?.[0];
-      if (!sheetName) {
-        this.temInLaiError = 'File không có sheet.';
-        return;
-      }
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }) as any[][];
-      const codes: string[] = [];
-      for (const r of rows) {
-        const v = r?.[0];
-        const mc = this.normalizeMaterialCodeUpper(String(v ?? ''));
-        if (mc) codes.push(mc);
-      }
-      const uniq = Array.from(new Set(codes)).filter(Boolean);
-      if (uniq.length === 0) {
-        this.temInLaiError = 'Không đọc được mã nào ở cột A.';
-        return;
-      }
-
-      // Write to Firestore in batches (<=500 ops/batch)
-      const chunks: string[][] = [];
-      for (let i = 0; i < uniq.length; i += 450) {
-        chunks.push(uniq.slice(i, i + 450));
-      }
-      for (const ch of chunks) {
-        const batch = this.firestore.firestore.batch();
-        for (const mc of ch) {
-          const docId = this.buildTemInLaiPrintedDocId(mc);
-          const ref = this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(docId).ref;
-          batch.set(
-            ref,
-            {
-              factory: this.selectedFactory,
-              materialCode: mc,
-              source: 'import',
-              updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-            },
-            { merge: true }
-          );
-        }
-        await batch.commit();
-      }
-
-      for (const mc of uniq) this.temInLaiPrintedCodes.add(mc);
-      this.temInLaiItems = this.temInLaiItems.map((it) =>
-        this.temInLaiPrintedCodes.has(it.materialCode) ? { ...it, alreadyPrinted: true } : it
-      );
-      this.temInLaiError = `✅ Đã import ${uniq.length} mã đã in.`;
-    } catch (e) {
-      console.warn('[TemInLai] import failed', e);
-      this.temInLaiError = 'Lỗi import file (chỉ nhận Excel/CSV, mã nằm ở cột A).';
-    } finally {
-      this.temInLaiImportBusy = false;
-    }
-  }
-
-  async printTemInLaiAll(): Promise<void> {
-    const QRCode = await import('qrcode') as any;
-    this.temInLaiError = '';
-    if (this.temInLaiBusy) return;
-    const lsx = this.temInLaiLsxInput.trim();
-    const codesToPrint = this.temInLaiItems
-      .filter((x) => x.eligibleRowCount > 0 && !x.alreadyPrinted && !x.blockedByRuleBag)
-      .map((x) => x.materialCode);
-    if (!codesToPrint.length) {
-      this.temInLaiError = 'Không có mã nào cần in (hoặc tất cả đã in / không có IMD cũ).';
-      return;
-    }
-    this.temInLaiBusy = true;
-    try {
-      const invRowsAll = await this.fetchInventoryRowsByMaterialCodes(codesToPrint);
-      const cutoffMs = this.TEM_MOI_CUTOFF.getTime();
-      const invRows = invRowsAll.filter((r) => {
-        const t = r.importDate?.getTime?.() || 0;
-        return t > 0 && t < cutoffMs;
+      this.temLeTlStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
       });
-      const payloads: { qrData: string }[] = [];
-      for (const r of invRows) {
-        const mat = this.normalizeMaterialCodeUpper(r.materialCode);
-        const po = (r.poNumber || '').trim();
-        const sp = this.getEffectiveStandardPacking(r);
-        if (!sp || sp <= 0) continue;
-        const rowStock = Math.max(0, this.calculateCurrentStock(r));
-        if (rowStock <= 0) continue;
-        const bagTotal = this.effectiveTotalBags(r);
-        if (!bagTotal || bagTotal < 1) continue;
-        const imdKey = this.getImdKeyForMaterial(r);
-        const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
-        const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
-        for (let i = 1; i <= bagTotal; i++) {
-          const qty = capOfBag(i);
-          if (qty <= 1e-9) continue;
-          const p4 = `${imdKey}-${i}/${bagTotal}`;
-          payloads.push({ qrData: `${mat}|${po}|${qty}|${p4}` });
-        }
-      }
-      if (!payloads.length) {
-        this.temInLaiError = 'Không tạo được tem nào để in (kiểm tra Standard Packing / BAG / tồn kho).';
-        return;
-      }
-
-      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: `IN LẠI TEM — ${lsx}`, qrData: '' }];
-      const byMat = new Map<string, { qrData: string }[]>();
-      for (const p of payloads) {
-        const parts = p.qrData.split('|');
-        const mat = (parts[0] || '').trim();
-        if (!byMat.has(mat)) byMat.set(mat, []);
-        byMat.get(mat)!.push(p);
-      }
-      const orderedMats = Array.from(byMat.keys()).sort((a, b) => a.localeCompare(b, 'vi'));
-      for (const mat of orderedMats) {
-        printSequence.push({ kind: 'lsxHeader', lsxText: mat, qrData: '' });
-        for (const p of byMat.get(mat) || []) {
-          printSequence.push(p);
-        }
-        printSequence.push({ kind: 'spacer', qrData: '' });
-      }
-
-      const qrImages: any[] = [];
-      let idx = 1;
-      for (const it of printSequence) {
-        if (it?.kind === 'lsxHeader' || it?.kind === 'spacer') {
-          qrImages.push(it);
-          continue;
-        }
-        const qrImage = await QRCode.toDataURL(it.qrData, {
-          width: 240,
-          margin: 1,
-          color: { dark: '#000000', light: '#FFFFFF' }
-        });
-        const parts = String(it.qrData || '').split('|');
-        qrImages.push({
-          image: qrImage,
-          qrData: it.qrData,
-          index: idx++,
-          materialCode: parts[0] || '',
-          poNumber: parts[1] || '',
-          unitNumber: Number(parts[2]) || 0
-        });
-      }
-
-      const fakeMaterial: InventoryMaterial = {
-        factory: this.selectedFactory,
-        importDate: new Date(),
-        batchNumber: '',
-        materialCode: 'REPRINT',
-        poNumber: '',
-        openingStock: null,
-        quantity: 0,
-        unit: '',
-        location: '',
-        type: '',
-        expiryDate: new Date(),
-        qualityCheck: false,
-        isReceived: false,
-        notes: '',
-        rollsOrBags: '',
-        supplier: '',
-        remarks: '',
-        isCompleted: false
-      } as any;
-      this.createQRPrintWindow(qrImages, fakeMaterial, true, false, invRows);
-
-      const batch = this.firestore.firestore.batch();
-      for (const mc of orderedMats) {
-        const docId = this.buildTemInLaiPrintedDocId(mc);
-        const ref = this.firestore.collection(this.TEM_INLAI_PRINTED_COLLECTION).doc(docId).ref;
-        batch.set(
-          ref,
-          {
-            factory: this.selectedFactory,
-            materialCode: mc,
-            source: 'print',
-            lastLsx: lsx || null,
-            updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-          },
-          { merge: true }
-        );
-      }
-      await batch.commit();
-      for (const mc of orderedMats) this.temInLaiPrintedCodes.add(mc);
-      this.temInLaiItems = this.temInLaiItems.map((it) =>
-        orderedMats.includes(it.materialCode) ? { ...it, alreadyPrinted: true } : it
-      );
+      this.temLeTlCamOn = true;
+      this.cdr.detectChanges();
+      const video = this.temLeTlVideoRef?.nativeElement;
+      if (!video || !this.showTemLePopup) { this.stopTemLeTlCamera(); return; }
+      video.srcObject = this.temLeTlStream;
+      await video.play().catch(() => undefined);
     } catch (e) {
-      console.error('[TemInLai] print failed', e);
-      this.temInLaiError = (e as Error)?.message || 'Lỗi khi in tem.';
+      console.warn('tem le TL camera:', e);
+      this.stopTemLeTlCamera();
+      this.temLeTlMsg = 'Không mở được camera — cấp quyền camera hoặc bấm "Chọn / chụp ảnh".';
+    }
+    this.cdr.markForCheck();
+  }
+
+  private stopTemLeTlCamera(): void {
+    this.temLeTlStream?.getTracks().forEach((t) => t.stop());
+    this.temLeTlStream = null;
+    const video = this.temLeTlVideoRef?.nativeElement;
+    if (video) video.srcObject = null;
+    this.temLeTlCamOn = false;
+  }
+
+  async captureTemLeTl(): Promise<void> {
+    const video = this.temLeTlVideoRef?.nativeElement;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    this.stopTemLeTlCamera();
+    await this.setTemLeTlPhoto(canvas);
+  }
+
+  onTemLeTlFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d')?.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      this.stopTemLeTlCamera();
+      void this.setTemLeTlPhoto(canvas);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      this.temLeTlMsg = 'Không đọc được ảnh.';
+      this.cdr.markForCheck();
+    };
+    img.src = url;
+  }
+
+  private async setTemLeTlPhoto(canvas: HTMLCanvasElement): Promise<void> {
+    if (this.temLeTlPreview) URL.revokeObjectURL(this.temLeTlPreview);
+    this.temLeTlPhoto = await this.pxkOddWeigh.compressPhoto(canvas);
+    this.temLeTlPreview = URL.createObjectURL(this.temLeTlPhoto);
+    this.temLeTlReading = true;
+    this.temLeTlMsg = 'Đang đọc số cân…';
+    this.cdr.detectChanges();
+    try {
+      const { value } = await readScaleNumber(canvas);
+      let gram = value;
+      // Cân hiển thị kg (vd 0.523) → đổi sang gram nếu gần GW dự kiến hơn
+      const exp = this.temLeTlExpected;
+      if (gram != null && exp && Math.abs(gram * 1000 - exp) < Math.abs(gram - exp)) gram = gram * 1000;
+      if (gram != null) gram = Math.round(gram * 10) / 10;
+      this.temLeTlOcr = gram;
+      if (gram != null) {
+        this.temLeGwTlInput = gram;
+        this.temLeTlMsg = `Đọc được ${gram} g — kiểm tra đúng số trên cân, sai thì sửa tay.`;
+      } else {
+        this.temLeTlMsg = 'Không đọc được số cân — nhập tay GW bịch TL, hoặc chụp lại gần hơn, đủ sáng.';
+      }
+    } catch (e) {
+      console.warn('readScaleNumber:', e);
+      this.temLeTlOcr = null;
+      this.temLeTlMsg = 'Không đọc được số cân — nhập tay GW bịch TL.';
     } finally {
-      this.temInLaiBusy = false;
+      this.temLeTlReading = false;
+      this.cdr.markForCheck();
     }
   }
+
+  retakeTemLeTl(): void {
+    this.resetTemLeTl();
+    void this.startTemLeTlCamera();
+  }
+
+  private resetTemLeTl(): void {
+    this.stopTemLeTlCamera();
+    if (this.temLeTlPreview) URL.revokeObjectURL(this.temLeTlPreview);
+    this.temLeTlPhoto = null;
+    this.temLeTlPreview = '';
+    this.temLeGwTlInput = null;
+    this.temLeTlOcr = null;
+    this.temLeTlReading = false;
+    this.temLeTlMsg = '';
+  }
+
+  private loadTemLeGwFull(code: string): void {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c || this.temLeGwFullFor === c) return;
+    this.temLeGwFullFor = c;
+    this.temLeGwFullKnown = 0;
+    void this.nvlCatalogFull.getByCode(c)
+      .then((cat) => {
+        if (this.temLeGwFullFor !== c) return;
+        this.temLeGwFullKnown = catalogBagWeight(cat);
+        this.cdr.markForCheck();
+      })
+      .catch(() => undefined);
+  }
+  /** Lần tách gần nhất — có khi scan lại tem cũ của bịch đã tách (cho phép Hủy lần tách). */
+  temLeLastSplit: TemLeSplitLog | null = null;
+  temLeUndoBusy = false;
 
   onTemLeQrTextChanged(): void {
     this.temLeError = '';
+    this.temLeClInfo = '';
+    this.temLeLastSplit = null;
+    if (this.temLeTlPhoto || this.temLeTlCamOn) this.resetTemLeTl();
     this.temLeParsed = this.parseTemLeQrText(this.temLeQrText);
+    if (this.temLeParsed) this.loadTemLeGwFull(this.temLeParsed.materialCode);
+    const parsed = this.temLeParsed;
+    if (!parsed) return;
+    const p = this.rmBagHistory.parseQrPart4(parsed.p4);
+    const scannedTag = p.splitTag || '';
+    void this.temLeCl.getState(this.selectedFactory, parsed.materialCode.trim().toUpperCase(), parsed.po.trim(), p.imdKey)
+      .then((st) => {
+        if (this.temLeParsed !== parsed) return;
+        if (scannedTag.startsWith('TL')) {
+          this.temLeClInfo = `⛔ Tem ${scannedTag} là phần đã tách để xuất — không tách tiếp.`;
+        } else if (st?.clActive && scannedTag === st.clTag) {
+          this.temLeClInfo = `Đang tách bịch ${st.clTag} (còn ${this.formatNumber(st.clQty)}) → in TL-${String(st.seq + 1).padStart(2, '0')} + CL-${String(st.seq + 1).padStart(2, '0')}`;
+        } else if (st?.clActive && !scannedTag && TemLeClService.isSameBag(p.bagFractionLabel, st.bagFraction)) {
+          const next = String(st.seq + 1).padStart(2, '0');
+          this.temLeClInfo = `Tem cũ của bịch ${st.clTag} (còn ${this.formatNumber(st.clQty)}) → tách được, in TL-${next} + CL-${next} mới, bỏ tem cũ.`;
+          void this.temLeCl.getLastSplit(this.selectedFactory, parsed.materialCode.trim().toUpperCase(), parsed.po.trim(), p.imdKey)
+            .then((last) => {
+              if (this.temLeParsed === parsed && last && last.clTag === st.clTag) {
+                this.temLeLastSplit = last;
+                this.cdr.markForCheck();
+              }
+            })
+            .catch(() => undefined);
+        } else if (st?.clActive) {
+          this.temLeClInfo = `⛔ IMD này còn bịch ${st.clTag} (${this.formatNumber(st.clQty)}). Xuất hết ${st.clTag} trước rồi mới tách bịch chẵn.`;
+          // Scan lại tem cũ của chính bịch đã tách → nói rõ, cho Hủy lần tách nếu tách sai
+          void this.temLeCl.getLastSplit(this.selectedFactory, parsed.materialCode.trim().toUpperCase(), parsed.po.trim(), p.imdKey)
+            .then((last) => {
+              if (this.temLeParsed !== parsed || !last || last.clTag !== st.clTag) return;
+              this.temLeLastSplit = last;
+              const when = last.at ? last.at.toLocaleString('vi-VN', { hour12: false }) : '';
+              this.temLeClInfo = `⛔ Bịch này đã tách ${when}${last.by ? ' (' + last.by + ')' : ''}: `
+                + `${last.tlTag} = ${this.formatNumber(last.tlQty)} + ${last.clTag} = ${this.formatNumber(last.clQty)}. `
+                + `Bịch đang giữ là ${last.clTag} — scan tem ${last.clTag} để tách tiếp. `
+                + `Tách sai và ${last.tlTag} chưa xuất thì bấm "Hủy lần tách" rồi tách lại.`;
+              this.cdr.markForCheck();
+            })
+            .catch(() => undefined);
+        } else {
+          const next = String((Number(st?.seq) || 0) + 1).padStart(2, '0');
+          this.temLeClInfo = `Bịch chẵn → in TL-${next} (phần xuất) + CL-${next} (bịch còn lại)`;
+        }
+        this.cdr.markForCheck();
+      })
+      .catch(() => { /* chỉ là thông tin — lỗi đọc không chặn */ });
+  }
+
+  // ===== Cân GW bag CL sau khi in tem (16/10 → 17/10/2026) =====
+  temLeGwStep: {
+    logId: string; code: string; po: string; imd: string; clTag: string; clQty: number;
+    fullQty: number; gwFull: number; gwFullKnown: boolean;
+  } | null = null;
+  temLeGwCl: number | null = null;
+  temLeGwFullInput: number | null = null;
+  temLeGwMsg = '';
+  temLeGwOk: boolean | null = null;
+  temLeGwBusy = false;
+
+  /**
+   * Lưu GW bịch CL đã nhập trước khi in + so với GW dự kiến (GW bag nguyên × lượng CL ÷ lượng bag nguyên).
+   * Lệch > 5% → danh mục nghi ngờ (email 8h sáng hôm sau).
+   */
+  private async saveTemLeGwAfterSplit(
+    res: TemLeSplitResult, code: string, po: string, imd: string, sourceQty: number, gwCl: number, gwFull: number,
+    tl: { photo: Blob; gw: number; ocr: number | null } | null
+  ): Promise<void> {
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      if (this.temLeGwFullKnownFor(code) <= 0 && gwFull > 0) await this.nvlCatalogFull.setGwBag(code, gwFull, by);
+      let std = this.getStandardPacking(code) || 0;
+      if (!std) std = Number((await this.nvlCatalogFull.getByCode(code).catch(() => null))?.standardPacking) || 0;
+      const fullQty = std || sourceQty;
+      const dev = (gw: number, qty: number) => {
+        const expected = fullQty > 0 ? gwFull * qty / fullQty : null;
+        const devPct = expected ? Math.round(((gw - expected) / expected) * 1000) / 10 : null;
+        return { expected, devPct, ok: devPct != null && Math.abs(devPct) <= WEIGH_TOLERANCE_PERCENT };
+      };
+      const cl = dev(gwCl, res.clQty);
+      let photo: { url: string; path: string } | null = null;
+      let photoErr = '';
+      if (tl) {
+        try {
+          photo = await this.pxkOddWeigh.uploadPhoto(this.selectedFactory, 'TEM-LE', `${code}_${po}_${imd}_${res.tlTag}`, tl.photo);
+        } catch (e: any) {
+          console.error('upload TL photo:', e);
+          photoErr = e?.message || String(e);
+        }
+      }
+      const t = tl && photo ? dev(tl.gw, res.tlQty) : null;
+      const ok = cl.ok && (!t || t.ok);
+      const reasons: string[] = [];
+      if (!cl.ok) reasons.push(cl.devPct == null ? 'Không tính được GW dự kiến' : `${res.clTag} lệch ${cl.devPct}%`);
+      if (t && !t.ok) reasons.push(t.devPct == null ? 'Không tính được GW TL dự kiến' : `${res.tlTag} lệch ${t.devPct}%`);
+      await this.temLeCl.saveGwCheck(res.logId, {
+        factory: this.selectedFactory, materialCode: code, po, imd, clTag: res.clTag, clQty: res.clQty,
+        fullQty, gwBagFull: gwFull, gwCl, gwExpected: cl.expected == null ? null : Math.round(cl.expected), devPct: cl.devPct, ok,
+        reason: reasons.join('; '), by,
+        ...(tl && t && photo ? {
+          tlTag: res.tlTag, tlQty: res.tlQty, gwTl: tl.gw, gwTlExpected: t.expected == null ? null : Math.round(t.expected),
+          tlDevPct: t.devPct, tlOk: t.ok, tlGwOcr: tl.ocr, tlPhotoUrl: photo.url, tlPhotoPath: photo.path
+        } : {})
+      });
+      if (!ok) {
+        const lines: string[] = [];
+        if (!cl.ok) lines.push(`GW bịch ${res.clTag} lệch ${cl.devPct ?? '?'}% (cân ${gwCl} g, dự kiến ${cl.expected ? Math.round(cl.expected) : '?'} g).`);
+        if (tl && t && !t.ok) lines.push(`GW bịch ${res.tlTag} lệch ${t.devPct ?? '?'}% (cân ${tl.gw} g, dự kiến ${t.expected ? Math.round(t.expected) : '?'} g).`);
+        alert(`⚠️ ${lines.join('\n')}\nĐã in tem và ghi vào danh mục nghi ngờ (email 8h sáng mai).`);
+      }
+      if (photoErr) {
+        alert(`Đã in tem nhưng chưa lưu được hình bịch ${res.tlTag}: ${photoErr}\nKhi scan xuất tem ${res.tlTag} ở Outbound sẽ phải chụp + cân lại.`);
+      }
+    } catch (e: any) {
+      console.error('saveTemLeGwAfterSplit:', e);
+      alert('Đã in tem nhưng chưa lưu được GW / hình bịch TL: ' + (e?.message || e)
+        + '\nKhi scan xuất tem TL ở Outbound sẽ phải chụp + cân lại.');
+    }
+  }
+
+  private temLeGwFullKnownFor(code: string): number {
+    return this.temLeGwFullFor === String(code || '').trim().toUpperCase() ? this.temLeGwFullKnown : 0;
+  }
+
+  /** GW dự kiến bag CL = GW bag nguyên × (lượng CL ÷ lượng bag nguyên). Lệch ≤ 5% là đạt. */
+  async saveTemLeGw(skip = false): Promise<void> {
+    const st = this.temLeGwStep;
+    if (!st || this.temLeGwBusy) return;
+    if (this.temLeGwOk !== null) { this.temLeGwStep = null; return; }
+    const gwCl = Number(this.temLeGwCl) || 0;
+    const gwFull = st.gwFullKnown ? st.gwFull : Math.round(Number(this.temLeGwFullInput) || 0);
+    if (!skip) {
+      if (!(gwCl > 0)) { this.temLeGwMsg = 'Nhập GW bag CL (gram).'; return; }
+      if (!(gwFull > 0)) { this.temLeGwMsg = 'Mã chưa có GW bag nguyên — nhập GW bag nguyên (gram).'; return; }
+    }
+    this.temLeGwBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      if (!skip && !st.gwFullKnown && gwFull > 0) await this.nvlCatalogFull.setGwBag(st.code, gwFull, by);
+      const expected = !skip && gwFull > 0 && st.fullQty > 0 ? gwFull * st.clQty / st.fullQty : null;
+      const devPct = expected ? Math.round(((gwCl - expected) / expected) * 1000) / 10 : null;
+      const ok = !skip && devPct != null && Math.abs(devPct) <= 5;
+      await this.temLeCl.saveGwCheck(st.logId, {
+        factory: this.selectedFactory, materialCode: st.code, po: st.po, imd: st.imd, clTag: st.clTag, clQty: st.clQty,
+        fullQty: st.fullQty, gwBagFull: gwFull, gwCl: skip ? null : gwCl,
+        gwExpected: expected == null ? null : Math.round(expected), devPct, ok,
+        reason: skip ? 'Không nhập GW' : (ok ? '' : `Lệch ${devPct}%`), by
+      });
+      this.temLeGwOk = ok;
+      this.temLeGwMsg = skip
+        ? 'Đã bỏ qua — ghi vào danh mục nghi ngờ (email 8h sáng mai).'
+        : ok
+          ? `✅ Đạt: GW ${gwCl} g, dự kiến ${Math.round(expected!)} g (lệch ${devPct}%).`
+          : `⚠️ Lệch ${devPct}% (GW ${gwCl} g, dự kiến ${Math.round(expected!)} g) — đã ghi danh mục nghi ngờ, email 8h sáng mai.`;
+    } catch (e: any) {
+      this.temLeGwMsg = '❌ Không lưu được GW: ' + (e?.message || e);
+    } finally {
+      this.temLeGwBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Danh mục nghi ngờ sai lệch GW
+  showTemLeGwSuspects = false;
+  temLeGwSuspects: any[] = [];
+  temLeGwSuspectsLoading = false;
+
+  async openTemLeGwSuspects(): Promise<void> {
+    this.showTemLeGwSuspects = true;
+    this.temLeGwSuspectsLoading = true;
+    this.cdr.detectChanges();
+    try {
+      this.temLeGwSuspects = await this.temLeCl.listGwSuspects();
+    } catch (e) {
+      console.error('listGwSuspects:', e);
+      this.temLeGwSuspects = [];
+    } finally {
+      this.temLeGwSuspectsLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  gwSuspectTime(v: any): string {
+    const d = v?.toDate ? v.toDate() : null;
+    return d ? d.toLocaleString('vi-VN', { hour12: false }) : '';
+  }
+
+  // ===== Report "không cân được" (tách lẻ & cân) → danh sách Check lượng PXK chờ duyệt =====
+  readonly weighReasons = WEIGH_EXEMPT_REASONS;
+  readonly weighOther = WEIGH_EXEMPT_OTHER;
+  weighReport: { code: string; po: string; lsx: string; maKho: string; choice: string; other: string; busy: boolean; msg: string; ok: boolean } | null = null;
+
+  openWeighReport(code: string, po: string, lsx: string, maKho = ''): void {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c) return;
+    this.weighReport = { code: c, po: String(po || '').trim(), lsx: String(lsx || '').trim(), maKho, choice: '', other: '', busy: false, msg: '', ok: false };
+  }
+
+  async submitWeighReport(): Promise<void> {
+    const r = this.weighReport;
+    if (!r || r.busy) return;
+    const reason = buildWeighExemptReason(r.choice, r.other, 'Tách lẻ & cân — Materials');
+    if (!reason) { r.msg = r.choice === WEIGH_EXEMPT_OTHER ? 'Nhập lý do khác.' : 'Chọn lý do.'; return; }
+    r.busy = true;
+    r.msg = '';
+    try {
+      const sent = await this.pxkWeightReports.submit({
+        lsx: r.lsx, materialCode: r.code, maKho: r.maKho, po: r.po, reason,
+        reportedBy: await this.getMaterialsOtpRequester()
+      });
+      r.ok = true;
+      r.msg = sent.zaloOk
+        ? '✅ Đã gửi — chờ duyệt ở Work Order Status (Danh mục check lượng) hoặc nhóm Quản lý kho rep "duyệt".'
+        : '✅ Đã lưu báo cáo (chờ duyệt). Zalo chưa gửi được tới nhóm Quản lý kho.';
+    } catch (e: any) {
+      r.msg = '❌ Không gửi được: ' + (e?.message || e);
+    } finally {
+      r.busy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async undoTemLeLastSplit(): Promise<void> {
+    const last = this.temLeLastSplit;
+    const parsed = this.temLeParsed;
+    if (!last || !parsed || this.temLeUndoBusy) return;
+    const p = this.rmBagHistory.parseQrPart4(parsed.p4);
+    if (!confirm(`Hủy lần tách ${last.tlTag} (${this.formatNumber(last.tlQty)}) + ${last.clTag} (${this.formatNumber(last.clQty)})?\n`
+      + `Bỏ 2 tem ${last.tlTag} / ${last.clTag} đã in. Chỉ hủy khi ${last.tlTag} CHƯA scan xuất.`)) return;
+    this.temLeUndoBusy = true;
+    try {
+      await this.temLeCl.undoLastSplit(this.selectedFactory, parsed.materialCode.trim().toUpperCase(), parsed.po.trim(),
+        p.imdKey, last.id, await this.getMaterialsOtpRequester());
+      this.onTemLeQrTextChanged();
+    } catch (e: any) {
+      this.temLeError = e?.message || 'Không hủy được lần tách.';
+    } finally {
+      this.temLeUndoBusy = false;
+      this.cdr.markForCheck();
+    }
   }
 
   onTemLeQrEnter(): void {
@@ -1849,7 +2118,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const materialCode = parts[0] || '';
     const po = parts[1] || '';
-    const qty = Number(String(parts[2] || '').replace(/,/g, '').trim());
+    const qty = isRmQtyDecimalFactory(this.selectedFactory)
+      ? parseRmScanQty(parts[2], RM_QTY_DECIMALS_4)
+      : Number(String(parts[2] || '').replace(/,/g, '').trim());
     const p4 = parts[3] || '';
     if (!materialCode || !po || !Number.isFinite(qty) || qty <= 0 || !p4) {
       this.temLeError = 'QR không hợp lệ. Vui lòng scan lại tem.';
@@ -1870,22 +2141,48 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.temLeError = 'Vui lòng nhập số lượng cần tách > 0';
       return;
     }
-    if (splitQty >= parsed.quantity) {
-      this.temLeError = 'Số lượng tách phải nhỏ hơn số lượng trên tem';
+    const mustWeigh = this.temLeNeedsWeigh;
+    const gwCl = Math.round(Number(this.temLeGwClInput) || 0);
+    const gwFull = this.temLeGwFullKnown > 0 ? this.temLeGwFullKnown : Math.round(Number(this.temLeGwFullInput2) || 0);
+    if (mustWeigh && !(gwCl > 0)) {
+      this.temLeError = 'Cân và nhập GW bịch CL (gram) trước khi in tem.';
       return;
     }
+    if (mustWeigh && !(gwFull > 0)) {
+      this.temLeError = 'Mã chưa có GW bag nguyên — nhập GW bag nguyên (gram).';
+      return;
+    }
+    const gwTl = Math.round((Number(this.temLeGwTlInput) || 0) * 10) / 10;
+    if (mustWeigh && (!this.temLeTlPhoto || !(gwTl > 0))) {
+      this.temLeError = 'Đặt bịch TL lên cân, chụp hình và kiểm tra GW bịch TL (gram) trước khi in tem.';
+      return;
+    }
+    const tlWeigh = mustWeigh && this.temLeTlPhoto ? { photo: this.temLeTlPhoto, gw: gwTl, ocr: this.temLeTlOcr } : null;
 
-    // Round to 4 decimals to avoid float noise
-    const round4 = (n: number) => Math.round(n * 10000) / 10000;
-    const remainingQty = round4(parsed.quantity - splitQty);
-    const splitQtyR = round4(splitQty);
-
-    const baseP4 = String(parsed.p4 || '').trim().replace(/\(T\d+\)\s*$/i, '');
-    const splitP4 = `${baseP4}(T1${this.nextTemLeSuffix6()})`; // Tem tách có đuôi lẽ (6 số)
-    const remainP4 = baseP4;         // Tem gốc còn lại giữ nguyên
-
-    const splitQrData = `${parsed.materialCode}|${parsed.po}|${splitQtyR}|${splitP4}`;
-    const remainQrData = `${parsed.materialCode}|${parsed.po}|${remainingQty}|${remainP4}`;
+    // Tem lẻ TL / CL (16/10/2026): chỉ tách từ bịch chẵn (IMD không còn CL) hoặc đúng bịch CL hiện tại.
+    // Lần tách n in TL-0n (phần đem xuất) + CL-0n (bịch còn lại). Kiểm tra + ghi trạng thái trong 1 transaction.
+    const p = this.rmBagHistory.parseQrPart4(parsed.p4);
+    let splitQrData = '';
+    let remainQrData = '';
+    let splitRes: TemLeSplitResult | null = null;
+    try {
+      const res = await this.temLeCl.split({
+        factory: this.selectedFactory,
+        materialCode: parsed.materialCode.trim().toUpperCase(),
+        po: parsed.po.trim(),
+        quantity: parsed.quantity,
+        p4: parsed.p4,
+        imd: p.imdKey,
+        bagFraction: p.bagFractionLabel
+      }, splitQty, await this.getMaterialsOtpRequester());
+      splitQrData = res.tlQrData;
+      remainQrData = res.clQrData;
+      splitRes = res;
+    } catch (e: any) {
+      this.temLeError = e?.message || 'Không tách được tem.';
+      this.cdr.markForCheck();
+      return;
+    }
 
     try {
       const [splitImg, remainImg] = await Promise.all([
@@ -1920,114 +2217,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       };
 
       this.createQRPrintWindow(qrImages, fakeMaterial, true);
+      const code = parsed.materialCode.trim().toUpperCase();
       this.closeTemLePopup();
+      if (splitRes && mustWeigh) void this.saveTemLeGwAfterSplit(splitRes, code, parsed.po.trim(), p.imdKey, Number(parsed.quantity) || 0, gwCl, gwFull, tlWeigh);
     } catch (e) {
       console.error('❌ Tem Lẽ print error:', e);
       this.temLeError = 'Lỗi khi tạo/in tem. Vui lòng thử lại.';
     }
-  }
-
-  openTemXuatKhoPopup(): void {
-    this.showTemXuatKhoPopup = true;
-    this.temXuatLsxInput = '';
-    this.temXuatError = '';
-    setTimeout(() => {
-      const el = document.getElementById('tem-xuat-lsx-input-asm1') as HTMLInputElement | null;
-      el?.focus();
-      el?.select();
-    }, 50);
-  }
-
-  closeTemXuatKhoPopup(): void {
-    this.showTemXuatKhoPopup = false;
-    this.temXuatLsxInput = '';
-    this.temXuatError = '';
-  }
-
-  onTemXuatLsxEnter(): void {
-    void this.confirmTemXuatKhoPrint();
-  }
-
-  private normPoForPxk(po: string): string {
-    return String(po || '')
-      .trim()
-      .toUpperCase()
-      .replace(/\s/g, '');
-  }
-
-  private normMatForPxk(m: string): string {
-    return String(m || '')
-      .trim()
-      .toUpperCase();
-  }
-
-  /**
-   * Tem Xuất Kho: không in — mã bắt đầu bằng R; mã thuộc nhóm Rule Bag đang OFF (4 ký tự đầu, `qtyBagRuleByPrefix[prefix] === false`).
-   */
-  private shouldSkipMaterialForTemXuatKhoExport(materialCode: string): boolean {
-    const c = String(materialCode || '').trim().toUpperCase();
-    if (!c) {
-      return true;
-    }
-    if (c.startsWith('R')) {
-      return true;
-    }
-    const p = this.getMaterialCodePrefix4(c);
-    return !!(p && this.qtyBagRuleByPrefix[p] === false);
-  }
-
-  /** Gộp các dòng PXK trùng Mã+PO (cộng lượng). */
-  private mergePxkLinesForTem(lines: PxkLineExport[]): { materialCode: string; po: string; quantity: number }[] {
-    const map = new Map<string, { materialCode: string; po: string; q: number }>();
-    for (const ln of lines) {
-      const mk = this.normMatForPxk(ln.materialCode);
-      const pk = this.normPoForPxk(ln.po);
-      const key = `${mk}\0${pk}`;
-      const add = Math.round((Number(ln.quantity) || 0) * 100) / 100;
-      if (add <= 0 || !mk) {
-        continue;
-      }
-      const cur = map.get(key);
-      if (!cur) {
-        map.set(key, { materialCode: ln.materialCode.trim(), po: (ln.po || '').trim(), q: add });
-      } else {
-        cur.q += add;
-      }
-    }
-    return Array.from(map.values()).map((x) => ({
-      materialCode: x.materialCode,
-      po: x.po,
-      quantity: x.q
-    }));
-  }
-
-  /**
-   * Tải tồn kho từ Firebase theo mọi mã hàng xuất hiện trong PXK (không dùng ô tìm kiếm trên màn hình).
-   */
-  private async fetchInventoryRowsForPxkMerged(
-    pxkLines: { materialCode: string; po: string; quantity: number }[]
-  ): Promise<InventoryMaterial[]> {
-    const codes = [...new Set(pxkLines.map((l) => this.normMatForPxk(l.materialCode)).filter(Boolean))];
-    const merged: InventoryMaterial[] = [];
-    for (const code of codes) {
-      try {
-        const querySnapshot = await this.firestore
-          .collection('inventory-materials', (ref) =>
-            ref.where('factory', '==', this.selectedFactory).where('materialCode', '==', code).limit(150)
-          )
-          .get()
-          .toPromise();
-        if (!querySnapshot?.docs?.length) {
-          continue;
-        }
-        for (const doc of querySnapshot.docs) {
-          merged.push(this.mapFirestoreDocToInventoryMaterialForPxk(doc));
-        }
-      } catch (e) {
-        console.warn('[Tem Xuất Kho] fetch inventory for', code, e);
-      }
-    }
-    return merged;
   }
 
   private mapFirestoreDocToInventoryMaterialForPxk(doc: { id: string; data: () => any }): InventoryMaterial {
@@ -2068,136 +2264,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return material;
   }
 
-  /**
-   * Theo lượng xuất PXK: FIFO theo IMD (importDate), chia tem = Standard Packing,
-   * phần lẻ một tem (giống logic in tem trên dòng tồn).
-   * `inventoryRows` — từ Firebase theo mã PXK, không phải `inventoryMaterials` đang lọc theo search.
-   */
-  /** Khóa ổn định cho map lượng đã giả lập xuất theo dòng inventory (Tem Xuất Kho). */
-  private pxkInventoryRowKey(m: InventoryMaterial): string {
-    const id = m.id != null && String(m.id).trim() !== '' ? String(m.id).trim() : '';
-    if (id) {
-      return id;
-    }
-    const t = m.importDate?.getTime() ?? 0;
-    return `${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber)}\0${t}\0${String(m.batchNumber ?? '')}`;
-  }
-
-  /**
-   * Tem xuất theo PXK (FIFO) + gom lượng đã lấy trên từng dòng để sau đó in thêm tem TỒN nếu còn kho.
-   */
-  private buildQrPayloadsForPxkLine(
-    line: {
-      materialCode: string;
-      po: string;
-      quantity: number;
-    },
-    inventoryRows: InventoryMaterial[],
-    reprintedDocIds: Set<string>,
-    printedFlagItemsOut: Map<
-      string,
-      { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }
-    >,
-    usedBagsByRowKeyOut: Map<string, number>,
-    exportedQtyByBagOut: Map<string, Map<number, number>>
-  ): { payloads: { qrData: string }[]; consumed: Map<string, number> } {
-    const consumed = new Map<string, number>();
-    const mat = line.materialCode.trim();
-    const po = (line.po || '').trim();
-    const Q = Math.round((Number(line.quantity) || 0) * 100) / 100;
-    if (Q <= 0 || !mat) {
-      return { payloads: [], consumed };
-    }
-    const matN = this.normMatForPxk(mat);
-    const poN = this.normPoForPxk(po);
-    const rows = inventoryRows
-      .filter(
-        (m) =>
-          this.normMatForPxk(m.materialCode) === matN &&
-          this.normPoForPxk(m.poNumber || '') === poN
-      )
-      .sort((a, b) => (a.importDate?.getTime() || 0) - (b.importDate?.getTime() || 0));
-
-    let totalAvail = rows.reduce((s, m) => s + this.calculateCurrentStock(m), 0);
-    if (totalAvail < Q) {
-      throw new Error(
-        `Không đủ tồn: ${mat} / PO ${po}. PXK cần ${Q}, tồn khả dụng ${totalAvail}.`
-      );
-    }
-
-    let remaining = Q;
-    const out: { qrData: string }[] = [];
-    for (const m of rows) {
-      if (remaining <= 0) {
-        break;
-      }
-      let rowAvail = Math.min(this.calculateCurrentStock(m), remaining);
-      if (rowAvail <= 0) {
-        continue;
-      }
-      const sp = this.getEffectiveStandardPacking(m);
-      if (!sp || sp <= 0) {
-        throw new Error(`Thiếu Standard Packing (hoặc catalog) cho mã ${mat}.`);
-      }
-      const bagTotal = this.effectiveTotalBags(m);
-      if (bagTotal <= 0) {
-        const imdKey = this.getImdKeyForMaterial(m);
-        throw new Error(`Thiếu BAG: ${mat} / PO ${po} / IMD ${imdKey}. Vui lòng nhập đủ cột BAG trước khi in.`);
-      }
-      const expectedBagsFromStock = this.computeTotalBagsFromStock(m);
-      if (expectedBagsFromStock > 0 && bagTotal < expectedBagsFromStock) {
-        const imdKey = this.getImdKeyForMaterial(m);
-        throw new Error(
-          `BAG không đủ: ${mat} / PO ${po} / IMD ${imdKey}. BAG=${bagTotal} nhưng tồn/SP cần tối thiểu ${expectedBagsFromStock}.`
-        );
-      }
-      const importDateStr = this.getImdKeyForMaterial(m);
-      const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
-      const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
-      const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
-      let bagIdx = 1;
-      const rowKey = this.pxkInventoryRowKey(m);
-      const rowStock = Math.max(0, this.calculateCurrentStock(m));
-      const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
-      const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
-      const expMap = exportedQtyByBagOut.get(rowKey) || new Map<number, number>();
-      if (!exportedQtyByBagOut.has(rowKey)) exportedQtyByBagOut.set(rowKey, expMap);
-      while (rowAvail > 0 && remaining > 0) {
-        if (bagIdx > bagTotal) {
-          throw new Error(`BAG vượt quá tổng: ${mat} / PO ${po} / IMD ${importDateStr} (${bagIdx}/${bagTotal}).`);
-        }
-        const chunk = rowAvail >= sp ? sp : rowAvail;
-        const p4Base = `${importDateStr}-${bagIdx}/${bagTotal}`;
-        const p4 = chunk < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
-        const qrData = `${mat}|${po}|${chunk}|${p4}`;
-        // Chỉ in lại tem cho hàng nhập trước cutoff và chưa được in lại tem mẫu mới.
-        if (!isTemMoi && !isAlreadyReprinted) {
-          out.push({ qrData });
-          printedFlagItemsOut.set(rowFlag.docId, rowFlag);
-        }
-        consumed.set(rowKey, (consumed.get(rowKey) || 0) + chunk);
-        expMap.set(bagIdx, Math.round(((expMap.get(bagIdx) || 0) + chunk) * 10000) / 10000);
-        rowAvail -= chunk;
-        remaining -= chunk;
-        bagIdx++;
-      }
-      // số bag đã dùng (để in tem tồn tiếp từ bag kế tiếp)
-      usedBagsByRowKeyOut.set(rowKey, Math.max(usedBagsByRowKeyOut.get(rowKey) || 0, bagIdx - 1));
-    }
-    return { payloads: out, consumed };
-  }
-
   private ensureTemLeSuffixPool(): void {
     if (this.temLeSuffixPool.length > 0) return;
     this.temLeSuffixPool = this.generateTemLeSuffixPool6(6);
-  }
-
-  private nextTemLeSuffix6(): string {
-    this.ensureTemLeSuffixPool();
-    const v = this.temLeSuffixPool.shift();
-    if (v) return v;
-    this.temLeSuffixPool = this.generateTemLeSuffixPool6(6);
-    return this.temLeSuffixPool.shift() || this.random6Digits();
   }
 
   private generateTemLeSuffixPool6(count: number): string[] {
@@ -2227,309 +2296,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
   }
 
-  /**
-   * Sau khi phân bổ lượng xuất PXK (FIFO), mỗi dòng tồn thuộc mã+PO trong PXK còn dư → 1 tem TỒN (cùng format như in trên dòng).
-   */
-  private buildTonQrPayloadsAfterPxkExport(
-    pxkLines: { materialCode: string; po: string; quantity: number }[],
-    inventoryRows: InventoryMaterial[],
-    consumedByRowKey: Map<string, number>,
-    reprintedDocIds: Set<string>,
-    printedFlagItemsOut: Map<
-      string,
-      { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }
-    >,
-    usedBagsByRowKey: Map<string, number>,
-    exportedQtyByBag: Map<string, Map<number, number>>
-  ): { qrData: string }[] {
-    const pxkKeys = new Set(
-      pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
-    );
-    const rows = inventoryRows
-      .filter(
-        (m) =>
-          pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
-      )
-      .sort((a, b) => {
-        const mc = this.normMatForPxk(a.materialCode).localeCompare(this.normMatForPxk(b.materialCode));
-        if (mc !== 0) {
-          return mc;
-        }
-        const po = this.normPoForPxk(a.poNumber || '').localeCompare(this.normPoForPxk(b.poNumber || ''));
-        if (po !== 0) {
-          return po;
-        }
-        return (a.importDate?.getTime() || 0) - (b.importDate?.getTime() || 0);
-      });
-    const out: { qrData: string }[] = [];
-    for (const m of rows) {
-      const key = this.pxkInventoryRowKey(m);
-      const taken = consumedByRowKey.get(key) || 0;
-      const rem = Math.max(
-        0,
-        Math.round((this.calculateCurrentStock(m) - taken) * 10000) / 10000
-      );
-      if (rem <= 1e-6) {
-        continue;
-      }
-      const bagTotal = this.effectiveTotalBags(m);
-      if (bagTotal <= 0) {
-        continue;
-      }
-      const importDateStr = this.getImdKeyForMaterial(m);
-      const rowFlag = this.buildReprintFlagItemFromInventoryRow(m);
-      const isTemMoi = !!m.importDate && m.importDate.getTime() >= this.TEM_MOI_CUTOFF.getTime();
-      const isAlreadyReprinted = reprintedDocIds.has(rowFlag.docId);
-      const mat = m.materialCode.trim();
-      const po = (m.poNumber || '').trim();
-      const sp = this.getEffectiveStandardPacking(m);
-      if (!sp || sp <= 0) {
-        continue;
-      }
-      if (!isTemMoi && !isAlreadyReprinted) {
-        const expMap = exportedQtyByBag.get(key) || new Map<number, number>();
-        const rowStock = Math.max(0, this.calculateCurrentStock(m));
-        const lastBagCapacity = Math.max(0, Math.round((rowStock - sp * (bagTotal - 1)) * 10000) / 10000);
-        const capOfBag = (i: number) => (i >= bagTotal ? (lastBagCapacity > 0 ? lastBagCapacity : sp) : sp);
-        for (let i = 1; i <= bagTotal; i++) {
-          const cap = capOfBag(i);
-          const exportedInBag = Math.round((Number(expMap.get(i) || 0)) * 10000) / 10000;
-          const remainInBag = Math.round((cap - exportedInBag) * 10000) / 10000;
-          if (remainInBag <= 1e-9) continue;
-          const p4Base = `${importDateStr}-${i}/${bagTotal}`;
-          const p4 = remainInBag < sp ? `${p4Base}(T1${this.nextTemLeSuffix6()})` : p4Base;
-          // NOTE: nếu bag bị tách (exportedInBag > 0) thì tem tồn của bag này vẫn in cùng số i/tổng.
-          // remainInBag < sp có thể xảy ra ở bag cuối hoặc bag bị tách.
-          const qrData = `${mat}|${po}|${remainInBag}|${p4}`;
-          out.push({ qrData });
-          printedFlagItemsOut.set(rowFlag.docId, rowFlag);
-        }
-      }
-    }
-    return out;
-  }
-
-  async confirmTemXuatKhoPrint(): Promise<void> {
-    const QRCode = await import('qrcode') as any;
-    this.temXuatError = '';
-    const raw = this.temXuatLsxInput.trim();
-    if (!raw) {
-      this.temXuatError = 'Vui lòng scan hoặc nhập lệnh sản xuất (LSX).';
-      return;
-    }
-    if (this.temXuatBusy) {
-      return;
-    }
-    this.temXuatBusy = true;
-    try {
-      const pxkRaw = await this.temXuatKho.loadPxkLinesForLsx(this.selectedFactory, raw);
-      if (!pxkRaw.length) {
-        this.temXuatError =
-          'Không tìm thấy PXK cho LSX này. Kiểm tra đã import PXK (Work Order / pxk-import-data).';
-        return;
-      }
-      const pxkMerged = this.mergePxkLinesForTem(pxkRaw);
-      const pxkLines = pxkMerged.filter((l) => !this.shouldSkipMaterialForTemXuatKhoExport(l.materialCode));
-      if (!pxkLines.length) {
-        this.temXuatError =
-          'Không còn dòng PXK nào đủ điều kiện in tem (đã loại mã R và nhóm Rule Bag đang OFF).';
-        return;
-      }
-      const inventoryRows = await this.fetchInventoryRowsForPxkMerged(pxkLines);
-
-      // 1) Load cờ "đã in lại tem mẫu mới" cho các dòng tồn liên quan (theo Mã + PO + IMD).
-      const pxkKeys = new Set(
-        pxkLines.map((l) => `${this.normMatForPxk(l.materialCode)}\0${this.normPoForPxk(l.po)}`)
-      );
-      const flagItems = inventoryRows
-        .filter((m) =>
-          pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)
-        )
-        .map((m) => this.buildReprintFlagItemFromInventoryRow(m));
-      const preCutoffFlagItems = inventoryRows.filter((m) => {
-        if (!pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)) return false;
-        const t = m.importDate?.getTime?.() || 0;
-        return t > 0 && t < this.TEM_MOI_CUTOFF.getTime();
-      });
-      const postCutoffCount = inventoryRows.filter((m) => {
-        if (!pxkKeys.has(`${this.normMatForPxk(m.materialCode)}\0${this.normPoForPxk(m.poNumber || '')}`)) return false;
-        const t = m.importDate?.getTime?.() || 0;
-        return t >= this.TEM_MOI_CUTOFF.getTime();
-      }).length;
-      const reprintedDocIds = this.REPRINT_FLAG_RULE_ENABLED
-        ? await this.labelReprintFlags.getExistingFlagsByDocId(flagItems.map((x) => x.docId))
-        : new Set<string>();
-
-      const exportPayloads: { qrData: string }[] = [];
-      const consumedByRowKey = new Map<string, number>();
-      const printedFlagItems = new Map<string, { docId: string; factory: 'ASM1' | 'ASM2'; materialCode: string; poNumber: string; imdKey: string }>();
-      const usedBagsByRowKey = new Map<string, number>();
-      const exportedQtyByBag = new Map<string, Map<number, number>>();
-      const notEnoughLines: string[] = [];
-      for (const ln of pxkLines) {
-        try {
-          const { payloads, consumed } = this.buildQrPayloadsForPxkLine(
-            ln,
-            inventoryRows,
-            reprintedDocIds,
-            printedFlagItems
-            , usedBagsByRowKey
-            , exportedQtyByBag
-          );
-          exportPayloads.push(...payloads);
-          for (const [k, v] of consumed) {
-            consumedByRowKey.set(k, (consumedByRowKey.get(k) || 0) + v);
-          }
-        } catch (e) {
-          // Không đủ tồn / thiếu Standard Packing... → vẫn tiếp tục in các mã khác
-          const msg = (e as Error)?.message || '';
-          const mat = (ln.materialCode || '').trim();
-          const po = (ln.po || '').trim();
-          notEnoughLines.push(msg || `Không xử lý được: ${mat} / PO ${po}`);
-          continue;
-        }
-      }
-      const tonPayloads = this.buildTonQrPayloadsAfterPxkExport(
-        pxkLines,
-        inventoryRows,
-        consumedByRowKey,
-        reprintedDocIds,
-        printedFlagItems,
-        usedBagsByRowKey,
-        exportedQtyByBag
-      );
-      if (exportPayloads.length === 0 && tonPayloads.length === 0) {
-        if (notEnoughLines.length) {
-          this.temXuatError = notEnoughLines.join('\n');
-        } else if (this.REPRINT_FLAG_RULE_ENABLED && preCutoffFlagItems.length > 0 && reprintedDocIds.size > 0) {
-          this.temXuatError = 'Đã in tem mẫu mới (tem cũ trước 01/04/2026) nên không in lại.';
-        } else if (postCutoffCount > 0 && preCutoffFlagItems.length === 0) {
-          this.temXuatError = 'Tem mới (sau 01/04/2026), không cần in';
-        } else {
-          this.temXuatError = 'Không có tem cần in trong LSX này.';
-        }
-        return;
-      }
-      if (notEnoughLines.length) {
-        this.temXuatError = `⚠️ Một số mã không đủ điều kiện in:\n${notEnoughLines.join('\n')}`;
-      } else {
-        this.temXuatError = '';
-      }
-
-      const exportByKey = new Map<string, { qrData: string }[]>();
-      for (const p of exportPayloads) {
-        const parts = p.qrData.split('|');
-        const k = `${(parts[0] || '').trim()}\0${(parts[1] || '').trim()}`;
-        if (!exportByKey.has(k)) exportByKey.set(k, []);
-        exportByKey.get(k)!.push(p);
-      }
-      const tonByKey = new Map<string, { qrData: string }[]>();
-      for (const p of tonPayloads) {
-        const parts = p.qrData.split('|');
-        const k = `${(parts[0] || '').trim()}\0${(parts[1] || '').trim()}`;
-        if (!tonByKey.has(k)) tonByKey.set(k, []);
-        tonByKey.get(k)!.push(p);
-      }
-
-      const displayLsx = raw.trim();
-      const orderedKeys: string[] = [];
-      for (const ln of pxkLines) {
-        const k = `${(ln.materialCode || '').trim()}\0${(ln.po || '').trim()}`;
-        if (!orderedKeys.includes(k)) orderedKeys.push(k);
-      }
-
-      const printSequence: any[] = [{ kind: 'lsxHeader', lsxText: displayLsx, qrData: '' }];
-      for (const k of orderedKeys) {
-        const [mat, po] = k.split('\0');
-        const exp = exportByKey.get(k) || [];
-        const ton = tonByKey.get(k) || [];
-        if (exp.length === 0 && ton.length === 0) continue;
-        printSequence.push({ kind: 'lsxHeader', lsxText: `${mat}`, qrData: '' });
-        if (exp.length) {
-          printSequence.push({ kind: 'lsxHeader', lsxText: 'XUẤT', qrData: '' });
-          for (const p of exp) printSequence.push(p);
-        }
-        if (ton.length) {
-          printSequence.push({ kind: 'lsxHeader', lsxText: 'TỒN', qrData: '' });
-          for (const p of ton) printSequence.push(p);
-        }
-        printSequence.push({ kind: 'spacer', qrData: '' });
-      }
-
-      const qrImages: any[] = [];
-      let idx = 1;
-      for (const it of printSequence) {
-        if (it?.kind === 'lsxHeader' || it?.kind === 'spacer') {
-          qrImages.push(it);
-          continue;
-        }
-        const qrImage = await QRCode.toDataURL(it.qrData, {
-          width: 240,
-          margin: 1,
-          color: { dark: '#000000', light: '#FFFFFF' }
-        });
-        const parts = String(it.qrData || '').split('|');
-        qrImages.push({
-          image: qrImage,
-          qrData: it.qrData,
-          index: idx++,
-          materialCode: parts[0] || '',
-          poNumber: parts[1] || '',
-          unitNumber: Number(parts[2]) || 0
-        });
-      }
-
-      // qrImages đã là thứ tự in cuối cùng (LSX -> Mã -> XUẤT -> tem -> TỒN -> tem)
-
-      const fakeMaterial: InventoryMaterial = {
-        factory: this.selectedFactory,
-        importDate: new Date(),
-        batchNumber: '',
-        materialCode: 'PXK-EXPORT',
-        poNumber: '',
-        openingStock: null,
-        quantity: 0,
-        unit: '',
-        location: '',
-        type: '',
-        expiryDate: new Date(),
-        qualityCheck: false,
-        isReceived: false,
-        notes: '',
-        rollsOrBags: '',
-        supplier: '',
-        remarks: '',
-        isCompleted: false
-      };
-
-      this.createQRPrintWindow(qrImages, fakeMaterial, true, false, inventoryRows);
-
-      // 2) Lưu cờ: các dòng tồn đã được in lại tem mẫu mới
-      if (this.REPRINT_FLAG_RULE_ENABLED) {
-        try {
-          const userEmail = (await this.afAuth.currentUser)?.email || '';
-          await this.labelReprintFlags.markReprintedByDocId(
-            Array.from(printedFlagItems.values()),
-            { reprintedBy: userEmail, source: `TEM_XUAT_KHO_REPRINT:${this.selectedFactory}` }
-          );
-        } catch (e) {
-          console.warn('⚠️ Không lưu được cờ in lại tem (bỏ qua):', e);
-        }
-      }
-
-      this.closeTemXuatKhoPopup();
-    } catch (e) {
-      console.error('❌ Tem Xuất Kho:', e);
-      this.temXuatError = (e as Error)?.message || 'Lỗi khi tạo/in tem.';
-    } finally {
-      this.temXuatBusy = false;
-    }
-  }
-
-  /** Tab riêng Kiểm tra KK — `/quan-ly-nguyen-lieu`. */
+  /** Tab riêng Kiểm tra KK — `/quan-ly-nguyen-lieu` (QuanLyNguyenLieuComponent ghi đè thành true). */
   get isNguyenLieuPage(): boolean {
-    return this.router.url.split('?')[0].split('#')[0] === '/quan-ly-nguyen-lieu';
+    return false;
   }
+
+  // ── Hook cho trang Kiểm kê: RM Inventory để trống, QuanLyNguyenLieuComponent ghi đè ──
+
+  /** Cuối ngOnInit. */
+  protected initKkPage(): void { }
+
+  /** Sau khi đổi nhà máy. */
+  protected onKkPageFactoryChanged(): void {
+    this.showKkTypeReportMenu = false;
+    this.showKkIdReport = false;
+    this.showKkPalletCheck = false;
+  }
+
+  /** Khi cửa sổ đổi kích thước. */
+  protected onKkPageResize(): void { }
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
@@ -2548,70 +2333,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  /** PDA / Enter: tìm mã ngay, không đợi debounce 2s. */
-  runMobileNguyenLieuSearch(): void {
-    const term = String(this.searchTerm || '').trim().toUpperCase();
-    this.searchTerm = term;
-    if (!term || term.length < 4) return;
-    void this.performSearch(term);
-  }
-
-  chooseNlScanDevice(_device?: 'mobile' | 'pda'): void {
-    // Tab Quản lý NVL: chỉ scanner — bỏ chọn camera.
-    this.nlScanDevice = 'pda';
-    this.showNlDevicePicker = false;
-    const pending = this.nlPendingAction;
-    this.nlPendingAction = null;
-    this.cdr.markForCheck();
-    if (pending === 'search') this.startNlSearchScan();
-    else if (pending === 'kk') this.startNlKkScan();
-    else if (pending === 'location' && this.mobileLocScanMaterial) {
-      this.openMobileLocationScan(this.mobileLocScanMaterial);
-    }
-  }
-
-  openNlDevicePicker(): void {
-    // Không còn picker camera/PDA — luôn scanner.
-    this.nlScanDevice = 'pda';
-  }
-
-  startNlSearchScan(): void {
-    this.nlScanDevice = 'pda';
-    this.stopNlCamera();
-    this.nlPdaBuffer = '';
-    this.showNlPdaScan = true;
-    setTimeout(() => this.focusNlPdaInput(), 50);
-  }
-
-  startNlKkScan(): void {
-    if (!this.canEdit || this.isLoading) return;
-    this.nlScanDevice = 'pda';
-    this.stopNlCamera();
-    // Cập nhật vị trí: scan kệ S/R (kể cả R10-1…) → scan mã — chỉ đổi vị trí
-    this.openKkTypeScanModal(undefined, 'location');
-  }
-
-  get nlCameraHeading(): string {
-    if (this.nlCameraPurpose === 'location') return 'Quét vị trí';
-    if (this.nlCameraPurpose === 'kk') {
-      if (this.kkTypeScanStep === 'operator') return 'Nhập mã nhân viên';
-      if (this.kkTypeScanStep === 'location') return 'Quét kệ S/R';
-      return 'Quét mã hàng (mã · PO · IMD)';
-    }
-    return 'Quét mã hàng';
-  }
-
-  get nlCameraSub(): string {
-    if (this.nlCameraPurpose === 'kk' && this.kkTypeScanStep === 'codes' && this.kkTypeScanLocation) {
-      return `Kệ ${this.kkTypeScanLocation} · đưa tem vào khung`;
-    }
-    return 'Đưa tem vào khung hình';
-  }
-
-  get kkScanHideKeyboard(): boolean {
-    return this.isMobile;
-  }
-
   onKkHidScanFocus(event: FocusEvent): void {
     const el = event.target as HTMLInputElement | null;
     if (!el) return;
@@ -2620,7 +2341,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.suppressVirtualKeyboard(el);
   }
 
-  private suppressVirtualKeyboard(el: HTMLInputElement): void {
+  protected suppressVirtualKeyboard(el: HTMLInputElement): void {
     try {
       el.setAttribute('inputmode', 'none');
       (el as HTMLInputElement & { virtualKeyboardPolicy?: string }).virtualKeyboardPolicy = 'manual';
@@ -2634,23 +2355,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch { /* ignore */ }
   }
 
-  private lockKkScanKeyboard(): void {
-    const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
-    if (meta && !this.kkPrevViewport) {
-      this.kkPrevViewport = meta.content || '';
-      if (!/interactive-widget/.test(meta.content || '')) {
-        meta.content = `${meta.content || ''}, interactive-widget=overlays-content`.replace(/^,\s*/, '');
-      }
-    }
-    try {
-      const vk = (navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
-      if (vk) vk.overlaysContent = true;
-    } catch { /* ignore */ }
-    document.body.classList.add('kk-scan-kb-lock');
-    this.attachKkDocScan();
-  }
-
-  private unlockKkScanKeyboard(): void {
+  protected unlockKkScanKeyboard(): void {
     this.detachKkDocScan();
     const meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
     if (meta && this.kkPrevViewport) {
@@ -2658,25 +2363,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkPrevViewport = '';
     }
     document.body.classList.remove('kk-scan-kb-lock');
-  }
-
-  /** Khóa scroll .main-panel khi mở chi tiết KK — tránh thanh kéo ngoài làm lệch footer. */
-  private syncKkPageLock(): void {
-    const lock = !this.isMobile
-      && !!(this.showKkLocMap || this.isNguyenLieuPage)
-      && !!this.kkActiveProductType;
-    document.body.classList.toggle('kk-page-lock', lock);
-    if (lock) {
-      const panel = document.querySelector('.main-panel') as HTMLElement | null;
-      if (panel) panel.scrollTop = 0;
-      window.scrollTo(0, 0);
-    }
-  }
-
-  private attachKkDocScan(): void {
-    if (this.kkDocScanHandler) return;
-    this.kkDocScanHandler = (event: KeyboardEvent) => this.onKkDocScanKey(event);
-    document.addEventListener('keydown', this.kkDocScanHandler, true);
   }
 
   private detachKkDocScan(): void {
@@ -2692,249 +2378,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkDocScanAt = 0;
   }
 
-  private onKkDocScanKey(event: KeyboardEvent): void {
-    if (!this.showKkTypeScanModal) return;
-    if (this.showKkTypeScanConfirm) return;
-    // Mã NV chỉ nhập tay
-    if (this.kkTypeScanStep === 'operator') return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest?.('.kk-type-scan__std')) return;
-    // Ô trap đang focus: để bindHidScanInput nhận ký tự native
-    if (
-      target &&
-      (target.id === 'kkTypeScanLocationInput' || target.id === 'kkTypeScanQrInput')
-    ) {
-      return;
-    }
-    // PDA: bắt cấp document khi ô mất focus (cả kệ lẫn mã hàng)
-    if (this.kkTypeScanStep === 'codes' && this.nlScanDevice !== 'pda') return;
-    const key = event.key;
-    if (!key || key === 'Escape' || key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta') return;
-    if (key === 'Tab' || key === 'Enter') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.flushKkDocScan(true);
-      return;
-    }
-    if (key === 'Backspace') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.kkDocScanBuf = this.kkDocScanBuf.slice(0, -1);
-      this.paintKkDocScanBuf();
-      return;
-    }
-    if (key.length !== 1) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (!this.kkDocScanAt) this.kkDocScanAt = performance.now();
-    this.kkDocScanBuf += key;
-    this.paintKkDocScanBuf();
-    // Đợi tem đủ dài — không cắt sớm
-    const idle = this.kkTypeScanStep === 'codes' ? 220 : 200;
-    this.scheduleKkDocScanFlush(idle);
-  }
-
-  private scheduleKkDocScanFlush(idleMs: number): void {
-    if (this.kkDocScanTimer) clearTimeout(this.kkDocScanTimer);
-    this.kkDocScanTimer = setTimeout(() => {
-      this.kkDocScanTimer = null;
-      this.flushKkDocScan();
-    }, idleMs);
-  }
-
-  private paintKkDocScanBuf(): void {
-    const id = this.kkActiveScanInputId();
-    const el = document.getElementById(id) as HTMLInputElement | null;
-    if (el) el.value = this.kkDocScanBuf;
-    if (this.kkTypeScanStep === 'operator') this.kkTypeScanOperatorInput = this.kkDocScanBuf;
-    if (this.kkTypeScanStep === 'location') this.kkTypeScanLocationInput = this.kkDocScanBuf;
-  }
-
-  private kkActiveScanInputId(): string {
+  protected kkActiveScanInputId(): string {
     if (this.kkTypeScanStep === 'operator') return 'kkTypeScanOperatorInput';
     if (this.kkTypeScanStep === 'location') return 'kkTypeScanLocationInput';
     return 'kkTypeScanQrInput';
   }
 
-  private flushKkDocScan(fromEnter = false): void {
-    if (this.kkDocScanTimer) {
-      clearTimeout(this.kkDocScanTimer);
-      this.kkDocScanTimer = null;
-    }
-    const raw = String(this.kkDocScanBuf || '')
-      .replace(/[\r\n\t]+/g, '')
-      .replace(/[\u0000-\u001F]/g, '')
-      .trim();
-    if (this.kkTypeScanStep === 'operator' && !fromEnter) {
-      this.pinKkScanFocus();
-      return;
-    }
-    // Không từ Enter: chỉ nhận khi tem đủ dạng (tránh cắt sớm)
-    if (!fromEnter) {
-      if (this.kkTypeScanStep === 'location') {
-        const t = raw.toUpperCase().replace(/\s+/g, '');
-        if (!/^[SR]\d{1,2}(?:-\d+(?:-\d+)?)?$/.test(t)) {
-          this.pinKkScanFocus();
-          return;
-        }
-      } else if (this.kkTypeScanStep === 'codes') {
-        const parts = raw.split('|');
-        if (parts.length < 3 || parts[0].trim().length < 4) {
-          this.pinKkScanFocus();
-          return;
-        }
-      }
-    }
-    this.kkDocScanBuf = '';
-    this.kkDocScanAt = 0;
-    this.paintKkDocScanBuf();
-    if (!raw) {
-      this.pinKkScanFocus();
-      return;
-    }
-    if (this.kkTypeScanStep === 'operator') {
-      this.submitKkTypeScanOperator(undefined, raw);
-    } else if (this.kkTypeScanStep === 'location') {
-      this.submitKkTypeScanLocation(undefined, raw);
-    } else {
-      this.enqueueKkTypeScanCode(raw, 0);
-    }
-    this.pinKkScanFocus();
-  }
-
   pinKkScanFocus(): void {
     if (!this.showKkTypeScanModal) return;
     this.focusKkTypeScanInput(this.kkActiveScanInputId());
-  }
-
-  onKkScanTrapBlur(event: FocusEvent): void {
-    if (!this.showKkTypeScanModal) return;
-    const next = event.relatedTarget as HTMLElement | null;
-    if (next?.closest?.('.kk-type-scan') && (next.tagName === 'BUTTON' || next.closest('button, a, input[type="number"]'))) {
-      return;
-    }
-    setTimeout(() => this.pinKkScanFocus(), 0);
-  }
-
-  /** Tem NV: chỉ lấy 7 ký tự đầu ASP + 4 số, bỏ phần còn lại. */
-  private parseKkEmployeeBadge(raw: string): string {
-    const compact = String(raw || '')
-      .replace(/[\r\n\t]+/g, '')
-      .replace(/[\u0000-\u001F]/g, '')
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '');
-    if (!compact) return '';
-    const found = compact.match(/ASP\d{4}/);
-    if (found) return found[0];
-    const head = compact.slice(0, 7);
-    if (/^ASP\d{4}$/.test(head)) return head;
-    if (/^\d{4}/.test(compact)) return `ASP${compact.slice(0, 4)}`;
-    return head;
-  }
-
-  onNlKkTick(material: InventoryMaterial, checked: boolean): void {
-    if (!this.canEdit || !material?.id) return;
-    if (!!material.kkChecked === !!checked) return;
-    void this.toggleKk(material);
-  }
-
-  extractMaterialCodeFromScan(raw: string): string {
-    const t = String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    if (!t) return '';
-    if (t.includes('|')) {
-      return t.split('|').map((p) => p.trim()).find(Boolean) || '';
-    }
-    return t.split(/[\s,;]+/)[0] || t;
-  }
-
-  applyNlSearchScan(raw: string): void {
-    const code = this.extractMaterialCodeFromScan(raw);
-    if (!code) {
-      alert('Không đọc được mã hàng. Quét lại tem.');
-      return;
-    }
-    this.searchTerm = code;
-    this.showNlPdaScan = false;
-    this.nlPdaBuffer = '';
-    this.stopNlCamera();
-    void this.performSearch(code);
-  }
-
-  closeNlPdaScan(): void {
-    this.showNlPdaScan = false;
-    this.nlPdaBuffer = '';
-    this.nlScanLastReadMs = null;
-  }
-
-  private focusNlPdaInput(): void {
-    const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
-    if (!el) return;
-    this.suppressVirtualKeyboard(el);
-    el.focus({ preventScroll: true });
-    this.bindHidScanInput(el, (raw, readMs) => {
-      this.nlScanLastReadMs = readMs;
-      this.applyNlSearchScan(raw);
-    }, { idleMs: 50 });
-  }
-
-  submitNlPdaScan(): void {
-    const el = document.getElementById('nl-pda-scan-input') as HTMLInputElement | null;
-    this.applyNlSearchScan(el?.value || this.nlPdaBuffer);
-  }
-
-  async startNlCamera(_purpose: 'search' | 'location' | 'kk'): Promise<void> {
-    // Tab Quản lý NVL: tắt camera — chỉ dùng máy scanner.
-    this.stopNlCamera();
-  }
-
-  private onNlCameraDecoded(text: string): void {
-    if (this.nlScanLock) return;
-    this.nlScanLock = true;
-    if (this.nlCameraPurpose === 'kk') {
-      void this.onNlKkCameraDecoded(text);
-      return;
-    }
-    if (this.nlCameraPurpose === 'location') {
-      this.mobileLocScanBuffer = String(text || '').trim().toUpperCase().replace(/\s+/g, '');
-      this.stopNlCamera();
-      void this.submitMobileLocationScan();
-      return;
-    }
-    this.applyNlSearchScan(text);
-  }
-
-  private async onNlKkCameraDecoded(text: string): Promise<void> {
-    const raw = String(text || '').trim();
-    if (!raw) {
-      this.nlScanLock = false;
-      return;
-    }
-    if (this.showKkTypeScanConfirm) {
-      this.nlScanLock = false;
-      this.kkTypeScanBeep('err');
-      return;
-    }
-    const step = this.kkTypeScanStep;
-    if (step === 'operator') {
-      // Không scan mã NV bằng camera — chỉ nhập tay
-      this.nlScanLock = false;
-      this.kkTypeScanErr = 'Mã nhân viên chỉ nhập tay, không quét.';
-      this.cdr.detectChanges();
-      return;
-    }
-    if (step === 'location') {
-      const el = document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null;
-      if (el) el.value = raw;
-      this.kkTypeScanLocationInput = raw;
-      // Giữ camera inline — chỉ chuyển bước, không tắt popup (không còn popup)
-      this.submitKkTypeScanLocation(undefined, raw);
-      setTimeout(() => { this.nlScanLock = false; }, 500);
-      return;
-    }
-    this.enqueueKkTypeScanCode(raw, 0);
-    this.cdr.detectChanges();
-    setTimeout(() => { this.nlScanLock = false; }, 700);
   }
 
   stopNlCamera(): void {
@@ -2957,19 +2409,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!loc) return '';
     if (/^S\d{2}-T\d$/i.test(loc) || /^S\d{2}-\d+$/i.test(loc)) return loc.toUpperCase();
     return this.primaryLocationDisplay(loc);
-  }
-
-  private async ensureKkMobileCatalog(): Promise<void> {
-    try {
-      if (!this.kkCatalogTypeMap.size) {
-        this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-      }
-      this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs();
-      this.kkTypeManagers = await this.kkCatalog.loadManagers();
-      this.cdr.markForCheck();
-    } catch (e) {
-      console.error('ensureKkMobileCatalog:', e);
-    }
   }
 
   focusMobileSearchForScan(): void {
@@ -3001,9 +2440,335 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'mat-m-status--ok';
   }
 
+  // ===== Lịch sử KK dạng log (kk-history-log): lưu 1 năm, quá 1 năm tải file về máy =====
+  /** Ghi 1 dòng inventory-kk-history vào batch + đưa vào log. */
+  protected kkLogSet(batch: firebase.default.firestore.WriteBatch, data: Record<string, any>): void {
+    batch.set(this.firestore.firestore.collection('inventory-kk-history').doc(), data);
+    this.kkLog.enqueue(data);
+  }
+
+  private kkLogAdd(data: Record<string, any>): Promise<unknown> {
+    this.kkLog.enqueue(data);
+    return this.firestore.collection('inventory-kk-history').add(data);
+  }
+  kkLogArchiveDue = false;
+
+  async checkKkLogArchive(): Promise<void> {
+    try {
+      this.kkLogArchiveDue = await this.kkLog.isArchiveDue(this.selectedFactory);
+      this.readTracker.track('materials', 'kk-history-log', 1);
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.warn('kk log archive check:', e);
+    }
+  }
+
+  /** Mỗi ngày kiểm 1 lần (1 lượt đọc): có log quá 1 năm cần tải về không. */
+  private autoCheckKkLogArchive(): void {
+    const key = `kk-log-archive-check:${this.selectedFactory}`;
+    const today = kkLogDateKey(new Date());
+    try {
+      const prev = localStorage.getItem(key) || '';
+      if (prev.startsWith(today)) { this.kkLogArchiveDue = prev.endsWith(':1'); return; }
+    } catch { /* bỏ qua */ }
+    void this.checkKkLogArchive().then(() => {
+      try { localStorage.setItem(key, `${today}:${this.kkLogArchiveDue ? 1 : 0}`); } catch { /* bỏ qua */ }
+    });
+  }
+
+  // ===== Tiêu hủy (kiểm): import Mã + Lượng tiêu hủy → đọc vị trí / tồn, đánh dấu Có / Không có / Thiếu =====
+  // Lưu 1 doc / nhà máy: tieu-huy-check/{factory} (1 lượt đọc khi mở, 1 lượt ghi khi sửa).
+  readonly thOptions: Array<{ value: '' | 'co' | 'khong-co' | 'thieu'; label: string }> = [
+    { value: '', label: '—' },
+    { value: 'co', label: 'Có' },
+    { value: 'khong-co', label: 'Không có' },
+    { value: 'thieu', label: 'Thiếu' }
+  ];
+  showThCheck = false;
+  /** true = mở từ Công cụ (Import / File mẫu / Xóa); false = nút TH (chỉ xem + kiểm). */
+  thManage = false;
+  thItems: Array<{ code: string; qty: number; option: '' | 'co' | 'khong-co' | 'thieu'; actualQty: number | null }> = [];
+  thMeta: { fileName: string; importedAt: Date | null; importedBy: string } = { fileName: '', importedAt: null, importedBy: '' };
+  thStock = new Map<string, { name: string; stock: number; locations: string; lines: number }>();
+  /** Tồn LinkQ theo mã (file LinkQ mới nhất, có cache) — null = chưa đọc. */
+  thLinkQ: Map<string, number> | null = null;
+  thLinkQLabel = '';
+  thLoading = false;
+  thStockLoading = false;
+  thError = '';
+  thQuery = '';
+  thOptionFilter = '';
+  private thSaveTimer: any = null;
+
+  protected thDocRef() {
+    return this.firestore.firestore.collection('tieu-huy-check').doc(this.selectedFactory);
+  }
+
+  /** Nút TH: mở bảng chi tiết như "Xem toàn bộ tất cả các mục", chỉ các mã trong danh sách tiêu hủy + cột TH. */
+  kkThMode = false;
+  private thItemByCode = new Map<string, { code: string; qty: number; option: '' | 'co' | 'khong-co' | 'thieu'; actualQty: number | null }>();
+
+  thItemOf(code: unknown): { code: string; qty: number; option: '' | 'co' | 'khong-co' | 'thieu'; actualQty: number | null } | null {
+    return this.thItemByCode.get(String(code || '').trim().toUpperCase()) || null;
+  }
+
+  protected rebuildThIndex(): void {
+    this.thItemByCode = new Map(this.thItems.map((x) => [x.code, x]));
+  }
+
+  /** Hệ thống đọc mã: tồn + vị trí (chỉ đọc các mã trong danh sách). */
+  async loadThStock(): Promise<void> {
+    if (this.thStockLoading || !this.thItems.length) return;
+    this.thStockLoading = true;
+    this.cdr.detectChanges();
+    try {
+      const [rows, lq] = await Promise.all([
+        this.fetchTieuHuyStockByCodes(this.thItems.map((x) => x.code)),
+        this.getLinkQPackCached(false).catch(() => null)
+      ]);
+      this.thLinkQ = lq?.map || new Map();
+      this.thLinkQLabel = lq?.label || '';
+      const map = new Map<string, { name: string; stock: number; locations: string; lines: number }>();
+      const locs = new Map<string, Set<string>>();
+      for (const m of rows) {
+        const code = String(m.materialCode || '').trim().toUpperCase();
+        const stock = this.calculateCurrentStock(m);
+        if (!code || !(stock > 0)) continue;
+        const cur = map.get(code) || { name: String(m.materialName || ''), stock: 0, locations: '', lines: 0 };
+        cur.stock = Math.round((cur.stock + stock) * 10000) / 10000;
+        cur.lines += 1;
+        if (!cur.name) cur.name = String(m.materialName || '');
+        map.set(code, cur);
+        const set = locs.get(code) || new Set<string>();
+        const loc = String(m.location || '').trim().toUpperCase();
+        if (loc) set.add(loc);
+        locs.set(code, set);
+      }
+      locs.forEach((set, code) => { const r = map.get(code); if (r) r.locations = Array.from(set).sort().join(', '); });
+      this.thStock = map;
+    } catch (e: any) {
+      this.thError = 'Không đọc được tồn kho: ' + (e?.message || e);
+    } finally {
+      this.thStockLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  importThCheck(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (ev: Event) => {
+      const file = (ev.target as HTMLInputElement)?.files?.[0];
+      if (file) void this.processThCheckFile(file);
+    };
+    input.click();
+  }
+
+  /** File: cột A = Mã, cột B = Lượng tiêu hủy (dòng đầu là tiêu đề thì tự bỏ). Trùng mã → cộng lượng. */
+  private async processThCheckFile(file: File): Promise<void> {
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false });
+      const byCode = new Map<string, number>();
+      for (const row of raw) {
+        const code = this.normalizeTieuHuyCode(row?.[0]);
+        if (!code || !/\d/.test(code)) continue;
+        const qty = this.parseTieuHuyQty(row?.[1]) || 0;
+        byCode.set(code, Math.round(((byCode.get(code) || 0) + qty) * 10000) / 10000);
+      }
+      if (!byCode.size) { alert('File không có mã nào (cột A = Mã, cột B = Lượng tiêu hủy).'); return; }
+      if (this.thItems.length && !confirm(`Thay danh sách hiện tại (${this.thItems.length} mã) bằng file mới (${byCode.size} mã)?\nKết quả Tùy chọn / Lượng hàng cũ sẽ mất.`)) return;
+      const by = await this.resolveLocationOperatorId().catch(() => '');
+      this.thItems = Array.from(byCode.entries()).map(([code, qty]) => ({ code, qty, option: '' as const, actualQty: null }));
+      this.rebuildThIndex();
+      this.thMeta = { fileName: file.name, importedAt: new Date(), importedBy: String(by || '') };
+      await this.thDocRef().set({
+        factory: this.selectedFactory,
+        fileName: file.name,
+        importedAt: firebase.default.firestore.FieldValue.serverTimestamp(),
+        importedBy: String(by || ''),
+        items: this.thItems
+      });
+      this.thStock = new Map();
+      await this.loadThStock();
+    } catch (e: any) {
+      console.error('❌ import tiêu hủy:', e);
+      alert('❌ Không import được file: ' + (e?.message || e));
+    } finally {
+      this.cdr.detectChanges();
+    }
+  }
+
+  async downloadThTemplate(): Promise<void> {
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([['Mã', 'Lượng tiêu hủy'], ['B005001', 100], ['B002010', 25.5]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tieu huy');
+    XLSX.writeFile(wb, `Tieu_huy_kiem_template_${this.selectedFactory}.xlsx`);
+  }
+
+  /** Sửa Tùy chọn / Lượng hàng → lưu gộp sau 0.8s (1 lượt ghi). */
+  onThItemChange(): void {
+    if (this.thSaveTimer) clearTimeout(this.thSaveTimer);
+    this.thSaveTimer = setTimeout(() => void this.saveThItems(), 800);
+  }
+
+  private async saveThItems(): Promise<void> {
+    this.thSaveTimer = null;
+    try {
+      await this.thDocRef().set({
+        items: this.thItems.map((x) => ({ ...x, actualQty: x.actualQty == null || (x.actualQty as any) === '' ? null : Number(x.actualQty) })),
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (e: any) {
+      alert('❌ Không lưu được: ' + (e?.message || e));
+    }
+  }
+
+  async clearThCheck(): Promise<void> {
+    if (!this.thItems.length || !confirm(`Xóa danh sách tiêu hủy ${this.selectedFactory} (${this.thItems.length} mã)?`)) return;
+    try {
+      await this.thDocRef().delete();
+      this.thItems = [];
+      this.rebuildThIndex();
+      this.thStock = new Map();
+      this.thMeta = { fileName: '', importedAt: null, importedBy: '' };
+    } catch (e: any) {
+      alert('❌ Không xóa được: ' + (e?.message || e));
+    } finally {
+      this.cdr.detectChanges();
+    }
+  }
+
+  thLinkQOf(code: string): number | null {
+    if (!this.thLinkQ) return null;
+    const v = this.thLinkQ.get(this.normalizeTieuHuyCode(code));
+    return v == null ? null : v;
+  }
+
+  /** Lệch = tồn web − LinkQ (null khi chưa có LinkQ cho mã). */
+  thDiffOf(code: string): number | null {
+    const lq = this.thLinkQOf(code);
+    if (lq == null) return null;
+    return Math.round(((this.thStock.get(code)?.stock || 0) - lq) * 10000) / 10000;
+  }
+
+  get thFiltered() {
+    const q = this.thQuery.trim().toUpperCase();
+    return this.thItems.filter((x) => {
+      if (this.thOptionFilter === 'none' ? !!x.option : (this.thOptionFilter && x.option !== this.thOptionFilter)) return false;
+      if (!q) return true;
+      const st = this.thStock.get(x.code);
+      return x.code.includes(q) || (st?.locations || '').includes(q) || (st?.name || '').toUpperCase().includes(q);
+    });
+  }
+
+  get thCounts(): { co: number; khong: number; thieu: number; none: number } {
+    const c = { co: 0, khong: 0, thieu: 0, none: 0 };
+    for (const x of this.thItems) {
+      if (x.option === 'co') c.co++;
+      else if (x.option === 'khong-co') c.khong++;
+      else if (x.option === 'thieu') c.thieu++;
+      else c.none++;
+    }
+    return c;
+  }
+
+  async exportThCheck(): Promise<void> {
+    const rows = this.thFiltered;
+    if (!rows.length) { alert('Không có dòng nào để tải.'); return; }
+    const XLSX = await import('xlsx');
+    const label = (v: string) => this.thOptions.find((o) => o.value === v)?.label || '';
+    const data = rows.map((x, i) => {
+      const st = this.thStock.get(x.code);
+      return {
+        'STT': i + 1,
+        'Mã': x.code,
+        'Tên hàng': st?.name || '',
+        'Vị trí': st?.locations || '',
+        'Tồn kho': st ? st.stock : 0,
+        'Tồn LinkQ': this.thLinkQOf(x.code) ?? '',
+        'Lệch (Web − LinkQ)': this.thDiffOf(x.code) ?? '',
+        'Lượng tiêu hủy': x.qty,
+        'Tùy chọn': x.option ? label(x.option) : '',
+        'Lượng hàng': x.actualQty ?? ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tieu huy');
+    XLSX.writeFile(wb, `Tieu_huy_kiem_${this.selectedFactory}_${kkLogDateKey(new Date())}.xlsx`);
+  }
+
+  // ===== Bảng tồn: cột LinkQ (bật bằng nút LinkQ) — tồn LinkQ tổng mã, so với tổng tồn web của mã =====
+  invLinkQOn = false;
+  invLinkQLoading = false;
+  invLinkQLabel = '';
+  private invLinkQMap: Map<string, number> | null = null;
+  private invWebByCodeMemo: { src: unknown; map: Map<string, number> } = { src: null, map: new Map() };
+
+  async toggleInvLinkQ(): Promise<void> {
+    if (this.invLinkQLoading) return;
+    if (this.invLinkQOn) { this.invLinkQOn = false; this.cdr.markForCheck(); return; }
+    this.invLinkQLoading = true;
+    this.cdr.markForCheck();
+    try {
+      const pack = await this.getLinkQPackCached(false);
+      this.invLinkQMap = pack.map;
+      this.invLinkQLabel = pack.label;
+      if (!pack.map.size) alert(`Chưa có file LinkQ cho ${this.selectedFactory}. Import file LinkQ ở tab Inventory Overview.`);
+      this.invLinkQOn = pack.map.size > 0;
+    } catch (e: any) {
+      alert('❌ Không đọc được LinkQ: ' + (e?.message || e));
+    } finally {
+      this.invLinkQLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Tồn LinkQ (tổng mã) — null = mã không có trong file LinkQ. */
+  invLinkQOf(code: string | null | undefined): number | null {
+    if (!this.invLinkQMap) return null;
+    const v = this.invLinkQMap.get(this.normalizeTieuHuyCode(code));
+    return v == null ? null : v;
+  }
+
+  /** Lệch = tổng tồn web của mã (mọi dòng đang tải) − LinkQ. */
+  invLinkQDiff(code: string | null | undefined): number | null {
+    const lq = this.invLinkQOf(code);
+    if (lq == null) return null;
+    const src = this.inventoryMaterials;
+    if (this.invWebByCodeMemo.src !== src) {
+      const map = new Map<string, number>();
+      for (const m of src || []) {
+        const c = this.normalizeTieuHuyCode(m.materialCode);
+        if (c) map.set(c, (map.get(c) || 0) + this.calculateCurrentStock(m));
+      }
+      this.invWebByCodeMemo = { src, map };
+    }
+    const web = this.invWebByCodeMemo.map.get(this.normalizeTieuHuyCode(code)) || 0;
+    return Math.round((web - lq) * 10000) / 10000;
+  }
+
+  invLinkQTitle(code: string | null | undefined): string {
+    const lq = this.invLinkQOf(code);
+    if (lq == null) return 'Mã không có trong file LinkQ';
+    const d = this.invLinkQDiff(code) ?? 0;
+    return `LinkQ ${this.formatNumber(lq)} (tổng mã) · Web − LinkQ = ${d > 0 ? '+' : ''}${this.formatNumber(d)}` +
+      (this.invLinkQLabel ? ` · ${this.invLinkQLabel}` : '');
+  }
+
   ngOnInit(): void {
     console.log('🔍 DEBUG: ngOnInit - Starting component initialization');
+    setTimeout(() => this.autoCheckKkLogArchive(), 8000);
     this.detectMobileDevice();
+    // Trạng thái khóa XT ASM1 (1 doc, theo dõi trực tiếp — mở/khóa ở máy khác cũng cập nhật ngay)
+    this.watchXtLock();
+    // Danh sách kiểm 100% (cùng nguồn tab Inbound, có cache) → dấu ! đỏ cạnh mã hàng
+    void this.sxxkSuspect.load().then(() => this.cdr.markForCheck()).catch(() => undefined);
 
     const factoryParam = this.route.snapshot.queryParamMap.get('factory');
     if (this.isValidFactory(factoryParam)) {
@@ -3014,9 +2779,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       firstValueFrom(this.authService.currentUser)
         .then(user => {
           this.selectedFactory = getDefaultRmFactory(user?.employeeId);
+          this.subscribeMaterialsMatrix();
         })
         .catch(() => {});
     }
+    this.subscribeMaterialsMatrix();
+    this.authService.currentUser.pipe(takeUntil(this.destroy$)).subscribe((user: any) => {
+      this.currentEmployeeId = String(user?.employeeId || '').trim().toUpperCase();
+      this.applyPermissionFlags();
+      this.cdr.markForCheck();
+    });
     this.route.queryParamMap.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const f = params.get('factory');
       if (this.isValidFactory(f) && f !== this.selectedFactory) {
@@ -3075,13 +2847,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.loadRuleBagManualPrefixesFromStorage();
     this.subscribeQtyBagRulesFromFirestore();
 
-    if (this.isNguyenLieuPage && !this.isMobile) {
-      this.enterKkLocMap();
-    } else if (this.isNguyenLieuPage && this.isMobile) {
-      void this.ensureKkMobileCatalog();
-      this.nlScanDevice = 'pda';
-      this.showNlDevicePicker = false;
-    }
+    this.initKkPage();
 
     console.log('✅ Materials component initialized - Waiting for user search');
     console.log('🔍 DEBUG: ngOnInit - Component initialization completed (NO AUTO LOAD)');
@@ -3122,13 +2888,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTickedMaterialsCache = [];
     this.clearKkInlineBanner(true);
     this.showKkCheckPopup = false;
-    if (this.isNguyenLieuPage && !this.isMobile) {
-      this.enterKkLocMap();
-    } else {
-      this.closeKkLocMap();
-      if (this.isNguyenLieuPage && this.isMobile) void this.ensureKkMobileCatalog();
-    }
-    if (this.kkLiveActive) this.startKkLive();
+    this.onKkPageFactoryChanged();
     this.closeGanPallet();
     this.cancelMobileLocationScan(true);
     this.cancelMobileKkConfirm();
@@ -3146,6 +2906,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.loadRuleBagManualPrefixesFromStorage();
     this.rebuildRuleBagPrefixList();
     this.subscribeQtyBagRulesFromFirestore();
+    this.showMatrix = false;
+    this.subscribeMaterialsMatrix();
 
     this.cdr.markForCheck();
   }
@@ -3159,6 +2921,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   @HostListener('window:resize')
   onWindowResize(): void {
     this.detectMobileDevice();
+    this.onKkPageResize();
   }
 
   @HostListener('document:click')
@@ -3179,6 +2942,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
+    this.stopTemLeTlCamera();
+    this.matrixSub?.();
+    this.matrixSub = null;
     window.removeEventListener('storage', this.onNvlCatalogStorage);
     this.stopScanning();
     this.stopKkLive();
@@ -3207,126 +2973,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  // Download inventory stock data from Firebase as Excel file
-  async loadInventoryStockFromFirebase(): Promise<void> {
-    const XLSX = await import('xlsx');
-    console.log('📦 Downloading ASM1 inventory stock from Firebase as Excel...');
-    this.isLoading = true;
-
-    try {
-      // Get all inventory materials from Firebase
-      const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.selectedFactory)
-      ).get().toPromise();
-
-      if (!snapshot || snapshot.empty) {
-        console.log('ℹ️ No inventory stock data found in Firebase');
-        alert('Không tìm thấy dữ liệu tồn kho trong Firebase');
-        this.isLoading = false;
-        return;
-      }
-
-      console.log(`📊 Found ${snapshot.docs.length} inventory records in Firebase`);
-
-      const inventoryData: any[] = [];
-
-      snapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-
-        // Create Excel row with all Firebase fields
-        const excelRow = {
-          'STT': inventoryData.length + 1,
-          'ID': doc.id,
-          'Factory': data.factory || this.selectedFactory,
-          'Mã hàng': data.materialCode || '',
-          'Tên hàng': data.materialName || '',
-          'PO': data.poNumber || '',
-          'Import Date': data.importDate ? (data.importDate.toDate ? data.importDate.toDate().toLocaleDateString('en-GB').split('/').join('') : data.importDate) : '',
-          'Received Date': data.receivedDate ? data.receivedDate.toDate().toLocaleDateString('vi-VN') : '',
-          'Tồn đầu': data.openingStock || 0,
-          'Số lượng': data.quantity || 0,
-          'Đã xuất': data.exported || 0,
-          'XT': data.xt || 0,
-          'Tồn kho': (data.openingStock || 0) + (data.quantity || 0) - (data.exported || 0) - (data.xt || 0),
-          'Đơn vị': data.unit || '',
-          'Vị trí': data.location || '',
-          'Pallet': data.palletId || '',
-          'Loại hình': data.type || '',
-          'Expiry Date': data.expiryDate ? data.expiryDate.toDate().toLocaleDateString('vi-VN') : '',
-          'Quality Check': data.qualityCheck ? 'Yes' : 'No',
-          'Is Received': data.isReceived ? 'Yes' : 'No',
-          'Notes': data.notes || '',
-          'Rolls/Bags': data.rollsOrBags || '',
-          'Supplier': data.supplier || '',
-          'Remarks': data.remarks || '',
-          'Standard Packing': data.standardPacking || 0,
-          'Is Completed': data.isCompleted ? 'Yes' : 'No',
-          'Import Status': data.importStatus || '',
-          'Source': data.source || '',
-          'Updated At': data.updatedAt ? data.updatedAt.toDate().toLocaleString('vi-VN') : '',
-          'Created At': data.createdAt ? data.createdAt.toDate().toLocaleString('vi-VN') : ''
-        };
-        
-        inventoryData.push(excelRow);
-      });
-      
-      // Create Excel file
-      const worksheet = XLSX.utils.json_to_sheet(inventoryData);
-      
-      // Set column widths
-      const columnWidths = [
-        { wch: 5 },   // STT
-        { wch: 20 },  // ID
-        { wch: 8 },   // Factory
-        { wch: 15 },  // Mã hàng
-        { wch: 25 },  // Tên hàng
-        { wch: 15 },  // PO
-        { wch: 12 },  // Import Date
-        { wch: 12 },  // Received Date
-        { wch: 10 },  // Tồn đầu
-        { wch: 10 },  // Số lượng
-        { wch: 10 },  // Đã xuất
-        { wch: 8 },   // XT
-        { wch: 10 },  // Tồn kho
-        { wch: 8 },   // Đơn vị
-        { wch: 12 },  // Vị trí
-        { wch: 12 },  // Loại hình
-        { wch: 12 },  // Expiry Date
-        { wch: 12 },  // Quality Check
-        { wch: 12 },  // Is Received
-        { wch: 20 },  // Notes
-        { wch: 12 },  // Rolls/Bags
-        { wch: 15 },  // Supplier
-        { wch: 20 },  // Remarks
-        { wch: 12 },  // Standard Packing
-        { wch: 12 },  // Is Completed
-        { wch: 12 },  // Import Status
-        { wch: 10 },  // Source
-        { wch: 18 },  // Updated At
-        { wch: 18 }   // Created At
-      ];
-      worksheet['!cols'] = columnWidths;
-      
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, `${this.selectedFactory}_Inventory_Firebase`);
-
-      // Generate filename with current date
-      const currentDate = new Date().toISOString().split('T')[0];
-      const fileName = `${this.selectedFactory}_Inventory_Firebase_${currentDate}.xlsx`;
-      
-      XLSX.writeFile(workbook, fileName);
-      
-      console.log(`✅ Successfully exported ${inventoryData.length} inventory items to Excel`);
-      alert(`✅ Đã tải thành công file Excel với ${inventoryData.length} mặt hàng tồn kho từ Firebase!\n\nFile: ${fileName}\nBao gồm tất cả thông tin đang lưu trên Firebase.`);
-      
-    } catch (error) {
-      console.error('❌ Error downloading inventory stock from Firebase:', error);
-      alert('❌ Lỗi khi tải file Excel từ Firebase. Vui lòng thử lại.');
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
   /** Vị trí đã sửa tay (OTP / user) — không auto ghi đè E7/F7 khi search hoặc F5. */
   private isManualLocationLocked(material: {
     modifiedBy?: string;
@@ -3344,14 +2990,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Ưu tiên `location` (kể cả chuỗi rỗng đã xóa). Chỉ fallback `viTri` khi chưa có field location. */
-  private locationFromInventoryDoc(data: any): string {
+  protected locationFromInventoryDoc(data: any): string {
     if (data && Object.prototype.hasOwnProperty.call(data, 'location')) {
       return String(data.location ?? '').trim().toUpperCase();
     }
     return String(data?.viTri ?? '').trim().toUpperCase();
   }
 
-  private inventoryLocationWriteFields(location: string): Record<string, unknown> {
+  protected inventoryLocationWriteFields(location: string): Record<string, unknown> {
     return { location, viTri: location };
   }
 
@@ -3657,50 +3303,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return new Date();
   }
 
-  // Load inventory and setup search mechanism
-  private loadInventoryAndSetupSearch(): void {
-    console.log('📦 Setting up search mechanism and loading inventory data...');
-    
-    // Setup search mechanism immediately
-    console.log('🔍 Setting up search mechanism...');
-    this.setupDebouncedSearch();
-    console.log('✅ Search mechanism setup completed');
-    
-    // 🔧 FIX: Load inventory data immediately
-    console.log('🔍 Loading inventory data...');
-    this.loadInventoryFromFirebase();
-  }
-
-  // Debug function to check outbound data on init
-  async debugOutboundDataOnInit(): Promise<void> {
-    try {
-      console.log('🔍 DEBUG: Checking outbound data on init...');
-      
-      const outboundSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(5)
-        .get();
-      
-      console.log(`🔍 DEBUG: Found ${outboundSnapshot.size} outbound records for ASM1`);
-      
-      if (!outboundSnapshot.empty) {
-        console.log('📋 Outbound records found:');
-        let index = 0;
-        outboundSnapshot.forEach((doc) => {
-          const data = doc.data() as any;
-          console.log(`  ${index + 1}. Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${data.exportQuantity || data.quantity || 'N/A'}, Date: ${data.exportDate}`);
-          index++;
-        });
-      } else {
-        console.log('⚠️ No outbound records found for ASM1');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error checking outbound data:', error);
-    }
-  }
-
   // Helper function to get display IMD (importDate + sequence if any)
   getDisplayIMD(material: InventoryMaterial): string {
     if (!material.importDate) return 'N/A';
@@ -3724,30 +3326,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     
     return baseDate;
-  }
-
-  /** Còn bịch / tổng bịch (ví dụ 5/10); không có totalBags → — */
-  getBatchBagsDisplay(material: InventoryMaterial): string {
-    const total = Math.floor(Number(material.totalBags ?? 0));
-    if (total <= 0) return '—';
-    const used = Math.max(0, Math.floor(Number(material.exportedBags ?? 0)));
-    const remaining = Math.max(0, total - used);
-    return `${remaining}/${total}`;
-  }
-
-  /**
-   * BATCH (cột bảng): ceil(tồn kho / Standard Packing). Tồn kho = cột "Tồn kho" (calculateCurrentStock).
-   */
-  getBatchPacksFromStockDisplay(material: InventoryMaterial): string {
-    const stock = this.calculateCurrentStock(material);
-    const sp = this.getStandardPacking(material.materialCode);
-    if (!sp || sp <= 0) {
-      return '—';
-    }
-    if (stock <= 0) {
-      return '0';
-    }
-    return String(Math.ceil(stock / sp));
   }
 
   /** Standard Packing: đọc Danh mục NVL; chỉ fallback dòng tồn kho khi catalog chưa có. */
@@ -3898,7 +3476,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openXtBagPopup(material: InventoryMaterial, event?: Event): void {
+    if (this.denyAction('xt')) return;
     event?.stopPropagation();
+    if (this.isXtLockedFor(material)) {
+      alert('🔒 XT đang khóa ở ASM1.\nMở khóa trong More → "Mở khóa XT ASM1" (mã Zalo gửi ASP0106).');
+      return;
+    }
     this.showBagStatusPopup = false;
     this.bagPopupMaterial = material;
     const le = this.getXtLeTotal(material);
@@ -3961,12 +3544,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.xtBagFallbackLeQty = n > 0 ? n : null;
   }
 
-  /** ASM2: XT giữ đúng 2 số thập phân. */
+  /** ASM2: XT giữ đúng 2 số thập phân; ASM1: 4 số lẻ. */
   private parseXtQty(raw: any): number {
     const n = parseFloat(String(raw ?? '').replace(/,/g, '').replace(/\s/g, ''));
     if (!Number.isFinite(n) || n <= 0) return 0;
-    if (this.selectedFactory !== 'ASM2') return n;
+    if (this.selectedFactory !== 'ASM2') return roundRmQty(n, RM_QTY_DECIMALS_4);
     return Math.round(n * 100) / 100;
+  }
+
+  /** Ghi nhận lượng: ASM1 làm tròn 4 số lẻ, nhà máy khác 2 số lẻ (như cũ). */
+  private roundQtyByFactory(n: number): number {
+    return isRmQtyDecimalFactory(this.selectedFactory) ? roundRmQty(n, RM_QTY_DECIMALS_4) : Math.round(n * 100) / 100;
   }
 
   selectAllRemainingXtBags(): void {
@@ -4170,7 +3758,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.bagPopupRows = [];
     this.cdr.markForCheck();
     try {
-      const covered = await this.loadOutboundCoveredQtyByBag(material);
+      const [covered, clState] = await Promise.all([
+        this.loadOutboundCoveredQtyByBag(material),
+        // Bịch CL hiện tại của IMD (tách tem lẻ) — 1 read, lỗi thì bỏ qua
+        this.temLeCl.getState(this.selectedFactory, String(material.materialCode || '').trim().toUpperCase(),
+          String(material.poNumber || '').trim(), this.rmBagHistory.parseQrPart4(this.getDisplayIMD(material)).imdKey || this.getDisplayIMD(material))
+          .catch(() => null)
+      ]);
+      const clBagNo = clState?.clActive ? Number(String(clState.bagFraction || '').split('/')[0]) || 0 : 0;
       const xtMap = new Map(this.normalizeXtBags(material).map((x) => [x.bagNo, x]));
       let n = this.getLotBagCount(material);
       const seenMax = Math.max(0, ...covered.keys(), ...xtMap.keys());
@@ -4187,13 +3782,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const pick = xtMap.get(i);
         const leQty = Number(pick?.leQty) > 0 ? Number(pick.leQty) : null;
         const isFullXt = !isExported && !!pick && !(leQty > 0);
+        const isClBag = !isExported && clBagNo === i;
+        const partial = !isExported && coveredQty > 1e-6 && coveredQty < defaultQty;
         rows.push({
           bagNo: i,
           qty: isFullXt && pick?.qty ? pick.qty : defaultQty,
           leQty,
           status: isExported ? 'exported' : (pick ? 'xt' : 'stock'),
           selected: isFullXt,
-          exported: isExported
+          exported: isExported,
+          isLe: isClBag || partial,
+          clGw: isClBag ? Number(clState?.clGw) || undefined : undefined,
+          leRemain: isClBag ? Number(clState?.clQty) || 0 : (partial ? Math.round((defaultQty - coveredQty) * 10000) / 10000 : undefined)
         });
       }
       this.bagPopupRows = rows;
@@ -4214,62 +3814,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     material.totalBags = derived;
     material.bagInput = '';
     updateData.totalBags = derived;
-  }
-
-  // Debug function to find problematic batchNumbers
-  async debugProblematicBatchNumbers(): Promise<void> {
-    console.log('🔍 DEBUG: Checking for problematic batchNumbers...');
-    
-    try {
-      const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.selectedFactory)
-      ).get().toPromise();
-      
-      if (!snapshot || snapshot.empty) {
-        console.log('❌ No inventory materials found');
-        return;
-      }
-      
-      const problematicItems: any[] = [];
-      
-      snapshot.forEach(doc => {
-        const data = doc.data() as any;
-        const batchNumber = data.batchNumber;
-        const importDate = data.importDate;
-        
-        if (batchNumber && importDate) {
-          const expectedBaseDate = new Date(importDate.seconds * 1000).toLocaleDateString('en-GB').split('/').join('');
-          
-          // Kiểm tra nếu batchNumber có format không đúng
-          if (!batchNumber.startsWith(expectedBaseDate) || 
-              (batchNumber.length > expectedBaseDate.length && 
-               !/^\d{1,2}$/.test(batchNumber.substring(expectedBaseDate.length)))) {
-            problematicItems.push({
-              id: doc.id,
-              materialCode: data.materialCode,
-              poNumber: data.poNumber,
-              batchNumber: batchNumber,
-              expectedBaseDate: expectedBaseDate,
-              importDate: importDate
-            });
-          }
-        }
-      });
-      
-      console.log(`🔍 Found ${problematicItems.length} problematic batchNumbers:`, problematicItems);
-      
-      if (problematicItems.length > 0) {
-        console.log('📋 Problematic items:');
-        problematicItems.forEach((item, index) => {
-          console.log(`  ${index + 1}. ${item.materialCode} - ${item.poNumber}`);
-          console.log(`     Current: ${item.batchNumber}`);
-          console.log(`     Expected: ${item.expectedBaseDate}`);
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Error checking problematic batchNumbers:', error);
-    }
   }
 
   // Fix problematic batchNumbers in Firebase
@@ -4335,194 +3879,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       alert('❌ Lỗi khi sửa batchNumbers. Vui lòng thử lại.');
     } finally {
       this.isLoading = false;
-    }
-  }
-
-  // Debug function to check materials collection
-  async debugMaterialsCollection(): Promise<void> {
-    console.log('🔍 DEBUG: Checking materials collection...');
-    
-    try {
-      const snapshot = await this.firestore.collection('materials').get().toPromise();
-      
-      if (!snapshot || snapshot.empty) {
-        console.log('❌ Collection "materials" is empty or does not exist');
-        alert('❌ Collection "materials" is empty or does not exist');
-        return;
-      }
-      
-      console.log(`📊 Total documents in materials collection: ${snapshot.size}`);
-      
-      // Phân tích cấu trúc dữ liệu
-      let withStandardPacking = 0;
-      let withMaterialCode = 0;
-      let withMaterialName = 0;
-      const fieldCounts: { [key: string]: number } = {};
-      
-      snapshot.docs.forEach((doc, index) => {
-        const data = doc.data() as any;
-        
-        // Đếm các field quan trọng
-        if (data.standardPacking !== undefined && data.standardPacking !== null) {
-          withStandardPacking++;
-        }
-        if (data.materialCode) {
-          withMaterialCode++;
-        }
-        if (data.materialName) {
-          withMaterialName++;
-        }
-        
-        // Đếm tất cả fields
-        Object.keys(data).forEach(field => {
-          fieldCounts[field] = (fieldCounts[field] || 0) + 1;
-        });
-        
-        // Log 3 documents đầu tiên để xem cấu trúc
-        if (index < 3) {
-          console.log(`📄 Document ${index + 1} (${doc.id}):`, data);
-        }
-      });
-      
-      console.log('📊 Field Analysis:');
-      console.log(`  - Documents with standardPacking: ${withStandardPacking}`);
-      console.log(`  - Documents with materialCode: ${withMaterialCode}`);
-      console.log(`  - Documents with materialName: ${withMaterialName}`);
-      
-      console.log('📊 All fields and their frequency:');
-      Object.entries(fieldCounts)
-        .sort(([,a], [,b]) => b - a)
-        .forEach(([field, count]) => {
-          console.log(`  - ${field}: ${count} documents`);
-        });
-      
-      alert(`🔍 MATERIALS COLLECTION DEBUG:\n\n` +
-            `📊 Total documents: ${snapshot.size}\n` +
-            `📦 With standardPacking: ${withStandardPacking}\n` +
-            `🏷️ With materialCode: ${withMaterialCode}\n` +
-            `📝 With materialName: ${withMaterialName}\n\n` +
-            `💡 Check console (F12) for detailed field analysis`);
-      
-    } catch (error) {
-      console.error('❌ Error checking materials collection:', error);
-      alert('❌ Error checking materials collection: ' + error.message);
-    }
-  }
-
-  // Xóa các mã không có standardPacking
-  async deleteMaterialsWithoutStandardPacking(): Promise<void> {
-    console.log('🗑️ Starting deletion of materials without standardPacking...');
-    
-    const confirmMessage = `⚠️ XÓA CÁC MÃ KHÔNG CÓ STANDARDPACKING\n\n` +
-      `📊 Tổng documents: 8,750\n` +
-      `📦 Có standardPacking: 5,792 (66%)\n` +
-      `❌ Không có standardPacking: 3,958 (34%)\n\n` +
-      `⚠️ Bạn có chắc chắn muốn XÓA 3,958 documents không có standardPacking?\n` +
-      `⚠️ Hành động này KHÔNG THỂ HOÀN TÁC!`;
-    
-    if (!confirm(confirmMessage)) {
-      console.log('❌ User cancelled deletion');
-      return;
-    }
-    
-    try {
-      console.log('🔍 Loading materials collection...');
-      const snapshot = await this.firestore.collection('materials').get().toPromise();
-      
-      if (!snapshot || snapshot.empty) {
-        console.log('❌ No materials found');
-        alert('❌ Không tìm thấy materials nào');
-        return;
-      }
-      
-      console.log(`📊 Total materials to check: ${snapshot.size}`);
-      
-      // Tìm các documents không có standardPacking
-      const documentsToDelete: any[] = [];
-      let processedCount = 0;
-      
-      snapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-        processedCount++;
-        
-        // Kiểm tra không có standardPacking hoặc standardPacking = null/undefined
-        if (data.standardPacking === undefined || data.standardPacking === null) {
-          documentsToDelete.push({
-            id: doc.id,
-            materialCode: data.materialCode || 'Unknown',
-            materialName: data.materialName || 'Unknown'
-          });
-        }
-        
-        // Log progress mỗi 1000 documents
-        if (processedCount % 1000 === 0) {
-          console.log(`📊 Processed ${processedCount}/${snapshot.size} documents, found ${documentsToDelete.length} to delete`);
-        }
-      });
-      
-      console.log(`📊 Analysis complete:`);
-      console.log(`  - Total processed: ${processedCount}`);
-      console.log(`  - Documents to delete: ${documentsToDelete.length}`);
-      console.log(`  - Documents to keep: ${processedCount - documentsToDelete.length}`);
-      
-      if (documentsToDelete.length === 0) {
-        alert('✅ Tất cả materials đều có standardPacking! Không cần xóa gì.');
-        return;
-      }
-      
-      // Xác nhận lần 2 với số liệu cụ thể
-      const finalConfirm = `⚠️ XÁC NHẬN CUỐI CÙNG\n\n` +
-        `📊 Sẽ xóa: ${documentsToDelete.length} documents\n` +
-        `📊 Sẽ giữ lại: ${processedCount - documentsToDelete.length} documents\n\n` +
-        `⚠️ Hành động này KHÔNG THỂ HOÀN TÁC!\n` +
-        `⚠️ Bạn có chắc chắn muốn tiếp tục?`;
-      
-      if (!confirm(finalConfirm)) {
-        console.log('❌ User cancelled final confirmation');
-        return;
-      }
-      
-      // Bắt đầu xóa theo batch (Firebase limit: 500 operations per batch)
-      const batchSize = 500;
-      let deletedCount = 0;
-      const totalBatches = Math.ceil(documentsToDelete.length / batchSize);
-      
-      console.log(`🗑️ Starting deletion in ${totalBatches} batches...`);
-      
-      for (let i = 0; i < documentsToDelete.length; i += batchSize) {
-        const batch = this.firestore.firestore.batch();
-        const currentBatch = documentsToDelete.slice(i, i + batchSize);
-        const batchNumber = Math.floor(i / batchSize) + 1;
-        
-        console.log(`🗑️ Processing batch ${batchNumber}/${totalBatches} (${currentBatch.length} documents)...`);
-        
-        currentBatch.forEach(docToDelete => {
-          const docRef = this.firestore.collection('materials').doc(docToDelete.id).ref;
-          batch.delete(docRef);
-        });
-        
-        await batch.commit();
-        deletedCount += currentBatch.length;
-        
-        console.log(`✅ Batch ${batchNumber} completed. Deleted: ${deletedCount}/${documentsToDelete.length}`);
-        
-        // Hiển thị progress
-        const progress = Math.round((deletedCount / documentsToDelete.length) * 100);
-        console.log(`📊 Progress: ${progress}% (${deletedCount}/${documentsToDelete.length})`);
-      }
-      
-      console.log(`✅ Deletion completed! Deleted ${deletedCount} documents`);
-      if (deletedCount) void this.nvlCatalogFull.markRemoteChanged({ reset: true });
-      
-      alert(`✅ XÓA THÀNH CÔNG!\n\n` +
-            `🗑️ Đã xóa: ${deletedCount} documents\n` +
-            `📊 Còn lại: ${processedCount - deletedCount} documents\n` +
-            `📦 Tất cả materials còn lại đều có standardPacking\n\n` +
-            `💡 Collection materials đã được làm sạch!`);
-      
-    } catch (error) {
-      console.error('❌ Error deleting materials without standardPacking:', error);
-      alert('❌ Lỗi khi xóa materials: ' + error.message);
     }
   }
 
@@ -4668,7 +4024,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return { v: 2, t: Date.now(), d: this.catalogTodayKey(), m: this.catalogRemoteTs, rows };
   }
 
-  private persistCatalogCache(): void {
+  protected persistCatalogCache(): void {
     if (!this.catalogCache.size) return;
     const payload = this.buildCatalogCachePayload();
     try {
@@ -4685,10 +4041,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       try { localStorage.removeItem(MaterialsComponent.CATALOG_CACHE_KEY_V2); } catch { /* ignore */ }
     }
     void this.writeCatalogCacheToIdb(payload);
-  }
-
-  private saveCatalogToLocalStorage(): void {
-    this.persistCatalogCache();
   }
 
   private catalogIdbOpen(): Promise<IDBDatabase | null> {
@@ -4776,7 +4128,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Chỉ đọc catalog `materials` cho mã đang xem — không load ~10K doc khi mở KK. */
-  private async ensureCatalogForMaterialCodes(codes: string[]): Promise<void> {
+  protected async ensureCatalogForMaterialCodes(codes: string[]): Promise<void> {
     if (this.catalogCache.size === 0) {
       await this.hydrateCatalogFromDisk();
     }
@@ -4811,7 +4163,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.catalogLoaded = this.catalogCache.size > 0;
   }
 
-  private applyCatalogToMaterials(materials: InventoryMaterial[]): void {
+  protected applyCatalogToMaterials(materials: InventoryMaterial[]): void {
     for (const material of materials) {
       const code = String(material.materialCode || '').trim().toUpperCase();
       if (!code) continue;
@@ -4821,16 +4173,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       material.unit = catalogItem.unit;
       material.standardPacking = Number(catalogItem.standardPacking) || 0;
     }
-  }
-
-  /** Một promise chung — không đọc collection `materials` 2 lần khi mở tab. Sang ngày mới thì đọc lại. */
-  ensureCatalogLoaded(): Promise<void> {
-    const today = this.catalogTodayKey();
-    if (this.catalogLoadPromise && (this.isCatalogLoading || this.catalogLoadedDateKey === today)) {
-      return this.catalogLoadPromise;
-    }
-    this.catalogLoadPromise = this.loadCatalogFromFirebase(false);
-    return this.catalogLoadPromise;
   }
 
   /** Nút "Cập nhật danh mục" — đọc lại Danh mục NVL ngay, áp Standard Packing lên bảng. */
@@ -4917,7 +4259,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.updateTotalStockCount();
   }
 
-  private mergeNvlItemIntoCatalogCache(item: {
+  protected mergeNvlItemIntoCatalogCache(item: {
     materialCode: string;
     materialName?: string;
     unit?: string;
@@ -5312,25 +4654,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.searchByLocation || this.searchType === 'location';
   }
 
-  onSearchByLocationChange(): void {
-    if (this.searchByLocation) {
-      this.searchType = 'location';
-      this.searchByCustomer = false;
-    } else if (this.searchType === 'location') {
-      this.searchType = 'material';
-    }
-    this.clearSearch();
-  }
-
-  onSearchByCustomerChange(): void {
-    if (this.searchByCustomer) {
-      this.searchByLocation = false;
-      this.showKhColumn = true;
-      void this.applyNvlkhFromCatalog();
-    }
-    this.clearSearch();
-  }
-
   get filteredCustomerOptions(): string[] {
     const q = (this.customerFilterQuery || '').trim().toLowerCase();
     if (!q) return this.customerFilterOptions;
@@ -5543,88 +4866,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('🧹 ASM1 Search cleared, returning to initial state (no data displayed)');
   }
 
-  /** Bấm chip KK / banner KK: hiện danh sách đang tick. */
-  toggleKkCheckedFilter(): void {
-    if (this.isLoading || this.kkCheckRunning) return;
-    if (this.searchByKk) {
-      this.searchByKk = false;
-      this.clearSearch();
-      return;
-    }
-    if (this.kkTickedMaterialsCache.length) {
-      this.showKkTickedMaterials(this.kkTickedMaterialsCache);
-      return;
-    }
-    void this.loadKkCheckedList();
-  }
-
-  openKkListFromBanner(event?: Event): void {
-    event?.stopPropagation();
-    if (this.kkCheckRunning || this.isLoading) return;
-    if (this.searchByKk && this.filteredInventory.length) return;
-    this.toggleKkCheckedFilter();
-  }
-
-  private isKkFlagOn(value: unknown): boolean {
+  protected isKkFlagOn(value: unknown): boolean {
     if (value === true || value === 1) return true;
     const s = String(value ?? '').trim().toUpperCase();
     return s === 'TRUE' || s === '1' || s === 'YES';
   }
 
-  private async loadKkCheckedList(): Promise<void> {
-    this.isLoading = true;
-    this.isSearching = true;
-    this.searchProgress = 20;
-    this.cdr.detectChanges();
-    try {
-      this.searchProgress = 40;
-      // Dùng chung cache KK theo factory (không quét lại 10k doc mỗi lần mở danh sách).
-      const factoryDocs = await this.getKkFactoryDocs(this.selectedFactory);
-
-      const byId = new Map<string, any>();
-      for (const doc of factoryDocs) {
-        if (this.isKkFlagOn((doc.data() as any)?.kkChecked)) byId.set(doc.id, doc);
-      }
-
-      const docs = Array.from(byId.values());
-      this.searchProgress = 80;
-      this.readTracker.track('materials', 'inventory-materials', factoryDocs.length);
-
-      this.inventoryMaterials = docs.map((doc) => this.mapKkInventoryDoc(doc));
-      this.kkTickedMaterialsCache = [...this.inventoryMaterials];
-      this.showKkTickedMaterials(this.inventoryMaterials);
-      this.isLoading = false;
-      this.isSearching = false;
-      this.searchProgress = 100;
-      this.cdr.detectChanges();
-
-      if (!this.filteredInventory.length) {
-        alert(`Không có dòng nào đang tick KK trên ${this.selectedFactory}.`);
-      } else {
-        void this.refreshLastStatusForMaterials(this.filteredInventory);
-        void this.ensureCatalogForMaterialCodes(this.inventoryMaterials.map((m) => m.materialCode)).then(() => {
-          this.applyCatalogToMaterials(this.inventoryMaterials);
-          this.updateTotalStockCount();
-          void this.applyStorageUnitsFromCatalog();
-          if (this.showKhColumn) void this.applyNvlkhFromCatalog();
-          this.cdr.markForCheck();
-        });
-      }
-    } catch (e) {
-      console.error('❌ loadKkCheckedList:', e);
-      this.inventoryMaterials = [];
-      this.filteredInventory = [];
-      this.displayedInventory = [];
-      alert('❌ Không tải được danh sách đã KK.');
-    } finally {
-      this.isLoading = false;
-      this.isSearching = false;
-      this.searchProgress = 100;
-      this.cdr.detectChanges();
-    }
-  }
-
-  private mapKkInventoryDoc(doc: any): InventoryMaterial {
+  protected mapKkInventoryDoc(doc: any): InventoryMaterial {
     const data = (doc?.data ? doc.data() : doc) as any;
     const material = {
       id: doc.id,
@@ -5652,25 +4900,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return material;
   }
 
-  private showKkTickedMaterials(rows: InventoryMaterial[]): void {
-    this.searchByLocation = false;
-    this.searchByCustomer = false;
-    this.searchType = 'material';
-    this.searchTerm = '';
-    this.searchByKk = true;
-    this.showOnlyNegativeStock = false;
-    this.inventoryMaterials = rows.map((row) => ({ ...row, kkChecked: true }));
-    this.filteredInventory = [...this.inventoryMaterials];
-    this.sortInventoryFIFO();
-    this.currentPage = 1;
-    this.updatePagination();
-    this.updateDisplayedInventory();
-    this.updateNegativeStockCount();
-    this.isLoading = false;
-    this.isSearching = false;
-    this.cdr.detectChanges();
-  }
-
   private docMatchesLocationSearch(data: any, normalizedLocation: string): boolean {
     const tokens = splitMultiLocations(String(data?.location ?? data?.viTri ?? ''));
     if (!tokens.length) return false;
@@ -5682,7 +4911,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Nhóm cố định luôn hiện trong popup lọc vị trí. */
-  private readonly knownLocationGroups = [
+  protected readonly knownLocationGroups = [
     'WH3', 'IQC', 'LOCKER', 'NG', 'TRA', 'E7', 'F7', 'F62', 'A12', 'Q1', 'Q2', 'Q3', 'TIEUHUY'
   ];
 
@@ -5795,13 +5024,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return locKey.startsWith(searchAlnum);
   }
 
-  /** Chuỗi locations (xuống dòng hoặc "A01, A01.2") — khớp từng vị trí, không ghép liền. */
-  private locationsTextMatchesGroup(locationsText: string, searchTerm: string): boolean {
-    const parts = splitMultiLocations(locationsText).filter((x) => x && x !== '—');
-    if (!parts.length) return false;
-    return parts.some((loc) => this.locationMatchesGroup(loc, searchTerm));
-  }
-
   /** Danh sách vị trí (từng token riêng). */
   locationParts(location: string | null | undefined): string[] {
     return splitMultiLocations(String(location || ''));
@@ -5844,6 +5066,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openInvShelfPicker(material: InventoryMaterial, event?: Event): void {
+    if (this.denyAction('location')) return;
     event?.preventDefault?.();
     event?.stopPropagation?.();
     if (!material) return;
@@ -6318,18 +5541,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  /** Chuỗi đầy đủ mọi vị trí (tooltip / textarea). */
-  formatLocationDisplay(location: string | null | undefined): string {
-    const parts = this.locationParts(location).map((p) => this.displayLocationToken(p));
-    return parts.length ? parts.join('\n') : '-';
-  }
-
   /** Locker/BOX/TRA: hiện tên gốc, không kèm J5-/J-. */
   displayLocationTokenPublic(loc: string): string {
     return this.displayLocationToken(loc);
   }
 
-  private displayLocationToken(loc: string): string {
+  protected displayLocationToken(loc: string): string {
     const raw = String(loc || '').trim();
     const bare = this.stripDoiKhoWhPrefix(raw);
     if (this.isLockerOrBoxToken(bare) || this.isTraLocationToken(bare) || this.isTraLocationToken(raw)) {
@@ -6343,7 +5560,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Chuẩn hóa trước khi lưu: UPPER từng token, nối bằng xuống dòng. */
-  private normalizeMultiLocationValue(raw: string): string {
+  protected normalizeMultiLocationValue(raw: string): string {
     return joinMultiLocations(
       splitMultiLocations(raw).map((t) => {
         const token = String(t || '').trim().toUpperCase();
@@ -6357,7 +5574,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Perform search — mã hàng hoặc vị trí (tick Location)
-  private async performSearch(searchTerm: string): Promise<void> {
+  protected async performSearch(searchTerm: string): Promise<void> {
     const requestId = ++this.searchRequestId;
     const stillCurrent = () => requestId === this.searchRequestId;
 
@@ -6678,7 +5895,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Compare material codes for FIFO sorting
-  private compareMaterialCodesFIFO(codeA: string, codeB: string): number {
+  protected compareMaterialCodesFIFO(codeA: string, codeB: string): number {
     if (!codeA || !codeB) return 0;
     
     // Extract first letter and 6-digit number
@@ -6825,7 +6042,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return `Hoạt động gần nhất${who}`;
   }
 
-  private async refreshLastStatusForMaterials(materials: InventoryMaterial[]): Promise<void> {
+  protected async refreshLastStatusForMaterials(materials: InventoryMaterial[]): Promise<void> {
     if (!materials?.length) return;
     for (const m of materials) {
       m.lastStatusLoading = true;
@@ -6865,130 +6082,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  getExpiryDateText(expiryDate: Date): string {
-    if (!expiryDate) return 'N/A';
-    
-    const today = new Date();
-    const diffTime = expiryDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) return 'Hết hạn';
-    if (diffDays <= 30) return `${diffDays}d`;
-    if (diffDays <= 90) return `${Math.ceil(diffDays/30)}m`;
-    return `${Math.ceil(diffDays/365)}y`;
-  }
-
   // Check if location is IQC
   isIQCLocation(location: string): boolean {
     return isIqcPrefixLocation(location);
-  }
-
-  // Convert old location format to new format
-  // TR12 -> T1.2(R), TR11 -> T1.1(R), etc.
-  convertLocationFormat(location: string): string {
-    if (!location) return location;
-    
-    const loc = location.trim().toUpperCase();
-    
-    // Pattern matching for old format: [Letter][Letter][Number]
-    const oldFormatPattern = /^([A-Z])([A-Z])(\d+)$/;
-    const match = loc.match(oldFormatPattern);
-    
-    if (match) {
-      const [, firstLetter, secondLetter, number] = match;
-      
-      // Convert based on the pattern
-      if (secondLetter === 'R') {
-        // TR12 -> T1.2(R)
-        const rowLetter = firstLetter;
-        const numStr = number.toString();
-        if (numStr.length >= 2) {
-          const firstDigit = numStr[0];
-          const remainingDigits = numStr.substring(1);
-          return `${rowLetter}${firstDigit}.${remainingDigits}(R)`;
-        } else {
-          return `${rowLetter}${number}(R)`;
-        }
-      } else if (secondLetter === 'L') {
-        // TL12 -> T1.2(L)
-        const rowLetter = firstLetter;
-        const numStr = number.toString();
-        if (numStr.length >= 2) {
-          const firstDigit = numStr[0];
-          const remainingDigits = numStr.substring(1);
-          return `${rowLetter}${firstDigit}.${remainingDigits}(L)`;
-        } else {
-          return `${rowLetter}${number}(L)`;
-        }
-      }
-    }
-    
-    // Special cases for Q and A12
-    if (loc === 'Q1') return 'Q1(L)';
-    if (loc === 'Q2') return 'Q2(L)';
-    if (loc === 'Q3') return 'Q3(L)';
-    if (loc === 'A12') return 'NVL-A12';
-    
-    // If no pattern matches, return original
-    return location;
-  }
-
-  // Update all locations in inventory to new format
-  async updateAllLocationsToNewFormat(): Promise<void> {
-    if (!confirm('Bạn có chắc muốn cập nhật tất cả vị trí sang format mới?\n\nVí dụ: TR12 -> T1.2(R), TL12 -> T1.2(L)\n\nHành động này không thể hoàn tác!')) {
-      return;
-    }
-
-    try {
-      this.isLoading = true;
-      console.log('🔄 Bắt đầu cập nhật vị trí sang format mới...');
-
-      // Get all inventory materials
-      const snapshot = await this.firestore.collection('inventory-materials', ref => 
-        ref.where('factory', '==', this.selectedFactory)
-      ).get().toPromise();
-
-      if (!snapshot || snapshot.empty) {
-        alert('Không tìm thấy dữ liệu inventory để cập nhật');
-        return;
-      }
-
-      const batch = this.firestore.firestore.batch();
-      let updateCount = 0;
-
-      snapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-        const oldLocation = data.location;
-        const newLocation = this.convertLocationFormat(oldLocation);
-
-        if (oldLocation !== newLocation) {
-          console.log(`📍 Cập nhật: ${oldLocation} -> ${newLocation}`);
-          batch.update(doc.ref, { 
-            location: newLocation,
-            updatedAt: new Date()
-          });
-          updateCount++;
-        }
-      });
-
-      if (updateCount > 0) {
-        await batch.commit();
-        console.log(`✅ Đã cập nhật ${updateCount} vị trí sang format mới`);
-        alert(`✅ Đã cập nhật thành công ${updateCount} vị trí sang format mới!\n\nVí dụ: TR12 -> T1.2(R), TL12 -> T1.2(L)`);
-        
-        // Refresh data
-        this.loadInventoryFromFirebase();
-      } else {
-        console.log('ℹ️ Không có vị trí nào cần cập nhật');
-        alert('Không có vị trí nào cần cập nhật sang format mới');
-      }
-
-    } catch (error) {
-      console.error('❌ Lỗi khi cập nhật vị trí:', error);
-      alert('❌ Lỗi khi cập nhật vị trí. Vui lòng thử lại.');
-    } finally {
-      this.isLoading = false;
-    }
   }
 
   // Mark duplicates within ASM1
@@ -7157,11 +6253,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .subscribe(canAccess => {
         console.log(`🔍 DEBUG: Tab permission result for 'materials': ${canAccess}`);
         
-        // Set basic permissions based on tab access
-        this.canView = canAccess;
-        this.canEdit = canAccess;
-        this.canExport = canAccess;
-        this.canDelete = canAccess;
+        // Quyền tab + Matrix quyền (edit / export / delete)
+        this.tabCanAccess = canAccess;
+        this.applyPermissionFlags();
         // this.canEditHSD = canAccess; // Removed - HSD column deleted
         
         
@@ -7298,84 +6392,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openKkLocMapFromMore(): void {
     this.closeMorePopup();
-    if (!this.isNguyenLieuPage) {
-      void this.router.navigate(['/quan-ly-nguyen-lieu'], {
-        queryParams: { factory: this.selectedFactory }
-      });
-      return;
-    }
-    this.enterKkLocMap();
-  }
-
-  /** Mở trang Kiểm tra KK (tab Quản lý Nguyên Liệu). */
-  enterKkLocMap(): void {
-    this.showKkLocMap = true;
-    this.kkLocMapQuery = '';
-    this.kkStockLoaded = false;
-    this.kkLocMapView = 'type';
-    this.kkLocMapWarehouseFilter = '';
-    this.kkCountWh3 = true;
-    this.kkWh3Only = false;
-    this.kkJOnly = false;
-    this.kkFilterUncheckedOnly = false;
-    this.kkLocMapBoxes = [];
-    this.kkLocMapByMaterial = [];
-    this.kkLocMapByType = [];
-    this.kkLocMapRowCache.clear();
-    this.kkLocMapMaterialCache.clear();
-    this.kkLocMapTypeCache.clear();
-    this.kkLocMapExpandedKey = null;
-    this.kkActiveProductType = null;
-    this.kkActiveTypeDraft = null;
-    this.kkActivePinSplit = null;
-    this.kkActiveSourceProductType = null;
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = null;
-    setTimeout(() => void this.loadKkCatalogMeta(), 0);
-    void this.loadKkMucAllowedLocs();
-  }
-
-  closeKkLocMap(): void {
-    this.showKkLocMap = false;
-    this.kkLocMapLoading = false;
-    this.kkLocMapStatus = '';
-    this.kkLocMapQuery = '';
-    this.kkStockLoaded = false;
-    this.kkLocMapView = null;
-    this.kkLocMapWarehouseFilter = '';
-    this.kkCountWh3 = true;
-    this.kkWh3Only = false;
-    this.kkJOnly = false;
-    this.kkFilterUncheckedOnly = false;
-    this.kkLocMapBoxes = [];
-    this.kkLocMapByMaterial = [];
-    this.kkLocMapByType = [];
-    this.kkLocMapRowCache.clear();
-    this.kkLocMapMaterialCache.clear();
-    this.kkLocMapTypeCache.clear();
-    this.kkLocMapLoadId++;
-    this.kkLocMapBusy = false;
-    this.kkLocMapExpandedKey = null;
-    this.kkActiveProductType = null;
-    this.kkActiveTypeDraft = null;
-    this.kkActivePinSplit = null;
-    this.kkActiveSourceProductType = null;
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = null;
-    this.showKkTypeReportMenu = false;
-    this.showKkIdReport = false;
-    this.showKkPalletCheck = false;
-    this.stopKkLive();
-    this.syncKkPageLock();
-  }
-
-  toggleKkToolMenu(menu: 'print' | 'tools'): void {
-    this.kkToolMenu = this.kkToolMenu === menu ? null : menu;
-  }
-
-  toggleKkLive(): void {
-    if (this.kkLiveActive) this.stopKkLive();
-    else this.startKkLive();
+    void this.router.navigate(['/quan-ly-nguyen-lieu'], {
+      queryParams: { factory: this.selectedFactory }
+    });
   }
 
   stopKkLive(): void {
@@ -7386,68 +6405,122 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkLiveRows = [];
   }
 
-  startKkLive(): void {
-    this.kkLiveStop$.next();
-    this.kkLiveActive = true;
-    this.kkLiveLoading = true;
-    this.kkLiveError = '';
-    this.kkLiveRows = [];
-    const factory = this.selectedFactory;
-    const dateKey = this.toDateKey(new Date());
-    const listen = (ordered: boolean) => {
-      this.firestore
-        .collection('inventory-kk-history', (ref) => {
-          let q = ref.where('factory', '==', factory).where('checkedDateKey', '==', dateKey);
-          if (ordered) q = q.orderBy('checkedAt', 'desc');
-          return q.limit(200);
-        })
-        .valueChanges()
-        .pipe(takeUntil(this.destroy$), takeUntil(this.kkLiveStop$))
-        .subscribe({
-          next: (rows) => {
-            this.applyKkLiveHistory(rows || []);
-          },
-          error: (err) => {
-            console.error('❌ kk live:', err);
-            if (ordered) {
-              listen(false);
-              return;
-            }
-            this.kkLiveLoading = false;
-            this.kkLiveError = 'Không đọc được KK live.';
-            this.cdr.detectChanges();
-          }
+  /** "ASP0106 · Tuấn Anh" — chưa tra được tên thì chỉ hiện mã. */
+  kkEmployeeLabel(id: string): string {
+    const code = String(id || '').trim().toUpperCase();
+    if (!/^ASP\d+$/.test(code)) return code || '—';
+    const name = this.kkEmployeeShortName(code);
+    return name ? `${code} · ${name}` : code;
+  }
+
+  private static readonly KK_EMP_NAME_KEY = 'kk-emp-names-v1';
+  private kkEmpNames: Map<string, string> | null = null;
+  private kkEmpNameQueue = new Set<string>();
+  private kkEmpNameTimer: any = null;
+
+  /** Tên sửa tay (kk-employee-names/{ASPxxxx}.name) — ưu tiên hơn tên tài khoản. */
+  private kkEmpNameOverrides: Map<string, string> | null = null;
+  private kkEmpNameOverridesLoading = false;
+
+  private ensureKkEmpNameOverrides(): void {
+    if (this.kkEmpNameOverrides || this.kkEmpNameOverridesLoading) return;
+    this.kkEmpNameOverridesLoading = true;
+    this.firestore.firestore.collection('kk-employee-names').get()
+      .then((snap) => {
+        const map = new Map<string, string>();
+        snap.docs.forEach((d) => {
+          const name = String((d.data() as any)?.name || '').trim();
+          if (name) map.set(d.id.toUpperCase(), name);
         });
-    };
-    listen(true);
+        this.kkEmpNameOverrides = map;
+        this.cdr.detectChanges();
+      })
+      .catch(() => { this.kkEmpNameOverrides = new Map(); })
+      .finally(() => { this.kkEmpNameOverridesLoading = false; });
   }
 
-  private applyKkLiveHistory(rows: unknown[]): void {
-    const parsed = (rows as Array<Record<string, unknown>>).map((data) => {
-      const checkedAt = this.normalizeTimestamp(data?.checkedAt) || this.normalizeTimestamp(data?.createdAt);
-      return {
-        materialCode: String(data?.materialCode || '').trim().toUpperCase(),
-        location: String(data?.location || '').trim().toUpperCase(),
-        poNumber: String(data?.poNumber || '').trim(),
-        checkedBy: String(data?.checkedBy || '').trim(),
-        checkedAt: checkedAt || new Date(0)
-      };
-    }).filter((r) => !!r.materialCode);
-    parsed.sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime());
-    const byCode = new Map<string, typeof parsed[number]>();
-    for (const row of parsed) {
-      if (!byCode.has(row.materialCode)) byCode.set(row.materialCode, row);
+  /** Sửa tên hiển thị của 1 mã nhân viên (dùng ở cột Thời gian KK, Báo cáo KK…). */
+  async editKkEmployeeName(id: string, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    const code = String(id || '').trim().toUpperCase();
+    if (!/^ASP\d+$/.test(code) || !this.canEdit) return;
+    const cur = this.kkEmployeeShortName(code);
+    const raw = window.prompt(`Tên hiển thị cho ${code} (để trống = dùng tên tài khoản):`, cur);
+    if (raw == null) return;
+    const name = raw.trim().replace(/\s+/g, ' ').slice(0, 40);
+    try {
+      const ref = this.firestore.firestore.collection('kk-employee-names').doc(code);
+      if (name) {
+        await ref.set({ name, updatedBy: await this.getMaterialsOtpRequester(), updatedAt: firebase.default.firestore.FieldValue.serverTimestamp() });
+        (this.kkEmpNameOverrides ||= new Map()).set(code, name);
+      } else {
+        await ref.delete();
+        this.kkEmpNameOverrides?.delete(code);
+      }
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('editKkEmployeeName:', e);
+      alert('❌ Không lưu được tên.');
     }
-    this.kkLiveRows = Array.from(byCode.values());
-    this.kkLiveLoading = false;
-    this.kkLiveError = '';
-    this.cdr.detectChanges();
   }
 
-  formatKkLiveTime(d: Date | null | undefined): string {
-    if (!d || Number.isNaN(d.getTime()) || !d.getTime()) return '—';
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  protected kkEmployeeShortName(id: string): string {
+    if (!id) return '';
+    this.ensureKkEmpNameOverrides();
+    const manual = this.kkEmpNameOverrides?.get(id);
+    if (manual) return manual;
+    if (!this.kkEmpNames) {
+      this.kkEmpNames = new Map();
+      try {
+        const raw = JSON.parse(localStorage.getItem(MaterialsComponent.KK_EMP_NAME_KEY) || '{}');
+        Object.keys(raw || {}).forEach((k) => this.kkEmpNames!.set(k, String(raw[k] || '')));
+      } catch {
+        /* bỏ qua cache hỏng */
+      }
+    }
+    if (this.kkEmpNames.has(id)) return this.kkEmpNames.get(id) || '';
+    if (!this.kkEmpNameQueue.has(id)) {
+      this.kkEmpNameQueue.add(id);
+      if (!this.kkEmpNameTimer) this.kkEmpNameTimer = setTimeout(() => void this.flushKkEmployeeNames(), 50);
+    }
+    return '';
+  }
+
+  private async flushKkEmployeeNames(): Promise<void> {
+    this.kkEmpNameTimer = null;
+    const ids = Array.from(this.kkEmpNameQueue);
+    this.kkEmpNameQueue.clear();
+    if (!ids.length || !this.kkEmpNames) return;
+    const shortOf = (full: string): string => {
+      const words = String(full || '').trim().split(/\s+/).filter(Boolean);
+      if (!words.length || /^ASP\d+$/i.test(words[0])) return '';
+      return words.slice(-2).join(' ');
+    };
+    try {
+      for (let i = 0; i < ids.length; i += 30) {
+        const chunk = ids.slice(i, i + 30);
+        const snap = await this.firestore.firestore.collection('users').where('employeeId', 'in', chunk).get();
+        const found = new Map<string, string>();
+        snap.docs.forEach((d) => {
+          const data = d.data() as any;
+          const id = String(data.employeeId || '').trim().toUpperCase();
+          const name = shortOf(data.displayName || data.fullName || '');
+          if (id && name) found.set(id, name);
+        });
+        chunk.forEach((id) => this.kkEmpNames!.set(id, found.get(id) || ''));
+      }
+      const obj: Record<string, string> = {};
+      this.kkEmpNames.forEach((v, k) => { if (v) obj[k] = v; });
+      try {
+        localStorage.setItem(MaterialsComponent.KK_EMP_NAME_KEY, JSON.stringify(obj));
+      } catch {
+        /* localStorage đầy */
+      }
+    } catch (e) {
+      console.warn('flushKkEmployeeNames:', e);
+      ids.forEach((id) => this.kkEmpNames!.set(id, ''));
+    }
+    this.cdr.detectChanges();
   }
 
   get kkIdReportTotalIds(): number {
@@ -7464,17 +6537,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   get kkIdReportTotalTicks(): number {
     return this.kkIdReportRows.reduce((n, r) => n + r.tickCount, 0);
-  }
-
-  openKkIdReport(): void {
-    const today = this.toDateKey(new Date());
-    if (!this.kkIdReportStart) this.kkIdReportStart = today;
-    if (!this.kkIdReportEnd) this.kkIdReportEnd = today;
-    this.showKkIdReport = true;
-    this.kkIdReportError = '';
-    if (!this.kkIdReportRows.length && !this.kkIdReportLoading) {
-      void this.loadKkIdReport();
-    }
   }
 
   closeKkIdReport(): void {
@@ -7628,219 +6690,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .sort((a, b) => b.uniqueCodes - a.uniqueCodes || a.id.localeCompare(b.id));
   }
 
-  setKkLocMapView(view: 'location' | 'material' | 'type' | 'manager'): void {
-    if (this.kkLocMapView === view && !this.kkLocMapLoading) {
-      if (this.kkActiveProductType) this.backKkTypeBoxes();
-      return;
-    }
-    this.kkLocMapView = view;
-    this.kkLocMapQuery = '';
-    this.kkLocMapExpandedKey = null;
-    this.kkActiveProductType = null;
-    this.kkActiveTypeDraft = null;
-    this.kkActivePinSplit = null;
-    this.kkActiveSourceProductType = null;
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = null;
-    if (!this.kkStockLoaded) {
-      if (view === 'type') void this.loadKkMucAllowedLocs();
-      return;
-    }
-    if (view === 'location') void this.loadKkLocMap();
-    else if (view === 'material') void this.loadKkByMaterial();
-    else if (view === 'manager' && this.kkLocMapTypeCache.size) {
-      this.invalidateKkTypeViewCache();
-      this.cdr.detectChanges();
-    } else {
-      void this.loadKkCatalogForMap();
-    }
-    if (view === 'type') void this.loadKkMucAllowedLocs();
-    this.syncKkPageLock();
-  }
-
-  /** Nút Play: đọc tồn kho. Search không bấm Play thì chỉ chạy khi đủ 4 số. */
-  playKkStock(): void {
-    this.refreshKkLocMap(true);
-  }
-
-  refreshKkLocMap(force = false): void {
-    if (force) this.invalidateKkInvSnapCache(this.selectedFactory);
-    if (this.kkLocMapView === 'material') void this.loadKkByMaterial();
-    else if (this.kkLocMapView === 'location') void this.loadKkLocMap();
-    else if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
-      void this.loadKkCatalogForMap(true);
-    } else {
-      this.kkLocMapView = 'type';
-      void this.loadKkCatalogForMap(true);
-    }
-  }
-
-  openKkCodeLookup(): void {
-    this.showKkCodeLookup = true;
-    this.kkCodeLookupBusy = false;
-    if (!this.kkCodeLookupResult) this.kkCodeLookupInput = '';
-    this.cdr.detectChanges();
-    setTimeout(() => {
-      const el = document.getElementById('kkCodeLookupInput') as HTMLInputElement | null;
-      el?.focus();
-      el?.select();
-    }, 80);
-  }
-
-  closeKkCodeLookup(): void {
-    this.showKkCodeLookup = false;
-  }
-
-  openKkPalletCheck(): void {
-    this.showKkPalletCheck = true;
-    void this.loadKkPalletCheck();
-  }
-
   closeKkPalletCheck(): void {
     this.showKkPalletCheck = false;
-  }
-
-  async loadKkPalletCheck(): Promise<void> {
-    this.kkPalletCheckBusy = true;
-    this.kkPalletCheckRows = [];
-    this.kkPalletCheckTotal = 0;
-    this.cdr.detectChanges();
-    try {
-      const snap = await this.firestore
-        .collection('inventory-materials', (ref) =>
-          ref.where('factory', '==', this.selectedFactory).limit(10000)
-        )
-        .get()
-        .toPromise();
-      const byWh = new Map<KkWarehouse, { pallets: Set<string>; lines: number; noPallet: number }>();
-      for (const w of this.kkLocMapWarehouseOptions) {
-        byWh.set(w.id, { pallets: new Set<string>(), lines: 0, noPallet: 0 });
-      }
-      for (const doc of snap?.docs || []) {
-        const data = doc.data() as any;
-        const stock = this.stockFromInventoryDoc(data);
-        if (stock <= 0) continue;
-        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
-        const cur = byWh.get(warehouse);
-        if (!cur) continue;
-        cur.lines += 1;
-        const pallet = String(data.palletId || '').trim().toUpperCase();
-        if (!pallet) cur.noPallet += 1;
-        else cur.pallets.add(pallet);
-      }
-      this.kkPalletCheckRows = this.kkLocMapWarehouseOptions.map((w) => {
-        const cur = byWh.get(w.id)!;
-        return {
-          warehouse: w.id,
-          label: w.label,
-          pallets: cur.pallets.size,
-          lines: cur.lines,
-          noPallet: cur.noPallet
-        };
-      });
-      this.kkPalletCheckTotal = this.kkPalletCheckRows.reduce((n, r) => n + r.pallets, 0);
-    } catch (e) {
-      console.error('loadKkPalletCheck:', e);
-      alert('Không đếm được pallet theo kho.');
-    } finally {
-      this.kkPalletCheckBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  onKkCodeLookupInput(value: string): void {
-    this.kkCodeLookupInput = String(value || '').toUpperCase();
-  }
-
-  async submitKkCodeLookup(): Promise<void> {
-    const code = String(this.kkCodeLookupInput || '').trim().toUpperCase();
-    this.kkCodeLookupInput = code;
-    if (!code) {
-      this.kkCodeLookupResult = null;
-      return;
-    }
-    this.kkCodeLookupBusy = true;
-    this.kkCodeLookupResult = null;
-    this.cdr.detectChanges();
-    try {
-      if (!this.kkCatalogTypeMap.size) {
-        this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-      }
-      const productType = this.kkTypeOrGroupOfMaterial(code);
-      const inCatalog = !!this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
-      let stock = 0;
-      let lines = 0;
-      this.kkLocMapTypeCache.forEach((list) => {
-        for (const m of list) {
-          if (String(m.materialCode || '').trim().toUpperCase() !== code) continue;
-          stock += this.calculateCurrentStock(m);
-          lines += 1;
-        }
-      });
-      if (!lines) {
-        this.kkLocMapMaterialCache.forEach((list) => {
-          for (const m of list) {
-            if (String(m.materialCode || '').trim().toUpperCase() !== code) continue;
-            stock += this.calculateCurrentStock(m);
-            lines += 1;
-          }
-        });
-      }
-      if (!lines) {
-        const snap = await this.firestore
-          .collection('inventory-materials', (ref) =>
-            ref.where('materialCode', '==', code).limit(200)
-          )
-          .get()
-          .toPromise();
-        const factory = String(this.selectedFactory || '').trim().toUpperCase();
-        const seen = new Set<string>();
-        for (const doc of snap?.docs || []) {
-          const data = doc.data() as any;
-          if (String(data.factory || '').trim().toUpperCase() !== factory) continue;
-          if (seen.has(doc.id)) continue;
-          seen.add(doc.id);
-          stock += this.stockFromInventoryDoc(data);
-          lines += 1;
-        }
-      }
-      this.kkCodeLookupResult = {
-        code,
-        productType,
-        stock,
-        lines,
-        found: lines > 0 || inCatalog
-      };
-    } catch (e) {
-      console.error('❌ submitKkCodeLookup:', e);
-      this.kkCodeLookupResult = {
-        code,
-        productType: '—',
-        stock: 0,
-        lines: 0,
-        found: false
-      };
-      alert('❌ Không tra được mã hàng.');
-    } finally {
-      this.kkCodeLookupBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  openGanPallet(): void {
-    this.showGanPallet = true;
-    this.ganPalletBusy = false;
-    this.ganPalletLookupBusy = false;
-    this.ganPalletStep = 1;
-    this.ganPalletCode = '';
-    this.ganPalletWh = null;
-    this.ganPalletLoc = '';
-    this.ganPalletMaterial = '';
-    this.ganPalletQty = '';
-    this.ganPalletError = '';
-    this.ganPalletHit = null;
-    this.ganPalletPending = [];
-    this.focusGanPalletField('gan-pallet-code');
   }
 
   closeGanPallet(): void {
@@ -8155,39 +7006,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  get kkLocMapFilteredBoxes(): Array<{ loc: string; checked: number; total: number }> {
-    let boxes = this.kkLocMapBoxes;
-    if (this.kkJOnly || this.kkLocMapWarehouseFilter === 'J') {
-      boxes = boxes.filter((b) => this.kkWarehouseFromLocation(b.loc) === 'J');
-    } else if (this.kkLocMapWarehouseFilter) {
-      boxes = boxes.filter((b) => this.kkWarehouseFromLocation(b.loc) === this.kkLocMapWarehouseFilter);
-    }
-    const q = this.kkEffectiveSearchQuery();
-    if (q) boxes = boxes.filter((b) => b.loc.includes(q));
-    return boxes;
-  }
-
-  get kkLocMapFilteredMaterials(): KkLocMaterialRow[] {
-    let rows = this.kkLocMapByMaterial;
-    const q = this.kkEffectiveSearchQuery();
-    if (q) rows = rows.filter((r) => this.kkCodeMatchesSearch(r.materialCode, q));
-    if (this.kkLocMapWarehouseFilter) {
-      rows = rows.filter((r) => r.warehouse === this.kkLocMapWarehouseFilter);
-    }
-    rows = rows.filter((r) => this.kkMatchesWh3Mode(r.warehouse));
-    if (this.kkFilterUncheckedOnly) {
-      rows = rows.filter((r) => r.remaining > 0);
-    }
-    return rows;
-  }
-
-  get kkLocMapMaterialSummary(): { count: number; stock: number } {
-    return this.kkLocMapFilteredMaterials.reduce(
-      (acc, r) => ({ count: acc.count + 1, stock: acc.stock + r.stock }),
-      { count: 0, stock: 0 }
-    );
-  }
-
   get kkCatalogFilteredEntries(): KkCatalogEntry[] {
     const q = (this.kkCatalogQuery || '').trim().toUpperCase();
     if (!q) return this.kkCatalogEntries;
@@ -8198,76 +7016,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
-  get kkLocMapCatalogEntries(): KkCatalogEntry[] {
-    const q = this.kkEffectiveSearchQuery();
-    if (!q) return this.kkCatalogEntries;
-    return this.kkCatalogEntries.filter((e) =>
-      this.kkCodeMatchesSearch(e.groupCode, q) ||
-      (!this.isKkFullMaterialQuery(q) && e.productType.toUpperCase().includes(q))
-    );
-  }
-
-  get kkLocMapFilteredTypes(): KkTypeRow[] {
-    const q = this.kkEffectiveSearchQuery();
-    if (!q) return this.kkLocMapByType;
-    return this.kkLocMapByType.filter((r) =>
-      r.groupCodes.some((g) => this.kkCodeMatchesSearch(g, q)) ||
-      (!this.isKkFullMaterialQuery(q) && r.productType.toUpperCase().includes(q))
-    );
-  }
-
-  get kkLocMapTypeSummary(): { count: number; stock: number } {
-    return this.kkTypeBoxes.reduce(
-      (acc, r) => ({ count: acc.count + 1, stock: acc.stock + r.stock }),
-      { count: 0, stock: 0 }
-    );
-  }
-
-  /** Số mã / dòng / tồn đang ở kệ kho J mới (không phụ thuộc bộ lọc đang bật). */
-  get kkJMovedSummary(): { codes: number; lines: number; stock: number } {
-    const sig = [
-      this.kkLocMapLoadId,
-      this.kkTypeCacheRev,
-      this.kkLocMapTypeCache.size,
-      this.kkLocMapMaterialCache.size,
-      this.kkLocMapRowCache.size
-    ].join('|');
-    if (sig === this.kkJMovedSig) return this.kkJMovedCached;
-    this.kkJMovedSig = sig;
-    this.kkJMovedCached = this.buildKkJMovedSummary();
-    return this.kkJMovedCached;
-  }
-
-  private buildKkJMovedSummary(): { codes: number; lines: number; stock: number } {
-    const codes = new Set<string>();
-    const seen = new Set<string>();
-    let lines = 0;
-    let stock = 0;
-    const add = (m: InventoryMaterial) => {
-      if (this.kkWarehouseFromLocation(m.location) !== 'J') return;
-      const qty = this.calculateCurrentStock(m);
-      if (qty <= 0) return;
-      const id = String(m.id || '');
-      if (id) {
-        if (seen.has(id)) return;
-        seen.add(id);
-      }
-      lines += 1;
-      stock += qty;
-      const code = String(m.materialCode || '').trim().toUpperCase();
-      if (code) codes.add(code);
-    };
-    if (this.kkLocMapTypeCache.size) {
-      this.kkLocMapTypeCache.forEach((list) => list.forEach(add));
-    } else if (this.kkLocMapMaterialCache.size) {
-      this.kkLocMapMaterialCache.forEach((list) => list.forEach(add));
-    } else {
-      this.kkLocMapRowCache.forEach((list) => list.forEach(add));
-    }
-    return { codes: codes.size, lines, stock };
-  }
-
-  private invalidateKkTypeViewCache(): void {
+  protected invalidateKkTypeViewCache(): void {
     this.kkTypeCacheRev++;
     this.kkTypeBoxesSig = '';
     this.kkTypeBoxGroupsSig = '';
@@ -8289,476 +7038,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkTypeBoxesCached;
   }
 
-  get kkTypeBoxGroups(): Array<{
-    category: string;
-    title: string;
-    boxes: Array<{
-      productType: string;
-      groupCodes: string[];
-      sharedPrefix: string;
-      stock: number;
-      checked: number;
-      totalLines: number;
-      remaining: number;
-    }>;
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }> {
-    // `kkTypeBoxes` đã tự cache theo `kkTypeBoxesSig`; nhóm mục chỉ phụ thuộc vào nó
-    // nên tái dùng kết quả cho tới khi chữ ký đổi — tránh gom nhóm lại mỗi CD tick.
-    const boxes = this.kkTypeBoxes;
-    if (this.kkTypeBoxGroupsSig === this.kkTypeBoxesSig) {
-      return this.kkTypeBoxGroupsCached;
-    }
-    const map = new Map<string, typeof this.kkTypeBoxesCached>();
-    for (const box of boxes) {
-      const category = this.kkTypeCategoryOf(box.productType, box.groupCodes);
-      const list = map.get(category) || [];
-      list.push(box);
-      map.set(category, list);
-    }
-    this.kkTypeBoxGroupsCached = Array.from(map.entries())
-      .map(([category, boxesInCat]) => {
-        const sorted = this.sortKkTypeBoxesInCategory(category, boxesInCat);
-        return {
-          category,
-          title: this.kkTypeMucTitle(category),
-          boxes: sorted,
-          groups: this.kkTypeBrandGroupsOf(category, sorted)
-        };
-      })
-      .filter((muc) => muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0))
-      // Không hiển thị mục B033 — 14/10/2026
-      .filter((muc) => !MaterialsComponent.KK_HIDDEN_MUCS.includes(muc.category));
-    this.kkTypeBoxGroupsCached = this.mergeKkSingletonMucsFromB019(this.kkTypeBoxGroupsCached);
-    this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
-    return this.kkTypeBoxGroupsCached;
-  }
-
-  /**
-   * Từ B019 trở đi: mục chỉ có 1 loại → gom vào "Mục còn lại".
-   * Giữ nguyên B036/B042 và các mục đặc biệt (< B019, NHUA, DAYCAP…).
-   */
-  private mergeKkSingletonMucsFromB019(
-    mucs: typeof this.kkTypeBoxGroupsCached
-  ): typeof this.kkTypeBoxGroupsCached {
-    const keep: typeof this.kkTypeBoxGroupsCached = [];
-    const mergedBoxes: typeof this.kkTypeBoxesCached = [];
-    for (const muc of mucs) {
-      const m = /^B(\d{3})$/.exec(String(muc.category || ''));
-      const n = m ? Number(m[1]) : 0;
-      // B036 / B042 giữ mục riêng (đã bỏ mục con, chỉ box phẳng)
-      if (muc.category === 'B036' || muc.category === 'B042') {
-        keep.push(muc);
-        continue;
-      }
-      if (n >= 19 && muc.boxes.length === 1) {
-        mergedBoxes.push(...muc.boxes);
-        continue;
-      }
-      keep.push(muc);
-    }
-    if (!mergedBoxes.length) return keep;
-    const sorted = this.sortKkTypeBoxesInCategory('CONLAI', mergedBoxes);
-    keep.push({
-      category: 'CONLAI',
-      title: this.kkTypeMucTitle('CONLAI'),
-      boxes: sorted,
-      groups: undefined
-    });
-    return keep;
-  }
-
-  /** Gom loại hàng thành mục. Cùng đầu mã B+3 → một mục, các box nằm trong đó. */
-  kkTypeCategoryOf(productType: string, groupCodes: string[] = []): string {
-    const raw = String(productType || '').trim();
-    if (!raw) return 'Khác';
-    if (raw === 'Chưa gán danh mục') return raw;
-    const prefixes = this.kkTypeGroupPrefixes(groupCodes);
-    // Mọi loại có mã đầu A (A001, A031…) gom chung một mục "A" — 14/10/2026
-    if (prefixes.length ? prefixes.every((p) => p.startsWith('A')) : /^A\d{3}$/i.test(raw)) return 'A';
-    if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
-    const bPrefix = this.kkTypeSharedBPrefix(groupCodes);
-    if (bPrefix === 'B018') return 'B018';
-    if (this.isKkDauCotMuc(raw, groupCodes)) return 'ĐẦU CỐT';
-    if (this.isKkNhuaType(prefixes, raw)) return 'NHUA';
-    if (this.isKkDayCapType(prefixes, raw)) return 'DAYCAP';
-    // Đầu mã dây cáp đơn lẻ (B002/B003/B005/B006) → luôn vào Mục Dây cáp
-    if (bPrefix && this.isKkDayCapPrefix(bPrefix)) return 'DAYCAP';
-    if (bPrefix) return bPrefix;
-    if (/DAU\s*NOI/.test(this.foldKkTypeName(raw))) return 'Khác';
-    return this.kkTypeNameHeadOf(raw);
-  }
-
-  /** Tên hãng/đầu loại (Molex, JST…) — bỏ màu và thông số. */
-  private kkTypeNameHeadOf(productType: string): string {
-    const raw = String(productType || '').trim();
-    if (!raw) return '';
-    const tokens = raw.split(/\s+/).filter(Boolean);
-    const skip = new Set([
-      'DEN', 'TRANG', 'DO', 'XANH', 'VANG', 'NAU', 'XAM', 'CAM', 'HONG', 'TIM',
-      'BLACK', 'WHITE', 'RED', 'BLUE', 'YELLOW', 'GREEN', 'GREY', 'GRAY', 'BROWN', 'ORANGE'
-    ]);
-    const isSpec = (t: string): boolean => {
-      const u = t.toUpperCase().replace(/[(),]/g, '');
-      if (!u) return true;
-      if (/^\d/.test(u)) return true;
-      if (/^(AWG|MM|CM|M|IN|MIL|V|A|W|KG|G|PCS|PC|Ø|PHI)$/.test(u)) return true;
-      if (/\d/.test(u)) return true;
-      return false;
-    };
-    const head: string[] = [];
-    for (const t of tokens) {
-      if (skip.has(this.foldKkTypeName(t))) continue;
-      if (isSpec(t)) break;
-      head.push(t);
-    }
-    return head.length ? head.join(' ') : raw;
-  }
-
-  /** B009/B016/B018 chia kệ × tầng. B017, Nhựa, Dây cáp, B036, B042: không chia mục con. */
-  private kkTypeBrandGroupsOf(
-    category: string,
-    boxes: typeof this.kkTypeBoxesCached
-  ): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> | undefined {
-    // B017 hiện hai dãy R17/R18, không chia kệ S.
-    // Từ 14/10/2026: B009/B016/B018 cũng không chia kệ × tầng nữa — mọi mục hiện lưới phẳng.
-    return undefined;
-  }
-
-  /** B036 / B042: mỗi nhóm loại một cột, xếp một hàng ngang. */
-  private kkTypeNameColsGroupsOf(
-    boxes: typeof this.kkTypeBoxesCached
-  ): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> {
-    const map = new Map<string, { title: string; boxes: typeof this.kkTypeBoxesCached }>();
-    for (const box of boxes) {
-      const head = this.kkTypeNameHeadOf(box.productType) || box.productType;
-      const key = this.foldKkTypeName(head) || head;
-      const cur = map.get(key) || { title: head, boxes: [] };
-      cur.boxes.push(box);
-      map.set(key, cur);
-    }
-    return Array.from(map.entries())
-      .map(([key, v]) => {
-        const sorted = this.sortKkTypeBoxesInCategory(key, v.boxes);
-        return {
-          key,
-          title: v.title,
-          boxes: sorted,
-          subMucs: [{ key: `${key}-all`, title: '', boxes: sorted }]
-        };
-      })
-      .sort((a, b) => a.title.localeCompare(b.title, 'vi', { numeric: true }));
-  }
-
-  /** Mục Nhựa / Dây cáp: từng đầu mã một cột, ô loại nằm trong cột đó. */
-  private kkTypePrefixColsGroupsOf(
-    boxes: typeof this.kkTypeBoxesCached,
-    order: string[],
-    opts?: { keepEmpty?: boolean }
-  ): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> {
-    const map = new Map<string, typeof this.kkTypeBoxesCached>();
-    for (const p of order) map.set(p, []);
-    const leftover: typeof this.kkTypeBoxesCached = [];
-    for (const box of boxes) {
-      const prefixes = this.kkTypeGroupPrefixes(box.groupCodes);
-      const shared = this.kkTypeSharedBPrefix(box.groupCodes);
-      const prefix = order.find((p) => prefixes.includes(p))
-        || (shared && order.includes(shared) ? shared : '')
-        || prefixes[0]
-        || '';
-      if (!map.has(prefix)) {
-        leftover.push(box);
-        continue;
-      }
-      map.get(prefix)!.push(box);
-    }
-    const groups = order
-      .map((prefix) => {
-        const sorted = this.sortKkTypeBoxesInCategory(prefix, map.get(prefix) || []);
-        return {
-          key: prefix,
-          title: prefix,
-          boxes: sorted,
-          subMucs: [{ key: `${prefix}-all`, title: '', boxes: sorted }]
-        };
-      })
-      .filter((g) => opts?.keepEmpty || g.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
-    // Mã xếp vào mục theo tên (vd "DAY CAP"/"CABLE") nhưng không có đầu mã trong order — vẫn hiện.
-    if (leftover.length) {
-      const sorted = this.sortKkTypeBoxesInCategory('Khác', leftover);
-      groups.push({
-        key: 'KHAC',
-        title: 'Khác',
-        boxes: sorted,
-        subMucs: [{ key: 'KHAC-all', title: '', boxes: sorted }]
-      });
-    }
-    return groups;
-  }
-
-  /** B017: theo mã + vị trí kệ S23–S25. Trên B017100 → S25-2. */
-  private kkTypeB017CodeGroupsOf(
-    boxes: typeof this.kkTypeBoxesCached
-  ): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> | undefined {
-    const prefix = 'B017';
-    const slots: Array<{ loc: string; from: number; to: number }> = [
-      { loc: 'S23-1', from: 1, to: 20 },
-      { loc: 'S23-2', from: 21, to: 40 },
-      { loc: 'S24-1', from: 41, to: 60 },
-      { loc: 'S24-2', from: 61, to: 80 },
-      { loc: 'S25-1', from: 81, to: 100 },
-      { loc: 'S25-2', from: 101, to: 999 }
-    ];
-    const subMucs = slots
-      .map((s) => ({
-        key: s.loc,
-        title: `${s.loc} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`,
-        boxes: boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to))
-      }))
-      .filter((s) => s.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0));
-    if (!subMucs.length) return undefined;
-    return [{ key: 'hang', title: '', boxes, subMucs }];
-  }
-
-  /** B009: S07–S10 ×50. B016: S11–S14 ×50. B018: S01×50, S03/S05×80. Tầng 1–5 có mã; 6–7 trống. */
-  private kkTypeConnectorShelfGroupsOf(
-    prefix: string,
-    boxes: typeof this.kkTypeBoxesCached
-  ): Array<{
-    key: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }> {
-    const shelves = this.kkConnectorRackShelves(prefix);
-    const used = new Set<string>();
-    const groups = shelves.map((s) => {
-      const blocks = jKhoMatBlocksForRow(s.shelf);
-      const subMucs = [];
-      for (let lv = 1; lv <= 7; lv++) {
-        const range = this.kkConnectorFloorRange(s, lv);
-        const locText = Array.from({ length: blocks }, (_, i) => `${s.shelf}-${i + 1}-${lv}`).join(' / ');
-        const rangeText = range ? this.kkConnectorRangeText(prefix, range.from, range.to) : 'trống';
-        const floorBoxes = range
-          ? boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, range.from, range.to))
-          : [];
-        for (const box of floorBoxes) used.add(box.productType);
-        subMucs.push({
-          key: `${s.shelf}-T${lv}`,
-          title: `Tầng ${lv} · ${locText} · ${rangeText}`,
-          boxes: floorBoxes
-        });
-      }
-      const shelfBoxes = boxes.filter((box) => this.kkConnectorBoxInRange(prefix, box, s.from, s.to));
-      return {
-        key: s.shelf,
-        title: s.from > 0
-          ? `Kệ ${s.shelf} · ${this.kkConnectorRangeText(prefix, s.from, s.to)}`
-          : `Kệ ${s.shelf}`,
-        boxes: shelfBoxes,
-        subMucs
-      };
-    });
-    const leftover = boxes.filter((b) => !used.has(b.productType));
-    if (leftover.length) {
-      groups.push({
-        key: 'KHAC',
-        title: `Ngoài dải ${prefix}001–${prefix}999`,
-        boxes: leftover,
-        subMucs: [{ key: 'KHAC-all', title: '', boxes: leftover }]
-      });
-    }
-    return groups;
-  }
-
-  private kkConnectorRackShelves(prefix: string): Array<{
-    shelf: string;
-    from: number;
-    to: number;
-    perFloor: number;
-  }> {
-    const removed = new Set(this.kkMucRemovedShelves[prefix] || []);
-    return this.kkConnectorRackShelfDefs(prefix).filter((row) => !removed.has(row.shelf));
-  }
-
-  private kkConnectorRackShelfDefs(prefix: string): Array<{
-    shelf: string;
-    from: number;
-    to: number;
-    perFloor: number;
-  }> {
-    if (prefix === 'B017') {
-      return [
-        { shelf: 'S23', from: 1, to: 40, perFloor: 20 },
-        { shelf: 'S24', from: 41, to: 80, perFloor: 20 },
-        { shelf: 'S25', from: 81, to: 999, perFloor: 20 }
-      ];
-    }
-    if (prefix === 'B016') {
-      return [
-        { shelf: 'S11', from: 1, to: 250, perFloor: 50 },
-        { shelf: 'S12', from: 251, to: 500, perFloor: 50 },
-        { shelf: 'S13', from: 501, to: 750, perFloor: 50 },
-        { shelf: 'S14', from: 751, to: 999, perFloor: 50 }
-      ];
-    }
-    if (prefix === 'B018') {
-      return [
-        { shelf: 'S01', from: 1, to: 200, perFloor: 50 },
-        { shelf: 'S03', from: 201, to: 600, perFloor: 80 },
-        { shelf: 'S05', from: 601, to: 999, perFloor: 80 }
-      ];
-    }
-    if (prefix === 'B009') {
-      return [
-        { shelf: 'S07', from: 1, to: 250, perFloor: 50 },
-        { shelf: 'S08', from: 251, to: 500, perFloor: 50 },
-        { shelf: 'S09', from: 501, to: 750, perFloor: 50 },
-        { shelf: 'S10', from: 751, to: 999, perFloor: 50 }
-      ];
-    }
-    return [];
-  }
-
-  private kkConnectorFloorRange(
-    s: { from: number; to: number; perFloor: number },
-    lv: number
-  ): { from: number; to: number } | null {
-    if (lv < 1 || lv > 5 || s.from <= 0) return null;
-    const from = s.from + (lv - 1) * s.perFloor;
-    if (from > s.to) return null;
-    return { from, to: Math.min(from + s.perFloor - 1, s.to) };
-  }
-
-  isKkConnectorRackMuc(category: string): boolean {
-    return category === 'B009' || category === 'B016' || category === 'B018';
-  }
-
-  /**
-   * Mục hiện theo sơ đồ mâm kệ trên trang KK. Từ 14/10/2026 không chia mâm kệ nữa (B009/B016/B018
-   * hiện lưới phẳng như các mục khác). In tem kệ theo mâm vẫn dùng isKkConnectorRackMuc.
-   */
-  isKkRackBoardMuc(_category: string): boolean {
-    return false;
-  }
-
-  isKkNhuaMuc(category: string): boolean {
-    return category === 'NHUA';
-  }
-
-  isKkDayCapMuc(category: string): boolean {
-    return category === 'DAYCAP';
-  }
-
-  isKkPrefixColsMuc(category: string): boolean {
-    // Không còn chia cột mục con cho Nhựa / B036 / B042
-    return false;
-  }
-
-  isKkNameColsMuc(category: string): boolean {
-    return category === 'B036' || category === 'B042';
-  }
-
-  private isKkNhuaPrefix(prefix: string): boolean {
-    return prefix === 'B011' || prefix === 'B012' || prefix === 'B014' || prefix === 'B013';
-  }
-
-  private isKkDayCapPrefix(prefix: string): boolean {
-    return prefix === 'B003' || prefix === 'B005' || prefix === 'B002' || prefix === 'B006';
-  }
-
-  /** Loại có một hoặc nhiều đầu mã nhựa, hoặc tên loại là nhựa. */
-  private isKkNhuaType(prefixes: string[], productType = ''): boolean {
-    if (prefixes.length && prefixes.every((p) => this.isKkNhuaPrefix(p))) return true;
-    const fold = this.foldKkTypeName(this.kkTypeNameHeadOf(productType) || productType);
-    return /^NHUA\b/.test(fold) || fold === 'PLASTIC';
-  }
-
-  /** Loại có một hoặc nhiều đầu mã dây cáp (vd B002+B005), hoặc tên loại là dây cáp. */
-  private isKkDayCapType(prefixes: string[], productType = ''): boolean {
-    if (prefixes.length && prefixes.every((p) => this.isKkDayCapPrefix(p))) return true;
-    const fold = this.foldKkTypeName(this.kkTypeNameHeadOf(productType) || productType);
-    return /^DAY\s*CAP/.test(fold) || fold === 'CABLE';
-  }
-
-  kkShelfBlockNos(shelf: string): number[] {
-    const n = jKhoMatBlocksForRow(shelf);
-    return Array.from({ length: n }, (_, i) => i + 1);
-  }
-
-  private kkConnectorCode(prefix: string, n: number): string {
+  protected kkConnectorCode(prefix: string, n: number): string {
     return `${prefix}${String(n).padStart(3, '0')}`;
   }
 
-  private kkConnectorRangeText(prefix: string, from: number, to: number): string {
-    return `${this.kkConnectorCode(prefix, from)} ~ ${this.kkConnectorCode(prefix, to)}`;
-  }
-
-  private kkConnectorSeqOf(prefix: string, groupCode: string): number | null {
-    const g = this.kkCatalog.normalizeGroupCode(groupCode)
-      || this.kkCatalog.groupCodeFromMaterial(groupCode)
-      || String(groupCode || '').trim().toUpperCase();
-    const m = new RegExp(`^${prefix}(\\d{3})$`).exec(g);
-    if (!m) return null;
-    return Number(m[1]);
-  }
-
-  private kkConnectorBoxInRange(
-    prefix: string,
-    box: { productType?: string; groupCodes?: string[] },
-    from: number,
-    to: number
-  ): boolean {
-    if (from <= 0 || to < from) return false;
-    const codes = [...(box.groupCodes || []), String(box.productType || '')];
-    for (const g of codes) {
-      const n = this.kkConnectorSeqOf(prefix, g);
-      if (n != null && n >= from && n <= to) return true;
-    }
-    return false;
-  }
-
   /** Mục Đầu nối: B008, B009, B016. */
-  private isKkDauNoiMuc(_productType: string, groupCodes: string[] = []): boolean {
+  protected isKkDauNoiMuc(_productType: string, groupCodes: string[] = []): boolean {
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
     if (!prefixes.length) return false;
     return prefixes.every((p) => p === 'B008' || p === 'B009' || p === 'B016');
   }
 
-  private kkDauNoiGroupKey(box: { groupCodes?: string[] }): string {
-    const prefixes = this.kkTypeGroupPrefixes(box.groupCodes || []);
-    for (const p of ['B008', 'B009', 'B016'] as const) {
-      if (prefixes.includes(p)) return p;
-    }
-    return prefixes[0] || 'Khác';
-  }
-
-  private isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
+  protected isKkDauCotMuc(productType: string, groupCodes: string[] = []): boolean {
     if (this.isKkDauNoiMuc(productType, groupCodes)) return false;
     if (this.kkTypeSharedBPrefix(groupCodes) === 'B018') return false;
     const fold = this.foldKkTypeName(productType);
@@ -8766,7 +7057,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Phần hãng sau “Đầu cốt (terminal)”. Trống = không ghi hãng. */
-  private kkTerminalBrandTail(productType: string): string {
+  protected kkTerminalBrandTail(productType: string): string {
     return this.foldKkTypeName(productType)
       .replace(/DAU\s*COT/g, ' ')
       .replace(/\(\s*TERMINAL\s*\)/g, ' ')
@@ -8787,7 +7078,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Gộp terminal chưa rõ hãng + không hãng thành một loại. */
-  private kkCanonicalTypeKey(productType: string, groupCodes: string[] = []): string {
+  protected kkCanonicalTypeKey(productType: string, groupCodes: string[] = []): string {
+    // B008 (2 ô: 001–500, 501–999) / B009 / B016 / B018 (mỗi ô 100 mã) — 16/10/2026
+    const ranges = new Set(groupCodes.map((g) => this.kkRangeTypeOf(g)).filter(Boolean));
+    if (ranges.size === 1) return [...ranges][0];
+    const ownRange = this.kkRangeTypeOf(productType);
+    if (ownRange && ownRange === productType) return ownRange;
     // Gom cả đầu mã về một loại (không chia theo phi / kích thước nữa) — 14/10/2026
     const merged = this.kkMergedPrefixTypeOf(productType, groupCodes);
     if (merged) return merged;
@@ -8795,8 +7091,27 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return productType;
   }
 
+  /** Đầu mã chia ô theo khoảng 100 mã thay cho loại hàng. */
+  protected static readonly KK_RANGE_PREFIXES = ['B008', 'B009', 'B016', 'B018'];
+
+  /** Số mã mỗi ô: B008 chia 2 ô (001–500, 501–999); B009 / B016 / B018 mỗi ô 100 mã. */
+  private static readonly KK_RANGE_SIZE: Record<string, number> = { B008: 500 };
+
+  /** B009123 / B009123xx → "B009101–B009200"; đầu mã khác → ''. Nhận cả nhãn khoảng đã dựng sẵn. */
+  private kkRangeTypeOf(codeOrGroup: string): string {
+    const s = String(codeOrGroup || '').trim().toUpperCase();
+    const m = /^(B\d{3})(\d{3})/.exec(s);
+    if (!m || !MaterialsComponent.KK_RANGE_PREFIXES.includes(m[1])) return '';
+    const size = MaterialsComponent.KK_RANGE_SIZE[m[1]] || 100;
+    const n = Math.max(1, Number(m[2]) || 0);
+    const from = Math.floor((n - 1) / size) * size + 1;
+    const to = Math.min(999, from + size - 1);
+    const pad = (x: number) => String(x).padStart(3, '0');
+    return `${m[1]}${pad(from)}–${m[1]}${pad(to)}`;
+  }
+
   /** Mục không hiển thị trên trang KK (theo Loại hàng). */
-  private static readonly KK_HIDDEN_MUCS = ['B033'];
+  protected static KK_HIDDEN_MUCS: string[] = ['B033'];
 
   /** Đầu mã gom thành 1 loại duy nhất trên trang KK (tên ô = đầu mã). */
   private static readonly KK_MERGED_PREFIX_TYPES = ['B042', 'B017', 'B015'];
@@ -8811,14 +7126,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Cùng một đầu mã B+3 (vd B017, B005). Trống nếu loại có nhiều đầu mã. */
-  private kkTypeSharedBPrefix(groupCodes: string[] = []): string {
+  protected kkTypeSharedBPrefix(groupCodes: string[] = []): string {
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
     if (prefixes.length !== 1) return '';
     const prefix = prefixes[0];
     return /^B\d{3}$/.test(prefix) ? prefix : '';
   }
 
-  private foldKkTypeName(value: string): string {
+  protected foldKkTypeName(value: string): string {
     return String(value || '')
       .toUpperCase()
       .normalize('NFD')
@@ -8857,451 +7172,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return pins != null && pins >= 5;
   }
 
-  kkTypeMucTitle(category: string): string {
-    if (category === 'Chưa gán danh mục') return 'Chưa gán danh mục';
-    if (category === 'Khác') return 'Mục khác';
-    if (category === 'CONLAI') return 'Mục còn lại';
-    if (category === 'ĐẦU NỐI') return 'Mục Đầu nối';
-    if (category === 'ĐẦU CỐT') return 'Mục Đầu cốt (Terminal)';
-    if (category === 'NHUA') return 'Mục Nhựa';
-    if (category === 'DAYCAP') return 'Mục Dây cáp';
-    if (category === 'A') return 'Nhóm A';
-    if (/^B\d{3}$/.test(category)) return `Mục ${category}`;
-    const lower = category.toLocaleLowerCase('vi');
-    const pretty = lower ? lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1) : category;
-    return `Mục ${pretty}`;
-  }
-
-  isKkTypeMucCollapsed(category: string): boolean {
-    return !!this.kkTypeMucCollapsed[category];
-  }
-
-  toggleKkTypeMuc(category: string, event?: Event): void {
-    event?.stopPropagation();
-    this.kkTypeMucCollapsed = {
-      ...this.kkTypeMucCollapsed,
-      [category]: !this.kkTypeMucCollapsed[category]
-    };
-  }
-
-  kkTypeNestKey(...parts: string[]): string {
-    return parts.filter(Boolean).join('|');
-  }
-
-  kkB009ShelfGroups(muc: {
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }): NonNullable<typeof muc.groups> {
-    return (muc.groups || []).filter((g) => /^S\d{2}$/.test(g.key));
-  }
-
-  kkB009OtherGroups(muc: {
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }): NonNullable<typeof muc.groups> {
-    return (muc.groups || []).filter((g) => !/^S\d{2}$/.test(g.key));
-  }
-
-  kkB009LevelsTopDown(group: {
-    subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-  }): typeof group.subMucs {
-    return [...group.subMucs].sort((a, b) => this.kkB009SubLevel(b) - this.kkB009SubLevel(a));
-  }
-
-  kkB009SubLevel(sub: { key: string }): number {
-    const m = /-T(\d+)$/.exec(sub.key);
-    return m ? Number(m[1]) : 0;
-  }
-
-  kkB009FloorEmpty(sub: { title: string }): boolean {
-    return /trống/i.test(sub.title);
-  }
-
-  kkB009SubFullRange(sub: { title: string }): string {
-    const raw = String(sub.title || '').split(' · ').pop() || '';
-    if (/trống/i.test(raw)) return 'Trống';
-    return raw.trim();
-  }
-
-  kkB009SubShortRange(sub: { title: string }): string {
-    const raw = String(sub.title || '').split(' · ').pop() || '';
-    if (/trống/i.test(raw)) return 'Trống';
-    const m = /B\d{3}(\d{3})\s*~\s*B\d{3}(\d{3})/i.exec(raw);
-    return m ? `${m[1]}–${m[2]}` : raw;
-  }
-
-  kkB009ShelfShortRange(group: { title: string }): string {
-    const m = /B\d{3}(\d{3})\s*~\s*B\d{3}(\d{3})/i.exec(group.title || '');
-    return m ? `${m[1]}–${m[2]}` : '';
-  }
-
-  kkConnectorViewShelf(category: string): string {
-    return this.kkConnectorRackView[category]?.shelf || '';
-  }
-
-  kkConnectorViewLevel(category: string): number {
-    return this.kkConnectorRackView[category]?.level || 1;
-  }
-
-  isKkB009FloorOn(category: string, shelf: string, sub: { key: string }): boolean {
-    return this.kkConnectorViewShelf(category) === shelf
-      && this.kkConnectorViewLevel(category) === this.kkB009SubLevel(sub);
-  }
-
-  setKkB009Floor(category: string, shelf: string, sub: { key: string }): void {
-    const level = this.kkB009SubLevel(sub);
-    const prev = this.kkConnectorRackView[category];
-    this.kkConnectorRackView = {
-      ...this.kkConnectorRackView,
-      [category]: { shelf, level }
-    };
-    // Đổi tầng → đóng danh sách chi tiết cũ
-    if (!prev || prev.shelf !== shelf || prev.level !== level) {
-      this.kkConnectorFloorCodesOpen = { ...this.kkConnectorFloorCodesOpen, [category]: false };
-    }
-  }
-
-  /** Bấm ô mâm/tầng: chọn tầng (highlight). Chi tiết → bảng KK. */
-  selectKkB009Floor(category: string, shelf: string, sub: { key: string; title: string }): void {
-    if (!this.kkB009FloorSelectable(category, shelf, sub)) return;
-    this.setKkB009Floor(category, shelf, sub);
-  }
-
-  isKkConnectorBoardOpen(category: string): boolean {
-    return !!this.kkConnectorBoardOpen[category];
-  }
-
-  toggleKkConnectorBoard(category: string, event?: Event): void {
-    event?.stopPropagation();
-    this.kkConnectorBoardOpen = {
-      ...this.kkConnectorBoardOpen,
-      [category]: !this.kkConnectorBoardOpen[category]
-    };
-  }
-
-  onKkMucContextMenu(event: MouseEvent, category: string): void {
-    const id = String(category || '').trim();
-    if (!id) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.kkMucShelfMenuCategory = id;
-    this.kkMucShelfMenuX = event.clientX;
-    this.kkMucShelfMenuY = event.clientY;
-    this.kkMucShelfDraft = '';
-    this.skipKkTypeBoxMenuClose = true;
-    setTimeout(() => { this.skipKkTypeBoxMenuClose = false; }, 0);
-    this.cdr.detectChanges();
-  }
-
   closeKkMucShelfMenu(): void {
     this.kkMucShelfMenuCategory = '';
     this.kkMucShelfDraft = '';
   }
 
-  kkMucCodeTotal(muc: { boxes?: Array<{ totalLines?: number }> }): number {
-    return (muc.boxes || []).reduce((n, box) => n + (Number(box.totalLines) || 0), 0);
-  }
-
-  kkMucCheckedTotal(muc: { boxes?: Array<{ checked?: number }> }): number {
-    return (muc.boxes || []).reduce((n, box) => n + (Number(box.checked) || 0), 0);
-  }
-
-  kkMucParentShelves(category: string): string[] {
-    const removed = new Set(this.kkMucRemovedShelves[category] || []);
-    const base = this.kkConnectorRackShelfDefs(category)
-      .map((row) => row.shelf)
-      .filter((shelf) => !removed.has(shelf));
-    const extra = (this.kkMucExtraShelves[category] || []).filter((shelf) => !base.includes(shelf) && !removed.has(shelf));
-    return [...base, ...extra];
-  }
-
-  kkMucExtraShelvesOf(category: string): string[] {
-    return this.kkMucExtraShelves[category] || [];
-  }
-
-  addKkMucParentShelf(): void {
-    const category = this.kkMucShelfMenuCategory;
-    if (!category || this.kkMucShelfSaving) return;
-    if (!this.canEdit) {
-      alert('Bạn không có quyền thêm kệ.');
-      return;
-    }
-    const shelf = this.normalizeKkParentShelf(this.kkMucShelfDraft);
-    if (!shelf) {
-      alert('Nhập tên kệ mẹ.');
-      return;
-    }
-    const defs = new Set(this.kkConnectorRackShelfDefs(category).map((row) => row.shelf));
-    const removed = new Set(this.kkMucRemovedShelves[category] || []);
-    if (removed.has(shelf)) {
-      removed.delete(shelf);
-      void this.saveKkMucShelfState(category, this.kkMucExtraShelves[category] || [], [...removed]);
-      return;
-    }
-    if (this.kkMucParentShelves(category).includes(shelf)) {
-      alert(`${shelf} đã có trong mục ${category}.`);
-      return;
-    }
-    const next = defs.has(shelf)
-      ? (this.kkMucExtraShelves[category] || [])
-      : [...(this.kkMucExtraShelves[category] || []), shelf];
-    void this.saveKkMucShelfState(category, next, [...removed]);
-  }
-
-  removeKkMucParentShelf(shelf: string): void {
-    const category = this.kkMucShelfMenuCategory;
-    if (!category || this.kkMucShelfSaving || !this.canEdit) return;
-    const defs = new Set(this.kkConnectorRackShelfDefs(category).map((row) => row.shelf));
-    const extras = (this.kkMucExtraShelves[category] || []).filter((id) => id !== shelf);
-    const removed = (this.kkMucRemovedShelves[category] || []).filter((id) => id !== shelf);
-    if (defs.has(shelf)) removed.push(shelf);
-    void this.saveKkMucShelfState(category, extras, removed);
-  }
-
-  private normalizeKkParentShelf(raw: string): string {
-    const text = String(raw || '').trim().toUpperCase().replace(/\s+/g, ' ');
-    if (!text || text.length > 40) return '';
-    const rack = /^([RS])\s*0*(\d{1,2})$/.exec(text.replace(/\s+/g, ''));
-    if (rack) {
-      const n = Number(rack[2]);
-      if (!n || n > 99) return '';
-      return `${rack[1]}${String(n).padStart(2, '0')}`;
-    }
-    return text;
-  }
-
-  private async saveKkMucShelfState(category: string, shelves: string[], removed: string[]): Promise<void> {
-    const prev = this.kkMucExtraShelves[category] || [];
-    const prevRemoved = this.kkMucRemovedShelves[category] || [];
-    this.kkMucShelfSaving = true;
-    this.kkMucExtraShelves = { ...this.kkMucExtraShelves, [category]: shelves };
-    this.kkMucRemovedShelves = { ...this.kkMucRemovedShelves, [category]: removed };
-    this.invalidateKkTypeViewCache();
-    this.cdr.detectChanges();
-    try {
-      await this.firestore.collection('kk-muc-allowed-locs').doc(category).set({
-        category,
-        parentShelves: shelves,
-        removedParentShelves: removed,
-        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      this.kkMucShelfDraft = '';
-      this.kkMucShelfSaving = false;
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.error('saveKkMucShelfState', e);
-      this.kkMucExtraShelves = { ...this.kkMucExtraShelves, [category]: prev };
-      this.kkMucRemovedShelves = { ...this.kkMucRemovedShelves, [category]: prevRemoved };
-      this.invalidateKkTypeViewCache();
-      this.kkMucShelfSaving = false;
-      alert('Không lưu được kệ mẹ.');
-      this.cdr.detectChanges();
-    }
-  }
-
-  private async saveKkMucParentShelves(category: string, shelves: string[]): Promise<void> {
-    await this.saveKkMucShelfState(category, shelves, this.kkMucRemovedShelves[category] || []);
-  }
-
-  hasKkMucAllowedSet(category: string): boolean {
-    return Array.isArray(this.kkMucAllowedLocs[category]);
-  }
-
-  kkMucLocAllowed(category: string, loc: string): boolean {
-    const set = this.kkMucAllowedLocs[category];
-    if (!set) return true;
-    return set.includes(loc);
-  }
-
-  kkB009FloorSelectable(category: string, shelf: string, sub: { key: string }): boolean {
-    if (!this.hasKkMucAllowedSet(category)) return true;
-    const level = this.kkB009SubLevel(sub);
-    return this.kkShelfBlockNos(shelf).some((block) => this.kkMucLocAllowed(category, this.kkB009LocOf(shelf, block, level)));
-  }
-
-  kkB009VisibleShelfGroups(muc: {
-    category?: string;
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }): NonNullable<typeof muc.groups> {
-    const groups = this.kkB009ShelfGroups(muc);
-    const category = String(muc.category || '');
-    if (!this.hasKkMucAllowedSet(category)) return groups;
-    return groups.filter((group) =>
-      this.kkB009LevelsTopDown(group).some((sub) => this.kkB009FloorSelectable(category, group.key, sub))
-    );
-  }
-
-  kkB009VisibleLevels(
-    category: string,
-    group: { key: string; subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }> }
-  ): typeof group.subMucs {
-    const levels = this.kkB009LevelsTopDown(group);
-    if (!this.hasKkMucAllowedSet(category)) return levels;
-    return levels.filter((sub) => this.kkB009FloorSelectable(category, group.key, sub));
-  }
-
-  openKkMucLocPicker(category: string): void {
-    const shelves = this.kkConnectorRackShelves(category).map((row) => ({
-      shelf: row.shelf,
-      levels: Array.from({ length: 7 }, (_, index) => {
-        const level = 7 - index;
-        return {
-          level,
-          locs: this.kkShelfBlockNos(row.shelf).map((block) => this.kkB009LocOf(row.shelf, block, level))
-        };
-      })
-    }));
-    const saved = this.kkMucAllowedLocs[category];
-    const on: Record<string, boolean> = {};
-    for (const shelf of shelves) {
-      for (const level of shelf.levels) {
-        for (const loc of level.locs) on[loc] = saved ? saved.includes(loc) : true;
-      }
-    }
-    this.kkMucLocPickerOn = on;
-    this.kkMucLocPickerSaving = false;
-    this.kkMucLocPicker = { category, shelves };
-  }
-
-  closeKkMucLocPicker(): void {
-    if (this.kkMucLocPickerSaving) return;
-    this.kkMucLocPicker = null;
-    this.kkMucLocPickerOn = {};
-  }
-
-  kkMucShelfAllOn(shelf: { levels: Array<{ locs: string[] }> }): boolean {
-    const locs = shelf.levels.reduce<string[]>((all, level) => all.concat(level.locs), []);
-    return locs.length > 0 && locs.every((loc) => this.kkMucLocPickerOn[loc]);
-  }
-
-  toggleKkMucShelf(shelf: { levels: Array<{ locs: string[] }> }, checked: boolean): void {
-    const next = { ...this.kkMucLocPickerOn };
-    for (const level of shelf.levels) {
-      for (const loc of level.locs) next[loc] = checked;
-    }
-    this.kkMucLocPickerOn = next;
-  }
-
-  async saveKkMucAllowedLocs(): Promise<void> {
-    const picker = this.kkMucLocPicker;
-    if (!picker || this.kkMucLocPickerSaving || !this.canEdit) return;
-    const locations = Object.keys(this.kkMucLocPickerOn).filter((loc) => this.kkMucLocPickerOn[loc]).sort();
-    this.kkMucLocPickerSaving = true;
-    try {
-      await this.firestore.collection('kk-muc-allowed-locs').doc(picker.category).set({
-        category: picker.category,
-        locations,
-        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-      });
-      this.kkMucAllowedLocs = { ...this.kkMucAllowedLocs, [picker.category]: locations };
-      this.kkMucLocPickerSaving = false;
-      this.closeKkMucLocPicker();
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.error('saveKkMucAllowedLocs', e);
-      this.kkMucLocPickerSaving = false;
-      alert('Không lưu được vị trí cho phép.');
-      this.cdr.detectChanges();
-    }
-  }
-
-  private async loadKkMucAllowedLocs(): Promise<void> {
-    if (this.kkMucAllowedLoaded) return;
-    this.kkMucAllowedLoaded = true;
-    try {
-      const snap = await this.firestore.collection('kk-muc-allowed-locs').get().toPromise();
-      const next: Record<string, string[] | null> = {};
-      const extra: Record<string, string[]> = {};
-      const removed: Record<string, string[]> = {};
-      for (const doc of snap?.docs || []) {
-        const data = (doc.data() || {}) as { locations?: unknown; parentShelves?: unknown; removedParentShelves?: unknown };
-        if (Array.isArray(data.locations)) {
-          next[doc.id] = data.locations.map((loc) => String(loc || '').trim()).filter(Boolean);
-        }
-        if (Array.isArray(data.parentShelves)) {
-          const shelves = data.parentShelves
-            .map((shelf) => this.normalizeKkParentShelf(String(shelf || '')))
-            .filter(Boolean);
-          extra[doc.id] = Array.from(new Set(shelves));
-        }
-        if (Array.isArray(data.removedParentShelves)) {
-          const shelves = data.removedParentShelves
-            .map((shelf) => this.normalizeKkParentShelf(String(shelf || '')))
-            .filter(Boolean);
-          removed[doc.id] = Array.from(new Set(shelves));
-        }
-      }
-      this.kkMucAllowedLocs = next;
-      this.kkMucExtraShelves = extra;
-      this.kkMucRemovedShelves = removed;
-      if (Object.keys(extra).length || Object.keys(removed).length) this.invalidateKkTypeViewCache();
-      this.cdr.detectChanges();
-    } catch (e) {
-      this.kkMucAllowedLoaded = false;
-      console.error('loadKkMucAllowedLocs', e);
-    }
-  }
-
-  isKkConnectorFloorCodesOpen(category: string): boolean {
-    return !!this.kkConnectorFloorCodesOpen[category];
-  }
-
-  toggleKkConnectorFloorCodes(category: string, event?: Event): void {
-    event?.stopPropagation?.();
-    this.openKkConnectorFloorKkDetail(category, event);
-  }
-
-  openKkConnectorFloorCodes(category: string, event?: Event): void {
-    event?.stopPropagation?.();
-    this.openKkConnectorFloorKkDetail(category, event);
-  }
-
-  /** Toàn bộ tồn kho — không phân loại theo loại hàng; 50 dòng/trang; tìm mã / vị trí. */
-  openKkAllStockDetail(): void {
-    this.kkAllStockDetail = true;
-    this.kkConnectorFloorDetail = null;
-    const title = this.kkAllStockDetailTitle;
-    this.kkActiveProductType = title;
-    this.kkActiveSourceProductType = title;
-    this.kkActivePinSplit = null;
-    this.kkActiveTypeDraft = this.buildEmptyKkTypeRow(title);
-    this.clearKkLocScanDay();
-    this.kkTypePage = 1;
-    this.kkTypePageSize = 50;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeShowExtraFilter = false;
-    this.kkTypeDetailSig = '';
-    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    this.syncKkPageLock();
-    this.cdr.detectChanges();
-    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
-  }
-
-  /** Chi tiết KK đang chờ người dùng nhập mã hoặc vị trí. */
-  kkAllStockWaitingSearch(): boolean {
-    return this.kkAllStockDetail && !this.kkAllStockSearch();
-  }
-
   /** Chi tiết KK: lấy dòng khi đã nhập mã, vị trí, hoặc bấm Hôm nay / Hôm qua. */
-  private kkAllStockSearch(): { code: string; loc: string } | null {
+  protected kkAllStockSearch(): { code: string; loc: string } | null {
     const code = String(this.kkTypeDetailQuery || this.kkLocMapQuery || '').trim().toUpperCase();
     const loc = String(this.kkTypeFilterLoc || '').trim().toUpperCase();
     const codeOk = code.length >= 2;
@@ -9351,97 +7228,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return out;
   }
 
-  /** Mở toàn bộ mã B017 để tự chọn vị trí, không gán sẵn R17/R18. */
-  openKkB017Detail(event?: Event): void {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    const title = 'B017';
-    const groupCodes: string[] = [];
-    for (let n = 1; n <= 999; n++) {
-      groupCodes.push(this.kkConnectorCode('B017', n));
-    }
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = {
-      prefix: 'B017',
-      shelf: '',
-      level: 0,
-      from: 1,
-      to: 999,
-      locs: [],
-      title
-    };
-    this.kkActiveProductType = title;
-    this.kkActiveSourceProductType = title;
-    this.kkActivePinSplit = null;
-    const draft = this.buildEmptyKkTypeRow(title);
-    draft.productType = title;
-    draft.groupCodes = groupCodes;
-    this.kkActiveTypeDraft = draft;
-    this.kkTypePage = 1;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeShowExtraFilter = false;
-    this.kkTypeDetailSig = '';
-    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    this.syncKkPageLock();
-    this.cdr.detectChanges();
-    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
-  }
-
-  /** Chi tiết tầng B009/B016/B018 → giao diện kiểm kê, mọi mã set cho vị trí tầng đó. */
-  openKkConnectorFloorKkDetail(category: string, event?: Event): void {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    const prefix = String(category || '').trim().toUpperCase();
-    if (!this.isKkConnectorRackMuc(prefix)) return;
-    const shelf = this.kkConnectorViewShelf(prefix);
-    const level = this.kkConnectorViewLevel(prefix);
-    if (!shelf) return;
-    const rack = this.kkConnectorRackShelves(prefix).find((s) => s.shelf === shelf);
-    if (!rack) return;
-    const range = this.kkConnectorFloorRange(rack, level);
-    if (!range?.from || range.to < range.from) return;
-    const locs = this.kkShelfBlockNos(shelf).map((b) => this.kkB009LocOf(shelf, b, level));
-    const title = `${shelf}-T${level} · ${this.kkConnectorRangeText(prefix, range.from, range.to)}`;
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = {
-      prefix,
-      shelf,
-      level,
-      from: range.from,
-      to: range.to,
-      locs,
-      title
-    };
-    this.kkConnectorFloorCodesOpen = { ...this.kkConnectorFloorCodesOpen, [prefix]: false };
-    this.kkActiveProductType = title;
-    this.kkActiveSourceProductType = title;
-    this.kkActivePinSplit = null;
-    const draft = this.buildEmptyKkTypeRow(title);
-    draft.productType = title;
-    draft.groupCodes = this.kkB009FloorCodes(prefix, {
-      title: this.kkConnectorRangeText(prefix, range.from, range.to)
-    });
-    this.kkActiveTypeDraft = draft;
-    this.kkTypePage = 1;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeShowExtraFilter = false;
-    this.kkTypeDetailSig = '';
-    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    this.syncKkPageLock();
-    this.cdr.detectChanges();
-    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
-  }
-
   /** Dòng tồn của mọi mã trong dải tầng đang Chi tiết (set cho vị trí mâm đó). */
   private kkConnectorFloorDetailLines(d: {
     prefix: string;
@@ -9485,70 +7271,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return out;
   }
 
-  /** Danh sách mã phẳng trên tầng đang chọn (B009001…), không nhóm theo P. */
-  kkB009FloorCodes(prefix: string, sub: { title: string }): string[] {
-    const r = this.kkB009SubRangeNums(sub);
-    if (!r) {
-      // title dạng B009001 ~ B009050
-      const m = /B\d{3}(\d{3})\s*~\s*B\d{3}(\d{3})/i.exec(sub?.title || '');
-      if (!m) return [];
-      const from = Number(m[1]);
-      const to = Number(m[2]);
-      if (!from || !to || to < from) return [];
-      const out: string[] = [];
-      for (let n = from; n <= to; n++) out.push(this.kkConnectorCode(prefix, n));
-      return out;
-    }
-    const out: string[] = [];
-    for (let n = r.from; n <= r.to; n++) out.push(this.kkConnectorCode(prefix, n));
-    return out;
-  }
-
-  /** Bấm mã trên danh sách tầng → mở chi tiết loại chứa mã đó, lọc đúng mã. */
-  selectKkConnectorFloorCode(code: string): void {
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = null;
-    const c = String(code || '').trim().toUpperCase();
-    if (!c) return;
-    this.selectKkTypeBox(this.kkTypeOrGroupOfMaterial(c));
-    this.kkTypeDetailQuery = c;
-    this.kkTypeSearchDraft = c;
-  }
-
-  kkB009ViewSub(muc: {
-    category?: string;
-    groups?: Array<{
-      key: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      subMucs: Array<{ key: string; title: string; boxes: typeof this.kkTypeBoxesCached }>;
-    }>;
-  }): { key: string; title: string; boxes: typeof this.kkTypeBoxesCached } | null {
-    const category = String(muc.category || '');
-    const shelf = this.kkConnectorViewShelf(category);
-    const g = this.kkB009ShelfGroups(muc).find((x) => x.key === shelf);
-    return g?.subMucs.find((s) => this.kkB009SubLevel(s) === this.kkConnectorViewLevel(category)) || null;
-  }
-
-  kkB009LocOf(shelf: string, block: number, level: number): string {
-    return `${shelf}-${block}-${level}`;
-  }
-
-  kkB009FloorCodeCount(sub: { title: string }): number {
-    const r = this.kkB009SubRangeNums(sub);
-    return r ? r.to - r.from + 1 : 0;
-  }
-
-  private kkB009SubRangeNums(sub: { title: string }): { from: number; to: number } | null {
-    const m = /B\d{3}(\d{3})\s*~\s*B\d{3}(\d{3})/i.exec(sub?.title || '');
-    if (!m) return null;
-    const from = Number(m[1]);
-    const to = Number(m[2]);
-    if (!from || !to || to < from) return null;
-    return { from, to };
-  }
-
-  private ensureKkTypeBoxesCache(): void {
+  protected ensureKkTypeBoxesCache(): void {
     const sig = [
       this.kkTypeCacheRev,
       this.kkLocMapWarehouseFilter,
@@ -9556,7 +7279,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkWh3Only ? 1 : 0,
       this.kkJOnly ? 1 : 0,
       this.kkFilterUncheckedOnly ? 1 : 0,
-      this.kkEffectiveSearchQuery()
+      this.kkEffectiveSearchQuery(),
+      this.kkCheckActive ? this.linkQCheckSet.size : 0
     ].join('|');
     if (sig === this.kkTypeBoxesSig) return;
     this.kkTypeBoxesSig = sig;
@@ -9605,6 +7329,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     for (const r of this.kkLocMapByType) {
       bump(r.productType, r.groupCodes);
     }
+    if (!this.kkStockLoaded) {
+      // Chưa đọc tồn toàn kho: vẫn hiện các box đã thấy ở lần đọc trước (mã chưa có trong danh mục)
+      for (const r of this.loadKkTypeSkeleton()) bump(r.t, r.g);
+    }
     const zone = this.kkLocMapWarehouseFilter;
     map.forEach((cur) => {
       const seen = new Set<string>();
@@ -9625,6 +7353,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       let searchHit = false;
       for (const m of raw) {
         if (q && !searchHit && this.kkLineMatchesSearchQuery(m, q)) searchHit = true;
+        if (this.kkCheckActive && !this.kkCheckHas(m.materialCode)) continue;
+        if (this.isKkAgingExempt(m)) continue;
         const wh = this.kkWarehouseFromLocation(m.location);
         if (!this.kkMatchesWh3Mode(wh)) continue;
         if (zone && wh !== zone) continue;
@@ -9642,6 +7372,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       cur.checked = checked;
       cur.searchHit = searchHit;
     });
+    const checkTypes = this.kkCheckActive ? this.kkCheckTypes() : null;
     const built = Array.from(map.values())
       .filter((v) => {
         const queryHit = !q ? true : (
@@ -9653,7 +7384,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             && (/1\s*[-–]?\s*4P/.test(q) || /5\s*[-–]?\s*10P/.test(q)))
         );
         if (!queryHit) return false;
+        if (checkTypes && !checkTypes.has(v.productType) && !Array.from(v.sources).some((src) => checkTypes.has(src))) return false;
         if (q) return true;
+        // Chưa đọc tồn toàn kho: hiện đủ box, bấm box nào mới đọc tồn box đó
+        if (!this.kkStockLoaded) return true;
         if (v.totalLines <= 0) return false;
         if (this.kkFilterUncheckedOnly && Math.max(0, v.totalLines - v.checked) <= 0) return false;
         return true;
@@ -9727,6 +7461,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           const lineStock = this.calculateCurrentStock(m);
           if (lineStock <= 0) continue;
           if (!this.kkMaterialMatchesPinSplit(m, split)) continue;
+          if (this.kkCheckActive && !this.kkCheckHas(m.materialCode)) continue;
+          if (this.isKkAgingExempt(m)) continue;
           stock += lineStock;
           totalLines += 1;
           if (this.isKkFlagOn(m.kkChecked)) checked += 1;
@@ -9772,12 +7508,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   }
 
-  /** Ẩn prefix đã trùng với tiêu đề mục/cột đang bao ngoài — tránh lặp lại thông tin đã rõ. */
-  kkTypeVisibleGroupPrefixes(box: { groupCodes: string[] }, hide: Array<string | undefined> = []): string[] {
-    const hideSet = new Set(hide.filter((h): h is string => !!h));
-    return this.kkTypeGroupPrefixes(box.groupCodes).filter((p) => !hideSet.has(p));
-  }
-
   /** Đầu mã chung của cả loại (vd B006). Chỉ hiện khi mọi nhóm mã cùng prefix. */
   kkTypeSharedGroupPrefix(groupCodes: string[]): string {
     const prefixes = (groupCodes || [])
@@ -9792,7 +7522,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Nhóm nhựa: B+6 trước (B001001 đầu), rồi A+6, rồi mã khác. */
-  private compareNhuaGroupCode(a: string, b: string): number {
+  protected compareNhuaGroupCode(a: string, b: string): number {
     const rank = (raw: string): { band: number; n: number; s: string } => {
       const c = String(raw || '').trim().toUpperCase();
       const m = /^([ABR])(\d{6})$/.exec(c);
@@ -9807,7 +7537,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return pa.s.localeCompare(pb.s, 'en', { numeric: true });
   }
 
-  private compareKkTypeBox(
+  protected compareKkTypeBox(
     a: { productType: string; groupCodes: string[] },
     b: { productType: string; groupCodes: string[] }
   ): number {
@@ -9818,100 +7548,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const byCode = this.compareNhuaGroupCode(ga, gb);
     if (byCode) return byCode;
     return a.productType.localeCompare(b.productType, 'vi', { numeric: true });
-  }
-
-  /** Số AWG trên tên loại (28AWG, 28 AWG, AWG28). Không có → null. */
-  private parseKkAwgFromType(productType: string): number | null {
-    const u = String(productType || '').toUpperCase().replace(/,/g, ' ');
-    const m = /(\d+(?:\.\d+)?)\s*AWG\b/.exec(u) || /\bAWG\s*(\d+(?:\.\d+)?)/.exec(u);
-    if (!m) return null;
-    const n = Number(m[1]);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  /** Trong cùng mục: vị trí yêu cầu nhỏ nhất trước (S1 / R1 nhỏ nhất). Chưa gán vị trí xuống cuối. */
-  private sortKkTypeBoxesInCategory(
-    category: string,
-    boxes: typeof this.kkTypeBoxesCached
-  ): typeof this.kkTypeBoxesCached {
-    const list = [...boxes];
-    list.sort((a, b) => {
-      const byHome = this.compareKkTypeBoxByHomeLoc(a, b);
-      if (byHome) return byHome;
-      if (category === 'B001') {
-        const awgA = this.parseKkAwgFromType(a.productType);
-        const awgB = this.parseKkAwgFromType(b.productType);
-        if (awgA != null && awgB != null && awgA !== awgB) return awgB - awgA;
-        if (awgA != null && awgB == null) return -1;
-        if (awgA == null && awgB != null) return 1;
-      }
-      return this.compareKkTypeBox(a, b);
-    });
-    return list;
-  }
-
-  private kkTypeBoxHomeLoc(box: {
-    productType: string;
-    sourceProductType?: string;
-    sourceProductTypes?: string[];
-  }): string {
-    const keys = [
-      box.productType,
-      box.sourceProductType,
-      ...(box.sourceProductTypes || [])
-    ].filter(Boolean);
-    for (const k of keys) {
-      const loc = this.kkTypeHomeLocOf(String(k));
-      if (loc) return loc;
-    }
-    return '';
-  }
-
-  /** S1 < S2; R1 < R1-6 < R3. Token khác / trống xuống sau. */
-  private parseKkHomeLocRank(token: string): number[] {
-    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
-    if (!raw) return [9, 999, 999, 999, 999];
-    const s = /^S0*(\d{1,2})(?:-(\d+))?(?:-(\d+))?$/.exec(raw);
-    if (s) return [0, Number(s[1]), Number(s[2] || 0), Number(s[3] || 0), 0];
-    const posOf = (ch?: string) => (ch ? ch.charCodeAt(0) - 64 : 0);
-    const r = parseJRackLocation(raw);
-    if (r) return [1, r.rack, r.block || 0, r.level || 0, posOf(r.pos)];
-    return [8, 999, 999, 999, 999];
-  }
-
-  private minKkHomeLocRank(joined: string): { empty: boolean; rank: number[]; text: string } {
-    const tokens = splitMultiLocations(joined).filter(Boolean);
-    if (!tokens.length) return { empty: true, rank: [9, 999, 999, 999, 999], text: '' };
-    let bestText = tokens[0];
-    let bestRank = this.parseKkHomeLocRank(bestText);
-    for (let i = 1; i < tokens.length; i++) {
-      const rank = this.parseKkHomeLocRank(tokens[i]);
-      if (this.compareKkHomeLocRank(rank, bestRank) < 0) {
-        bestRank = rank;
-        bestText = tokens[i];
-      }
-    }
-    return { empty: false, rank: bestRank, text: String(bestText || '').toUpperCase() };
-  }
-
-  private compareKkHomeLocRank(a: number[], b: number[]): number {
-    const n = Math.min(a.length, b.length);
-    for (let i = 0; i < n; i++) {
-      if (a[i] !== b[i]) return a[i] - b[i];
-    }
-    return a.length - b.length;
-  }
-
-  private compareKkTypeBoxByHomeLoc(
-    a: { productType: string; sourceProductType?: string; sourceProductTypes?: string[] },
-    b: { productType: string; sourceProductType?: string; sourceProductTypes?: string[] }
-  ): number {
-    const ha = this.minKkHomeLocRank(this.kkTypeBoxHomeLoc(a));
-    const hb = this.minKkHomeLocRank(this.kkTypeBoxHomeLoc(b));
-    if (ha.empty !== hb.empty) return ha.empty ? 1 : -1;
-    const byRank = this.compareKkHomeLocRank(ha.rank, hb.rank);
-    if (byRank) return byRank;
-    return ha.text.localeCompare(hb.text, 'en', { numeric: true });
   }
 
   get kkActiveTypeRow(): KkTypeRow | null {
@@ -9925,206 +7561,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private applyKkTypeRowLiveCounts(row: KkTypeRow): KkTypeRow {
     this.ensureKkTypeDetailCache();
     row.stock = this.kkTypeLiveStock;
-    row.totalLines = this.kkTypeDetailAllCached.length;
+    row.totalLines = this.kkTypeLiveTotal;
     row.checked = this.kkTypeLiveChecked;
     row.remaining = Math.max(0, row.totalLines - row.checked);
     return row;
   }
 
-  kkTypeBoxTone(box: { checked: number; totalLines: number }): string {
-    if (!box.totalLines) return 'empty';
-    if (box.checked >= box.totalLines) return 'done';
-    if (box.checked <= 0) return 'none';
-    return 'partial';
-  }
-
-  selectKkTypeBox(productType: string): void {
-    this.kkAllStockDetail = false;
-    this.kkConnectorFloorDetail = null;
-    this.ensureKkTypeBoxesCache();
-    const box = this.kkTypeBoxesCached.find((b) => b.productType === productType)
-      || this.kkTypeBoxesCached.find((b) => !!b.sourceProductTypes?.includes(productType));
-    this.kkActiveProductType = box?.productType || productType;
-    this.kkActiveSourceProductType = box?.sourceProductType || productType;
-    this.kkActivePinSplit = box?.pinSplit || null;
-    const draft = this.buildEmptyKkTypeRow(this.kkActiveSourceProductType);
-    draft.productType = productType;
-    if (box?.groupCodes?.length) draft.groupCodes = box.groupCodes;
-    this.kkActiveTypeDraft = draft;
-    this.kkTypePage = 1;
-    this.kkTypeDetailQuery = this.kkLocMapQuery;
-    this.kkTypeSearchDraft = this.kkLocMapQuery;
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeShowExtraFilter = false;
-    if (!this.kkLocMapTypeCache.size) void this.loadKkByType();
-    this.syncKkPageLock();
-    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
-  }
-
-  kkTypeHomeLocOf(productType: string): string {
-    return this.kkTypeHomeLocs.get(String(productType || '').trim()) || '';
-  }
-
-  kkTypeManagerOf(productType: string): string {
-    return this.kkTypeManagers.get(String(productType || '').trim()) || '';
-  }
-
-  private kkManagerNameForType(productType: string, sources: string[] = []): string {
-    const keys = [productType, ...sources];
-    for (const k of keys) {
-      const n = this.kkTypeManagerOf(k);
-      if (n) return n;
-    }
-    return '';
-  }
-
-  get kkManagerRows(): Array<{
-    name: string;
-    codeCount: number;
-    typeCount: number;
-    types: string[];
-    prefixes: string[];
-    mucs: string[];
-  }> {
-    const q = String(this.kkLocMapQuery || '').trim().toLowerCase();
-    const sig = [
-      this.kkTypeCacheRev,
-      this.kkTypeManagers.size,
-      this.kkLocMapTypeCache.size,
-      this.kkLocMapWarehouseFilter,
-      this.kkCountWh3 ? 1 : 0,
-      this.kkWh3Only ? 1 : 0,
-      this.kkJOnly ? 1 : 0,
-      q
-    ].join('|');
-    if (sig === this.kkManagerRowsSig) return this.kkManagerRowsCached;
-    this.kkManagerRowsSig = sig;
-    this.kkManagerRowsCached = this.buildKkManagerRows(q);
-    return this.kkManagerRowsCached;
-  }
-
-  get kkManagerTotalCodes(): number {
-    return this.kkManagerRows.reduce((sum, row) => sum + row.codeCount, 0);
-  }
-
-  private buildKkManagerRows(query: string): Array<{
-    name: string;
-    codeCount: number;
-    typeCount: number;
-    types: string[];
-    prefixes: string[];
-    mucs: string[];
-  }> {
-    const map = new Map<string, { productType: string; groups: Set<string>; sources: Set<string> }>();
-    const bump = (productType: string, groupCodes: string[] = []) => {
-      const key = this.kkCanonicalTypeKey(productType, groupCodes);
-      const cur = map.get(key) || {
-        productType: key,
-        groups: new Set<string>(),
-        sources: new Set<string>()
-      };
-      cur.sources.add(productType);
-      groupCodes.forEach((g) => cur.groups.add(g));
-      map.set(key, cur);
-      return cur;
-    };
-    for (const e of this.kkCatalogEntries) {
-      bump(e.productType).groups.add(e.groupCode);
-    }
-    for (const r of this.kkLocMapByType) {
-      bump(r.productType, r.groupCodes);
-    }
-    this.kkTypeManagers.forEach((_name, typeKey) => bump(typeKey));
-
-    const zone = this.kkLocMapWarehouseFilter;
-    const byManager = new Map<string, {
-      display: string;
-      types: Set<string>;
-      codes: Set<string>;
-      prefixes: Set<string>;
-      mucs: Set<string>;
-    }>();
-    map.forEach((cur) => {
-      const sources = Array.from(cur.sources);
-      const manager = this.kkManagerNameForType(cur.productType, sources);
-      if (!manager) return;
-      const nk = manager.toLocaleLowerCase('vi');
-      let rec = byManager.get(nk);
-      if (!rec) {
-        rec = {
-          display: manager,
-          types: new Set<string>(),
-          codes: new Set<string>(),
-          prefixes: new Set<string>(),
-          mucs: new Set<string>()
-        };
-        byManager.set(nk, rec);
-      }
-      const seen = new Set<string>();
-      const codesBefore = rec.codes.size;
-      for (const src of sources) {
-        for (const m of this.kkLocMapTypeCache.get(src) || []) {
-          const id = String(m.id || '');
-          if (id) {
-            if (seen.has(id)) continue;
-            seen.add(id);
-          }
-          const wh = this.kkWarehouseFromLocation(m.location);
-          if (!this.kkMatchesWh3Mode(wh)) continue;
-          if (zone && wh !== zone) continue;
-          if (this.calculateCurrentStock(m) <= 0) continue;
-          const code = String(m.materialCode || '').trim().toUpperCase();
-          if (code) rec.codes.add(code);
-        }
-      }
-      if (rec.codes.size <= codesBefore) return;
-      rec.types.add(cur.productType);
-      const groupCodes = Array.from(cur.groups);
-      for (const p of this.kkTypeGroupPrefixes(groupCodes)) rec.prefixes.add(p);
-      const muc = this.kkTypeMucTitle(this.kkTypeCategoryOf(cur.productType, groupCodes));
-      if (muc) rec.mucs.add(muc);
-    });
-
-    let rows = Array.from(byManager.values())
-      .filter((rec) => rec.codes.size > 0)
-      .map((rec) => ({
-      name: rec.display,
-      codeCount: rec.codes.size,
-      typeCount: rec.types.size,
-      types: Array.from(rec.types).sort((a, b) => a.localeCompare(b, 'vi')),
-      prefixes: Array.from(rec.prefixes).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })),
-      mucs: Array.from(rec.mucs).sort((a, b) => a.localeCompare(b, 'vi'))
-    }));
-    rows.sort((a, b) => b.codeCount - a.codeCount || a.name.localeCompare(b.name, 'vi'));
-    if (query) {
-      rows = rows.filter((r) =>
-        r.name.toLowerCase().includes(query)
-        || r.types.some((t) => t.toLowerCase().includes(query))
-        || r.prefixes.some((p) => p.toLowerCase().includes(query))
-        || r.mucs.some((m) => m.toLowerCase().includes(query))
-      );
-    }
-    return rows;
-  }
-
-  openKkTypeBoxMenu(event: MouseEvent, box: { productType: string; groupCodes?: string[] }): void {
-    event.preventDefault();
-    event.stopPropagation();
-    const productType = String(box?.productType || '').trim();
-    if (!productType) return;
-    this.kkTypeBoxMenuBox = { productType, groupCodes: box.groupCodes || [] };
-    this.kkTypeBoxMenuManagerDraft = this.kkTypeManagerOf(productType);
-    this.kkTypeBoxMenuSaving = false;
-    this.kkTypeBoxMenuX = event.clientX;
-    this.kkTypeBoxMenuY = event.clientY;
-    this.kkTypeBoxMenuVisible = true;
-    this.skipKkTypeBoxMenuClose = true;
-    setTimeout(() => { this.skipKkTypeBoxMenuClose = false; }, 0);
-    this.cdr.detectChanges();
-  }
+  /** "Xem toàn bộ" 1 mục: bảng chi tiết gộp mọi box của mục (vd toàn bộ B016). */
+  kkMucAllDetail: { title: string; boxes: KkStockBoxRef[] } | null = null;
 
   closeKkTypeBoxMenu(): void {
     this.kkTypeBoxMenuVisible = false;
@@ -10133,346 +7577,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeBoxMenuSaving = false;
   }
 
-  onKkTypeBoxMenuAssign(): void {
-    const box = this.kkTypeBoxMenuBox;
-    this.closeKkTypeBoxMenu();
-    if (box) this.openKkTypeHomeLocPicker(box);
-  }
-
-  onKkTypeBoxMenuPrint(): void {
-    const box = this.kkTypeBoxMenuBox;
-    this.closeKkTypeBoxMenu();
-    if (!box?.productType) return;
-    this.printKkTypeNameLabel(box.productType);
-  }
-
-  async saveKkTypeBoxManager(): Promise<void> {
-    const productType = String(this.kkTypeBoxMenuBox?.productType || '').trim();
-    if (!productType || !this.canEdit || this.kkTypeBoxMenuSaving) return;
-    const name = String(this.kkTypeBoxMenuManagerDraft || '').trim();
-    this.kkTypeBoxMenuSaving = true;
-    this.cdr.detectChanges();
-    try {
-      await this.kkCatalog.saveManager(productType, name);
-      if (name) this.kkTypeManagers.set(productType, name);
-      else this.kkTypeManagers.delete(productType);
-      this.kkTypeManagers = new Map(this.kkTypeManagers);
-      this.invalidateKkTypeViewCache();
-      this.closeKkTypeBoxMenu();
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.error('saveKkTypeBoxManager:', e);
-      alert('Không lưu được tên người quản lý. Thử lại.');
-      this.kkTypeBoxMenuSaving = false;
-      this.cdr.detectChanges();
-    }
-  }
-
   printKkTypeNameLabelFromPicker(): void {
     const productType = String(this.layoutLocTypeAssign || '').trim();
     if (!productType) return;
     this.printKkTypeNameLabel(productType);
   }
 
-  openKkShelfLabelPicker(): void {
-    this.kkShelfLabelQuery = '';
-    this.showKkShelfLabelPicker = true;
-  }
-
-  closeKkShelfLabelPicker(): void {
-    this.showKkShelfLabelPicker = false;
-    this.kkShelfLabelQuery = '';
-  }
-
-  openKkMucReportPicker(): void {
-    this.kkMucReportQuery = '';
-    if (!Object.keys(this.kkKiemKeSelectedPrefixes).length) {
-      for (const p of this.kkKiemKeAllPrefixes()) {
-        this.kkKiemKeSelectedPrefixes[p] = false;
-      }
-    }
-    this.showKkMucReportPicker = true;
-  }
-
-  closeKkMucReportPicker(): void {
-    this.showKkMucReportPicker = false;
-    this.kkMucReportQuery = '';
-  }
-
-  private kkKiemKeAllPrefixes(): string[] {
-    const set = new Set<string>();
-    for (const muc of this.kkTypeBoxGroups) {
-      const cat = String(muc.category || '').trim().toUpperCase();
-      if (/^B\d{3}$/.test(cat)) set.add(cat);
-      for (const box of muc.boxes || []) {
-        for (const p of this.kkTypeGroupPrefixes(box.groupCodes || [])) {
-          if (/^B\d{3}$/.test(p)) set.add(p);
-        }
-      }
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  }
-
-  get kkKiemKePrefixOptions(): string[] {
-    const q = String(this.kkMucReportQuery || '').trim().toUpperCase();
-    return this.kkKiemKeAllPrefixes().filter((p) => !q || p.includes(q) || this.kkTypeMucTitle(p).toUpperCase().includes(q));
-  }
-
-  get kkKiemKeSelectedCount(): number {
-    return Object.keys(this.kkKiemKeSelectedPrefixes).filter((k) => this.kkKiemKeSelectedPrefixes[k]).length;
-  }
-
-  toggleKkKiemKePrefix(prefix: string, on: boolean): void {
-    this.kkKiemKeSelectedPrefixes = { ...this.kkKiemKeSelectedPrefixes, [prefix]: !!on };
-  }
-
-  selectAllKkKiemKePrefixes(on: boolean): void {
-    const next: Record<string, boolean> = { ...this.kkKiemKeSelectedPrefixes };
-    for (const p of this.kkKiemKePrefixOptions) next[p] = !!on;
-    this.kkKiemKeSelectedPrefixes = next;
-  }
-
-  async printKkKiemKePaper(): Promise<void> {
-    const prepared = await this.prepareKkKiemKeShelves();
-    if (!prepared) return;
-    this.closeKkMucReportPicker();
-    await this.renderKkKiemKePaper(prepared.shelves, prepared.linkQLabel);
-  }
-
-  async downloadKkKiemKeExcel(): Promise<void> {
-    const prepared = await this.prepareKkKiemKeShelves();
-    if (!prepared) return;
-    const rows: Record<string, unknown>[] = [];
-    for (const s of prepared.shelves) {
-      let stt = 1;
-      for (const mam of s.mams) {
-        for (const r of mam.rows) {
-          rows.push({
-            'Đầu mã': s.prefix,
-            'Kệ': s.shelf,
-            'Mâm': mam.mam,
-            'STT': stt++,
-            'Mã': r.code,
-            'PO': r.po,
-            'Tồn vị trí': r.stock,
-            'Tồn web': r.webStock ?? '',
-            'Tồn LinkQ': r.linkQStock ?? '',
-            'VT1': r.locs[0] || '',
-            'VT2': r.locs[1] || '',
-            'VT3': r.locs[2] || '',
-            'VT4': r.locs[3] || '',
-            'VT5': r.locs[4] || '',
-            'Lưu ý': r.note || ''
-          });
-        }
-      }
-    }
-    const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Kiem ke');
-    const day = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Giay_kiem_ke_${this.selectedFactory}_${day}.xlsx`);
-  }
-
-  private async prepareKkKiemKeShelves(): Promise<{
-    shelves: Array<{
-      prefix: string;
-      shelf: string;
-      mams: Array<{
-        mam: string;
-        rows: Array<{
-          code: string;
-          po: string;
-          stock: number;
-          locs: string[];
-          webStock: number | null;
-          linkQStock: number | null;
-          note: string;
-          noteWarn: boolean;
-        }>;
-      }>;
-    }>;
-    linkQLabel: string;
-  } | null> {
-    const prefixes = Object.keys(this.kkKiemKeSelectedPrefixes)
-      .filter((k) => this.kkKiemKeSelectedPrefixes[k])
-      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-    if (!prefixes.length) {
-      alert('Tick ít nhất một đầu mã để in giấy kiểm kê.');
-      return null;
-    }
-    this.kkTypePrintBusy = true;
-    this.cdr.markForCheck();
-    try {
-      const shelves: Array<{
-        prefix: string;
-        shelf: string;
-        mams: Array<{
-          mam: string;
-          rows: Array<{
-            code: string;
-            po: string;
-            stock: number;
-            locs: string[];
-            webStock: number | null;
-            linkQStock: number | null;
-            note: string;
-            noteWarn: boolean;
-          }>;
-        }>;
-      }> = [];
-      for (const prefix of prefixes) {
-        const byShelf = this.buildKkKiemKeShelfMap(prefix);
-        const shelfIds = Array.from(byShelf.keys()).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-        for (const shelf of shelfIds) {
-          const mamMap = byShelf.get(shelf)!;
-          const mamIds = Array.from(mamMap.keys()).sort((a, b) => {
-            if (a.includes('chưa gán')) return 1;
-            if (b.includes('chưa gán')) return -1;
-            return a.localeCompare(b, 'en', { numeric: true });
-          });
-          const mams = mamIds
-            .map((mam) => ({
-              mam,
-              rows: mamMap.get(mam)!.sort((x, y) =>
-                x.code.localeCompare(y.code, 'en', { numeric: true })
-                || x.po.localeCompare(y.po, 'en', { numeric: true })
-              )
-            }))
-            .filter((m) => m.rows.length);
-          if (mams.length) shelves.push({ prefix, shelf, mams });
-        }
-      }
-      if (!shelves.length) {
-        alert('Các đầu mã đã chọn chưa có vị trí kệ S/R để in.');
-        return null;
-      }
-
-      const codes = new Set<string>();
-      for (const s of shelves) {
-        for (const mam of s.mams) {
-          for (const r of mam.rows) codes.add(r.code);
-        }
-      }
-      const linkQPack = await this.loadKkKiemKeLinkQPack();
-      const webByCode = await this.buildKkKiemKeWebStockByCode(codes);
-      for (const s of shelves) {
-        for (const mam of s.mams) {
-          for (const r of mam.rows) {
-            const info = this.kkKiemKeLinkQInfo(r.code, linkQPack.map, webByCode);
-            r.webStock = info.web;
-            r.linkQStock = info.linkQ;
-            r.note = info.note;
-            r.noteWarn = info.warn;
-          }
-        }
-      }
-      return { shelves, linkQLabel: linkQPack.label };
-    } finally {
-      this.kkTypePrintBusy = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  /** shelf → mâm → dòng kiểm kê (theo vị trí thực tế). */
-  private buildKkKiemKeShelfMap(prefix: string): Map<
-    string,
-    Map<string, Array<{
-      code: string;
-      po: string;
-      stock: number;
-      locs: string[];
-      webStock: number | null;
-      linkQStock: number | null;
-      note: string;
-      noteWarn: boolean;
-    }>>
-  > {
-    type Row = {
-      code: string;
-      po: string;
-      stock: number;
-      locs: string[];
-      webStock: number | null;
-      linkQStock: number | null;
-      note: string;
-      noteWarn: boolean;
-    };
-    const byShelf = new Map<string, Map<string, Row[]>>();
-    const materials = this.kkKiemKeMaterialsForPrefix(prefix);
-    for (const m of materials) {
-      const code = String(m.materialCode || '').trim().toUpperCase();
-      if (!code) continue;
-      const po = String(m.poNumber || '').trim().toUpperCase() || '—';
-      const stock = this.calculateCurrentStock(m);
-      const locs = this.locationParts(m.location)
-        .map((p) => this.displayLocationToken(p))
-        .filter((p) => !!p && p !== '-');
-      if (!locs.length) continue;
-      const shelfSlots: Array<{ shelf: string; mam: string }> = [];
-      for (const loc of locs) {
-        const parsed = this.kkParseKiemKeMam(loc);
-        if (!parsed) continue;
-        const dup = shelfSlots.some(
-          (s) => s.shelf === parsed.shelf && s.mam.toUpperCase() === parsed.mam.toUpperCase()
-        );
-        if (!dup) shelfSlots.push(parsed);
-      }
-      if (!shelfSlots.length) continue;
-      // Tồn chỉ gắn với vị trí kệ chính của dòng (vị trí đầu), không lặp số tồn sang vị trí khác.
-      const home = shelfSlots[0];
-      let mamMap = byShelf.get(home.shelf);
-      if (!mamMap) {
-        mamMap = new Map();
-        byShelf.set(home.shelf, mamMap);
-      }
-      let rows = mamMap.get(home.mam);
-      if (!rows) {
-        rows = [];
-        mamMap.set(home.mam, rows);
-      }
-      const ordered = [
-        home.mam,
-        ...locs.filter((l) => l.toUpperCase() !== home.mam.toUpperCase())
-      ].slice(0, 5);
-      rows.push({
-        code,
-        po,
-        stock,
-        locs: ordered,
-        webStock: null,
-        linkQStock: null,
-        note: '',
-        noteWarn: false
-      });
-    }
-    return byShelf;
-  }
-
-  /** Tồn web theo mã — đọc inventory-materials (dedupe id), khớp Overview «Theo mã». */
-  private async buildKkKiemKeWebStockByCode(codes: Set<string>): Promise<Map<string, number>> {
-    const map = new Map<string, number>();
-    const seen = new Set<string>();
-    const add = (m: InventoryMaterial) => {
-      const code = this.normalizeTieuHuyCode(m.materialCode);
-      if (!code || !codes.has(code)) return;
-      if (m.factory && m.factory !== this.selectedFactory) return;
-      const id = String(m.id || `${code}|${m.poNumber}|${this.getDisplayIMD(m)}`);
-      if (seen.has(id)) return;
-      seen.add(id);
-      map.set(code, (map.get(code) || 0) + this.calculateCurrentStock(m));
-    };
-    const fetched = await this.fetchTieuHuyStockByCodes(Array.from(codes));
-    fetched.forEach(add);
-    this.kkLocMapTypeCache.forEach((list) => (list || []).forEach(add));
-    (this.inventoryMaterials || []).forEach(add);
-    map.forEach((v, k) => map.set(k, Math.round(v)));
-    return map;
-  }
-
   /** File LinkQ mới nhất + map tồn (cùng nguồn Overview). */
-  private async loadKkKiemKeLinkQPack(): Promise<{ map: Map<string, number>; label: string }> {
+  protected async loadKkKiemKeLinkQPack(): Promise<{ map: Map<string, number>; label: string }> {
     const map = new Map<string, number>();
     const put = (code: string, stock: unknown) => {
       const key = this.normalizeTieuHuyCode(code);
@@ -10512,923 +7624,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.warn('[KK giấy kiểm kê] load LinkQ failed', e);
     }
     return { map, label };
-  }
-
-  /** Overview: lệch nếu |web − LinkQ| > 1; mã khớp → để trống các cột so sánh. */
-  private kkKiemKeLinkQInfo(
-    code: string,
-    linkQMap: Map<string, number>,
-    webByCode: Map<string, number>
-  ): { web: number | null; linkQ: number | null; note: string; warn: boolean } {
-    const key = this.normalizeTieuHuyCode(code);
-    const web = webByCode.has(key) ? Number(webByCode.get(key)) : null;
-    // Chưa có LinkQ hoặc không so được → không ghi gì
-    if (!key || !linkQMap.has(key)) {
-      return { web: null, linkQ: null, note: '', warn: false };
-    }
-    const linkQ = Number(linkQMap.get(key));
-    const webN = web == null ? 0 : web;
-    if (!Number.isFinite(linkQ)) {
-      return { web: null, linkQ: null, note: '', warn: false };
-    }
-    const diff = Math.round(webN - linkQ);
-    const warn = Math.abs(diff) > 1;
-    // Không lệch: vẫn hiện số Tồn LinkQ. Tồn web và lưu ý chỉ khi lệch.
-    if (!warn) {
-      return { web: null, linkQ, note: '', warn: false };
-    }
-    const diffTxt = `${diff > 0 ? '+' : ''}${this.formatNumber(diff)}`;
-    return {
-      web: webN,
-      linkQ,
-      note: `Lệch ${diffTxt}`,
-      warn: true
-    };
-  }
-
-  private kkKiemKeMaterialsForPrefix(prefix: string): InventoryMaterial[] {
-    const p = String(prefix || '').trim().toUpperCase();
-    const out: InventoryMaterial[] = [];
-    const seen = new Set<string>();
-    const push = (m: InventoryMaterial) => {
-      const id = String(m.id || `${m.materialCode}|${m.poNumber}|${this.getDisplayIMD(m)}`);
-      if (seen.has(id)) return;
-      seen.add(id);
-      out.push(m);
-    };
-    for (const box of this.kkTypeBoxesCached || []) {
-      if (!this.kkBoxHasBPrefix(box, p)) continue;
-      for (const m of this.kkMucReportLinesForBox(box)) push(m);
-    }
-    // Bổ sung dòng tồn có mã thuộc đầu mã (kể cả chưa map box)
-    this.kkLocMapTypeCache.forEach((list) => {
-      for (const m of list || []) {
-        const code = String(m.materialCode || '').trim().toUpperCase();
-        const g = this.kkCatalog.groupCodeFromMaterial(code)
-          || this.kkCatalog.normalizeGroupCode(code)
-          || code;
-        if (!g.startsWith(p)) continue;
-        const wh = this.kkWarehouseFromLocation(m.location);
-        if (!this.kkMatchesWh3Mode(wh)) continue;
-        const zone = this.kkLocMapWarehouseFilter;
-        if (zone && wh !== zone) continue;
-        push(m);
-      }
-    });
-    return out;
-  }
-
-  /** S01-1-1 → shelf S01, mam S01-1-1; S01 trần → mâm «chưa gán». */
-  private kkParseKiemKeMam(token: string): { shelf: string; mam: string } | null {
-    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
-    const bare = (this.stripDoiKhoWhPrefix(raw) || raw).toUpperCase();
-    const full = /^([SR])(\d{1,2})-(\d+)-(\d+)$/.exec(bare);
-    if (full) {
-      const shelf = `${full[1]}${String(Number(full[2])).padStart(2, '0')}`;
-      return { shelf, mam: `${shelf}-${Number(full[3])}-${Number(full[4])}` };
-    }
-    const aisle = /^([SR])(\d{1,2})$/.exec(bare);
-    if (aisle) {
-      const shelf = `${aisle[1]}${String(Number(aisle[2])).padStart(2, '0')}`;
-      return { shelf, mam: `${shelf} (chưa gán mâm)` };
-    }
-    const aisleSeq = /^([SR])(\d{1,2})-(\d+)$/.exec(bare);
-    if (aisleSeq) {
-      const shelf = `${aisleSeq[1]}${String(Number(aisleSeq[2])).padStart(2, '0')}`;
-      return { shelf, mam: `${shelf}-${Number(aisleSeq[3])}` };
-    }
-    return null;
-  }
-
-  private async renderKkKiemKePaper(
-    shelves: Array<{
-      prefix: string;
-      shelf: string;
-      mams: Array<{
-        mam: string;
-        rows: Array<{
-          code: string;
-          po: string;
-          stock: number;
-          locs: string[];
-          webStock: number | null;
-          linkQStock: number | null;
-          note: string;
-          noteWarn: boolean;
-        }>;
-      }>;
-    }>,
-    linkQLabel = ''
-  ): Promise<void> {
-    const win = window.open('', '_blank', 'width=980,height=900');
-    if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
-      return;
-    }
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const now = new Date().toLocaleString('vi-VN');
-    const QRCode = await import('qrcode') as any;
-    const qrByShelf = new Map<string, string>();
-    const shelvesNeedQr = Array.from(new Set(shelves.map((s) => s.shelf)));
-    await Promise.all(
-      shelvesNeedQr.map(async (key) => {
-        try {
-          qrByShelf.set(
-            key,
-            await QRCode.toDataURL(key, {
-              width: 220,
-              margin: 0,
-              color: { dark: '#000000', light: '#FFFFFF' }
-            })
-          );
-        } catch {
-          qrByShelf.set(key, '');
-        }
-      })
-    );
-
-    const locCells = (locs: string[]) => {
-      const cells: string[] = [];
-      for (let i = 0; i < 5; i++) {
-        cells.push(`<td class="loc">${esc(locs[i] || '')}</td>`);
-      }
-      return cells.join('');
-    };
-
-    const pagesHtml = shelves.map((s, pageIdx) => {
-      let stt = 1;
-      const mamHtml = s.mams.map((mam) => {
-        const body = mam.rows.map((r) => {
-          const n = stt++;
-          const noteCls = r.noteWarn ? ' note--warn' : '';
-          const webTxt = r.webStock == null ? '' : this.formatNumber(r.webStock);
-          const lqTxt = r.linkQStock == null ? '' : this.formatNumber(r.linkQStock);
-          return `<tr>
-            <td class="c">${n}</td>
-            <td class="code">${esc(r.code)}</td>
-            <td class="po">${esc(r.po)}</td>
-            <td class="c stock">
-              <span class="stock-old">${esc(this.formatNumber(r.stock))}</span>
-              <span class="stock-new" title="Ghi tồn mới"></span>
-            </td>
-            <td class="c num">${esc(webTxt)}</td>
-            <td class="c num">${esc(lqTxt)}</td>
-            ${locCells(r.locs)}
-            <td class="tick"></td>
-            <td class="tick"></td>
-            <td class="note${noteCls}">${esc(r.note || '')}</td>
-          </tr>`;
-        }).join('');
-        return `<section class="mam">
-          <div class="mam-head">
-            <h3>Mâm ${esc(mam.mam)}</h3>
-            <span>${mam.rows.length} dòng</span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th class="c" rowspan="2">STT</th>
-                <th rowspan="2">Mã</th>
-                <th rowspan="2">PO</th>
-                <th class="c" rowspan="2">Tồn vị trí<br><small>Ghi số mới nếu tồn sai</small></th>
-                <th class="c" rowspan="2">Tồn web<br><small>theo mã</small></th>
-                <th class="c" rowspan="2">Tồn LinkQ</th>
-                <th class="c" colspan="5">Vị trí (tối đa 5)</th>
-                <th class="c" colspan="2">Kiểm</th>
-                <th rowspan="2">Lưu ý</th>
-              </tr>
-              <tr>
-                <th class="c">VT1</th><th class="c">VT2</th><th class="c">VT3</th><th class="c">VT4</th><th class="c">VT5</th>
-                <th class="c">Đủ</th><th class="c">Thiếu</th>
-              </tr>
-            </thead>
-            <tbody>${body}</tbody>
-          </table>
-        </section>`;
-      }).join('');
-
-      const shelfQr = qrByShelf.get(s.shelf) || '';
-      return `<article class="shelf-page"${pageIdx ? ' style="page-break-before:always"' : ''}>
-        <header class="sheet-head">
-          <div class="sheet-meta">
-            <h1>GIẤY KIỂM KÊ — ${esc(s.prefix)} · Kệ ${esc(s.shelf)}</h1>
-            <p>Nhà máy <strong>${esc(this.selectedFactory)}</strong>
-              &nbsp;|&nbsp; Đầu mã <strong>${esc(s.prefix)}</strong>
-              &nbsp;|&nbsp; Kệ <strong>${esc(s.shelf)}</strong>
-              &nbsp;|&nbsp; In: ${esc(now)}</p>
-            <p class="hint">LinkQ: <strong>${esc(linkQLabel || '—')}</strong>. Tồn LinkQ luôn hiện. Tồn web và Lưu ý chỉ khi lệch. Ghi số mới vào cột Tồn vị trí nếu sai.</p>
-            <div class="nv-box">
-              <div class="nv-row"><span>Mã nhân viên</span><b></b></div>
-              <div class="nv-row"><span>Họ và tên</span><b></b></div>
-            </div>
-          </div>
-          <div class="sheet-qr">
-            ${shelfQr ? `<img src="${shelfQr}" alt="QR ${esc(s.shelf)}">` : ''}
-            <div class="sheet-qr-lab">${esc(s.shelf)}</div>
-          </div>
-        </header>
-        ${mamHtml}
-      </article>`;
-    }).join('');
-
-    win.document.open();
-    win.document.write(`<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>Giấy kiểm kê</title>
-  <style>
-    @page { size: A4 landscape; margin: 7mm 7mm 9mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #000; background: #fff; }
-    .no-print { background:#ecfdf5; border:1px solid #34d399; padding:8px 14px; margin-bottom:12px;
-                border-radius:4px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
-                       border-radius:4px; cursor:pointer; font-size:12px; }
-    .shelf-page { break-inside: avoid-page; }
-    .sheet-head { display:flex; gap:12px; align-items:stretch; border:1.5px solid #000;
-                  padding:8px 10px; margin-bottom:10px; }
-    .sheet-meta { flex:1; min-width:0; }
-    .sheet-meta h1 { font-size:14px; letter-spacing:.3px; margin-bottom:4px; }
-    .sheet-meta p { font-size:9px; color:#222; margin-bottom:5px; }
-    .sheet-meta .hint { font-size:8px; color:#444; font-style:italic; margin-bottom:8px; }
-    .nv-box { border:1px solid #000; padding:6px 8px; display:grid; gap:6px; max-width:420px; }
-    .nv-row { display:grid; grid-template-columns:110px 1fr; gap:8px; align-items:end; min-height:20px; }
-    .nv-row span { font-size:9px; font-weight:700; }
-    .nv-row b { border-bottom:1px solid #000; min-height:14px; display:block; }
-    .sheet-qr { width:84px; text-align:center; flex-shrink:0; }
-    .sheet-qr img { width:72px; height:72px; display:block; margin:0 auto 4px; }
-    .sheet-qr-lab { font-size:11px; font-weight:800; letter-spacing:.4px; }
-    .mam { margin-bottom:8px; page-break-inside: avoid; }
-    .mam-head { display:flex; align-items:baseline; gap:8px;
-               border-bottom:1px solid #000; padding:2px 0 4px; margin-bottom:4px; }
-    .mam-head h3 { font-size:11px; }
-    .mam-head span { font-size:8px; color:#444; }
-    table { width:100%; border-collapse:collapse; table-layout:fixed; }
-    thead { display: table-header-group; }
-    th, td { border:1px solid #333; padding:2px 3px; vertical-align:middle; }
-    th { background:#f3f4f6; font-size:8px; text-transform:uppercase; }
-    th small { font-size:6px; text-transform:none; font-weight:600; }
-    td.c, th.c { text-align:center; }
-    td.code { font-weight:700; font-size:9px; word-break:break-all; }
-    td.po { font-size:8px; word-break:break-all; }
-    td.stock { white-space:nowrap; }
-    td.num { font-variant-numeric:tabular-nums; font-size:8px; }
-    .stock-old { display:inline-block; min-width:2em; font-variant-numeric:tabular-nums; }
-    .stock-new { display:inline-block; border-bottom:1px solid #000; min-width:2.4em; min-height:10px;
-                 margin-left:3px; vertical-align:bottom; }
-    td.loc { font-size:7px; text-align:center; word-break:break-all; }
-    td.tick { width:22px; height:16px; }
-    td.note { font-size:7px; font-weight:700; color:#333; word-break:break-word; }
-    td.note--warn { color:#9a3412; background:#fff7ed; }
-    @media print { .no-print { display:none !important; } }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <span>Giấy kiểm kê — QR dãy kệ. LinkQ: ${esc(linkQLabel || '—')}. Nhấn <strong>Ctrl+P</strong>.</span>
-    <button onclick="window.print()">In ngay</button>
-  </div>
-  ${pagesHtml}
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
-  }
-
-  private kkBoxHasBPrefix
-(box: { groupCodes?: string[] }, prefix: string): boolean {
-    return this.kkTypeGroupPrefixes(box.groupCodes || []).includes(prefix);
-  }
-
-  private kkShelfLabelTrayCount(prefix: string): number {
-    return this.kkConnectorAllTrays(prefix).filter((t) => t.from > 0).length;
-  }
-
-
-  get kkShelfLabelGroups(): Array<{
-    category: string;
-    title: string;
-    boxes: typeof this.kkTypeBoxesCached;
-    labelCount: number;
-  }> {
-    const q = String(this.kkShelfLabelQuery || '').trim().toLowerCase();
-    const out: Array<{
-      category: string;
-      title: string;
-      boxes: typeof this.kkTypeBoxesCached;
-      labelCount: number;
-    }> = [];
-    let addedB018 = false;
-    const b018Group = () => ({
-      category: 'B018',
-      title: this.kkTypeMucTitle('B018'),
-      boxes: [] as typeof this.kkTypeBoxesCached,
-      labelCount: this.kkShelfLabelTrayCount('B018')
-    });
-    for (const muc of this.kkTypeBoxGroups) {
-      const category = String(muc.category || '');
-      if (this.isKkConnectorRackMuc(category)) {
-        if (category === 'B018') addedB018 = true;
-        out.push({
-          category,
-          title: muc.title,
-          boxes: muc.boxes,
-          labelCount: this.kkShelfLabelTrayCount(category)
-        });
-        continue;
-      }
-      if (category === 'ĐẦU CỐT') {
-        const rest = muc.boxes.filter((box) => !this.kkBoxHasBPrefix(box, 'B018'));
-        if (!addedB018 && muc.boxes.some((box) => this.kkBoxHasBPrefix(box, 'B018'))) {
-          addedB018 = true;
-          out.push(b018Group());
-        }
-        if (!rest.length) continue;
-        out.push({
-          category,
-          title: muc.title,
-          boxes: rest,
-          labelCount: rest.filter((box) => !!this.kkShelfLabelLocOf(box)).length
-        });
-        continue;
-      }
-      out.push({
-        category,
-        title: muc.title,
-        boxes: muc.boxes,
-        labelCount: muc.boxes.filter((box) => !!this.kkShelfLabelLocOf(box)).length
-      });
-    }
-    return out.filter((g) => {
-      if (!q) return true;
-      return g.title.toLowerCase().includes(q) || String(g.category || '').toLowerCase().includes(q);
-    });
-  }
-
-  printKkShelfLabelsForGroup(group: {
-    category?: string;
-    title: string;
-    boxes: Array<{ productType: string; groupCodes?: string[] }>;
-  }): void {
-    const category = String(group?.category || '');
-    const rackPrefix = this.isKkConnectorRackMuc(category)
-      ? category
-      : ((group?.boxes || []).some((box) => this.kkBoxHasBPrefix(box, 'B018')) ? 'B018' : '');
-    if (rackPrefix) {
-      const labels = this.kkConnectorAllTrays(rackPrefix)
-        .filter((t) => t.from > 0)
-        .map((t) => ({
-          name: this.kkConnectorRangeText(rackPrefix, t.from, t.to),
-          loc: t.loc
-        }));
-      if (!labels.length) {
-        alert(`Mục ${rackPrefix} chưa có dải mã để in tem kệ.`);
-        return;
-      }
-      this.closeKkShelfLabelPicker();
-      void this.printKkShelfLabels(labels, group.title);
-      return;
-    }
-    const boxes = group?.boxes || [];
-    const labels = boxes
-      .map((box) => ({
-        name: this.kkShelfLabelTitle(box),
-        loc: this.kkShelfLabelLocOf(box)
-      }))
-      .filter((row) => !!row.loc)
-      .sort((a, b) => a.loc.localeCompare(b.loc, 'en', { numeric: true })
-        || a.name.localeCompare(b.name, 'vi', { numeric: true }));
-    if (!labels.length) {
-      alert(`Nhóm ${group?.title || ''} chưa có vị trí yêu cầu để in tem kệ.`);
-      return;
-    }
-    this.closeKkShelfLabelPicker();
-    void this.printKkShelfLabels(labels, group.title);
-  }
-
-  private kkShelfLabelLocOf(box: {
-    productType: string;
-    groupCodes?: string[];
-    sourceProductType?: string;
-    sourceProductTypes?: string[];
-  }): string {
-    const loc = this.kkTypeBoxHomeLoc(box);
-    const shown = this.primaryLocationDisplay(loc);
-    return shown && shown !== '-' ? shown : '';
-  }
-
-  private kkShelfLabelTitle(box: { productType: string; groupCodes?: string[] }): string {
-    const type = String(box?.productType || '').trim();
-    const codes = box?.groupCodes || [];
-    if (this.isKkDauCotMuc(type, codes)) {
-      const brand = String(this.kkTerminalBrandTail(type) || '').replace(/\s+/g, ' ').trim();
-      const pretty = this.kkShelfLabelPretty(brand);
-      return pretty ? `Terminal ${pretty}` : 'Terminal';
-    }
-    return this.kkShelfLabelPretty(this.kkTypeNameHeadOf(type) || type) || type;
-  }
-
-  private kkShelfLabelPretty(raw: string): string {
-    const s = String(raw || '').trim();
-    if (!s) return '';
-    if (/^[A-Z0-9][A-Z0-9.&/-]{1,10}$/.test(s)) return s;
-    const lower = s.toLocaleLowerCase('vi');
-    return lower.charAt(0).toLocaleUpperCase('vi') + lower.slice(1);
-  }
-
-  /** Tem kệ 57×32mm: tên + vị trí + QR góc phải (nội dung = vị trí để scan). */
-  private async printKkShelfLabels(labels: Array<{ name: string; loc: string }>, title: string): Promise<void> {
-    if (!labels.length) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
-      return;
-    }
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    try {
-      const QRCode = await import('qrcode') as any;
-      const qrImages = await Promise.all(
-        labels.map((row) =>
-          QRCode.toDataURL(String(row.loc || '').trim() || '—', {
-            width: 360,
-            margin: 0,
-            color: { dark: '#000000', light: '#FFFFFF' }
-          })
-        )
-      );
-      const pages = labels.map((row, i) => {
-        const nameSize = row.name.length > 22 ? '12px' : row.name.length > 14 ? '15px' : '17px';
-        return `<div class="label">
-    <img class="qr" src="${qrImages[i]}" alt="QR ${esc(row.loc)}">
-    <div class="text">
-      <div class="name" style="font-size:${nameSize}!important">${esc(row.name)}</div>
-      <div class="loc">${esc(row.loc)}</div>
-    </div>
-  </div>`;
-      }).join('\n');
-      printWindow.document.write(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${esc(title)} — tem kệ</title>
-<style>
-  * { margin:0!important; padding:0!important; box-sizing:border-box!important; }
-  body {
-    font-family: Arial, sans-serif;
-    background: white!important;
-    color: #000!important;
-  }
-  .label {
-    position: relative!important;
-    display: flex!important;
-    flex-direction: row!important;
-    align-items: center!important;
-    justify-content: flex-start!important;
-    width: 57mm!important;
-    height: 32mm!important;
-    padding: 2mm 22mm 2mm 2.5mm!important;
-    border: 1px solid #000!important;
-    page-break-after: always!important;
-    page-break-inside: avoid!important;
-    box-sizing: border-box!important;
-    color: #000!important;
-    gap: 1.5mm!important;
-  }
-  .label:last-child { page-break-after: auto!important; }
-  .qr {
-    position: absolute!important;
-    top: 1.5mm!important;
-    right: 1.5mm!important;
-    width: 20mm!important;
-    height: 20mm!important;
-    object-fit: contain!important;
-  }
-  .text {
-    flex: 1!important;
-    min-width: 0!important;
-    display: flex!important;
-    flex-direction: column!important;
-    justify-content: center!important;
-    align-items: flex-start!important;
-    text-align: left!important;
-    gap: 1mm!important;
-    padding-right: 1mm!important;
-  }
-  .name {
-    font-weight: 800!important;
-    line-height: 1.15!important;
-    word-break: break-word!important;
-    max-width: 30mm!important;
-  }
-  .loc {
-    font-size: 18px!important;
-    font-weight: 800!important;
-    line-height: 1.1!important;
-    letter-spacing: 0.3px!important;
-  }
-  @media print {
-    @page { margin:0!important; size: 57mm 32mm!important; padding:0!important; }
-    .label { width:57mm!important; height:32mm!important; }
-  }
-</style></head>
-<body>
-  ${pages}
-  <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
-</body></html>`);
-      printWindow.document.close();
-    } catch (e) {
-      console.error('❌ printKkShelfLabels QR:', e);
-      printWindow.close();
-      alert('Lỗi tạo QR tem kệ. Vui lòng thử lại.');
-    }
-  }
-
-  private kkMucReportLinesForBox(box: {
-    productType: string;
-    sourceProductType?: string;
-    sourceProductTypes?: string[];
-  }): InventoryMaterial[] {
-    const sources = (box.sourceProductTypes && box.sourceProductTypes.length)
-      ? box.sourceProductTypes
-      : [box.sourceProductType || box.productType];
-    const seen = new Set<string>();
-    const out: InventoryMaterial[] = [];
-    const zone = this.kkLocMapWarehouseFilter;
-    for (const src of sources) {
-      for (const m of this.kkLocMapTypeCache.get(src) || []) {
-        const id = String(m.id || '');
-        if (id) {
-          if (seen.has(id)) continue;
-          seen.add(id);
-        }
-        const wh = this.kkWarehouseFromLocation(m.location);
-        if (!this.kkMatchesWh3Mode(wh)) continue;
-        if (zone && wh !== zone) continue;
-        out.push(m);
-      }
-    }
-    return out;
-  }
-
-  /** B009 / B016 / B018: mã theo tầng; tầng không có dải thì from=0. */
-  private kkConnectorAllTrays(prefix: string): Array<{
-    loc: string;
-    shelf: string;
-    block: number;
-    level: number;
-    from: number;
-    to: number;
-  }> {
-    const out: Array<{ loc: string; shelf: string; block: number; level: number; from: number; to: number }> = [];
-    for (const s of this.kkConnectorRackShelves(prefix)) {
-      const blocks = jKhoMatBlocksForRow(s.shelf);
-      for (let lv = 1; lv <= 7; lv++) {
-        const range = this.kkConnectorFloorRange(s, lv);
-        const from = range?.from || 0;
-        const to = range?.to || 0;
-        for (let block = 1; block <= blocks; block++) {
-          out.push({
-            loc: `${s.shelf}-${block}-${lv}`,
-            shelf: s.shelf,
-            block,
-            level: lv,
-            from,
-            to
-          });
-        }
-      }
-    }
-    return out;
-  }
-
-  private kkB009AllTrays(): Array<{
-    loc: string;
-    shelf: string;
-    block: number;
-    level: number;
-    from: number;
-    to: number;
-  }> {
-    return this.kkConnectorAllTrays('B009');
-  }
-
-  private kkB009FloorLocText(tray: { shelf: string; level: number }): string {
-    return [1, 2, 3].map((b) => `${tray.shelf}-${b}-${tray.level}`).join(', ');
-  }
-
-  private kkB009Code(n: number): string {
-    return `B009${String(n).padStart(3, '0')}`;
-  }
-
-  private kkB009RangeText(from: number, to: number): string {
-    return `${this.kkB009Code(from)} ~ ${this.kkB009Code(to)}`;
-  }
-
-  private kkB009TrayOf(groupCode: string): {
-    loc: string;
-    shelf: string;
-    block: number;
-    level: number;
-    from: number;
-    to: number;
-  } | null {
-    const n = this.kkB009SeqOf(groupCode);
-    if (n == null || n < 1 || n > 999) return null;
-    return this.kkB009AllTrays().find((t) => t.from > 0 && n >= t.from && n <= t.to) || null;
-  }
-
-  private kkB009SeqOf(groupCode: string): number | null {
-    const g = this.kkCatalog.normalizeGroupCode(groupCode)
-      || this.kkCatalog.groupCodeFromMaterial(groupCode)
-      || String(groupCode || '').trim().toUpperCase();
-    const m = /^B009(\d{3})$/.exec(g);
-    if (!m) return null;
-    return Number(m[1]);
-  }
-
-  private kkB009SectionOrder(section: string): number {
-    if (section === 'S07') return 1;
-    if (section === 'S08') return 2;
-    if (section === 'S09') return 3;
-    if (section === 'S10') return 4;
-    return 9;
-  }
-
-  private kkB009SectionCaption(section: string): string {
-    if (section === 'S07') return 'S07 — B009001 ~ B009250';
-    if (section === 'S08') return 'S08 — B009251 ~ B009500';
-    if (section === 'S09') return 'S09 — B009501 ~ B009750';
-    if (section === 'S10') return 'S10 — B009751 ~ B009999';
-    return section;
-  }
-
-  private kkNormalizeSShelfId(token: string): string {
-    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
-    const m = /^S0*(\d{1,2})(?:-|$)/.exec(raw);
-    if (!m) return '';
-    const n = Number(m[1]);
-    if (n < 1 || n > 25) return '';
-    return `S${String(n).padStart(2, '0')}`;
-  }
-
-  private kkSLevelFromLoc(token: string): number {
-    const raw = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
-    const m = /^S\d{1,2}-\d+-(\d+)/.exec(raw);
-    return m ? Number(m[1]) : 0;
-  }
-
-  private kkSPrefixOfCode(code: string): string {
-    const g = this.kkCatalog.normalizeGroupCode(code)
-      || String(code || '').trim().toUpperCase();
-    const m = /^(B\d{3})/.exec(g);
-    return m ? m[1] : '';
-  }
-
-  private kkSShelfKind(n: number): 'empty' | 'B018' | 'B009' | 'B016' | 'B007' | 'B008' | 'B017' | 'home' {
-    if (n === 2 || n === 4 || n === 6) return 'empty';
-    if (n === 1 || n === 3 || n === 5) return 'B018';
-    if (n >= 7 && n <= 10) return 'B009';
-    if (n >= 11 && n <= 14) return 'B016';
-    if (n === 15) return 'B007';
-    if (n === 16) return 'B008';
-    if (n >= 23 && n <= 25) return 'home';
-    return 'home';
-  }
-
-  private kkSHomeLocRecords(): Array<{
-    code: string;
-    typeName: string;
-    prefix: string;
-    terminal: boolean;
-    shelf: string;
-    loc: string;
-    level: number;
-  }> {
-    const out: Array<{
-      code: string;
-      typeName: string;
-      prefix: string;
-      terminal: boolean;
-      shelf: string;
-      loc: string;
-      level: number;
-    }> = [];
-    const seen = new Set<string>();
-    for (const e of this.kkCatalogEntries) {
-      const code = this.kkCatalog.normalizeGroupCode(e.groupCode)
-        || String(e.groupCode || '').trim().toUpperCase();
-      if (!code) continue;
-      const locJoined = String(
-        this.kkCatalog.homeLocForMaterial(code) || this.kkTypeHomeLocOf(e.productType) || ''
-      ).trim();
-      const tokens = splitMultiLocations(locJoined);
-      const terminal = this.isKkDauCotMuc(e.productType, [code]);
-      const prefix = this.kkSPrefixOfCode(code);
-      if (!tokens.length) {
-        const key = `${code}|`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ code, typeName: e.productType, prefix, terminal, shelf: '', loc: '', level: 0 });
-        continue;
-      }
-      for (const token of tokens) {
-        const shelf = this.kkNormalizeSShelfId(token);
-        const key = `${code}|${shelf}|${token}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({
-          code,
-          typeName: e.productType,
-          prefix,
-          terminal,
-          shelf,
-          loc: String(token || '').toUpperCase(),
-          level: this.kkSLevelFromLoc(token)
-        });
-      }
-    }
-    return out;
-  }
-
-  private kkCodesRangeSummary(codes: string[]): { group: string; range: string } {
-    const byPrefix = new Map<string, { min: number; max: number }>();
-    const extra: string[] = [];
-    for (const raw of codes) {
-      const code = this.kkCatalog.normalizeGroupCode(raw)
-        || String(raw || '').trim().toUpperCase();
-      if (!code) continue;
-      const prefix = this.kkSPrefixOfCode(code);
-      const n = prefix ? this.kkConnectorSeqOf(prefix, code) : null;
-      if (prefix && n != null) {
-        const cur = byPrefix.get(prefix);
-        if (!cur) byPrefix.set(prefix, { min: n, max: n });
-        else {
-          cur.min = Math.min(cur.min, n);
-          cur.max = Math.max(cur.max, n);
-        }
-        continue;
-      }
-      extra.push(code);
-    }
-    const prefixes = Array.from(byPrefix.keys()).sort((a, b) => a.localeCompare(b, 'en'));
-    const ranges = prefixes.map((p) => {
-      const r = byPrefix.get(p)!;
-      return this.kkConnectorRangeText(p, r.min, r.max);
-    });
-    const uniqExtra = Array.from(new Set(extra)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-    const group = [...prefixes, ...uniqExtra.map((c) => this.kkSPrefixOfCode(c) || c)]
-      .filter(Boolean)
-      .filter((v, i, arr) => arr.indexOf(v) === i)
-      .join(', ');
-    const range = [...ranges, ...uniqExtra].join(', ');
-    return { group: group || '—', range: range || '—' };
-  }
-
-  private kkRHomeCodesByShelf(): Map<string, string[]> {
-    const map = new Map<string, string[]>();
-    for (const e of this.kkCatalogEntries) {
-      const code = this.kkCatalog.normalizeGroupCode(e.groupCode)
-        || String(e.groupCode || '').trim().toUpperCase();
-      if (!code) continue;
-      const locJoined = String(
-        this.kkCatalog.homeLocForMaterial(code) || this.kkTypeHomeLocOf(e.productType) || ''
-      ).trim();
-      for (const token of splitMultiLocations(locJoined)) {
-        const p = parseJRackLocation(token);
-        if (!p?.rack) continue;
-        const shelf = formatJRackAisle(p.rack);
-        const list = map.get(shelf) || [];
-        if (!list.includes(code)) list.push(code);
-        map.set(shelf, list);
-      }
-    }
-    return map;
-  }
-
-  /** Danh sách kệ S01–S25 và kệ R — chỉ kệ + nhóm mã / khoảng mã. */
-  printKkSShelfMap(): void {
-    const win = window.open('', '_blank', 'width=980,height=860');
-    if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
-      return;
-    }
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const now = new Date().toLocaleString('vi-VN');
-    const sHome = new Map<string, string[]>();
-    for (const rec of this.kkSHomeLocRecords()) {
-      if (!rec.shelf) continue;
-      const list = sHome.get(rec.shelf) || [];
-      if (!list.includes(rec.code)) list.push(rec.code);
-      sHome.set(rec.shelf, list);
-    }
-    const plannedKind = (kind: string): kind is 'B018' | 'B009' | 'B016' | 'B017' =>
-      kind === 'B018' || kind === 'B009' || kind === 'B016' || kind === 'B017';
-
-    const sRows = Array.from({ length: 25 }, (_, i) => {
-      const n = i + 1;
-      const shelf = `S${String(n).padStart(2, '0')}`;
-      const kind = this.kkSShelfKind(n);
-      if (kind === 'empty') return { shelf, group: '—', range: 'Trống', empty: true };
-      if (plannedKind(kind)) {
-        const planned = this.kkConnectorRackShelves(kind).find((row) => row.shelf === shelf);
-        if (planned) {
-          return {
-            shelf,
-            group: kind,
-            range: this.kkConnectorRangeText(kind, planned.from, planned.to),
-            empty: false
-          };
-        }
-      }
-      const sum = this.kkCodesRangeSummary(sHome.get(shelf) || []);
-      if (kind === 'B007' || kind === 'B008') {
-        return {
-          shelf,
-          group: kind,
-          range: sum.range === '—' ? kind : sum.range,
-          empty: sum.range === '—'
-        };
-      }
-      return { shelf, group: sum.group, range: sum.range, empty: sum.range === '—' };
-    });
-
-    const rHome = this.kkRHomeCodesByShelf();
-    let rMax = 28;
-    for (const key of rHome.keys()) {
-      const n = Number(String(key).replace(/^R0*/, '')) || 0;
-      if (n > rMax) rMax = n;
-    }
-    const rRows = Array.from({ length: rMax }, (_, i) => {
-      const shelf = formatJRackAisle(i + 1);
-      const sum = this.kkCodesRangeSummary(rHome.get(shelf) || []);
-      return { shelf, group: sum.group, range: sum.range, empty: sum.range === '—' };
-    });
-
-    const tableRows = (rows: Array<{ shelf: string; group: string; range: string; empty: boolean }>) =>
-      rows.map((s) => `<tr class="${s.empty ? 'empty' : ''}">
-        <td class="c"><strong>${esc(s.shelf)}</strong></td>
-        <td class="c">${esc(s.group)}</td>
-        <td>${esc(s.range)}</td>
-      </tr>`).join('');
-
-    win.document.open();
-    win.document.write(`<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>Sơ đồ kệ S và R</title>
-  <style>
-    @page { size: A4 portrait; margin: 10mm 10mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; }
-    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:12px;
-                border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
-    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
-                       border-radius:4px; cursor:pointer; font-size:12px; }
-    h1 { font-size: 20px; margin-bottom: 6px; }
-    h2 { font-size: 14px; margin: 16px 0 8px; }
-    .sub { color:#475569; margin-bottom: 12px; }
-    table.index { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    table.index th, table.index td { border: 1px solid #111; padding: 6px 8px; }
-    table.index th { background: #0f172a; color: #fff; text-align: left; }
-    table.index td.c, table.index th.c { text-align: center; }
-    table.index tr.empty td { color: #64748b; background: #f8fafc; }
-    .foot { margin-top: 10px; font-size: 10px; color: #64748b; text-align: right; }
-    @media print { .no-print { display: none !important; } }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <span>Danh sách kệ S và R — nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in</span>
-    <button onclick="window.print()">In ngay</button>
-  </div>
-  <h1>HÌNH SƠ ĐỒ KỆ S &amp; R</h1>
-  <p class="sub">Chỉ kệ và nhóm mã / khoảng mã. S01–S25 · R01–R${String(rMax).padStart(2, '0')}</p>
-  <h2>Kệ S</h2>
-  <table class="index">
-    <thead>
-      <tr>
-        <th class="c">Kệ</th>
-        <th class="c">Nhóm mã</th>
-        <th>Khoảng mã</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows(sRows)}</tbody>
-  </table>
-  <h2>Kệ R</h2>
-  <table class="index">
-    <thead>
-      <tr>
-        <th class="c">Kệ</th>
-        <th class="c">Nhóm mã</th>
-        <th>Khoảng mã</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows(rRows)}</tbody>
-  </table>
-  <div class="foot">In lúc: ${esc(now)} · ${esc(this.selectedFactory)}</div>
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
   }
 
   /** Tem 57×32mm (cùng khổ Inbound) — chỉ tên nhóm hàng. */
@@ -11487,42 +7682,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     printWindow.document.close();
   }
 
-  openKkTypeHomeLocPicker(box: { productType: string; groupCodes?: string[] }, event?: Event): void {
-    event?.preventDefault();
-    event?.stopPropagation();
-    const productType = String(box?.productType || '').trim();
-    if (!productType) return;
-    this.layoutLocTypeAssign = productType;
-    this.layoutLocTypeAssignGroups = box.groupCodes || [];
-    this.layoutLocMaterial = null;
-    this.layoutLocFocus = 'location';
-    this.layoutLocWh = 'J';
-    const existing = this.kkTypeHomeLocOf(productType);
-    const tokens = this.layoutLocNormalizeTokens(splitMultiLocations(existing));
-    this.layoutLocSelected = new Set(tokens);
-    const groups = getLayoutLocationGroups('J');
-    const hit = this.layoutLocGroupFromTokens(tokens);
-    const prefixes = this.kkTypeGroupPrefixes(this.layoutLocTypeAssignGroups);
-    const bPrefix = prefixes.find((p) => /^B\d{3}$/.test(p)) || '';
-    const suggestedS = jKhoMatSFirstRowForPrefix(bPrefix);
-    if (hit) {
-      this.layoutLocGroupId = hit.id;
-      this.layoutLocFamily = /^S\d{2}$/.test(hit.id) ? 'S' : 'R';
-    } else if (suggestedS) {
-      this.layoutLocGroupId = suggestedS;
-      this.layoutLocFamily = 'S';
-    } else {
-      this.layoutLocGroupId = groups[0]?.id || '';
-      this.layoutLocFamily = 'R';
-    }
-    this.layoutLocQuery = '';
-    this.layoutLocManualDraft = '';
-    this.layoutLocPalletDraft = '';
-    this.syncLayoutJFocusBlockFromSelection();
-    this.showLayoutLocPicker = true;
-    this.cdr.detectChanges();
-  }
-
   private async applyKkTypeHomeLocPicker(): Promise<void> {
     const productType = String(this.layoutLocTypeAssign || '').trim();
     if (!productType) return;
@@ -11545,44 +7704,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  backKkTypeBoxes(): void {
-    this.kkActiveProductType = null;
-    this.kkActiveTypeDraft = null;
-    this.kkActivePinSplit = null;
-    this.kkActiveSourceProductType = null;
-    this.kkConnectorFloorDetail = null;
-    this.kkAllStockDetail = false;
-    this.kkTypePage = 1;
-    this.kkTypePageSize = 20;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeShowExtraFilter = false;
-    this.clearKkLocScanDay();
-    this.syncKkPageLock();
-  }
-
   get kkTypeDetailAll(): InventoryMaterial[] {
     this.ensureKkTypeDetailCache();
     return this.kkTypeDetailAllCached;
   }
 
-  /** Lọc danh sách chi tiết (bảng) theo mã / tên / pallet / vị trí / kho / cuộn / chưa KK. */
-  get kkTypeDetailFiltered(): InventoryMaterial[] {
-    this.ensureKkTypeDetailCache();
-    return this.kkTypeDetailFilteredCached;
-  }
-
-  /** Tổng cuộn (ceil tồn÷SP, phần lẻ +1) của các dòng đang lọc. */
-  get kkTypeFilteredRollsTotal(): number {
-    this.ensureKkTypeDetailCache();
-    return this.kkTypeFilteredRollsCached;
-  }
-
-  private ensureKkTypeDetailCache(): void {
+  protected ensureKkTypeDetailCache(): void {
     const floor = this.kkConnectorFloorDetail;
     const sig = [
       this.kkTypeCacheRev,
@@ -11602,9 +7729,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeFilterWh,
       this.kkTypeFilterRolls,
       this.kkTypeSortQtyDesc ? 1 : 0,
+      this.kkTypeSortKkTimeDesc ? 1 : 0,
+      this.kkCheckActive ? this.linkQCheckSet.size : 0,
+      this.kkTypeInnerQuery,
+      this.kkTypeWarnFilter,
+      this.kkTypeLinkQFilter,
+      this.kkTypeKkFilter,
+      this.kkTypeDiffFilter,
+      this.kkPendingPxk ? this.kkPendingPxk.size : 0,
+      this.kkTypeLinkQLabel,
       this.kkLocScanDay,
       this.kkLocScanReady ? 1 : 0,
-      this.kkLocScanReq
+      this.kkLocScanReq,
+      this.kkThMode ? 'TH' + this.thItems.length : ''
     ].join('|');
     if (sig === this.kkTypeDetailSig) return;
     this.kkTypeDetailSig = sig;
@@ -11620,15 +7757,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         : null;
       this.kkTypeDetailAllCached = this.kkTypeDetailLines(found);
     }
+    // Mã đầu R / B033: không hiển thị, không kiểm
+    this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter((m) => !MaterialsComponent.isKkExcludedCode(m.materialCode));
+    // Nút TH: chỉ các mã trong danh sách tiêu hủy
+    if (this.kkThMode) this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter((m) => !!this.thItemOf(m.materialCode));
     this.kkTypeDetailFilteredCached = this.buildKkTypeDetailFiltered(this.kkTypeDetailAllCached);
     let stock = 0;
     let checked = 0;
+    let total = 0;
     for (const m of this.kkTypeDetailAllCached) {
       stock += this.calculateCurrentStock(m);
+      if (this.isKkAgingExempt(m)) continue;
+      total += 1;
       if (this.isKkFlagOn(m.kkChecked)) checked += 1;
     }
     this.kkTypeLiveStock = stock;
     this.kkTypeLiveChecked = checked;
+    this.kkTypeLiveTotal = total;
     this.kkTypeFilteredRollsCached = this.kkAllStockDetail
       ? 0
       : this.kkTypeDetailFilteredCached.reduce((sum, m) => sum + this.getKkRollsCount(m), 0);
@@ -11636,8 +7781,41 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildKkTypeDetailFiltered(all: InventoryMaterial[]): InventoryMaterial[] {
     let rows = all;
+    if (this.kkTypeLinkQFilter && this.kkTypeLinkQMap) {
+      const want = this.kkTypeLinkQFilter === 'yes';
+      rows = rows.filter((m) => this.kkTypeLinkQMap!.has(this.normalizeTieuHuyCode(m.materialCode)) === want);
+    }
+    if (this.kkTypeKkFilter === 'done') rows = rows.filter((m) => this.isKkFlagOn(m.kkChecked));
+    else if (this.kkTypeKkFilter === 'todo') rows = rows.filter((m) => !this.isKkFlagOn(m.kkChecked) && !this.isKkAgingExempt(m));
+    if (this.kkTypeWarnFilter === 'any') rows = rows.filter((m) => !!this.kkWarningOf(m));
+    else if (this.kkTypeWarnFilter) rows = rows.filter((m) => this.kkWarningOf(m) === this.kkTypeWarnFilter);
+    if (this.kkTypeDiffFilter && this.kkPendingPxk) {
+      const mode = this.kkTypeDiffFilter;
+      const t = this.ruleNum('linkqDiffThreshold');
+      rows = rows.filter((m) => {
+        const d = this.kkPxkDiff(m.materialCode);
+        if (d == null) return false;
+        if (mode === 'bad') return d > t || d < -t;
+        if (mode === 'ok') return d >= -t && d <= t;
+        if (mode === 'pos') return d > t;
+        if (mode === 'neg') return d < -t;
+        return true;
+      });
+    }
+    const iq = this.kkTypeInnerQuery.trim().toUpperCase();
+    if (iq) {
+      rows = rows.filter((m) =>
+        String(m.materialCode || '').toUpperCase().includes(iq) ||
+        String(m.poNumber || '').toUpperCase().includes(iq) ||
+        this.getDisplayIMD(m).includes(iq) ||
+        String(m.location || '').toUpperCase().includes(iq) ||
+        String(m.palletId || '').toUpperCase().includes(iq) ||
+        this.getKkMaterialName(m).toUpperCase().includes(iq)
+      );
+    }
+    if (this.kkCheckActive) rows = rows.filter((m) => this.kkCheckHas(m.materialCode));
     if (this.kkFilterUncheckedOnly) {
-      rows = rows.filter((m) => !this.isKkFlagOn(m.kkChecked));
+      rows = rows.filter((m) => !this.isKkFlagOn(m.kkChecked) && !this.isKkAgingExempt(m));
     }
     const loc = this.kkTypeFilterLoc.trim().toUpperCase();
     if (loc) {
@@ -11673,113 +7851,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (q) {
       rows = rows.filter((m) => this.kkLineMatchesSearchQuery(m, q));
     }
-    if (this.kkTypeSortQtyDesc) {
+    if (this.kkTypeSortKkTimeDesc) {
+      rows = [...rows].sort((a, b) => this.kkTickTimeMs(b) - this.kkTickTimeMs(a));
+    } else if (this.kkTypeSortQtyDesc) {
       rows = [...rows].sort((a, b) => this.calculateCurrentStock(b) - this.calculateCurrentStock(a));
     }
     return rows;
-  }
-
-  get kkTypeLocationOptions(): string[] {
-    const set = new Set<string>();
-    for (const m of this.kkTypeDetailAll) {
-      const loc = String(m.location || '').trim().toUpperCase();
-      if (loc) set.add(loc);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  }
-
-  get kkTypeRollsOptions(): string[] {
-    const set = new Set<string>();
-    for (const m of this.kkTypeDetailAll) {
-      const t = this.getKkRollsText(m);
-      if (t && t !== '—') set.add(t);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  }
-
-  /** % đầu mã ở Kho J mới vs còn D1 / ASM3 khi search nhóm mã (không lọc Zone, không theo pcs). */
-  private kkSearchWhShareSig = '';
-  private kkSearchWhShareCached: {
-    query: string;
-    total: number;
-    jQty: number;
-    d1Qty: number;
-    asm3Qty: number;
-    otherQty: number;
-    leftoverQty: number;
-    jPct: number;
-    d1Pct: number;
-    asm3Pct: number;
-    otherPct: number;
-    leftoverPct: number;
-  } | null = null;
-
-  get kkSearchWhShare() {
-    const q = this.kkEffectiveSearchQuery();
-    if (!q || (this.kkLocMapView !== 'type' && this.kkLocMapView !== 'material')) {
-      return null;
-    }
-    const sig = [
-      q,
-      this.kkLocMapView,
-      this.kkTypeCacheRev,
-      this.kkLocMapTypeCache.size,
-      this.kkLocMapMaterialCache.size
-    ].join('|');
-    if (sig === this.kkSearchWhShareSig) return this.kkSearchWhShareCached;
-
-    const cache = this.kkLocMapView === 'material' ? this.kkLocMapMaterialCache : this.kkLocMapTypeCache;
-    const byCode = new Map<string, { j: boolean; d1: boolean; asm3: boolean; other: boolean }>();
-    cache.forEach((rows) => {
-      for (const m of rows) {
-        if (!this.kkLineMatchesSearchQuery(m, q)) continue;
-        if (this.calculateCurrentStock(m) <= 0) continue;
-        const code = String(m.materialCode || '').trim().toUpperCase();
-        if (!code) continue;
-        const rec = byCode.get(code) || { j: false, d1: false, asm3: false, other: false };
-        const wh = this.kkWarehouseFromLocation(String(m.location || ''));
-        if (wh === 'J') rec.j = true;
-        else if (wh === 'D1') rec.d1 = true;
-        else if (wh === 'ASM3') rec.asm3 = true;
-        else rec.other = true;
-        byCode.set(code, rec);
-      }
-    });
-    const total = byCode.size;
-    let jQty = 0;
-    let d1Qty = 0;
-    let asm3Qty = 0;
-    let otherQty = 0;
-    let leftoverQty = 0;
-    byCode.forEach((rec) => {
-      if (rec.j) jQty += 1;
-      if (rec.d1) d1Qty += 1;
-      if (rec.asm3) asm3Qty += 1;
-      if (rec.other && !rec.j && !rec.d1 && !rec.asm3) otherQty += 1;
-      if (rec.d1 || rec.asm3) leftoverQty += 1;
-    });
-    const pct = (part: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
-    const result = total <= 0 ? null : {
-      query: q,
-      total,
-      jQty,
-      d1Qty,
-      asm3Qty,
-      otherQty,
-      leftoverQty,
-      jPct: pct(jQty),
-      d1Pct: pct(d1Qty),
-      asm3Pct: pct(asm3Qty),
-      otherPct: pct(otherQty),
-      leftoverPct: pct(leftoverQty)
-    };
-    this.kkSearchWhShareSig = sig;
-    this.kkSearchWhShareCached = result;
-    return result;
-  }
-
-  get kkSearchReady(): boolean {
-    return !!this.kkEffectiveSearchQuery();
   }
 
   /** Mã đầy đủ: B001800 / A012345 / R000001 (+ hậu tố). Không còn khớp nhóm B001 hay đoạn số 1800. */
@@ -11788,7 +7865,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Search only after 4+ characters (4 số); always uppercase. Location names may be shorter. */
-  private kkEffectiveSearchQuery(raw?: string): string {
+  protected kkEffectiveSearchQuery(raw?: string): string {
     const q = String(raw ?? (this.kkLocMapQuery || '')).trim().toUpperCase();
     if (!q) return '';
     if (this.kkLocMapView === 'location') return q;
@@ -11796,7 +7873,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** 16580 matches B016580; optional leading A/B/R. Full mã B001800 chỉ khớp đúng mã đó. */
-  private kkCodeMatchesSearch(code: string, q: string): boolean {
+  protected kkCodeMatchesSearch(code: string, q: string): boolean {
     const c = String(code || '').trim().toUpperCase();
     const query = String(q || '').trim().toUpperCase();
     if (!c || !query) return false;
@@ -11829,83 +7906,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.getKkMaterialName(m).toUpperCase().includes(q);
   }
 
-  applyKkTypeFilters(): void {
-    this.kkTypeDetailQuery = this.kkTypeSearchDraft || this.kkLocMapQuery;
-    this.kkTypePage = 1;
-  }
-
-  onKkLocMapQueryChange(value: string): void {
-    if (this.kkLocMapView === 'manager') {
-      this.kkLocMapQuery = String(value || '');
-      this.kkManagerRowsSig = '';
-      this.cdr.detectChanges();
-      return;
-    }
-    this.kkLocMapQuery = String(value || '').toUpperCase();
-    const q = this.kkEffectiveSearchQuery();
-    if (!q) {
-      if (this.kkLocMapView === 'type') {
-        this.kkTypeSearchDraft = '';
-        this.kkTypeDetailQuery = '';
-        this.kkTypePage = 1;
-        this.invalidateKkTypeViewCache();
-      }
-      return;
-    }
-    if (!this.kkStockLoaded && !this.kkLocMapLoading && !this.kkLocMapBusy) {
-      this.playKkStock();
-      return;
-    }
-    if (this.kkLocMapView === 'type') this.onKkTypeUnifiedSearch();
-  }
-
-  onKkTypeUnifiedSearch(): void {
-    this.kkTypeSearchDraft = this.kkLocMapQuery;
-    this.kkTypeDetailQuery = this.kkLocMapQuery;
-    this.kkTypePage = 1;
-    this.invalidateKkTypeViewCache();
-  }
-
-  clearKkTypeUnifiedSearch(): void {
-    this.kkLocMapQuery = '';
-    this.onKkTypeUnifiedSearch();
-  }
-
-  clearKkTypeFilters(): void {
-    this.kkTypeFilterLoc = '';
-    this.kkTypeFilterWh = '';
-    this.kkTypeFilterRolls = '';
-    this.kkTypeSortQtyDesc = false;
-    this.kkTypeDetailQuery = '';
-    this.kkTypeSearchDraft = '';
-    this.clearKkLocScanDay();
-    this.kkTypePage = 1;
-  }
-
-  setKkLocScanDay(day: 'today' | 'yesterday'): void {
-    if (this.kkLocScanDay === day) {
-      this.clearKkLocScanDay();
-      this.kkTypePage = 1;
-      this.invalidateKkTypeViewCache();
-      return;
-    }
-    this.kkLocScanDay = day;
-    this.kkLocScanReady = false;
-    this.kkLocScanIds = new Set();
-    this.kkTypePage = 1;
-    this.invalidateKkTypeViewCache();
-    void this.loadKkLocScanIds(day);
-  }
-
-  private clearKkLocScanDay(): void {
-    this.kkLocScanDay = '';
-    this.kkLocScanLoading = false;
-    this.kkLocScanReady = false;
-    this.kkLocScanIds = new Set();
-    this.kkLocScanReq++;
-  }
-
-  private kkLocScanRange(day: 'today' | 'yesterday'): { start: Date; end: Date } {
+  protected kkLocScanRange(day: 'today' | 'yesterday'): { start: Date; end: Date } {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     if (day === 'yesterday') start.setDate(start.getDate() - 1);
@@ -11914,290 +7915,49 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return { start, end };
   }
 
-  /** Mã có lịch sử scan vị trí (kk-location-scan) trong ngày. */
-  private async loadKkLocScanIds(day: 'today' | 'yesterday'): Promise<void> {
-    const req = ++this.kkLocScanReq;
-    this.kkLocScanLoading = true;
-    const { start, end } = this.kkLocScanRange(day);
-    const factory = String(this.selectedFactory || '').trim().toUpperCase();
+  /** Thời điểm tick KK (ms); chưa tick → 0 (xuống cuối). */
+  private kkTickTimeMs(m: InventoryMaterial): number {
+    if (!m || !this.isKkFlagOn(m.kkChecked)) return 0;
+    const raw: any = (m as any).kkAt;
+    if (!raw) return 0;
+    const d: Date = typeof raw.toDate === 'function' ? raw.toDate()
+      : raw.seconds != null ? new Date(raw.seconds * 1000)
+      : raw instanceof Date ? raw : new Date(raw);
+    const t = d.getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
+
+  private async clearKkWarningAll(value: string): Promise<void> {
+    if (!value) return;
+    const label = this.kkWarningOptions.find((o) => o.value === value)?.label || value;
+    const factory = this.selectedFactory;
     try {
-      const snap = await this.firestore.firestore
-        .collection('material-location-history')
-        .where('changedAt', '>=', start)
-        .where('changedAt', '<', end)
-        .get();
-      if (req !== this.kkLocScanReq || this.kkLocScanDay !== day) return;
-      const ids = new Set<string>();
-      snap.forEach((doc) => {
-        const data = doc.data() as {
-          changeType?: string;
-          materialId?: string;
-          factory?: string;
-        };
-        if (String(data.changeType || '') !== 'kk-location-scan') return;
-        const rowFactory = String(data.factory || '').trim().toUpperCase();
-        if (factory && rowFactory && rowFactory !== factory) return;
-        const id = String(data.materialId || '').trim();
-        if (id) ids.add(id);
-      });
-      this.kkLocScanIds = ids;
-      this.kkLocScanReady = true;
-    } catch (err) {
-      console.error('loadKkLocScanIds', err);
-      if (req !== this.kkLocScanReq) return;
-      this.kkLocScanIds = new Set();
-      this.kkLocScanReady = true;
-      alert('Không lọc được mã scan vị trí. Vui lòng thử lại.');
-    } finally {
-      if (req === this.kkLocScanReq) {
-        this.kkLocScanLoading = false;
-        this.invalidateKkTypeViewCache();
-        this.cdr.detectChanges();
+      const snap = await this.firestore.firestore.collection('inventory-materials').where('kkWarning', '==', value).get();
+      const docs = snap.docs.filter((d) => String((d.data() as any)?.factory || '').trim().toUpperCase() === factory);
+      const by = await this.getMaterialsOtpRequester();
+      const now = firebase.default.firestore.FieldValue.serverTimestamp();
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = this.firestore.firestore.batch();
+        docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, {
+          kkWarning: '', kkWarningBy: '', kkWarningAt: now, kkWarningClearedBy: by, kkWarningClearedValue: value
+        }));
+        await batch.commit();
       }
+      const ids = new Set(docs.map((d) => d.id));
+      this.kkLocMapTypeCache.forEach((list) => list.forEach((m) => {
+        if (m.id && ids.has(m.id)) { (m as any).kkWarning = ''; (m as any).kkWarningBy = ''; }
+      }));
+      ids.forEach((id) => this.patchKkInvSnapCache(id, { kkWarning: '', kkWarningBy: '' }));
+      this.kkTypeWarnFilter = '';
+      this.invalidateKkTypeViewCache();
+      alert(`Đã xóa cảnh báo "${label}" của ${docs.length} dòng (${factory}).`);
+    } catch (e: any) {
+      console.error('clearKkWarningAll:', e);
+      alert('❌ Không xóa được cảnh báo: ' + (e?.message || e));
+    } finally {
+      this.kkWarnClearPending = '';
+      this.cdr.detectChanges();
     }
-  }
-
-  toggleKkTypeSortQty(): void {
-    this.kkTypeSortQtyDesc = !this.kkTypeSortQtyDesc;
-    this.kkTypePage = 1;
-  }
-
-  onKkTypeFilterChange(): void {
-    this.kkTypePage = 1;
-  }
-
-  onKkTypePageSizeChange(size: number): void {
-    const n = Number(size) || 20;
-    this.kkTypePageSize = n;
-    this.kkTypePage = 1;
-  }
-
-  get kkTypeShowingFrom(): number {
-    if (!this.kkTypeDetailFiltered.length) return 0;
-    return (this.kkTypePage - 1) * this.kkTypePageSize + 1;
-  }
-
-  get kkTypeShowingTo(): number {
-    return Math.min(this.kkTypePage * this.kkTypePageSize, this.kkTypeDetailFiltered.length);
-  }
-
-  get kkTypeVisiblePages(): Array<number | 'ellipsis'> {
-    const total = this.kkTypeDetailTotalPages;
-    const current = Math.min(Math.max(1, this.kkTypePage), total);
-    if (total <= 7) {
-      return Array.from({ length: Math.max(total, 1) }, (_, i) => i + 1);
-    }
-    if (current <= 4) {
-      return [1, 2, 3, 4, 5, 'ellipsis', total];
-    }
-    if (current >= total - 3) {
-      return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total];
-    }
-    return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
-  }
-
-  kkTypeGoToVisiblePage(page: number | 'ellipsis'): void {
-    if (page === 'ellipsis') return;
-    this.kkTypeGoToPage(page);
-  }
-
-  onKkTypeDetailQueryChange(): void {
-    this.kkTypePage = 1;
-  }
-
-  onKkCountWh3Change(): void {
-    if (!this.kkCountWh3) this.kkWh3Only = false;
-    this.kkTypePage = 1;
-    this.cdr.detectChanges();
-  }
-
-  onKkWh3OnlyChange(): void {
-    if (this.kkWh3Only) {
-      this.kkCountWh3 = true;
-      this.kkJOnly = false;
-      if (this.kkLocMapWarehouseFilter === 'J') this.kkLocMapWarehouseFilter = '';
-    }
-    this.kkTypePage = 1;
-    this.cdr.detectChanges();
-  }
-
-  onKkJOnlyChange(): void {
-    if (this.kkJOnly) {
-      this.kkWh3Only = false;
-      this.kkLocMapWarehouseFilter = 'J';
-    } else if (this.kkLocMapWarehouseFilter === 'J') {
-      this.kkLocMapWarehouseFilter = '';
-    }
-    this.kkTypePage = 1;
-    this.cdr.detectChanges();
-  }
-
-  toggleKkJOnly(): void {
-    this.kkJOnly = !this.kkJOnly;
-    this.onKkJOnlyChange();
-  }
-
-  onKkWarehouseFilterChange(): void {
-    this.kkJOnly = this.kkLocMapWarehouseFilter === 'J';
-    if (this.kkJOnly) this.kkWh3Only = false;
-    this.kkTypePage = 1;
-    this.cdr.detectChanges();
-  }
-
-  onKkFilterUncheckedChange(): void {
-    this.kkTypePage = 1;
-    this.cdr.detectChanges();
-  }
-
-  get kkTypeDetailTotalPages(): number {
-    return Math.max(1, Math.ceil(this.kkTypeDetailFiltered.length / this.kkTypePageSize));
-  }
-
-  get kkTypePageOptions(): number[] {
-    return Array.from({ length: this.kkTypeDetailTotalPages }, (_, i) => i + 1);
-  }
-
-  get kkTypeDetailPaged(): InventoryMaterial[] {
-    const all = this.kkTypeDetailFiltered;
-    const maxPage = Math.max(1, Math.ceil(all.length / this.kkTypePageSize));
-    const page = Math.min(Math.max(1, this.kkTypePage), maxPage);
-    const start = (page - 1) * this.kkTypePageSize;
-    return all.slice(start, start + this.kkTypePageSize);
-  }
-
-  kkTypeRowIndex(indexOnPage: number): number {
-    const page = Math.min(Math.max(1, this.kkTypePage), this.kkTypeDetailTotalPages);
-    return (page - 1) * this.kkTypePageSize + indexOnPage + 1;
-  }
-
-  kkTypeGoToPage(page: number): void {
-    const max = this.kkTypeDetailTotalPages;
-    if (page < 1 || page > max) return;
-    this.kkTypePage = page;
-    setTimeout(() => void this.ensureKkTypeMaterialNames(), 0);
-  }
-
-  kkTypePrevPage(): void {
-    this.kkTypeGoToPage(this.kkTypePage - 1);
-  }
-
-  kkTypeNextPage(): void {
-    this.kkTypeGoToPage(this.kkTypePage + 1);
-  }
-
-  printKkTypeList(): void {
-    const row = this.kkActiveTypeRow;
-    const lines = this.kkTypeDetailAll;
-    if (!row || !lines.length) {
-      alert('Không có dòng để in.');
-      return;
-    }
-    const win = window.open('', '_blank', 'width=1100,height=800');
-    if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
-      return;
-    }
-    const esc = (s: string) => this.escapeHtmlForPrint(s);
-    const zone = this.kkLocMapWarehouseFilter
-      ? this.kkWarehouseLabel(this.kkLocMapWarehouseFilter)
-      : (this.kkJOnly ? 'Chỉ kho J' : (this.kkWh3Only ? 'Chỉ ASM3 / WH3' : (this.kkCountWh3 ? 'Tất cả' : 'Tất cả (không WH3/ASM3)')));
-    const groupText = row.groupCodes.length
-      ? `${row.groupCodes[0]}${row.groupCodes.length > 1 ? ` · ${row.groupCodes.length} nhóm mã` : ''}`
-      : '—';
-    const rowsHtml = lines.map((m, i) => {
-      const stock = this.calculateCurrentStock(m);
-      return `<tr>
-        <td class="c">${i + 1}</td>
-        <td>${esc(String(m.materialCode || ''))}</td>
-        <td>${esc(this.getKkMaterialName(m))}</td>
-        <td>${esc(String(m.poNumber || '—'))}</td>
-        <td>${esc(this.getDisplayIMD(m) || '—')}</td>
-        <td class="n">${esc(this.formatNumber(stock))}</td>
-        <td>${esc(String(m.location || '—'))}</td>
-        <td>${esc(this.kkWarehouseLabel(this.kkWarehouseFromLocation(m.location)))}</td>
-        <td>${esc(String(m.palletId || '—'))}</td>
-        <td class="n">${esc(this.formatNumber(this.getEffectiveStandardPacking(m) || 0))}</td>
-        <td class="c">${esc(this.getKkRollsText(m))}</td>
-        <td class="n">${esc(this.formatNumber(this.getKkScanCount(m)))} / ${esc(String(this.getKkRollsCount(m) || '—'))} Box</td>
-        <td class="c">${m.kkChecked ? '☑' : '☐'}</td>
-        <td>${esc(this.getKkTypePalletNote(m) || '—')}</td>
-      </tr>`;
-    }).join('');
-    const now = new Date().toLocaleString('vi-VN');
-    win.document.open();
-    win.document.write(`<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>KK · ${esc(row.productType)}</title>
-  <style>
-    @page { size: A4 landscape; margin: 10mm 10mm 12mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
-    .no-print { background:#fffbe6; border:1px solid #e6c000; padding:8px 14px; margin-bottom:12px;
-                border-radius:4px; display:flex; justify-content:space-between; align-items:center; }
-    .no-print button { background:#0f172a; color:#fff; border:none; padding:7px 18px;
-                       border-radius:4px; cursor:pointer; font-size:12px; }
-    .page-hdr { border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px; }
-    .page-hdr h1 { font-size:16px; letter-spacing:.4px; margin-bottom:4px; }
-    .page-hdr p { font-size:11px; color:#333; }
-    table { width:100%; border-collapse:collapse; }
-    thead { display: table-header-group; }
-    th, td { border:1px solid #333; padding:4px 6px; }
-    th { background:#f0f0f0; font-size:10px; text-transform:uppercase; text-align:left; }
-    td.c, th.c { text-align:center; }
-    td.n { text-align:right; font-variant-numeric: tabular-nums; }
-    tbody tr:nth-child(even) td { background:#fafafa; }
-    .print-footer { margin-top:10px; font-size:9px; color:#666; text-align:right; }
-    @media print { .no-print { display:none !important; } }
-  </style>
-</head>
-<body>
-  <div class="no-print">
-    <span>Nhấn <strong>Ctrl+P</strong> hoặc bấm nút để in danh sách loại hàng</span>
-    <button onclick="window.print()">In ngay</button>
-  </div>
-  <div class="page-hdr">
-    <h1>KIỂM TRA KK THEO LOẠI HÀNG</h1>
-    <p>
-      Loại hàng: <strong>${esc(row.productType)}</strong>
-      &nbsp;|&nbsp; Nhà máy: <strong>${esc(this.selectedFactory)}</strong>
-      &nbsp;|&nbsp; Zone: <strong>${esc(zone)}</strong>
-      &nbsp;|&nbsp; ${esc(groupText)}
-    </p>
-    <p>
-      KK: <strong>${row.checked}/${row.totalLines}</strong>
-      &nbsp;|&nbsp; Tồn: <strong>${esc(this.formatNumber(row.stock))}</strong>
-      &nbsp;|&nbsp; ${lines.length} dòng
-      &nbsp;|&nbsp; In lúc: ${esc(now)}
-    </p>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th class="c">STT</th>
-        <th>Mã hàng</th>
-        <th>Tên hàng</th>
-        <th>PO</th>
-        <th>IMD</th>
-        <th class="c">Tồn kho</th>
-        <th>Vị trí</th>
-        <th>Kho</th>
-        <th>Pallet</th>
-        <th class="c">Standard</th>
-        <th class="c">Cuộn</th>
-        <th class="c">Lần quét (Box)</th>
-        <th class="c">KK</th>
-        <th>Ghi chú</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
-  <div class="print-footer">In lúc: ${esc(now)}</div>
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
   }
 
   private kkTypeReportZoneLabel(): string {
@@ -12316,7 +8076,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private buildEmptyKkTypeRow(productType: string): KkTypeRow {
+  protected buildEmptyKkTypeRow(productType: string): KkTypeRow {
     const zone = this.kkLocMapWarehouseFilter || 'D1';
     return {
       productType,
@@ -12377,520 +8137,402 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'D1';
   }
 
-  kkMaterialRowKey(row: { materialCode: string; warehouse: string }): string {
-    return `${row.warehouse}|${String(row.materialCode || '').trim().toUpperCase()}`;
-  }
-
-  isKkMaterialExpanded(row: KkLocMaterialRow): boolean {
-    return this.kkLocMapExpandedKey === this.kkMaterialRowKey(row);
-  }
-
-  toggleKkMaterialExpand(row: KkLocMaterialRow, event?: Event): void {
-    event?.stopPropagation();
-    const key = this.kkMaterialRowKey(row);
-    this.kkLocMapExpandedKey = this.kkLocMapExpandedKey === key ? null : key;
-  }
-
-  kkMaterialDetailLines(row: KkLocMaterialRow): InventoryMaterial[] {
-    const list = this.kkLocMapMaterialCache.get(this.kkMaterialRowKey(row)) || [];
-    return list
-      .filter((m) => this.calculateCurrentStock(m) > 0)
-      .sort((a, b) => {
-        const po = String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
-        if (po) return po;
-        return this.getDisplayIMD(a).localeCompare(this.getDisplayIMD(b), 'en', { numeric: true });
-      });
-  }
-
-  private kkLinesForRow(row: KkLocMaterialRow): InventoryMaterial[] {
-    return (this.kkLocMapMaterialCache.get(this.kkMaterialRowKey(row)) || []).filter((m) => !!m.id);
-  }
-
-  onKkMaterialRowClick(row: { materialCode: string; warehouse: string }): void {
-    this.toggleKkMaterialExpand(row as KkLocMaterialRow);
-  }
-
-  private palletSummaryOf(list: InventoryMaterial[]): { palletId: string; palletMixed: boolean } {
-    const ids = Array.from(
-      new Set(
-        list
-          .map((m) => String(m.palletId || '').trim().toUpperCase())
-          .filter(Boolean)
-      )
-    );
-    if (ids.length === 1) return { palletId: ids[0], palletMixed: false };
-    if (ids.length === 0) return { palletId: '', palletMixed: false };
-    return { palletId: '', palletMixed: true };
-  }
-
-  private kkLinesForMaterialCode(materialCode: string): InventoryMaterial[] {
-    const code = String(materialCode || '').trim().toUpperCase();
-    const rows: InventoryMaterial[] = [];
-    this.kkLocMapMaterialCache.forEach((list, key) => {
-      if (key.endsWith(`|${code}`)) {
-        rows.push(...list);
-      }
-    });
-    return rows;
-  }
-
-  private syncKkMaterialRows(materialCode: string): void {
-    const code = String(materialCode || '').trim().toUpperCase();
-    this.kkLocMapByMaterial = this.kkLocMapByMaterial.map((row) => {
-      if (row.materialCode !== code) return row;
-      const key = `${row.warehouse}|${code}`;
-      const list = this.kkLocMapMaterialCache.get(key) || [];
-      const checked = list.filter((m) => this.isKkFlagOn(m.kkChecked)).length;
-      return {
-        ...row,
-        checked,
-        remaining: Math.max(0, row.totalLines - checked)
-      };
-    });
-  }
-
-  /** Tick KK theo mã hàng — ghi tất cả dòng cùng mã (mọi kho trong factory đang xem). */
-  async onKkByMaterialTick(row: KkLocMaterialRow, checked: boolean): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) {
-      this.cdr.detectChanges();
-      return;
-    }
-    const next = !!checked;
-    const lines = this.kkLinesForMaterialCode(row.materialCode).filter((m) => !!m.id);
-    const targets = lines.filter((m) => this.isKkFlagOn(m.kkChecked) !== next);
-    if (!targets.length) {
-      this.syncKkMaterialRows(row.materialCode);
-      this.cdr.detectChanges();
-      return;
-    }
-    if (!next) {
-      const ok = confirm(`Bỏ tick KK mọi dòng mã ${row.materialCode}?\n(${targets.length} dòng)`);
-      if (!ok) {
-        this.cdr.detectChanges();
-        return;
-      }
-    }
-    const operator = next
-      ? await this.resolveKkOperatorId()
-      : await this.resolveKkOperatorFromSession();
-    if (!operator) {
-      this.cdr.detectChanges();
-      return;
-    }
-
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    const kkAt = new Date();
-    try {
-      const chunkSize = 400;
-      for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
-            kkChecked: next,
-            kkBy: operator,
-            kkAt,
-            updatedAt: new Date(),
-            ...(next ? {} : { kkScanCount: 0 })
-          });
-        }
-        await batch.commit();
-        if (next) {
-          const histBatch = this.firestore.firestore.batch();
-          for (const m of chunk) {
-            histBatch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
-              inventoryDocId: m.id,
-              factory: this.resolveKkFactoryForMaterial(m),
-              materialCode: String(m.materialCode || '').trim().toUpperCase(),
-              materialName: String(m.materialName || '').trim(),
-              poNumber: String(m.poNumber || '').trim(),
-              batchNumber: String(m.batchNumber || '').trim(),
-              location: String(m.location || '').trim().toUpperCase(),
-              quantity: Number(m.quantity) || 0,
-              stock: Number(this.calculateCurrentStock(m)) || 0,
-              unit: String(m.unit || '').trim(),
-              checkedBy: operator,
-              checkedAt: kkAt,
-              checkedDateKey: this.toDateKey(kkAt),
-              createdAt: new Date()
-            });
-          }
-          await histBatch.commit();
-        }
-      }
-      for (const m of targets) {
-        m.kkChecked = next;
-        m.kkBy = operator;
-        m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
-      }
-      this.invalidateKkInvSnapCache();
-      this.syncKkMaterialRows(row.materialCode);
-    } catch (e) {
-      console.error('❌ onKkByMaterialTick:', e);
-      alert('❌ Không lưu được tick KK theo mã hàng.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  onKkMaterialPalletEnter(row: KkLocMaterialRow, event: Event): void {
-    (event.target as HTMLInputElement | null)?.blur();
-  }
-
-  /** Nhập pallet trên dòng theo mã — ghi mọi dòng cùng mã hàng. */
-  async saveKkMaterialPallet(row: KkLocMaterialRow): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    const next = String(row.palletId || '').trim().toUpperCase();
-    row.palletId = next;
-    if (row.palletMixed && !next) return;
-    if (next === row.palletSaved && !row.palletMixed) return;
-
-    const lines = this.kkLinesForRow(row);
-    if (!lines.length) return;
-
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const modifiedBy = await this.resolveLocationOperatorId();
-      const chunkSize = 400;
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        const chunk = lines.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
-            palletId: next,
-            updatedAt: new Date(),
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy
-          });
-        }
-        await batch.commit();
-      }
-      for (const m of lines) {
-        m.palletId = next;
-        (m as { __prevPalletId?: string }).__prevPalletId = next;
-      }
-      row.palletSaved = next;
-      row.palletMixed = false;
-    } catch (e) {
-      console.error('❌ saveKkMaterialPallet:', e);
-      alert('❌ Không lưu được số pallet.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  onKkMaterialLocationEnter(row: KkLocMaterialRow, event: Event): void {
-    (event.target as HTMLInputElement | null)?.blur();
-  }
-
-  /** Sửa vị trí ở dòng tổng → ghi tất cả dòng chi tiết (PO/IMD) của mã này. */
-  async saveKkMaterialLocation(row: KkLocMaterialRow): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    const next = this.normalizeMultiLocationValue(String(row.location || ''));
-    row.location = next;
-    if (!next) return;
-    if (next === row.locationSaved) return;
-
-    const lines = this.kkLinesForRow(row);
-    if (!lines.length) return;
-
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const modifiedBy = await this.resolveLocationOperatorId();
-      const changedAt = new Date();
-      const chunkSize = 400;
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        const chunk = lines.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          const fromLocation = this.normalizeMultiLocationValue(String(m.location || ''));
-          const payload: Record<string, unknown> = {
-            ...this.inventoryLocationWriteFields(next),
-            updatedAt: changedAt,
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy,
-            locationManualOverride: true
-          };
-          if ((next === 'F62' || next === 'F62TRA') && m.iqcStatus !== 'Pass') {
-            payload.iqcStatus = 'Pass';
-          }
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
-          if (fromLocation !== next) {
-            batch.set(this.firestore.collection('material-location-history').doc().ref, {
-              factory: this.selectedFactory,
-              materialId: m.id,
-              materialCode: m.materialCode,
-              poNumber: m.poNumber || '',
-              fromLocation,
-              toLocation: next,
-              changedBy: modifiedBy,
-              changeType: 'kk-material-summary',
-              changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-            });
-          }
-        }
-        await batch.commit();
-      }
-      for (const m of lines) {
-        m.location = next;
-        if (next === 'F62' || next === 'F62TRA') m.iqcStatus = 'Pass';
-        const rowMeta = m as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
-        rowMeta.__prevLocation = next;
-        rowMeta.__locationAtLoad = next;
-        rowMeta.locationManualOverride = true;
-      }
-      row.locationSaved = next;
-    } catch (e) {
-      console.error('❌ saveKkMaterialLocation:', e);
-      alert('❌ Không lưu được vị trí.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  /** Sửa vị trí 1 dòng chi tiết — không đổi ô vị trí ở dòng tổng. */
-  async saveKkDetailLocation(line: InventoryMaterial): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
-    await this.persistLocationChange(line, { silent: true, bypassUnlock: true, allowEmpty: true });
-    this.invalidateKkTypeViewCache();
-  }
-
   /** Sửa pallet 1 dòng chi tiết — không đổi ô pallet ở dòng tổng. */
-  async saveKkDetailPallet(line: InventoryMaterial): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
-    await this.persistPalletChange(line, String(line.palletId || ''), { silent: true, bypassUnlock: true });
-    this.invalidateKkTypeViewCache();
+  /** Cột Báo cáo (bảng tồn kho): "Đã hết stock" → lưu vào dòng + Zalo nhóm Quản lý kho. */
+  readonly invReportOptions: Array<{ value: string; label: string }> = [
+    { value: 'het-stock', label: 'Đã hết stock' }
+  ];
+  invReportBusyId: string | null = null;
+
+  invReportOf(m: InventoryMaterial): string {
+    return String((m as any)?.invReport || '');
   }
 
-  /** Đổi số pallet: nhập pallet hiện tại → pallet mới, áp cho loại hàng đang mở. */
-  async renameKkTypePallet(row: KkTypeRow): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !row) return;
-    const fromRaw = window.prompt('Nhập số pallet hiện tại:');
-    if (fromRaw == null) return;
-    const from = String(fromRaw).trim().toUpperCase();
-    if (!from) {
-      alert('Chưa nhập số pallet hiện tại.');
-      return;
-    }
-
-    const toRaw = window.prompt('Nhập số pallet mới:');
-    if (toRaw == null) return;
-    const to = String(toRaw).trim().toUpperCase();
-    if (!to) {
-      alert('Chưa nhập số pallet mới.');
-      return;
-    }
-    if (from === to) {
-      alert('Số pallet không đổi.');
-      return;
-    }
-
-    const lines = this.kkLinesForTypeRow(row).filter(
-      (m) => String(m.palletId || '').trim().toUpperCase() === from && !!m.id
-    );
-    if (!lines.length) {
-      alert(`Không có dòng pallet ${from} trong loại hàng này.`);
-      return;
-    }
-    if (!confirm(`Đổi pallet ${from} → ${to}?\n${lines.length} dòng loại ${row.productType}`)) return;
-
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const modifiedBy = await this.resolveLocationOperatorId();
-      const chunkSize = 400;
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        const chunk = lines.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
-            palletId: to,
-            updatedAt: new Date(),
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy
-          });
-        }
-        await batch.commit();
-      }
-      const ids = new Set(lines.map((m) => m.id));
-      const stamp = (m: InventoryMaterial) => {
-        if (!ids.has(m.id)) return;
-        m.palletId = to;
-        (m as { __prevPalletId?: string }).__prevPalletId = to;
-      };
-      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
-      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
-      alert(`✅ Đã đổi pallet ${from} → ${to} (${lines.length} dòng).`);
-    } catch (e) {
-      console.error('❌ renameKkTypePallet:', e);
-      alert('❌ Không đổi được số pallet.');
-    } finally {
-      this.kkLocMapBusy = false;
+  async onInvReportChange(m: InventoryMaterial, value: string, _raw?: unknown): Promise<void> {
+    if (this.denyAction('invReport')) return;
+    if (!this.canEdit || !m?.id) return;
+    const next = String(value || '');
+    const prev = this.invReportOf(m);
+    if (next === prev) return;
+    const label = this.invReportOptions.find((o) => o.value === next)?.label || '';
+    if (next && !confirm(`Báo "${label}" cho ${m.materialCode} · PO ${m.poNumber || '—'}?\nBot Zalo sẽ nhắn nhóm Quản lý kho.`)) {
+      (m as any).invReport = prev;
       this.cdr.detectChanges();
-    }
-  }
-
-  kkTypePalletLabelName(row: KkTypeRow | null): string {
-    if (!row) return '';
-    const codes = this.kkTypeUniqueMaterialCodes(row);
-    if (codes.length === 1) {
-      const code = codes[0];
-      const prefix = this.kkTypeCodePrefix(code);
-      const abbr = this.kkTypeCustomerAbbr(this.nvlkhCustomerMap.get(code) || this.getCustomerForMaterial({ materialCode: code } as InventoryMaterial));
-      if (prefix && abbr) return `${prefix}-${abbr}`;
-      return code;
-    }
-    return String(row.productType || '').trim();
-  }
-
-  private kkTypeUniqueMaterialCodes(row: KkTypeRow): string[] {
-    const set = new Set<string>();
-    const lines = this.kkActiveProductType === row.productType
-      ? this.kkTypeDetailAll
-      : this.kkLinesForTypeRow(row).filter((m) => this.calculateCurrentStock(m) > 0);
-    for (const m of lines) {
-      const code = String(m.materialCode || '').trim().toUpperCase();
-      if (code) set.add(code);
-    }
-    return Array.from(set);
-  }
-
-  private kkTypeCodePrefix(code: string): string {
-    const c = String(code || '').replace(/\s/g, '').toUpperCase();
-    const m = /^([ABR]\d{3})/.exec(c);
-    return m ? m[1] : (c.length >= 4 ? c.slice(0, 4) : c);
-  }
-
-  private kkTypeCustomerAbbr(customer: string): string {
-    const s = String(customer || '').trim();
-    if (!s || /^shared$/i.test(s)) return '';
-    const first = (s.split(/[\s/_-]+/).filter(Boolean)[0] || s).trim();
-    return first.slice(0, 8).toUpperCase();
-  }
-
-  async printKkTypePalletLabel(row: KkTypeRow): Promise<void> {
-    if (!row || this.kkTypePrintBusy) return;
-    try {
-      if (!this.nvlkhCustomerMap.size) {
-        this.nvlkhCustomerMap = await this.nvlkhCatalog.loadAllAsMap();
-      }
-    } catch {
-      /* in vẫn được nếu không có khách hàng */
-    }
-    const name = this.kkTypePalletLabelName(row);
-    if (!name) {
-      alert('Chưa có tên pallet để in.');
       return;
     }
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
-      return;
-    }
-    this.kkTypePrintBusy = true;
+    (m as any).invReport = next;
+    this.invReportBusyId = m.id;
     this.cdr.detectChanges();
     try {
-      const QRCode = await import('qrcode') as any;
-      const qrDataUrl = await QRCode.toDataURL(name, {
-        width: 640,
-        margin: 1,
-        color: { dark: '#000000', light: '#FFFFFF' }
+      const by = await this.getMaterialsOtpRequester();
+      await this.firestore.firestore.collection('inventory-materials').doc(m.id).update({
+        invReport: next,
+        invReportBy: next ? by : '',
+        invReportAt: firebase.default.firestore.FieldValue.serverTimestamp()
       });
-      const esc = (s: string) => this.escapeHtmlForPrint(s);
-      const typeName = String(row.productType || '').trim();
-      printWindow.document.open();
-      printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${esc(name)}</title>
-  <style>
-    @page { size: 100mm 100mm; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100mm;
-      height: 100mm;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #000;
-      background: #fff;
-    }
-    .label {
-      width: 100mm;
-      height: 100mm;
-      padding: 5mm 4mm 4mm;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .name {
-      font-size: ${name.length > 14 ? '16pt' : '22pt'};
-      font-weight: 800;
-      letter-spacing: 0.4px;
-      text-align: center;
-      line-height: 1.15;
-      word-break: break-word;
-      max-width: 92mm;
-    }
-    .qr img {
-      width: 58mm;
-      height: 58mm;
-      display: block;
-    }
-    .meta {
-      font-size: 8pt;
-      font-weight: 700;
-      text-align: center;
-      color: #222;
-    }
-  </style>
-</head>
-<body>
-  <div class="label">
-    <div class="name">${esc(name)}</div>
-    <div class="qr"><img src="${qrDataUrl}" alt="QR"></div>
-    <div class="meta">${esc(typeName && typeName !== name ? typeName : 'Pallet label')} · ${esc(this.selectedFactory)}</div>
-  </div>
-  <script>
-    window.onload = function() { setTimeout(function() { window.print(); }, 250); };
-  </script>
-</body>
-</html>`);
-      printWindow.document.close();
+      (m as any).invReportBy = next ? by : '';
+      if (next) {
+        try {
+          await this.invStockReport.notify({
+            factory: this.selectedFactory,
+            materialCode: String(m.materialCode || ''),
+            po: String(m.poNumber || ''),
+            imd: this.getDisplayIMD(m),
+            stock: this.formatNumber(this.calculateCurrentStock(m)),
+            location: this.primaryLocationDisplay(m.location),
+            status: label,
+            reportedBy: by
+          });
+        } catch (e: any) {
+          alert(`Đã lưu báo cáo nhưng chưa gửi được Zalo: ${e?.message || e}`);
+        }
+      }
     } catch (e) {
-      console.error('❌ printKkTypePalletLabel:', e);
-      try { printWindow.close(); } catch { /* ignore */ }
-      alert('Không in được tem pallet.');
+      console.error('onInvReportChange:', e);
+      (m as any).invReport = prev;
+      alert('❌ Không lưu được báo cáo.');
     } finally {
-      this.kkTypePrintBusy = false;
+      this.invReportBusyId = null;
       this.cdr.detectChanges();
     }
   }
 
-  get kkTypeScanOpUntilLabel(): string {
-    if (!this.kkTypeScanOpUntil) return '';
-    const h = this.kkTypeScanOpUntil.getHours();
-    const m = this.kkTypeScanOpUntil.getMinutes();
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  // ===== Cột Báo cáo (điều chỉnh): đề nghị Giảm / Tăng Tồn đầu hoặc Tồn cuối → Zalo nhóm Quản lý kho → duyệt ở More =====
+  /** Tồn đầu → trường openingStock; Tồn cuối → trường quantity (NK), cùng cách nhập ngược của cột Kế toán cũ. */
+  private static readonly INV_ADJUST_COL = 'inventory-adjust-requests';
+
+  invAdjust: {
+    material: InventoryMaterial;
+    target: '' | 'opening' | 'closing';
+    direction: '' | 'dec' | 'inc';
+    qty: number | null;
+    note: string;
+    busy: boolean;
+    msg: string;
+    ok: boolean;
+  } | null = null;
+
+  invAdjustTargetLabel(t: string): string {
+    return t === 'opening' ? 'Tồn đầu' : t === 'closing' ? 'Tồn cuối' : '';
   }
 
-  private nextKkScanOpExpiry(from: Date = new Date()): Date {
-    const cutHours = [12, 17, 20];
-    for (const h of cutHours) {
-      const cut = new Date(from.getFullYear(), from.getMonth(), from.getDate(), h, 0, 0, 0);
-      if (from.getTime() < cut.getTime()) return cut;
+  invAdjustDirectionLabel(d: string): string {
+    return d === 'dec' ? 'Giảm' : d === 'inc' ? 'Tăng' : '';
+  }
+
+  openInvAdjust(m: InventoryMaterial): void {
+    if (this.denyAction('invAdjustRequest')) return;
+    if (!m?.id) return;
+    this.invAdjust = { material: m, target: '', direction: '', qty: null, note: '', busy: false, msg: '', ok: false };
+  }
+
+  async submitInvAdjust(): Promise<void> {
+    const a = this.invAdjust;
+    if (!a || a.busy || a.ok) return;
+    if (!a.target) { a.msg = 'Chọn báo cáo: Tồn đầu hoặc Tồn cuối.'; return; }
+    if (!a.direction) { a.msg = 'Chọn Giảm hoặc Tăng.'; return; }
+    const qty = Math.round((Number(a.qty) || 0) * 10000) / 10000;
+    if (!(qty > 0)) { a.msg = 'Nhập lượng (> 0).'; return; }
+    const m = a.material;
+    const targetLabel = this.invAdjustTargetLabel(a.target);
+    const dirLabel = this.invAdjustDirectionLabel(a.direction);
+    const current = a.target === 'opening' ? Number(m.openingStock) || 0 : this.calculateCurrentStock(m);
+    const expected = Math.round((current + (a.direction === 'inc' ? qty : -qty)) * 10000) / 10000;
+    a.busy = true;
+    a.msg = '';
+    this.cdr.detectChanges();
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      await this.firestore.firestore.collection(MaterialsComponent.INV_ADJUST_COL).add({
+        factory: this.selectedFactory,
+        materialId: m.id,
+        materialCode: m.materialCode || '',
+        po: m.poNumber || '',
+        imd: this.getDisplayIMD(m),
+        location: this.primaryLocationDisplay(m.location),
+        target: a.target,
+        direction: a.direction,
+        qty,
+        currentValue: current,
+        expectedValue: expected,
+        note: a.note.trim(),
+        status: 'pending',
+        by,
+        at: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+      let zaloOk = true;
+      try {
+        await this.invStockReport.notify({
+          factory: this.selectedFactory,
+          materialCode: String(m.materialCode || ''),
+          po: String(m.poNumber || ''),
+          imd: this.getDisplayIMD(m),
+          stock: this.formatNumber(this.calculateCurrentStock(m)),
+          location: this.primaryLocationDisplay(m.location),
+          status: `Cần ${dirLabel.toLowerCase()} ${targetLabel.toLowerCase()} ${this.formatNumber(qty)}`,
+          reportedBy: by,
+          detail: `Đề nghị ${dirLabel.toLowerCase()} ${targetLabel.toLowerCase()} ${this.formatNumber(qty)} `
+            + `(${this.formatNumber(current)} → ${this.formatNumber(expected)}) để khớp tồn.`
+            + (a.note.trim() ? `\nGhi chú: ${a.note.trim()}` : '')
+            + '\nDuyệt tại Materials → More → Danh mục điều chỉnh.'
+        });
+      } catch (e) {
+        console.warn('submitInvAdjust zalo:', e);
+        zaloOk = false;
+      }
+      a.ok = true;
+      a.msg = zaloOk
+        ? '✅ Đã gửi — bot Zalo đã báo nhóm Quản lý kho. Chờ duyệt ở More → Danh mục điều chỉnh.'
+        : '✅ Đã lưu đề nghị (chờ duyệt). Zalo chưa gửi được tới nhóm Quản lý kho.';
+    } catch (e: any) {
+      console.error('submitInvAdjust:', e);
+      a.msg = '❌ Không gửi được: ' + (e?.message || e);
+    } finally {
+      a.busy = false;
+      this.cdr.detectChanges();
     }
-    return new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1, 12, 0, 0, 0);
   }
 
-  private restoreKkScanOpSession(): void {
+  // --- More → Danh mục điều chỉnh (pass 2026) ---
+  showInvAdjustList = false;
+  invAdjustUnlocked = false;
+  invAdjustPass = '';
+  invAdjustPassError = '';
+  invAdjustRows: Array<{
+    id: string; materialId: string; materialCode: string; po: string; imd: string; location: string;
+    target: string; direction: string; qty: number; currentValue: number; expectedValue: number;
+    note: string; by: string; at: Date | null;
+  }> = [];
+  invAdjustLoading = false;
+  invAdjustError = '';
+  invAdjustBusyId: string | null = null;
+
+  openInvAdjustList(): void {
+    if (this.denyAction('invAdjustApprove')) return;
+    this.closeMorePopup();
+    this.showInvAdjustList = true;
+    this.invAdjustPass = '';
+    this.invAdjustPassError = '';
+    if (this.invAdjustUnlocked) void this.loadInvAdjustRows();
+    else setTimeout(() => (document.getElementById('inv-adjust-pass') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  unlockInvAdjustList(): void {
+    if (String(this.invAdjustPass || '').trim() !== String(this.matrixRules['invAdjustPass'] || '').trim()) {
+      this.invAdjustPassError = 'Sai mật khẩu.';
+      return;
+    }
+    this.invAdjustUnlocked = true;
+    this.invAdjustPass = '';
+    this.invAdjustPassError = '';
+    void this.loadInvAdjustRows();
+  }
+
+  async loadInvAdjustRows(): Promise<void> {
+    this.invAdjustLoading = true;
+    this.invAdjustError = '';
+    this.cdr.detectChanges();
+    try {
+      const snap = await this.firestore.firestore.collection(MaterialsComponent.INV_ADJUST_COL)
+        .where('factory', '==', this.selectedFactory)
+        .where('status', '==', 'pending')
+        .get();
+      this.invAdjustRows = snap.docs.map((d) => {
+        const x = d.data() as any;
+        return {
+          id: d.id,
+          materialId: String(x.materialId || ''),
+          materialCode: String(x.materialCode || ''),
+          po: String(x.po || ''),
+          imd: String(x.imd || ''),
+          location: String(x.location || ''),
+          target: String(x.target || ''),
+          direction: String(x.direction || ''),
+          qty: Number(x.qty) || 0,
+          currentValue: Number(x.currentValue) || 0,
+          expectedValue: Number(x.expectedValue) || 0,
+          note: String(x.note || ''),
+          by: String(x.by || ''),
+          at: x.at?.toDate ? x.at.toDate() : null
+        };
+      }).sort((a, b) => (b.at?.getTime() || 0) - (a.at?.getTime() || 0));
+    } catch (e: any) {
+      console.error('loadInvAdjustRows:', e);
+      this.invAdjustError = 'Không đọc được danh mục: ' + (e?.message || e);
+    } finally {
+      this.invAdjustLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async approveInvAdjust(row: (typeof this.invAdjustRows)[number]): Promise<void> {
+    if (this.denyAction('invAdjustApprove')) return;
+    if (this.invAdjustBusyId) return;
+    const targetLabel = this.invAdjustTargetLabel(row.target);
+    const dirLabel = this.invAdjustDirectionLabel(row.direction);
+    if (!confirm(`Duyệt: ${dirLabel} ${targetLabel} ${this.formatNumber(row.qty)}\n${row.materialCode} · PO ${row.po || '—'} · IMD ${row.imd || '—'}?`)) return;
+    this.invAdjustBusyId = row.id;
+    this.cdr.detectChanges();
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      const db = this.firestore.firestore;
+      const matRef = db.collection('inventory-materials').doc(row.materialId);
+      const reqRef = db.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id);
+      const field = row.target === 'opening' ? 'openingStock' : 'quantity';
+      const delta = row.direction === 'inc' ? row.qty : -row.qty;
+      let before = 0;
+      let after = 0;
+      await db.runTransaction(async (tx) => {
+        const [matSnap, reqSnap] = await Promise.all([tx.get(matRef), tx.get(reqRef)]);
+        if (!reqSnap.exists || (reqSnap.data() as any)?.status !== 'pending') throw new Error('Đề nghị đã được xử lý hoặc đã xóa.');
+        if (!matSnap.exists) throw new Error('Dòng tồn không còn trên hệ thống.');
+        before = Number((matSnap.data() as any)?.[field]) || 0;
+        after = Math.round((before + delta) * 10000) / 10000;
+        if (after < 0) {
+          throw new Error(`${field === 'openingStock' ? 'Tồn đầu' : 'NK'} sẽ âm (${this.formatNumber(before)} → ${this.formatNumber(after)}).`);
+        }
+        const now = firebase.default.firestore.FieldValue.serverTimestamp();
+        tx.update(matRef, { [field]: after, updatedAt: now });
+        tx.update(reqRef, { status: 'approved', approvedBy: by, approvedAt: now, field, fieldBefore: before, fieldAfter: after });
+      });
+      const local = (this.inventoryMaterials || []).find((m) => m.id === row.materialId);
+      if (local) (local as any)[field] = after;
+      this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
+      alert(`✅ Đã duyệt: ${dirLabel} ${targetLabel} ${this.formatNumber(row.qty)} cho ${row.materialCode}.`);
+    } catch (e: any) {
+      console.error('approveInvAdjust:', e);
+      alert('❌ Không duyệt được: ' + (e?.message || e));
+    } finally {
+      this.invAdjustBusyId = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async deleteInvAdjust(row: (typeof this.invAdjustRows)[number]): Promise<void> {
+    if (this.denyAction('invAdjustApprove')) return;
+    if (this.invAdjustBusyId) return;
+    if (!confirm(`Xóa đề nghị điều chỉnh của ${row.materialCode} · PO ${row.po || '—'}?`)) return;
+    this.invAdjustBusyId = row.id;
+    this.cdr.detectChanges();
+    try {
+      await this.firestore.firestore.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id).delete();
+      this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
+    } catch (e: any) {
+      console.error('deleteInvAdjust:', e);
+      alert('❌ Không xóa được: ' + (e?.message || e));
+    } finally {
+      this.invAdjustBusyId = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Mã nằm trong danh sách kiểm 100% (tab Inbound). */
+  isK100(code: string | null | undefined): boolean {
+    return !!this.sxxkSuspect.get(code);
+  }
+
+  k100Title(code: string | null | undefined): string {
+    const s = this.sxxkSuspect.get(code);
+    if (!s) return '';
+    return s.source === 'manual' ? `Kiểm 100% (nhập tay): ${s.reason}` : `Kiểm 100%: ${s.n} lần xuất bổ sung (SXXK) — ${s.reason}`;
+  }
+
+  /** Cột Cảnh báo (chi tiết box loại hàng). */
+  readonly kkWarningOptions: Array<{ value: string; label: string }> = [
+    { value: 'nghi-ngo-thieu', label: 'Nghi ngờ thiếu' },
+    { value: 'chua-tim-ra', label: 'Chưa tìm ra' },
+    { value: 'ncc-giao-thieu', label: 'NCC giao thiếu' },
+    { value: 'lech-linkq-du', label: 'Lệch LinkQ (Dư)' },
+    { value: 'du-sai-so', label: 'Dư sai số' },
+    { value: 'xoa', label: 'Xóa' }
+  ];
+
+  kkWarningOf(line: InventoryMaterial): string {
+    return String((line as any)?.kkWarning || '');
+  }
+
+  /**
+   * Aging theo PO (không theo IMD): 8 số cuối của PO, 4 số đầu là MMYY.
+   * KZPO0219/0001 / PO0219/0001 → 02/2019. Tính số tháng tới hôm nay, làm tròn.
+   */
+  private kkPoAgingCache = new Map<string, { months: number; label: string } | null>();
+
+  private kkPoAging(po: string | null | undefined): { months: number; label: string } | null {
+    const key = String(po || '').trim().toUpperCase();
+    if (!key) return null;
+    if (this.kkPoAgingCache.has(key)) return this.kkPoAgingCache.get(key) || null;
+    let out: { months: number; label: string } | null = null;
+    const digits = key.replace(/\D/g, '');
+    if (digits.length >= 8) {
+      const last8 = digits.slice(-8);
+      const mm = Number(last8.slice(0, 2));
+      const yy = Number(last8.slice(2, 4));
+      if (mm >= 1 && mm <= 12) {
+        const start = new Date(2000 + yy, mm - 1, 1).getTime();
+        const months = Math.max(0, Math.round((Date.now() - start) / (30.4375 * 24 * 3600 * 1000)));
+        out = { months, label: `${String(mm).padStart(2, '0')}/${2000 + yy}` };
+      }
+    }
+    this.kkPoAgingCache.set(key, out);
+    return out;
+  }
+
+  /** Từ IMD này trở đi Aging tính theo IMD (có số lẻ); trước đó tính theo PO (làm tròn tháng). */
+  private get kkAgingImdFromMs(): number {
+    return matrixDateMs(this.matrixRules['kkAgingImdFrom']) || new Date(2026, 0, 1).getTime();
+  }
+
+  /** Dòng tồn Aging dưới 1 tháng: hệ thống coi như đã KK ("Không cần kiểm"), không tính vào Đã KK / Tổng. */
+  isKkAgingExempt(m: InventoryMaterial | null | undefined): boolean {
+    const a = this.kkAgingRaw(m);
+    return !!a && a.months < this.ruleNum('kkAgingExemptMonths');
+  }
+
+  protected kkAgingRaw(m: InventoryMaterial | null | undefined): { months: number; by: 'IMD' | 'PO'; label: string } | null {
+    if (!m) return null;
+    const imd = m.importDate instanceof Date && !isNaN(m.importDate.getTime()) ? m.importDate.getTime() : 0;
+    let out: { months: number; by: 'IMD' | 'PO'; label: string } | null = null;
+    if (imd && imd >= this.kkAgingImdFromMs) {
+      const months = Math.round(((Date.now() - imd) / (30.4375 * 24 * 3600 * 1000)) * 10) / 10;
+      out = { months, by: 'IMD', label: `IMD ${this.getDisplayIMD(m)}` };
+    } else {
+      const po = this.kkPoAging(m.poNumber);
+      if (po) out = { months: po.months, by: 'PO', label: `PO tháng ${po.label}` };
+    }
+    return out;
+  }
+  kkTypeLinkQLabel = '';
+  protected kkTypeLinkQMap: Map<string, number> | null = null;
+
+  /** PXK chưa xuất theo mã (Work Order 7 ngày chưa Done, web chưa scan xuất) — chỉ tính khi bấm nút. */
+  kkPendingPxk: Map<string, PendingPxkInfo> | null = null;
+
+  /** Tồn web theo mã (cộng mọi dòng PO của mã trong box / mục đang mở) — memo theo dữ liệu chi tiết. */
+  private kkWebByCodeMemo: { src: unknown; map: Map<string, number> } = { src: null, map: new Map() };
+
+  protected kkWebTotalOfCode(code: string): number {
+    const all = this.kkTypeDetailAll;
+    if (this.kkWebByCodeMemo.src !== all) {
+      const map = new Map<string, number>();
+      for (const m of all) {
+        const c = String(m.materialCode || '').trim().toUpperCase();
+        if (c) map.set(c, (map.get(c) || 0) + this.calculateCurrentStock(m));
+      }
+      this.kkWebByCodeMemo = { src: all, map };
+    }
+    return this.kkWebByCodeMemo.map.get(code) || 0;
+  }
+
+  /** Chênh lệch = Tồn web − (Tồn LinkQ + PXK chưa xuất), tính theo tổng mã. null khi chưa có LinkQ. */
+  kkPxkDiff(code: string | null | undefined): number | null {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c || !this.kkTypeLinkQMap) return null;
+    const lq = Number(this.kkTypeLinkQMap.get(this.normalizeTieuHuyCode(c))) || 0;
+    const pxk = this.kkPendingPxk?.get(c)?.qty || 0;
+    return Math.round((this.kkWebTotalOfCode(c) - (lq + pxk)) * 10000) / 10000;
+  }
+
+  protected restoreKkScanOpSession(): void {
     try {
       const raw = sessionStorage.getItem(MaterialsComponent.KK_SCAN_OP_KEY);
       if (!raw) return;
@@ -12910,26 +8552,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private persistKkScanOpSession(): void {
-    if (!this.kkTypeScanOperator || !this.kkTypeScanOpUntil || Date.now() >= this.kkTypeScanOpUntil.getTime()) {
-      sessionStorage.removeItem(MaterialsComponent.KK_SCAN_OP_KEY);
-      return;
-    }
-    sessionStorage.setItem(MaterialsComponent.KK_SCAN_OP_KEY, JSON.stringify({
-      employeeId: this.kkTypeScanOperator,
-      until: this.kkTypeScanOpUntil.getTime()
-    }));
-  }
-
-  private startKkScanOpSession(employeeId: string): void {
-    this.kkTypeScanOperator = employeeId;
-    this.kkOperatorIdCache = employeeId;
-    this.kkTypeScanOpUntil = this.nextKkScanOpExpiry(new Date());
-    this.persistKkScanOpSession();
-    this.scheduleKkScanOpExpiry();
-  }
-
-  private scheduleKkScanOpExpiry(): void {
+  protected scheduleKkScanOpExpiry(): void {
     if (this.kkScanOpTimer) {
       clearTimeout(this.kkScanOpTimer);
       this.kkScanOpTimer = null;
@@ -12963,214 +8586,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return false;
   }
 
-  openKkScanGuide(): void {
-    this.showKkScanGuide = true;
-    this.kkScanGuideSending = false;
-    this.kkScanGuideSendMsg = '';
-    this.kkScanGuideSendErr = false;
-  }
-
-  closeKkScanGuide(): void {
-    this.showKkScanGuide = false;
-  }
-
-  async sendKkScanGuideToZalo(): Promise<void> {
-    if (this.kkScanGuideSending) return;
-    this.kkScanGuideSending = true;
-    this.kkScanGuideSendMsg = '';
-    this.kkScanGuideSendErr = false;
-    this.cdr.detectChanges();
-    try {
-      const user = await firstValueFrom(this.authService.currentUser);
-      const sentBy = String(user?.employeeId || this.kkTypeScanOperator || '').trim().toUpperCase();
-      const r = await this.kkScanGuideZalo.sendToKhoGroup(sentBy);
-      this.kkScanGuideSendErr = false;
-      this.kkScanGuideSendMsg =
-        r?.images > 0
-          ? `Đã gửi ${r.images} hình + hướng dẫn vào nhóm Quản lý kho.`
-          : 'Đã gửi hướng dẫn vào nhóm Quản lý kho.';
-    } catch (e: unknown) {
-      const err = e as { code?: string; message?: string; error?: { message?: string; status?: string } };
-      const raw = String(err?.error?.message || err?.message || '').trim();
-      const lower = raw.toLowerCase();
-      this.kkScanGuideSendErr = true;
-      if (
-        lower.includes('cors') ||
-        lower.includes('err_failed') ||
-        lower.includes('not-found') ||
-        err?.code === 'functions/not-found' ||
-        err?.error?.status === 'NOT_FOUND' ||
-        raw === 'internal' ||
-        err?.code === 'functions/internal'
-      ) {
-        this.kkScanGuideSendMsg =
-          'Chưa gửi được vào nhóm Quản lý kho. Thử lại sau.';
-      } else {
-        this.kkScanGuideSendMsg =
-          raw || 'Không gửi được Zalo vào nhóm Quản lý kho. Thử lại.';
-      }
-    } finally {
-      this.kkScanGuideSending = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  openKkTypeScanModal(row?: KkTypeRow, mode: 'inventory' | 'location' = 'location'): void {
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    if (row && !row.totalLines) return;
-    this.restoreKkScanOpSession();
-    this.kkTypeScanMode = mode;
-    this.kkTypeScanUiTab = 'scan';
-    this.showKkTypeScanModal = true;
-    this.kkTypeScanOperatorInput = this.kkTypeScanOperator;
-    // Luôn bắt đầu bằng nhập tay mã nhân viên
-    this.kkTypeScanStep = 'operator';
-    this.kkTypeScanLocation = '';
-    this.kkTypeScanLocationInput = '';
-    this.kkTypeScanQrInput = '';
-    this.kkTypeScanBusy = false;
-    this.kkHidQrQueue = [];
-    this.kkHidQrDraining = false;
-    this.kkTypeScanMaterialCode = '';
-    this.kkTypeScanStandardDraft = '';
-    this.kkTypeScanOkCount = 0;
-    this.kkTypeScanSkipCount = 0;
-    this.kkTypeScanMissCount = 0;
-    this.kkTypeScanLogs = [];
-    this.kkTypeScanLastReadMs = null;
-    this.kkTypeScanLastSaveMs = null;
-    this.kkTypeScanLastSavePending = false;
-    this.kkTypeScanExtraLines = [];
-    this.kkTypeScanCartons = {};
-    this.kkTypeScanErr = '';
-    this.showKkTypeScanConfirm = false;
-    this.kkTypeScanConfirm = null;
-    this.kkTypeScanLocToast = null;
-    if (this.kkTypeScanLocToastTimer) {
-      clearTimeout(this.kkTypeScanLocToastTimer);
-      this.kkTypeScanLocToastTimer = null;
-    }
-    this.lockKkScanKeyboard();
-    this.cdr.detectChanges();
-    setTimeout(() => this.focusKkTypeScanInput('kkTypeScanOperatorInput'), 80);
-  }
-
-  get kkTypeScanModalTitle(): string {
-    return this.kkTypeScanMode === 'inventory' ? 'Scan kiểm kê' : 'Cập nhật vị trí';
-  }
-
-  setKkTypeScanUiTab(tab: 'scan' | 'shelf' | 'log'): void {
-    this.kkTypeScanUiTab = tab;
-    this.cdr.detectChanges();
-    if (tab === 'scan') {
-      if (this.kkTypeScanStep === 'location') this.focusKkTypeScanInput('kkTypeScanLocationInput');
-      else if (this.kkTypeScanStep === 'codes') this.focusKkTypeScanInput('kkTypeScanQrInput');
-    } else if (tab === 'shelf' && this.kkTypeScanStep === 'codes') {
-      // giữ kệ hiện tại — chỉ xem / đổi qua nút
-    }
-  }
-
-  get kkTypeScanStageTitle(): string {
-    if (this.kkTypeScanStep === 'location') return 'Quét kệ S/R';
-    if (this.kkTypeScanStep === 'codes') return 'Quét mã hàng (mã · PO · IMD)';
-    return 'Nhập mã nhân viên';
-  }
-
-  get kkTypeScanStageSub(): string {
-    if (this.kkTypeScanStep === 'location') {
-      return 'Bắn tem kệ S… / R… vào ô bằng máy scanner';
-    }
-    if (this.kkTypeScanStep === 'codes' && this.kkTypeScanLocation) {
-      return `Kệ ${this.kkTypeScanLocation} · bắn tem mã hàng vào ô`;
-    }
-    return 'Bắn tem vào ô bằng máy scanner';
-  }
-
-  get kkTypeScanStepHint(): string {
-    if (this.kkTypeScanStep === 'operator') {
-      return 'Bước 1: Nhập tay mã nhân viên (ASP + 4 số).';
-    }
-    if (this.kkTypeScanStep === 'location') {
-      return 'Bước 2: Scan kệ S/R — vd S16-1-1, R03, hoặc R10-1 (theo số pallet).';
-    }
-    if (this.kkTypeScanMode === 'location') {
-      return 'Bước 3: Scan mã hàng — chuyển về kệ này, rồi scan mã tiếp.';
-    }
-    return 'Bước 3: Scan mã hàng — đọc mã, PO, IMD (không đọc lượng).';
-  }
-
-  get kkTypeScanProgressLabel(): string {
-    if (this.kkTypeScanMode === 'inventory' && this.kkTypeScanMaterialCode && this.kkTypeScanCartonTotal) {
-      return `${this.formatNumber(this.kkTypeScanQtyScanned)} / ${this.kkTypeScanCartonTotal} Box`;
-    }
-    const done = this.kkTypeScanOkCount;
-    const total = done + this.kkTypeScanMissCount;
-    if (total <= 0) return `${done} mã`;
-    return `${done} / ${total} mã`;
-  }
-
-  get kkTypeScanProgressPct(): number {
-    if (this.kkTypeScanMode === 'inventory' && this.kkTypeScanMaterialCode && this.kkTypeScanCartonTotal) {
-      return Math.min(100, Math.round((this.kkTypeScanQtyScanned / this.kkTypeScanCartonTotal) * 100));
-    }
-    const done = this.kkTypeScanOkCount;
-    const total = done + this.kkTypeScanMissCount;
-    if (total <= 0) return 0;
-    return Math.min(100, Math.round((done / total) * 100));
-  }
-
-  get kkTypeScanRecentLogs(): Array<{ id: number; ok: boolean; skip?: boolean; text: string; readMs?: number; saveMs?: number }> {
-    return (this.kkTypeScanLogs || []).slice(0, 4);
-  }
-
-  closeKkTypeScanModal(): void {
-    if (this.kkTypeScanBusy) return;
-    if (this.nlCameraPurpose === 'kk') this.stopNlCamera();
-    this.unlockKkScanKeyboard();
-    this.showKkTypeScanModal = false;
-    this.showKkTypeScanConfirm = false;
-    this.kkTypeScanConfirm = null;
-    this.kkTypeScanLocToast = null;
-    if (this.kkTypeScanLocToastTimer) {
-      clearTimeout(this.kkTypeScanLocToastTimer);
-      this.kkTypeScanLocToastTimer = null;
-    }
-    this.kkTypeScanStep = 'location';
-    this.kkTypeScanLocation = '';
-    this.kkTypeScanLocationInput = '';
-    this.kkTypeScanQrInput = '';
-    this.kkTypeScanMaterialCode = '';
-    this.kkTypeScanStandardDraft = '';
-    this.kkTypeScanLogs = [];
-    this.kkTypeScanExtraLines = [];
-    this.kkTypeScanCartons = {};
-    this.kkHidQrQueue = [];
-    this.kkHidQrDraining = false;
-    this.syncKkTypeRows();
-  }
-
-  submitKkTypeScanOperator(event?: Event, rawOverride?: string): void {
-    event?.preventDefault?.();
-    const el = (event?.target as HTMLInputElement | undefined)
-      || (document.getElementById('kkTypeScanOperatorInput') as HTMLInputElement | null);
-    const raw = String(rawOverride ?? el?.value ?? this.kkTypeScanOperatorInput ?? '');
-    const shortCode = this.parseKkEmployeeBadge(raw);
-    if (!/^ASP\d{4}$/.test(shortCode)) {
-      this.kkTypeScanErr = 'Mã nhân viên không đúng. Chỉ nhập tay ASP + 4 số (vd ASP1234).';
-      this.kkTypeScanBeep('err');
-      this.cdr.detectChanges();
-      el?.focus();
-      return;
-    }
-    this.kkTypeScanErr = '';
-    this.startKkScanOpSession(shortCode);
-    this.kkTypeScanOperatorInput = shortCode;
-    this.kkTypeScanStep = 'location';
-    this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanLocationInput');
-  }
-
-  private focusKkTypeScanInput(id: string, retry = 0): void {
+  protected focusKkTypeScanInput(id: string, retry = 0): void {
     if (!this.showKkTypeScanModal) return;
     setTimeout(() => {
       const el = document.getElementById(id) as HTMLInputElement | null;
@@ -13232,7 +8648,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * vì mỗi ký tự kích hoạt change detection → mất chữ khi tem QR dài.
    * Gom native value, chỉ xử lý khi Enter hoặc hết burst.
    */
-  private bindHidScanInput(
+  protected bindHidScanInput(
     el: HTMLInputElement,
     onComplete: (raw: string, readMs: number) => void,
     opts?: { idleMs?: number; minLenForIdleFlush?: number; shouldFlush?: (raw: string) => boolean }
@@ -13295,7 +8711,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private enqueueKkTypeScanCode(raw: string, readMs = 0): void {
+  protected enqueueKkTypeScanCode(raw: string, readMs = 0): void {
     if (this.showKkTypeScanConfirm) {
       this.kkTypeScanBeep('err');
       return;
@@ -13304,10 +8720,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!v) return;
     this.kkHidQrQueue.push({ raw: v, readMs: Math.max(0, readMs || 0) });
     void this.drainKkHidQrQueue();
-  }
-
-  get kkTypeScanPendingCount(): number {
-    return this.kkHidQrQueue.length + (this.kkHidQrDraining ? 1 : 0) + this.kkScanWritesInFlight;
   }
 
   formatScanMs(ms: number | null | undefined): string {
@@ -13347,15 +8759,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  acknowledgeKkTypeScanConfirm(): void {
-    this.showKkTypeScanConfirm = false;
-    this.kkTypeScanConfirm = null;
-    this.kkHidQrQueue = [];
-    this.nlScanLock = false;
-    this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanQrInput');
-  }
-
   private showKkTypeScanLocToast(
     code: string,
     location: string,
@@ -13378,20 +8781,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeScanLocToastTimer = null;
       if (this.showKkTypeScanModal) this.cdr.detectChanges();
     }, ms);
-  }
-
-  onKkTypeScanNewline(kind: 'operator' | 'location' | 'code', event: Event): void {
-    const el = event.target as HTMLInputElement | undefined;
-    const raw = String(el?.value || '');
-    if (!/[\r\n]/.test(raw)) return;
-    const cleaned = raw.replace(/[\r\n]+/g, '').trim();
-    if (kind === 'operator') this.kkTypeScanOperatorInput = cleaned;
-    else if (kind === 'location') this.kkTypeScanLocationInput = cleaned;
-    else this.kkTypeScanQrInput = cleaned;
-    if (el) el.value = cleaned;
-    if (kind === 'operator') this.submitKkTypeScanOperator(event);
-    else if (kind === 'location') this.submitKkTypeScanLocation(event);
-    else void this.submitKkTypeScanCode(event);
   }
 
   private normalizeKkScanLocation(raw: string): string {
@@ -13442,6 +8831,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return /^[SR]\d{2}-\d+(?:-\d+)?$/.test(n);
   }
 
+  /** Locker / Backup: mọi mã đều được đổi vào, không ép về vị trí home. */
+  private kkScanIsFreeLocation(loc: string): boolean {
+    const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
+    const bare = (this.stripDoiKhoWhPrefix(n) || n).replace(/\s+/g, '').toUpperCase();
+    return isLockerPrefixLocation(bare) || /^BACKUP(?:-?\d+)?$/.test(bare);
+  }
+
   private kkScanAisleOf(loc: string): string {
     const n = this.normalizeKkScanLocation(loc) || String(loc || '').trim().toUpperCase();
     const m = n.match(/^([SR]\d{2})(?:-|$)/);
@@ -13467,37 +8863,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const u = String(p || '').trim().toUpperCase();
     if (this.kkScanIsWrongLocation(u)) return true;
     return !u || u === '-' || /^(F62|F62TRA|IQC|NG)$/.test(u);
-  }
-
-  /** Vị trí gốc của mã+PO+IMD (đã ghi nhận trước / kệ thật, không tính IQC/TRA/THAO TÁC SAI). */
-  private kkScanOriginLocation(code: string, po: string, imd: string): string {
-    const lines = this.kkStockLinesForCode(code);
-    const homes: Array<{ loc: string; stock: number }> = [];
-    const needPo = String(po || '').trim();
-    const needImd = String(imd || '').trim();
-    for (const m of lines) {
-      if (needPo && !this.kkTypeScanPoMatch(String(m.poNumber || ''), needPo)) continue;
-      if (needImd && needImd !== 'N/A' && !this.kkTypeScanImdMatch(needImd, this.getDisplayIMD(m))) continue;
-      const originField = this.normalizeKkScanLocation(String(m.kkOriginLocation || '').trim());
-      if (originField && !this.kkScanIsStagingLocation(originField)) {
-        const stock = this.calculateCurrentStock(m);
-        if (stock > 0) {
-          const hit = homes.find((h) => h.loc === originField);
-          if (hit) hit.stock += stock;
-          else homes.push({ loc: originField, stock });
-        }
-      }
-      const loc = this.normalizeKkScanLocation(this.primaryLocationDisplay(m.location));
-      if (!loc || this.kkScanIsStagingLocation(loc) || this.kkScanIsWrongLocation(loc)) continue;
-      const stock = this.calculateCurrentStock(m);
-      if (stock <= 0) continue;
-      const hit = homes.find((h) => h.loc === loc);
-      if (hit) hit.stock += stock;
-      else homes.push({ loc, stock });
-    }
-    if (!homes.length) return '';
-    homes.sort((a, b) => b.stock - a.stock);
-    return homes[0].loc;
   }
 
   private kkScanLocationsEqual(a: string, b: string): boolean {
@@ -13528,6 +8893,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (foldHangLoi === 'HANGLOI') return true;
     if (this.isTraLocationToken(raw) || this.isTraLocationToken(bare)) return true;
     if (this.isLockerOrBoxToken(raw) || this.isLockerOrBoxToken(bare)) return true;
+    if (this.kkScanIsFreeLocation(bare)) return true;
     // Bắt buộc có "-" sau số dãy — S01 / R15 không giữ; kho D1 cũng không khớp
     const n = this.normalizeKkScanLocation(bare) || bare;
     return /^[SR]\d{1,2}-\d+(?:-\d+)?$/.test(n);
@@ -13612,8 +8978,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.detectChanges();
       return;
     }
-    if (!this.kkScanIsSrShelfLocation(loc)) {
-      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem phải dạng S/R + dãy + - + số (vd R10-1, S07-2, S16-1-1). Không nhận S01 trần.`;
+    if (!this.kkScanIsSrShelfLocation(loc) && !this.kkScanIsFreeLocation(loc)) {
+      this.kkTypeScanErr = `Kệ không hợp lệ: "${loc}". Tem phải dạng S/R + dãy + - + số (vd R10-1, S07-2, S16-1-1), hoặc Locker / Backup. Không nhận S01 trần.`;
       this.kkTypeScanBeep('err');
       this.kkTypeScanLocationInput = '';
       if (el) el.value = '';
@@ -13635,26 +9001,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkTypeScanBeep('ready');
   }
 
-  backKkTypeScanToLocation(): void {
-    this.kkTypeScanStep = 'location';
-    this.kkTypeScanLocation = '';
-    this.kkTypeScanLocationInput = '';
-    this.kkTypeScanQrInput = '';
-    this.kkTypeScanMaterialCode = '';
-    this.kkTypeScanStandardDraft = '';
-    this.kkTypeScanCartons = {};
-    this.kkHidQrQueue = [];
-    this.cdr.detectChanges();
-    this.focusKkTypeScanInput('kkTypeScanLocationInput');
-    setTimeout(() => {
-      const el = document.getElementById('kkTypeScanLocationInput') as HTMLInputElement | null;
-      if (el) {
-        el.value = '';
-        el.focus();
-      }
-    }, 80);
-  }
-
   private kkTypeScanPoMatch(a: string, b: string): boolean {
     const x = String(a || '').trim().replace(/\s+/g, '');
     const y = String(b || '').trim().replace(/\s+/g, '');
@@ -13671,7 +9017,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return a.startsWith(b) || b.startsWith(a);
   }
 
-  private pushKkTypeScanLog(
+  protected pushKkTypeScanLog(
     ok: boolean,
     text: string,
     skip = false,
@@ -13691,7 +9037,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
-  private kkTypeScanBeep(kind: 'ready' | 'ok' | 'err'): void {
+  protected kkTypeScanBeep(kind: 'ready' | 'ok' | 'err'): void {
     try {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
@@ -13710,25 +9056,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch {
       /* ignore audio */
     }
-  }
-
-  private readKkTypeScanInput(id: string, fallback: string, event?: Event): string {
-    const el = (event?.target as HTMLInputElement | undefined)
-      || (document.getElementById(id) as HTMLInputElement | null);
-    return String(el?.value ?? fallback ?? '')
-      .replace(/[\r\n\t]+/g, '')
-      .replace(/[\u0000-\u001F]/g, '')
-      .trim();
-  }
-
-  async submitKkTypeScanCode(event?: Event): Promise<void> {
-    event?.preventDefault?.();
-    if (this.kkTypeScanStep !== 'codes') return;
-    const raw = this.readKkTypeScanInput('kkTypeScanQrInput', this.kkTypeScanQrInput, event);
-    this.kkTypeScanQrInput = '';
-    const inputEl = document.getElementById('kkTypeScanQrInput') as HTMLInputElement | null;
-    if (inputEl) inputEl.value = '';
-    if (raw) this.enqueueKkTypeScanCode(raw, 0);
   }
 
   private async submitKkTypeScanCodeFromRaw(raw: string, readMs = 0): Promise<void> {
@@ -13880,7 +9207,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     let relocateNote = '';
     const locationOnly = this.kkTypeScanMode === 'location';
     // Scan kiểm kê: đã set vị trí cho loại mã → follow vị trí đúng; scan sai kệ thì đưa về home
-    if (!locationOnly && home && !this.kkScanLocationAllowed(loc, home)) {
+    if (!locationOnly && home && !this.kkScanIsFreeLocation(loc) && !this.kkScanLocationAllowed(loc, home)) {
       targetLoc = home;
       relocateNote = ` · đưa về ${home}`;
     }
@@ -13934,7 +9261,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const nextScan = this.roundKkQty(prevScanCount + 1);
     const stock = this.calculateCurrentStock(line);
     const rolls = this.getKkRollsCount(line);
-    const shouldKk = !locationOnly && rolls > 0 && nextScan + 1e-9 >= rolls && stock > 0;
+    const shouldKk = !locationOnly && rolls > 0 && nextScan + 1e-9 >= rolls && stock > 0 && this.can('kkTick');
     const overStandard = rolls > 0 && nextScan > rolls + 1e-9;
     const firstReal =
       splitMultiLocations(nextLoc)
@@ -13979,7 +9306,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
     if (shouldKk) {
-      batch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
+      this.kkLogSet(batch, {
         inventoryDocId: line.id,
         factory: this.resolveKkFactoryForMaterial(line),
         materialCode: String(line.materialCode || '').trim().toUpperCase(),
@@ -14172,12 +9499,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.getKkRollsCount(m), 0);
   }
 
-  get kkTypeScanCartonScanned(): number {
-    const code = this.kkTypeScanMaterialCode;
-    if (!code) return 0;
-    return Math.max(0, Number(this.kkTypeScanCartons[code]) || 0);
-  }
-
   get kkTypeScanCartonTotal(): number {
     return this.kkTypeScanCodeRollsTotal;
   }
@@ -14186,174 +9507,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.getKkScanCount(m), 0);
   }
 
-  get kkTypeScanQtyTotal(): number {
-    return this.kkTypeScanCodeRows.reduce((sum, m) => sum + this.calculateCurrentStock(m), 0);
-  }
-
-  get kkTypeScanProgressTone(): '' | 'ok' | 'low' | 'over' {
-    const scanned = this.kkTypeScanQtyScanned;
-    const total = this.kkTypeScanCartonTotal;
-    if (scanned <= 0) return '';
-    if (!total) return 'low';
-    if (scanned === total) return 'ok';
-    return scanned < total ? 'low' : 'over';
-  }
-
-  get kkTypeScanStatusText(): string {
-    const scanned = this.kkTypeScanQtyScanned;
-    const total = this.kkTypeScanCartonTotal;
-    if (!total) return scanned ? `Đã scan ${scanned} Box` : 'Chưa scan';
-    if (scanned < total) return `Thiếu ${total - scanned} Box`;
-    if (scanned > total) return `Thừa ${scanned - total} Box`;
-    return 'Đủ Box';
-  }
-
-  get kkTypeScanAllTicked(): boolean {
-    const rows = this.kkTypeScanCodeRows;
-    return !!rows.length && rows.every((m) => this.isKkFlagOn(m.kkChecked));
-  }
-
-  async saveKkTypeScanStandard(): Promise<void> {
-    const first = this.kkTypeScanCodeRows[0];
-    if (!first) return;
-    first.standardPacking = Math.max(0, Number(this.kkTypeScanStandardDraft) || 0);
-    await this.saveKkTypeStandard(first);
-    this.kkTypeScanStandardDraft = this.getEffectiveStandardPacking(first) || '';
-    this.cdr.detectChanges();
-  }
-
-  async onKkTypeScanTickAll(checked: boolean): Promise<void> {
-    const rows = this.kkTypeScanCodeRows;
-    if (!rows.length) return;
-    await this.applyKkTypeScanTick(rows, !!checked);
-  }
-
-  async onKkTypeScanRowTick(line: InventoryMaterial, checked: boolean): Promise<void> {
-    if (!line) return;
-    await this.applyKkTypeScanTick([line], !!checked);
-  }
-
-  private async applyKkTypeScanTick(lines: InventoryMaterial[], checked: boolean): Promise<void> {
-    if (!this.canEdit || this.kkTypeScanBusy) return;
-    const next = !!checked;
-    const targets = lines.filter((m) => !!m?.id && this.isKkFlagOn(m.kkChecked) !== next);
-    if (!targets.length) {
-      this.cdr.detectChanges();
-      return;
-    }
-    if (!next) {
-      const ok = confirm(targets.length > 1
-        ? `Bỏ tick KK ${targets.length} dòng mã ${this.kkTypeScanMaterialCode}?`
-        : `Bỏ tick KK mã ${this.kkTypeScanMaterialCode}?`);
-      if (!ok) {
-        this.cdr.detectChanges();
-        return;
-      }
-    }
-    const operator = next
-      ? (this.kkTypeScanOperator || this.kkOperatorIdCache || await this.resolveKkOperatorId())
-      : await this.resolveKkOperatorFromSession();
-    if (!operator) {
-      if (next && !this.kkTypeScanOperator) {
-        this.kkTypeScanStep = 'operator';
-        this.cdr.detectChanges();
-        this.focusKkTypeScanInput('kkTypeScanOperatorInput');
-      }
-      return;
-    }
-    this.kkTypeScanOperator = operator;
-    this.kkOperatorIdCache = operator;
-
-    this.kkTypeScanBusy = true;
-    this.cdr.detectChanges();
-    const kkAt = new Date();
-    try {
-      const chunkSize = 400;
-      for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          const payload: Record<string, unknown> = {
-            kkChecked: next,
-            kkBy: operator,
-            kkAt,
-            updatedAt: new Date(),
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy: operator
-          };
-          if (!next) payload.kkScanCount = 0;
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
-        }
-        await batch.commit();
-        if (next) {
-          const histBatch = this.firestore.firestore.batch();
-          for (const m of chunk) {
-            histBatch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
-              inventoryDocId: m.id,
-              factory: this.resolveKkFactoryForMaterial(m),
-              materialCode: String(m.materialCode || '').trim().toUpperCase(),
-              materialName: String(m.materialName || '').trim(),
-              poNumber: String(m.poNumber || '').trim(),
-              batchNumber: String(m.batchNumber || '').trim(),
-              location: this.kkTypeScanLocation || String(m.location || '').trim().toUpperCase(),
-              palletId: String(m.palletId || '').trim(),
-              quantity: Number(m.quantity) || 0,
-              stock: Number(this.calculateCurrentStock(m)) || 0,
-              unit: String(m.unit || '').trim(),
-              checkedBy: operator,
-              checkedAt: kkAt,
-              checkedDateKey: this.toDateKey(kkAt),
-              createdAt: new Date(),
-              source: 'kk-type-scan'
-            });
-          }
-          await histBatch.commit();
-        }
-      }
-      for (const m of targets) {
-        m.kkChecked = next;
-        m.kkBy = operator;
-        m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
-        const stamp = (x: InventoryMaterial) => {
-          if (x.id !== m.id) return;
-          x.kkChecked = next;
-          x.kkBy = operator;
-          x.kkAt = kkAt;
-          if (!next) x.kkScanCount = 0;
-        };
-        this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
-        this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
-      }
-      this.invalidateKkInvSnapCache();
-      this.syncKkTypeRows();
-      this.pushKkTypeScanLog(true, next
-        ? `KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}${this.kkTypeScanLocation ? ` · ${this.kkTypeScanLocation}` : ''}`
-        : `Bỏ KK ${targets.length} dòng ${this.kkTypeScanMaterialCode}`);
-      this.kkTypeScanBeep('ok');
-    } catch (e) {
-      console.error('❌ applyKkTypeScanTick:', e);
-      this.pushKkTypeScanLog(false, 'Không lưu được tick KK');
-      this.kkTypeScanBeep('err');
-      alert('❌ Không lưu được tick KK.');
-    } finally {
-      this.kkTypeScanBusy = false;
-      this.cdr.detectChanges();
-      this.focusKkTypeScanInput('kkTypeScanQrInput');
-    }
-  }
-
   kkLineWhValue(line: InventoryMaterial): '' | '00' | 'J' | 'ASM3' {
     const tag = this.locationWhTag(line.location);
     return tag === 'J' || tag === 'ASM3' || tag === '00' ? tag : '';
-  }
-
-  async saveKkDetailWarehouse(line: InventoryMaterial, value: string): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !line?.id) return;
-    await this.commitWhChange(line, value, { silent: true, bypassUnlock: true });
-    this.syncKkMaterialRows(String(line.materialCode || '').trim().toUpperCase());
-    this.syncKkTypeRows();
-    this.cdr.detectChanges();
   }
 
   getKkMaterialName(material: InventoryMaterial): string {
@@ -14448,611 +9604,30 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return Math.max(0, Number(material?.kkScanCount) || 0);
   }
 
-  private parseKkScanQty(raw: string): number {
-    const n = Number(String(raw || '').replace(/,/g, '').trim());
-    if (!Number.isFinite(n) || n <= 0) return 0;
-    return this.roundKkQty(n);
-  }
-
   private roundKkQty(n: number): number {
     return Math.round(n * 1e6) / 1e6;
   }
 
-  kkScanStockTone(material: InventoryMaterial): '' | 'ok' | 'low' | 'over' {
-    const scanned = this.getKkScanCount(material);
-    if (scanned <= 0) return '';
-    const total = this.getKkRollsCount(material);
-    if (!total) return 'low';
-    if (scanned === total) return 'ok';
-    return scanned < total ? 'low' : 'over';
+  protected kkTypeSkeletonKey(): string {
+    return `kk-type-skeleton-${this.selectedFactory}`;
   }
 
-  getKkScanCompareTitle(material: InventoryMaterial): string {
-    const scanned = this.getKkScanCount(material);
-    const total = this.getKkRollsCount(material);
-    const tone = this.kkScanStockTone(material);
-    if (!total) {
-      return scanned ? `Đã quét ${scanned} Box · chưa có số cuộn/thùng` : 'Chưa scan';
-    }
-    if (tone === 'ok') return `Đã quét ${scanned} Box = ${total} Box · Standard đúng`;
-    if (tone === 'low') return `Đã quét ${scanned} / ${total} Box — thiếu ${total - scanned}`;
-    if (tone === 'over') {
-      return `Đã quét ${scanned} / ${total} Box — thừa ${scanned - total} · cần xem lại Standard`;
-    }
-    return `Chưa scan · ${total} Box`;
-  }
+  /** Danh sách box (loại + nhóm mã) của lần đọc tồn gần nhất — để hiện box khi chưa đọc tồn. */
+  protected kkTypeSkeletonMemo: { key: string; rows: Array<{ t: string; g: string[] }> } | null = null;
 
-  getKkRollsTitle(material: InventoryMaterial): string {
-    const b = this.getKkStockBreakdown(material, this.getEffectiveStandardPacking(material));
-    if (!b.sp) return 'Chưa có Standard Packing';
-    if (b.oddBags) {
-      return `${b.fullCount} cuộn chẵn × ${this.formatNumber(b.sp)} + 1 cuộn lẻ ${this.formatNumber(b.oddQty)}`;
-    }
-    return `${b.fullCount} cuộn × ${this.formatNumber(b.sp)}`;
-  }
-
-  private async ensureKkTypeMaterialNames(): Promise<void> {
+  private loadKkTypeSkeleton(): Array<{ t: string; g: string[] }> {
+    const key = this.kkTypeSkeletonKey();
+    if (this.kkTypeSkeletonMemo?.key === key) return this.kkTypeSkeletonMemo.rows;
+    let rows: Array<{ t: string; g: string[] }> = [];
     try {
-      const rows = this.kkTypeDetailPaged;
-      const codes = [...new Set(
-        rows.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
-      )].filter((code) => {
-        if (String(this.catalogCache.get(code)?.materialName || '').trim()) return false;
-        return !rows.some((m) =>
-          String(m.materialCode || '').trim().toUpperCase() === code &&
-          String(m.materialName || '').trim() &&
-          String(m.materialName || '').trim().toUpperCase() !== code
-        );
-      });
-      if (!codes.length) return;
-      await this.ensureCatalogForMaterialCodes(codes);
-      this.applyCatalogToMaterials(rows);
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.warn('[KK] ensureKkTypeMaterialNames:', e);
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      rows = Array.isArray(arr) ? arr.filter((r) => r && typeof r.t === 'string') : [];
+    } catch {
+      rows = [];
     }
-  }
-
-  async saveKkTypeStandard(material: InventoryMaterial): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !material) return;
-    const code = String(material.materialCode || '').trim().toUpperCase();
-    const sp = Math.max(0, Number(material.standardPacking) || 0);
-    if (!code) return;
-    const cat = this.catalogCache.get(code);
-    const prev = this.getStandardPacking(code) || Number(cat?.standardPacking) || 0;
-    if (Math.abs(sp - prev) < 1e-9) {
-      this.applyKkStandardToCode(code, sp);
-      return;
-    }
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const live = await this.nvlCatalogFull.getByCode(code);
-      if (live) {
-        this.mergeNvlItemIntoCatalogCache(live);
-        this.persistCatalogCache();
-        if (live.standardPackingLocked === true) {
-          alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
-          material.standardPacking = Number(live.standardPacking) || 0;
-          this.applyKkStandardToCode(code, Number(live.standardPacking) || 0);
-          return;
-        }
-      }
-      const operator = await this.resolveKkOperatorFromSession();
-      await this.nvlCatalogFull.update(code, { standardPacking: sp }, operator);
-      this.mergeNvlItemIntoCatalogCache({
-        materialCode: code,
-        standardPacking: sp,
-        standardPackingLocked: false,
-        materialName: live?.materialName,
-        unit: live?.unit,
-        isMsd: live?.isMsd,
-        isEsd: live?.isEsd
-      });
-      this.persistCatalogCache();
-      this.applyKkStandardToCode(code, sp);
-    } catch (e) {
-      console.error('❌ saveKkTypeStandard:', e);
-      alert('❌ Không lưu được Standard Packing lên danh mục.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  private applyKkStandardToCode(code: string, sp: number): void {
-    const apply = (m: InventoryMaterial) => {
-      if (String(m.materialCode || '').trim().toUpperCase() === code) {
-        m.standardPacking = sp;
-      }
-    };
-    this.kkLocMapTypeCache.forEach((list) => list.forEach(apply));
-    this.inventoryMaterials.forEach(apply);
-    this.filteredInventory.forEach(apply);
-    this.displayedInventory.forEach(apply);
-    this.invalidateKkTypeViewCache();
-  }
-
-  async onKkDetailTick(line: InventoryMaterial, checked: boolean): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy || !line?.id) {
-      this.cdr.detectChanges();
-      return;
-    }
-    const wantOn = !!checked;
-    if (this.isKkFlagOn(line.kkChecked) === wantOn) return;
-    await this.toggleKk(line);
-    this.syncKkMaterialRows(String(line.materialCode || '').trim().toUpperCase());
-    this.syncKkTypeRows();
-    this.cdr.detectChanges();
-  }
-
-  /** Nhóm vị trí KK theo chữ cái đầu (A, B, C, D…). */
-  kkLocFirstLetter(loc: string): string {
-    if (this.kkWarehouseFromLocation(loc) === 'J') {
-      const body = this.stripDoiKhoWhPrefix(String(loc || '')).trim().toUpperCase();
-      if (isJWarehouseLocation(body) || isJWarehouseLocation(String(loc || ''))) {
-        return body.startsWith('S') ? 'Kho J · S' : 'Kho J · R';
-      }
-      return 'Kho J';
-    }
-    const raw = String(loc || '').trim().toUpperCase();
-    if (!raw || raw === '—') return '#';
-    const body = raw.replace(/^(ASM3-|WH3-)/, '');
-    const ch = body.charAt(0);
-    return ch || '#';
-  }
-
-  get kkLocMapGroupedBoxes(): Array<{
-    key: string;
-    boxes: Array<{ loc: string; checked: number; total: number }>;
-    checked: number;
-    total: number;
-  }> {
-    const buckets = new Map<string, Array<{ loc: string; checked: number; total: number }>>();
-    for (const box of this.kkLocMapFilteredBoxes) {
-      const key = this.kkLocFirstLetter(box.loc);
-      const list = buckets.get(key) || [];
-      list.push(box);
-      buckets.set(key, list);
-    }
-    return Array.from(buckets.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
-      .map(([key, boxes]) => {
-        boxes.sort((x, y) => x.loc.localeCompare(y.loc, 'en', { numeric: true }));
-        return {
-          key,
-          boxes,
-          checked: boxes.reduce((n, b) => n + b.checked, 0),
-          total: boxes.reduce((n, b) => n + b.total, 0)
-        };
-      });
-  }
-
-  get kkLocMapSummary(): { checked: number; total: number } {
-    return this.kkLocMapBoxes.reduce(
-      (acc, b) => ({ checked: acc.checked + b.checked, total: acc.total + b.total }),
-      { checked: 0, total: 0 }
-    );
-  }
-
-  kkLocBoxTone(box: { checked: number; total: number }): string {
-    if (!box.total) return 'empty';
-    if (box.checked >= box.total) return 'done';
-    if (box.checked <= 0) return 'none';
-    return 'partial';
-  }
-
-  onKkLocBoxClick(box: { loc: string }): void {
-    const loc = String(box?.loc || '').trim();
-    if (!loc || loc === '—') return;
-    const rows = [...(this.kkLocMapRowCache.get(loc) || [])];
-    if (this.isNguyenLieuPage) {
-      void this.router.navigate(['/materials'], {
-        queryParams: { factory: this.selectedFactory, location: loc }
-      });
-      return;
-    }
-    this.closeKkLocMap();
-    this.showKkLocMapRows(loc, rows);
-  }
-
-  /** Hiện đúng bộ mã đã dùng để đếm ô KK — tồn > 0, chưa KK lên đầu. */
-  private showKkLocMapRows(loc: string, rows: InventoryMaterial[]): void {
-    this.searchByLocation = true;
-    this.searchByCustomer = false;
-    this.searchByKk = false;
-    this.searchType = 'location';
-    this.searchTerm = loc;
-    this.showOnlyNegativeStock = false;
-    this.inventoryMaterials = rows.map((row) => ({ ...row }));
-    this.inventoryMaterials.sort((a, b) => {
-      const ak = this.isKkFlagOn(a.kkChecked) ? 1 : 0;
-      const bk = this.isKkFlagOn(b.kkChecked) ? 1 : 0;
-      if (ak !== bk) return ak - bk;
-      const codeCmp = this.compareMaterialCodesFIFO(
-        String(a.materialCode || ''),
-        String(b.materialCode || '')
-      );
-      if (codeCmp) return codeCmp;
-      return String(a.poNumber || '').localeCompare(String(b.poNumber || ''), 'en', { numeric: true });
-    });
-    this.filteredInventory = [...this.inventoryMaterials];
-    this.currentPage = 1;
-    this.updatePagination();
-    this.updateDisplayedInventory();
-    this.updateNegativeStockCount();
-    this.cdr.detectChanges();
-    if (this.filteredInventory.length) {
-      void this.refreshLastStatusForMaterials(this.filteredInventory);
-    }
-  }
-
-  private finishKkLocMapLoad(loadId: number, markStock = true): void {
-    if (loadId === this.kkLocMapLoadId) {
-      this.kkLocMapLoading = false;
-      this.kkLocMapBusy = false;
-      this.kkLocMapStatus = '';
-      if (markStock) {
-        this.kkStockLoaded = true;
-        if (this.kkLocMapView === 'type' && this.kkEffectiveSearchQuery()) {
-          this.onKkTypeUnifiedSearch();
-        }
-      }
-      this.cdr.detectChanges();
-      return;
-    }
-    if (!this.showKkLocMap) {
-      this.kkLocMapLoading = false;
-      this.kkLocMapBusy = false;
-      this.kkLocMapStatus = '';
-    }
-  }
-
-  /**
-   * `{ docs }` cho các view Sơ đồ KK — đọc qua cache KK theo factory thay vì quét lại
-   * 10k doc mỗi lần đổi view. Giữ shape `{ docs }` để các chỗ gọi cũ không phải sửa.
-   */
-  private async loadKkInventorySnap(force = false): Promise<{ docs: any[] }> {
-    const docs = await this.getKkFactoryDocs(this.selectedFactory, force);
-    return { docs };
-  }
-
-  async loadKkLocMap(): Promise<void> {
-    const loadId = ++this.kkLocMapLoadId;
-    this.kkLocMapLoading = true;
-    this.kkLocMapStatus = `Đang đọc tồn kho ${this.selectedFactory}…`;
-    this.kkLocMapBoxes = [];
-    this.cdr.detectChanges();
-    try {
-      const snap = await this.loadKkInventorySnap();
-      if (loadId !== this.kkLocMapLoadId) return;
-
-      this.kkLocMapRowCache.clear();
-      const byLoc = new Map<string, Map<string, { rows: number; kk: number }>>();
-      const locDocs = snap?.docs || [];
-      for (let i = 0; i < locDocs.length; i++) {
-        if (i > 0 && i % 400 === 0) {
-          await this.yieldUi();
-          if (loadId !== this.kkLocMapLoadId) return;
-        }
-        const doc = locDocs[i];
-        const data = doc.data() as any;
-        if (this.stockFromInventoryDoc(data) <= 0) continue;
-        const code = String(data.materialCode || '').trim().toUpperCase();
-        if (!code) continue;
-        const tokens = splitMultiLocations(String(data.location || data.viTri || ''));
-        const groups = tokens.length
-          ? [...new Set(tokens.map((t) => this.locationGroupKey(t) || '—'))]
-          : ['—'];
-        const kkOn = this.isKkFlagOn(data.kkChecked);
-        const material = this.mapKkInventoryDoc(doc);
-        material.kkChecked = kkOn;
-        for (const loc of groups) {
-          let codes = byLoc.get(loc);
-          if (!codes) {
-            codes = new Map();
-            byLoc.set(loc, codes);
-          }
-          const cur = codes.get(code) || { rows: 0, kk: 0 };
-          cur.rows += 1;
-          if (kkOn) cur.kk += 1;
-          codes.set(code, cur);
-          const list = this.kkLocMapRowCache.get(loc) || [];
-          list.push({ ...material });
-          this.kkLocMapRowCache.set(loc, list);
-        }
-      }
-
-      const boxes = Array.from(byLoc.entries()).map(([loc, codes]) => {
-        let checked = 0;
-        codes.forEach((v) => {
-          if (v.rows > 0 && v.kk >= v.rows) checked += 1;
-        });
-        return { loc, checked, total: codes.size };
-      });
-
-      const known = this.knownLocationGroups;
-      boxes.sort((a, b) => {
-        const ai = known.indexOf(a.loc);
-        const bi = known.indexOf(b.loc);
-        if (ai >= 0 || bi >= 0) {
-          if (ai < 0) return 1;
-          if (bi < 0) return -1;
-          return ai - bi;
-        }
-        if (a.loc === '—') return 1;
-        if (b.loc === '—') return -1;
-        return a.loc.localeCompare(b.loc, 'en', { numeric: true });
-      });
-
-      if (loadId !== this.kkLocMapLoadId) return;
-      this.kkLocMapBoxes = boxes;
-      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
-    } catch (e) {
-      if (loadId !== this.kkLocMapLoadId) return;
-      console.error('❌ loadKkLocMap:', e);
-      this.kkLocMapBoxes = [];
-      alert('❌ Không tải được sơ đồ KK theo vị trí.');
-    } finally {
-      this.finishKkLocMapLoad(loadId);
-    }
-  }
-
-  async loadKkByMaterial(): Promise<void> {
-    const loadId = ++this.kkLocMapLoadId;
-    this.kkLocMapLoading = true;
-    this.kkLocMapStatus = 'Đang đọc tồn kho theo mã hàng…';
-    this.kkLocMapByMaterial = [];
-    this.cdr.detectChanges();
-    try {
-      const snap = await this.loadKkInventorySnap();
-      if (loadId !== this.kkLocMapLoadId) return;
-
-      this.kkLocMapMaterialCache.clear();
-      const byKey = new Map<string, {
-        materialCode: string;
-        warehouse: KkWarehouse;
-        stock: number;
-        checked: number;
-        totalLines: number;
-      }>();
-      const matDocs = snap?.docs || [];
-      for (let i = 0; i < matDocs.length; i++) {
-        if (i > 0 && i % 400 === 0) {
-          await this.yieldUi();
-          if (loadId !== this.kkLocMapLoadId) return;
-        }
-        const doc = matDocs[i];
-        const data = doc.data() as any;
-        const stock = this.stockFromInventoryDoc(data);
-        if (stock <= 0) continue;
-        const materialCode = String(data.materialCode || '').trim().toUpperCase();
-        if (!materialCode) continue;
-        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
-        const key = `${warehouse}|${materialCode}`;
-        const kkOn = this.isKkFlagOn(data.kkChecked);
-        const cur = byKey.get(key) || {
-          materialCode,
-          warehouse,
-          stock: 0,
-          checked: 0,
-          totalLines: 0
-        };
-        cur.stock += stock;
-        cur.totalLines += 1;
-        if (kkOn) cur.checked += 1;
-        byKey.set(key, cur);
-        const material = this.mapKkInventoryDoc(doc);
-        material.kkChecked = kkOn;
-        const list = this.kkLocMapMaterialCache.get(key) || [];
-        list.push(material);
-        this.kkLocMapMaterialCache.set(key, list);
-      }
-
-      const warehouseOrder: Record<string, number> = { D1: 0, '00': 1, J: 2, ASM3: 3 };
-      this.kkLocMapByMaterial = Array.from(byKey.values())
-        .map((v) => {
-          const key = `${v.warehouse}|${v.materialCode}`;
-          const pallet = this.palletSummaryOf(this.kkLocMapMaterialCache.get(key) || []);
-          return {
-            ...v,
-            remaining: Math.max(0, v.totalLines - v.checked),
-            palletId: pallet.palletId,
-            palletMixed: pallet.palletMixed,
-            palletSaved: pallet.palletId,
-            location: '',
-            locationSaved: ''
-          };
-        })
-        .sort((a, b) => {
-          const codeCmp = a.materialCode.localeCompare(b.materialCode, 'en', { numeric: true });
-          if (codeCmp) return codeCmp;
-          return (warehouseOrder[a.warehouse] ?? 9) - (warehouseOrder[b.warehouse] ?? 9);
-        });
-      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
-    } catch (e) {
-      if (loadId !== this.kkLocMapLoadId) return;
-      console.error('❌ loadKkByMaterial:', e);
-      this.kkLocMapByMaterial = [];
-      alert('❌ Không tải được Kiểm tra KK theo mã hàng.');
-    } finally {
-      this.finishKkLocMapLoad(loadId);
-    }
-  }
-
-  private async loadKkCatalogMeta(forceRefresh = false): Promise<void> {
-    this.kkLocMapBusy = true;
-    this.kkLocMapStatus = 'Đang tải danh mục KK…';
-    this.cdr.detectChanges();
-    try {
-      this.kkCatalogEntries = await this.kkCatalog.loadAll(forceRefresh);
-      this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-      try {
-        this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs(forceRefresh);
-      } catch (homeErr) {
-        console.error('❌ loadHomeLocs:', homeErr);
-      }
-      try {
-        this.kkTypeManagers = await this.kkCatalog.loadManagers(forceRefresh);
-      } catch (mgrErr) {
-        console.error('❌ loadManagers:', mgrErr);
-      }
-      this.invalidateKkTypeViewCache();
-    } catch (e) {
-      console.error('❌ loadKkCatalogMeta:', e);
-      this.kkCatalogEntries = [];
-      this.kkCatalogTypeMap = new Map();
-    } finally {
-      this.kkLocMapBusy = false;
-      this.kkLocMapStatus = '';
-      this.cdr.detectChanges();
-      if (this.kkEffectiveSearchQuery() && !this.kkStockLoaded) {
-        this.playKkStock();
-      }
-    }
-  }
-
-  private async loadKkCatalogForMap(forceRefresh = false): Promise<void> {
-    const loadId = ++this.kkLocMapLoadId;
-    this.kkLocMapBusy = true;
-    this.kkLocMapStatus = 'Đang tải danh mục KK…';
-    if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
-      this.kkLocMapLoading = false;
-    } else {
-      this.kkLocMapLoading = true;
-    }
-    this.cdr.detectChanges();
-    let handedOff = false;
-    try {
-      this.kkCatalogEntries = await this.kkCatalog.loadAll(forceRefresh);
-      this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-      try {
-        this.kkTypeHomeLocs = await this.kkCatalog.loadHomeLocs(forceRefresh);
-      } catch (homeErr) {
-        console.error('❌ loadHomeLocs:', homeErr);
-      }
-      try {
-        this.kkTypeManagers = await this.kkCatalog.loadManagers(forceRefresh);
-      } catch (mgrErr) {
-        console.error('❌ loadManagers:', mgrErr);
-      }
-      if (loadId !== this.kkLocMapLoadId) return;
-      this.invalidateKkTypeViewCache();
-      this.cdr.detectChanges();
-      if (this.kkLocMapView === 'type' || this.kkLocMapView === 'manager') {
-        this.kkLocMapStatus = 'Đang đọc tồn kho…';
-        this.cdr.detectChanges();
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        handedOff = true;
-        await this.loadKkByType(loadId);
-      }
-    } catch (e) {
-      console.error('❌ loadKkCatalogForMap:', e);
-      this.kkCatalogEntries = [];
-      this.kkCatalogTypeMap = new Map();
-    } finally {
-      if (!handedOff) this.finishKkLocMapLoad(loadId, false);
-    }
-  }
-
-  setKkTypeZone(zone: '' | KkWarehouse): void {
-    this.kkLocMapWarehouseFilter = zone;
-    this.kkJOnly = zone === 'J';
-    if (this.kkJOnly) this.kkWh3Only = false;
-    this.kkLocMapExpandedKey = null;
-    this.kkTypePage = 1;
-    this.invalidateKkTypeViewCache();
-    if (this.kkStockLoaded && !this.kkLocMapByType.length && !this.kkLocMapBusy) void this.loadKkByType();
-  }
-
-  async loadKkByType(existingLoadId?: number): Promise<void> {
-    const loadId = existingLoadId ?? ++this.kkLocMapLoadId;
-    this.kkLocMapBusy = true;
-    this.kkLocMapStatus = this.kkLocMapStatus || 'Đang đọc tồn kho theo loại hàng…';
-    this.cdr.detectChanges();
-    try {
-      if (!this.kkCatalogTypeMap.size) {
-        this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-        this.kkCatalogEntries = await this.kkCatalog.loadAll();
-      }
-      const snap = await this.loadKkInventorySnap();
-      if (loadId !== this.kkLocMapLoadId) return;
-
-      this.kkLocMapTypeCache.clear();
-      const byType = new Map<string, {
-        productType: string;
-        groups: Set<string>;
-        warehouse: KkWarehouse;
-        stock: number;
-        checked: number;
-        totalLines: number;
-      }>();
-      const typeDocs = snap?.docs || [];
-      for (let i = 0; i < typeDocs.length; i++) {
-        if (i > 0 && i % 400 === 0) {
-          await this.yieldUi();
-          if (loadId !== this.kkLocMapLoadId) return;
-        }
-        const doc = typeDocs[i];
-        const data = doc.data() as any;
-        const stock = this.stockFromInventoryDoc(data);
-        if (stock <= 0) continue;
-        const materialCode = String(data.materialCode || '').trim().toUpperCase();
-        if (!materialCode) continue;
-        const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
-        const groupCode = this.kkCatalog.groupCodeFromMaterial(materialCode);
-        const productType = this.kkTypeOrGroupOfMaterial(materialCode);
-        const kkOn = this.isKkFlagOn(data.kkChecked);
-        const cur = byType.get(productType) || {
-          productType,
-          groups: new Set<string>(),
-          warehouse,
-          stock: 0,
-          checked: 0,
-          totalLines: 0
-        };
-        if (groupCode) cur.groups.add(groupCode);
-        cur.stock += stock;
-        cur.totalLines += 1;
-        if (kkOn) cur.checked += 1;
-        byType.set(productType, cur);
-        const material = this.mapKkInventoryDoc(doc);
-        material.kkChecked = kkOn;
-        const list = this.kkLocMapTypeCache.get(productType) || [];
-        list.push(material);
-        this.kkLocMapTypeCache.set(productType, list);
-      }
-
-      this.kkLocMapByType = Array.from(byType.values())
-        .map((v) => ({
-          productType: v.productType,
-          groupCodes: Array.from(v.groups).sort((a, b) => this.compareNhuaGroupCode(a, b)),
-          warehouse: v.warehouse,
-          stock: v.stock,
-          checked: v.checked,
-          totalLines: v.totalLines,
-          remaining: Math.max(0, v.totalLines - v.checked),
-          location: '',
-          locationSaved: ''
-        }))
-        .sort((a, b) => this.compareKkTypeBox(a, b));
-      this.invalidateKkTypeViewCache();
-      this.readTracker.track('materials', 'inventory-materials', snap?.docs?.length || 0);
-    } catch (e) {
-      if (loadId !== this.kkLocMapLoadId) return;
-      console.error('❌ loadKkByType:', e);
-      this.kkLocMapByType = [];
-      const timedOut = String((e as any)?.name || e).toLowerCase().includes('timeout');
-      alert(timedOut
-        ? '❌ Hết thời gian đọc tồn kho. Bấm Làm mới để thử lại.'
-        : '❌ Không tải được Kiểm tra KK theo loại hàng.');
-    } finally {
-      this.finishKkLocMapLoad(loadId);
-    }
-  }
-
-  kkTypeRowKey(row: { productType: string; warehouse: string }): string {
-    return `type:${row.warehouse}|${row.productType}`;
+    this.kkTypeSkeletonMemo = { key, rows };
+    return rows;
   }
 
   kkTypeDetailLines(row: KkTypeRow | null): InventoryMaterial[] {
@@ -15070,14 +9645,31 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  private kkMatchesWh3Mode(warehouse: KkWarehouse | string): boolean {
+  protected kkMatchesWh3Mode(warehouse: KkWarehouse | string): boolean {
     if (this.kkJOnly) return warehouse === 'J';
     if (this.kkWh3Only) return warehouse === 'ASM3';
     if (!this.kkCountWh3) return warehouse !== 'ASM3';
     return true;
   }
 
-  private kkCachedLinesForType(productType: string): InventoryMaterial[] {
+  protected kkCachedLinesForType(productType: string): InventoryMaterial[] {
+    const mucAll = this.kkMucAllDetail;
+    if (mucAll && productType === mucAll.title) {
+      const seen = new Set<string>();
+      const out: InventoryMaterial[] = [];
+      // Toàn bộ tất cả mục: luôn lấy danh sách box hiện tại (sau khi đọc toàn kho có thể thêm box mới)
+      let boxes = mucAll.boxes;
+      if (mucAll.title === 'Toàn bộ tất cả các mục') { this.ensureKkTypeBoxesCache(); boxes = this.kkTypeBoxesCached as any; }
+      for (const b of boxes) {
+        for (const m of this.kkCachedLinesForType(b.productType)) {
+          const id = String(m.id || '');
+          if (id && seen.has(id)) continue;
+          if (id) seen.add(id);
+          out.push(m);
+        }
+      }
+      return out;
+    }
     if (this.kkAllStockDetail && productType === this.kkAllStockDetailTitle) {
       return this.kkAllStockDetailLines();
     }
@@ -15145,28 +9737,23 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return out;
   }
 
-  private kkLinesForTypeRow(row: KkTypeRow): InventoryMaterial[] {
+  protected kkLinesForTypeRow(row: KkTypeRow): InventoryMaterial[] {
     return this.kkCachedLinesForType(row.productType).filter((m) => !!m.id);
   }
 
-  groupCodeOfMaterial(materialCode: string): string {
-    return this.kkCatalog.groupCodeFromMaterial(materialCode) || '—';
-  }
-
-  productTypeOfMaterial(materialCode: string): string {
-    return this.kkCatalog.productTypeOf(materialCode, this.kkCatalogTypeMap) || '—';
-  }
-
   /** Loại hàng theo Danh mục KK; mã chưa có loại hàng → xếp theo nhóm đầu mã (R029, A031, B015…). */
-  private kkTypeOrGroupOfMaterial(materialCode: string): string {
+  protected kkTypeOrGroupOfMaterial(materialCode: string): string {
     const code = String(materialCode || '').trim().toUpperCase();
+    // B008 / B009 / B016 / B018: "loại" = khoảng 100 mã (ô B009101–B009200…)
+    const range = this.kkRangeTypeOf(code);
+    if (range) return range;
     const type = this.kkCatalog.productTypeOf(code, this.kkCatalogTypeMap);
     if (type) return type;
     const head = /^([A-Z]\d{3})/.exec(code);
     return head ? head[1] : 'Chưa gán danh mục';
   }
 
-  private syncKkTypeRows(): void {
+  protected syncKkTypeRows(): void {
     this.invalidateKkTypeViewCache();
     this.kkLocMapByType = this.kkLocMapByType.map((row) => {
       const list = this.kkCachedLinesForType(row.productType);
@@ -15177,268 +9764,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         remaining: Math.max(0, row.totalLines - checked)
       };
     });
-  }
-
-  async onKkByTypeTick(row: KkTypeRow, checked: boolean): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) {
-      this.cdr.detectChanges();
-      return;
-    }
-    const next = !!checked;
-    const lines = this.kkLinesForTypeRow(row);
-    const targets = lines.filter((m) => this.isKkFlagOn(m.kkChecked) !== next);
-    if (!targets.length) {
-      this.syncKkTypeRows();
-      this.cdr.detectChanges();
-      return;
-    }
-    if (!next) {
-      const ok = confirm(`Bỏ tick KK mọi dòng loại hàng ${row.productType}?\n(${targets.length} dòng)`);
-      if (!ok) {
-        this.cdr.detectChanges();
-        return;
-      }
-    }
-    const operator = next
-      ? await this.resolveKkOperatorId()
-      : await this.resolveKkOperatorFromSession();
-    if (!operator) {
-      this.cdr.detectChanges();
-      return;
-    }
-
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    const kkAt = new Date();
-    try {
-      const chunkSize = 400;
-      for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, {
-            kkChecked: next,
-            kkBy: operator,
-            kkAt,
-            updatedAt: new Date(),
-            ...(next ? {} : { kkScanCount: 0 })
-          });
-        }
-        await batch.commit();
-        if (next) {
-          const histBatch = this.firestore.firestore.batch();
-          for (const m of chunk) {
-            histBatch.set(this.firestore.collection('inventory-kk-history').doc().ref, {
-              inventoryDocId: m.id,
-              factory: this.resolveKkFactoryForMaterial(m),
-              materialCode: String(m.materialCode || '').trim().toUpperCase(),
-              materialName: String(m.materialName || '').trim(),
-              poNumber: String(m.poNumber || '').trim(),
-              batchNumber: String(m.batchNumber || '').trim(),
-              location: String(m.location || '').trim().toUpperCase(),
-              quantity: Number(m.quantity) || 0,
-              stock: Number(this.calculateCurrentStock(m)) || 0,
-              unit: String(m.unit || '').trim(),
-              checkedBy: operator,
-              checkedAt: kkAt,
-              checkedDateKey: this.toDateKey(kkAt),
-              createdAt: new Date()
-            });
-          }
-          await histBatch.commit();
-        }
-      }
-      for (const m of targets) {
-        m.kkChecked = next;
-        m.kkBy = operator;
-        m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
-      }
-      this.invalidateKkInvSnapCache();
-      this.syncKkTypeRows();
-    } catch (e) {
-      console.error('❌ onKkByTypeTick:', e);
-      alert('❌ Không lưu được tick KK theo loại hàng.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
-  }
-
-  async resetKkScanForBoxes(
-    boxes: Array<{ productType: string }>,
-    label: string,
-    event?: Event
-  ): Promise<void> {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    const seen = new Set<string>();
-    const lines: InventoryMaterial[] = [];
-    for (const box of boxes || []) {
-      for (const m of this.kkCachedLinesForType(box.productType)) {
-        if (!m?.id || seen.has(m.id)) continue;
-        seen.add(m.id);
-        lines.push(m);
-      }
-    }
-    await this.commitKkScanCountReset(lines, label);
-  }
-
-  async resetKkScanForCurrentCode(event?: Event): Promise<void> {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    await this.commitKkScanCountReset(
-      this.kkTypeScanCodeRows,
-      this.kkTypeScanMaterialCode || 'mã đang quét'
-    );
-  }
-
-  private async commitKkScanCountReset(lines: InventoryMaterial[], label: string): Promise<void> {
-    if (!this.canEdit) return;
-    const targets = (lines || []).filter((m) => !!m?.id && this.getKkScanCount(m) > 0);
-    if (!targets.length) {
-      alert(`Chưa có lần quét nào để xóa (${label}).`);
-      return;
-    }
-    if (!confirm(`Xóa lần quét cũ của ${label}?\n${targets.length} dòng sẽ về 0 để quét lại.`)) {
-      return;
-    }
-    this.kkLocMapBusy = true;
-    this.kkTypeScanBusy = true;
-    this.cdr.detectChanges();
-    const operator = this.kkTypeScanOperator || this.kkOperatorIdCache || '';
-    try {
-      const chunkSize = 400;
-      for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          const payload: Record<string, unknown> = {
-            kkScanCount: 0,
-            updatedAt: new Date(),
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp()
-          };
-          if (operator) payload.modifiedBy = operator;
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
-        }
-        await batch.commit();
-      }
-      const ids = new Set(targets.map((m) => m.id));
-      const stamp = (x: InventoryMaterial) => {
-        if (x?.id && ids.has(x.id)) x.kkScanCount = 0;
-      };
-      targets.forEach((m) => { m.kkScanCount = 0; });
-      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
-      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
-      this.kkTypeScanExtraLines.forEach(stamp);
-      this.inventoryMaterials.forEach(stamp);
-      targets.forEach((m) => this.patchKkInvSnapCache(m.id!, { kkScanCount: 0 }));
-      const codes = new Set(
-        targets.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
-      );
-      const nextCartons = { ...this.kkTypeScanCartons };
-      codes.forEach((c) => { delete nextCartons[c]; });
-      this.kkTypeScanCartons = nextCartons;
-      this.syncKkTypeRows();
-      if (this.showKkTypeScanModal) {
-        this.pushKkTypeScanLog(true, `Reset lần quét ${label} · ${targets.length} dòng`);
-      }
-    } catch (e) {
-      console.error('❌ resetKkScanCount:', e);
-      alert('❌ Không xóa được lần quét. Thử lại.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.kkTypeScanBusy = false;
-      this.cdr.detectChanges();
-      if (this.showKkTypeScanModal) this.focusKkTypeScanInput('kkTypeScanQrInput');
-    }
-  }
-
-  onKkTypeLocationEnter(row: KkTypeRow, event: Event): void {
-    (event.target as HTMLInputElement | null)?.blur();
-  }
-
-  async saveKkTypeLocation(row: KkTypeRow): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    const next = this.normalizeMultiLocationValue(String(row.location || ''));
-    row.location = next;
-    if (!next) return;
-    if (next === row.locationSaved) return;
-    const lines = this.kkLinesForTypeRow(row);
-    if (!lines.length) return;
-    await this.writeKkTypeLocations(row, next, lines);
-  }
-
-  async clearKkTypeLocations(row: KkTypeRow): Promise<void> {
-    if (!this.canEdit || this.kkLocMapBusy) return;
-    const lines = this.kkLinesForTypeRow(row).filter((m) => String(m.location || '').trim());
-    if (!lines.length) {
-      row.location = '';
-      row.locationSaved = '';
-      this.cdr.detectChanges();
-      return;
-    }
-    const ok = confirm(`Xóa vị trí mọi dòng loại hàng ${row.productType}?\n(${lines.length} dòng)`);
-    if (!ok) return;
-    await this.writeKkTypeLocations(row, '', lines);
-  }
-
-  private async writeKkTypeLocations(row: KkTypeRow, next: string, lines: InventoryMaterial[]): Promise<void> {
-    this.kkLocMapBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const modifiedBy = await this.resolveLocationOperatorId();
-      const changedAt = new Date();
-      const chunkSize = 400;
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        const chunk = lines.slice(i, i + chunkSize);
-        const batch = this.firestore.firestore.batch();
-        for (const m of chunk) {
-          const fromLocation = this.normalizeMultiLocationValue(String(m.location || ''));
-          const payload: Record<string, unknown> = {
-            ...this.inventoryLocationWriteFields(next),
-            updatedAt: changedAt,
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy,
-            locationManualOverride: true
-          };
-          if ((next === 'F62' || next === 'F62TRA') && m.iqcStatus !== 'Pass') {
-            payload.iqcStatus = 'Pass';
-          }
-          batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
-          if (fromLocation !== next) {
-            batch.set(this.firestore.collection('material-location-history').doc().ref, {
-              factory: this.selectedFactory,
-              materialId: m.id,
-              materialCode: m.materialCode,
-              poNumber: m.poNumber || '',
-              fromLocation,
-              toLocation: next,
-              changedBy: modifiedBy,
-              changeType: next ? 'kk-type-summary' : 'kk-type-clear',
-              changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-            });
-          }
-        }
-        await batch.commit();
-      }
-      for (const m of lines) {
-        m.location = next;
-        const rowMeta = m as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
-        rowMeta.__prevLocation = next;
-        rowMeta.__locationAtLoad = next;
-        rowMeta.locationManualOverride = true;
-      }
-      row.location = next;
-      row.locationSaved = next;
-    } catch (e) {
-      console.error('❌ writeKkTypeLocations:', e);
-      alert(next ? '❌ Không lưu được vị trí theo loại hàng.' : '❌ Không xóa được vị trí theo loại hàng.');
-    } finally {
-      this.kkLocMapBusy = false;
-      this.cdr.detectChanges();
-    }
   }
 
   toggleQtyBagRule(): void {
@@ -15674,6 +9999,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.setManualStockEdit(false);
       return;
     }
+    if (this.denyAction('manualOn')) return;
     this.pendingMaterialsOtpAction = 'manual-on';
     this.materialsOtpActionLabel = `Bật Manual — tồn đầu / xuất tay (${this.selectedFactory})`;
     this.closeMorePopup();
@@ -15695,6 +10021,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Các thao tác More đổi tồn / import / xóa — cần OTP Zalo ASP0106 (phiên 10 phút). */
   runMoreSensitiveAction(action: MaterialsOtpAction, label: string): void {
+    if (this.denyAction('moreSensitive')) return;
     if (this.materialsInventoryUnlock.isUnlocked()) {
       this.closeMorePopup();
       void this.executeMaterialsOtpAction(action);
@@ -15706,7 +10033,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.openMaterialsOtpModal();
   }
 
-  private openMaterialsOtpModal(): void {
+  protected openMaterialsOtpModal(): void {
     this.showMaterialsOtpModal = true;
     this.materialsOtpStep = 1;
     this.materialsOtpCode = '';
@@ -15725,7 +10052,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
   }
 
-  private async getMaterialsOtpRequester(): Promise<string> {
+  protected async getMaterialsOtpRequester(): Promise<string> {
     try {
       const user = await firstValueFrom(this.authService.currentUser);
       const emp = String(user?.employeeId || '').trim().toUpperCase();
@@ -15819,9 +10146,79 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'manual-on':
         this.setManualStockEdit(true);
         break;
+      case 'unlock-xt':
+        await this.setXtAsm1Locked(false);
+        break;
+      case 'clear-kk-warning':
+        await this.clearKkWarningAll(this.kkWarnClearPending);
+        break;
       default:
         break;
     }
+  }
+
+  // ===== Khóa XT ở ASM1 =====
+  // Mặc định khóa. Mở khóa ở More bằng mã Zalo 4 số gửi ASP0106; mở rồi giữ nguyên (mọi máy)
+  // cho tới khi có người bấm khóa lại. Lưu chung ở app-settings/materials-xt-lock.
+  static readonly XT_LOCK_DOC = 'app-settings/materials-xt-lock';
+  xtAsm1Locked = true;
+  xtAsm1LockInfo = '';
+  private xtLockSub: Subscription | null = null;
+
+  private watchXtLock(): void {
+    if (this.xtLockSub) return;
+    this.xtLockSub = this.firestore.doc(MaterialsComponent.XT_LOCK_DOC).valueChanges()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((d: any) => {
+        // Chưa có doc → coi như đang khóa
+        this.xtAsm1Locked = d?.asm1Locked !== false;
+        const by = String(d?.updatedBy || '').trim();
+        const at = d?.updatedAt?.toDate ? d.updatedAt.toDate() : null;
+        this.xtAsm1LockInfo = by || at
+          ? `${this.xtAsm1Locked ? 'Khóa' : 'Mở'} bởi ${by || '—'}${at ? ' · ' + at.toLocaleString('vi-VN') : ''}`
+          : '';
+        this.cdr.markForCheck();
+      });
+  }
+
+  /** XT đang bị khóa cho dòng này (chỉ ASM1). */
+  isXtLockedFor(material: InventoryMaterial | null | undefined): boolean {
+    const factory = String(material?.factory || this.selectedFactory || '').trim().toUpperCase();
+    return factory === 'ASM1' && this.xtAsm1Locked;
+  }
+
+  private async setXtAsm1Locked(locked: boolean): Promise<void> {
+    const by = await this.getMaterialsOtpRequester();
+    try {
+      await this.firestore.doc(MaterialsComponent.XT_LOCK_DOC).set({
+        asm1Locked: locked,
+        updatedBy: by,
+        updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      this.xtAsm1Locked = locked;
+      alert(locked ? '🔒 Đã khóa XT ở ASM1.' : '🔓 Đã mở khóa XT ở ASM1 — giữ mở cho tới khi bấm Khóa lại trong More.');
+    } catch (e) {
+      console.error('setXtAsm1Locked', e);
+      alert('Không lưu được trạng thái khóa XT. Thử lại.');
+    } finally {
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** More → mở khóa XT ASM1: luôn hỏi mã Zalo (không dùng phiên mở khóa 10 phút). */
+  openUnlockXtAsm1(): void {
+    if (this.denyAction('xtLockToggle')) return;
+    this.pendingMaterialsOtpAction = 'unlock-xt';
+    this.materialsOtpActionLabel = 'Mở khóa XT — ASM1';
+    this.closeMorePopup();
+    this.openMaterialsOtpModal();
+  }
+
+  lockXtAsm1(): void {
+    if (this.denyAction('xtLockToggle')) return;
+    if (!confirm('Khóa XT ở ASM1? Sau khi khóa, muốn XT lại phải mở bằng mã Zalo.')) return;
+    this.closeMorePopup();
+    void this.setXtAsm1Locked(true);
   }
 
   /** Quản lý danh mục NVL (Mã/Tên/ĐVT/KH/Standard Packing) đã chuyển sang tab riêng — Danh mục NVL & TP. */
@@ -15871,6 +10268,46 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   closeTieuHuyPopup(): void {
     if (this.tieuHuyImporting || this.tieuHuyBusy) return;
     this.showTieuHuyPopup = false;
+  }
+
+  protected async getLinkQPackCached(force: boolean): Promise<{ map: Map<string, number>; label: string }> {
+    const factory = this.selectedFactory;
+    const hit = this.linkQPackCache.get(factory);
+    if (!force && hit && Date.now() - hit.ts < MaterialsComponent.LINKQ_PACK_TTL_MS) return hit.pack;
+    const pack = await this.loadKkKiemKeLinkQPack();
+    if (pack.map.size) this.linkQPackCache.set(factory, { pack, ts: Date.now() });
+    return pack;
+  }
+
+  /** Mã đầu R và A không đưa vào báo cáo so sánh LinkQ. */
+  protected static isLinkQCompareExcluded(code: string): boolean {
+    return /^[RA]/i.test(String(code || '').trim());
+  }
+
+  private growLinkQCompareShown(): void {
+    const n = this.linkQCompareShownRows.length + MaterialsComponent.LINKQ_COMPARE_PAGE;
+    this.linkQCompareShownRows = this.linkQCompareVisibleRows.slice(0, n);
+  }
+
+  /** DS Check bật → trang KK chỉ hiện mã có trong danh sách Check (dùng chung file Import Check với LinkQ). */
+  get kkCheckActive(): boolean {
+    return this.linkQCheckOnly && this.linkQCheckSet.size > 0;
+  }
+
+  kkCheckHas(code: string | null | undefined): boolean {
+    return this.linkQCheckSet.has(this.normalizeTieuHuyCode(code));
+  }
+
+  private kkCheckTypesMemo: { set: unknown; cat: unknown; types: Set<string> } = { set: null, cat: null, types: new Set() };
+
+  /** Loại hàng (box) chứa các mã trong DS Check — để ẩn box / mục không có mã cần kiểm. */
+  private kkCheckTypes(): Set<string> {
+    const m = this.kkCheckTypesMemo;
+    if (m.set === this.linkQCheckSet && m.cat === this.kkCatalogTypeMap) return m.types;
+    const types = new Set<string>();
+    this.linkQCheckSet.forEach((c) => types.add(this.kkTypeOrGroupOfMaterial(c)));
+    this.kkCheckTypesMemo = { set: this.linkQCheckSet, cat: this.kkCatalogTypeMap, types };
+    return types;
   }
 
   async downloadTieuHuyTemplate(): Promise<void> {
@@ -16086,7 +10523,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return s;
   }
 
-  private normalizeTieuHuyCode(raw: unknown): string {
+  protected normalizeTieuHuyCode(raw: unknown): string {
     return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
   }
 
@@ -16212,7 +10649,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return map;
   }
 
-  private async fetchTieuHuyStockByCodes(materialCodes: string[]): Promise<InventoryMaterial[]> {
+  protected async fetchTieuHuyStockByCodes(materialCodes: string[]): Promise<InventoryMaterial[]> {
     const uniq = Array.from(new Set(materialCodes.map((x) => this.normalizeTieuHuyCode(x)).filter(Boolean)));
     const out: InventoryMaterial[] = [];
     const seen = new Set<string>();
@@ -16652,11 +11089,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('📱 Mobile menu toggled:', this.showMobileMenu);
   }
 
-  toggleMobileStats(): void {
-    this.showMobileStats = !this.showMobileStats;
-    console.log('📊 Mobile stats toggled:', this.showMobileStats);
-  }
-
 
   stopScanning(): void {
     this.stopNlCamera();
@@ -16734,12 +11166,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   downloadFIFOReport(): void {
     console.log(`Download FIFO report for ${this.selectedFactory}`);
-  }
-
-  // Delete single inventory item
-  async deleteInventoryItem(material: InventoryMaterial): Promise<void> {
-    // Giữ tên cũ để tương thích HTML cũ nếu còn sót — chuyển sang ẩn
-    return this.hideInventoryItem(material);
   }
 
   /** Ẩn 1 dòng inventory → chuyển sang danh mục Ẩn (giữ 30 ngày). */
@@ -16863,10 +11289,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     return hiddenCount;
-  }
-
-  openHiddenInventoryPopup(): void {
-    this.runMoreSensitiveAction('hidden-list', `Danh mục Ẩn / Pushback — ${this.selectedFactory}`);
   }
 
   /** Mở danh mục Ẩn sau khi đã OTP (không hỏi lại). */
@@ -17059,85 +11481,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  // Delete all inventory for the currently selected factory
-  async deleteAllInventory(): Promise<void> {
-    try {
-      // Confirm deletion with user
-      const confirmDelete = confirm(
-        `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ tồn kho ${this.selectedFactory}?\n\n` +
-        'Thao tác này sẽ:\n' +
-        `• Xóa tất cả dữ liệu tồn kho ${this.selectedFactory}\n` +
-        '• Không thể hoàn tác\n' +
-        '• Cần import lại toàn bộ dữ liệu\n\n' +
-        'Nhập "DELETE" để xác nhận:'
-      );
-
-      if (!confirmDelete) return;
-
-      const userInput = prompt(`Nhập "DELETE" để xác nhận xóa toàn bộ tồn kho ${this.selectedFactory}:`);
-      if (userInput !== 'DELETE') {
-        alert('❌ Xác nhận không đúng. Thao tác bị hủy.');
-        return;
-      }
-
-      // Show loading
-      this.isLoading = true;
-
-      // Get all inventory documents for the selected factory
-      const inventoryQuery = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('factory', '==', this.selectedFactory)
-      ).get().toPromise();
-
-      if (!inventoryQuery || inventoryQuery.empty) {
-        alert(`✅ Không có dữ liệu tồn kho ${this.selectedFactory} để xóa.`);
-        this.isLoading = false;
-        return;
-      }
-
-      const totalItems = inventoryQuery.docs.length;
-      console.log(`🗑️ Starting deletion of ${totalItems} ${this.selectedFactory} inventory items...`);
-      
-      // Delete all documents in batches
-      const batchSize = 500; // Firestore batch limit
-      const batches = [];
-      
-      for (let i = 0; i < inventoryQuery.docs.length; i += batchSize) {
-        const batch = this.firestore.firestore.batch();
-        const batchDocs = inventoryQuery.docs.slice(i, i + batchSize);
-        
-        batchDocs.forEach(doc => {
-          batch.delete(doc.ref);
-        });
-        
-        batches.push(batch);
-      }
-      
-      // Execute all batches
-      let deletedCount = 0;
-      for (const batch of batches) {
-        await batch.commit();
-        deletedCount += batchSize;
-        console.log(`✅ Deleted batch: ${deletedCount}/${totalItems} items`);
-      }
-      
-      // Clear local data
-      this.inventoryMaterials = [];
-      this.filteredInventory = [];
-      
-      // Show success message
-      alert(`✅ Đã xóa thành công ${totalItems} items tồn kho ASM1!\n\n` +
-            `Bạn có thể import lại dữ liệu mới.`);
-      
-      console.log(`✅ Successfully deleted all ${totalItems} ASM1 inventory items`);
-      
-    } catch (error) {
-      console.error('❌ Error deleting all inventory:', error);
-      alert(`❌ Lỗi khi xóa tồn kho: ${error.message}`);
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
   // completeInventory method removed - replaced with resetZeroStock
   // completeInventory(): void {
   //   this.showCompleted = !this.showCompleted;
@@ -17171,7 +11514,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     (material as { __prevLocation?: string }).__prevLocation = material.location || '';
   }
 
-  private async resolveLocationOperatorId(): Promise<string> {
+  protected async resolveLocationOperatorId(): Promise<string> {
     const unlocked = this.locationUnlock.getEmployeeId();
     if (unlocked) return unlocked;
     const user = await this.afAuth.currentUser;
@@ -17185,9 +11528,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Nhớ mã NV đã nhập cho Kiểm kê — chỉ hỏi 1 lần, các lần tick KK sau trong cùng phiên (tới khi tải lại trang) dùng lại. */
-  private kkOperatorIdCache: string | null = null;
+  protected kkOperatorIdCache: string | null = null;
 
-  private async resolveKkOperatorId(): Promise<string | null> {
+  protected async resolveKkOperatorId(): Promise<string | null> {
     // Mobile Kiểm kê: không hỏi/scan mã NV — lấy từ phiên đăng nhập.
     if (this.isMobile) {
       return this.resolveKkOperatorFromSession();
@@ -17208,7 +11551,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Operator KK từ user đang login (không popup). */
-  private async resolveKkOperatorFromSession(): Promise<string> {
+  protected async resolveKkOperatorFromSession(): Promise<string> {
     const unlocked = this.locationUnlock.getEmployeeId();
     if (unlocked) return unlocked;
     try {
@@ -17224,12 +11567,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const name = String(user.displayName || '').trim();
     if (name) return name.substring(0, 24);
     return email.substring(0, 24) || 'UNKNOWN';
-  }
-
-  onLocationKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    void this.persistLocationChange(material);
   }
 
   /** Lưu riêng cột Vị trí lên inventory-materials + material-location-history. */
@@ -17314,11 +11651,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
       return false;
     }
-  }
-
-  updateLocation(material: InventoryMaterial): void {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
-    void this.persistLocationChange(material);
   }
 
   updateType(material: InventoryMaterial): void {
@@ -17494,21 +11826,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     
     // Update negative stock count for real-time display
     this.updateNegativeStockCount();
-  }
-
-  // onHSDChange method removed - HSD column deleted
-  // onHSDChange(event: any, material: InventoryMaterial): void {
-  //   if (!this.canEditHSD) return;
-  //   const dateValue = event.target.value;
-  //   if (dateValue) {
-  //     material.expiryDate = new Date(dateValue);
-  //     this.updateMaterialInFirebase(material);
-  //   }
-  // }
-
-  onLocationChange(material: InventoryMaterial): void {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) return;
-    void this.persistLocationChange(material);
   }
 
   get layoutLocGroups(): LayoutLocGroup[] {
@@ -17701,7 +12018,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.layoutJFocusBlock = block;
   }
 
-  private syncLayoutJFocusBlockFromSelection(): void {
+  protected syncLayoutJFocusBlockFromSelection(): void {
     if (this.isLayoutJKhoMatGroup) {
       this.layoutJFocusBlock = null;
       return;
@@ -17727,12 +12044,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   isLayoutLocPickerRow(material: InventoryMaterial): boolean {
     return this.showLayoutLocPicker && this.layoutLocMaterial?.id === material.id;
-  }
-
-  /** KK: bấm cột vị trí → popup nhập mã hoặc chọn ô kệ Layout Kho J. */
-  openKkLayoutLocPicker(material: InventoryMaterial, event?: Event): void {
-    if (!this.canEdit || this.kkLocMapBusy || !material) return;
-    this.openLayoutLocPicker(material, event, 'location');
   }
 
   openLayoutLocPicker(
@@ -17909,7 +12220,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return m ? Number(m[1]) : 0;
   }
 
-  private layoutLocNormalizeTokens(tokens: string[]): string[] {
+  protected layoutLocNormalizeTokens(tokens: string[]): string[] {
     return compactJRackLocations(
       tokens
         .map((x) => this.displayLocationToken(normalizeLayoutLocToken(x, 'J')))
@@ -17917,7 +12228,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
-  private layoutLocGroupFromTokens(tokens: string[]): LayoutLocGroup | undefined {
+  protected layoutLocGroupFromTokens(tokens: string[]): LayoutLocGroup | undefined {
     const groups = getLayoutLocationGroups('J');
     for (const t of tokens) {
       const p = parseJRackLocation(t);
@@ -17977,21 +12288,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     (material as { __prevPalletId?: string }).__prevPalletId = String(material.palletId || '');
   }
 
-  onPalletKeyEnter(material: InventoryMaterial, event: KeyboardEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    void this.persistPalletChange(material, String(material.palletId || ''));
-  }
-
-  onPalletBlur(material: InventoryMaterial): void {
-    void this.persistPalletChange(material, String(material.palletId || ''));
-  }
-
   onWhSelect(material: InventoryMaterial, value: string): void {
     void this.commitWhChange(material, value);
   }
 
-  private async commitWhChange(
+  protected async commitWhChange(
     material: InventoryMaterial,
     raw: string,
     opts?: { silent?: boolean; bypassUnlock?: boolean }
@@ -18017,7 +12318,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private async persistPalletChange(
+  protected async persistPalletChange(
     material: InventoryMaterial,
     raw: string,
     opts?: { silent?: boolean; bypassUnlock?: boolean }
@@ -18168,61 +12469,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return stock;
   }
 
-  // Calculate total stock for all filtered materials
-  getTotalStock(): number {
-    if (!this.filteredInventory || this.filteredInventory.length === 0) {
-      return 0;
-    }
-    
-    const totalStock = this.filteredInventory.reduce((sum, material) => {
-      return sum + this.calculateCurrentStock(material);
-    }, 0);
-
-    // Update the BehaviorSubject for reactive updates
-    this.totalStockSubject.next(totalStock);
-    this.totalBagSubject.next(
-      this.filteredInventory.reduce((sum, material) => sum + this.displayedBagCount(material), 0)
-    );
-
-    return totalStock;
-  }
-
-  // 🔧 QUERY LOGIC MỚI: Lấy số lượng xuất từ Outbound theo Material + PO (không còn vị trí)
-  // - Trước đây: Query theo Material + PO + Location → Bị lỗi khi Outbound không có vị trí
-  // - Bây giờ: Chỉ query theo Material + PO → Lấy tất cả outbound records
-  // - Kết quả: Số lượng xuất chính xác cho từng Material + PO
-  // - Không còn bị lỗi số âm sai khi search
-  async getExportedQuantityFromOutbound(materialCode: string, poNumber: string, location: string): Promise<number> {
-    try {
-      console.log(`🔍 Getting exported quantity for ${materialCode} - PO: ${poNumber}`);
-      
-      const outboundRef = this.firestore.collection('outbound-materials');
-      const snapshot = await outboundRef
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .where('materialCode', '==', materialCode)
-        .where('poNumber', '==', poNumber)
-        .get();
-
-      if (!snapshot.empty) {
-        let totalExported = 0;
-        snapshot.forEach(doc => {
-          const data = doc.data() as any;
-          totalExported += (data.exportQuantity || 0);
-        });
-        
-        console.log(`✅ Total exported quantity for ${materialCode} - PO ${poNumber}: ${totalExported}`);
-        return totalExported;
-      } else {
-        console.log(`ℹ️ No outbound records found for ${materialCode} - PO ${poNumber}`);
-        return 0;
-      }
-    } catch (error) {
-      console.error(`❌ Error getting exported quantity for ${materialCode} - PO ${poNumber}:`, error);
-      return 0;
-    }
-  }
-
   /**
    * Outbound lưu `importDate` là chuỗi QR đầy đủ (vd. 25032025-14/77), không khớp Firestore `==` với IMD 8 số trên tồn kho.
    * Trích 8 số DDMMYYYY để khớp với dòng inventory.
@@ -18269,1009 +12515,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       return material.importDate.toLocaleDateString('en-GB').split('/').join('');
     }
     return undefined;
-  }
-
-  /**
-   * Đồng bộ "Đã xuất": query Material + PO, rồi lọc theo 8 số IMD (batch) vì outbound không lưu trùng field với tồn kho.
-   */
-  async getExportedQuantityFromOutboundFIFO(materialCode: string, poNumber: string, batch?: string): Promise<{ totalExported: number; outboundRecords: any[] }> {
-    try {
-      const batchKey = batch ? String(batch).trim() : '';
-      console.log(`🔍 FIFO export: ${materialCode} - PO: ${poNumber} - IMD key: ${batchKey || '(tất cả)'}`);
-
-      const outboundRef = this.firestore.collection('outbound-materials');
-      const normCode = String(materialCode || '').trim();
-      const normPo = String(poNumber || '').trim();
-
-      let snapshot: any;
-      try {
-        snapshot = await outboundRef.ref
-          .where('factory', '==', this.selectedFactory)
-          .where('materialCode', '==', normCode)
-          .where('poNumber', '==', normPo)
-          .orderBy('exportDate', 'asc')
-          .get();
-      } catch {
-        snapshot = await outboundRef.ref
-          .where('factory', '==', this.selectedFactory)
-          .where('materialCode', '==', normCode)
-          .where('poNumber', '==', normPo)
-          .get();
-      }
-
-      if (snapshot.empty) {
-        console.log(`ℹ️ No outbound for ${materialCode} - PO ${poNumber}`);
-        return { totalExported: 0, outboundRecords: [] };
-      }
-
-      let totalExported = 0;
-      const outboundRecords: any[] = [];
-
-      snapshot.forEach((doc: any) => {
-        const data = doc.data() as any;
-        const imdKey = this.normalizeOutboundImdToKey(data);
-        if (batchKey) {
-          if (!imdKey || imdKey !== batchKey) {
-            return;
-          }
-        }
-
-        let exportQuantity = 0;
-        if (data.exportQuantity !== undefined && data.exportQuantity !== null) {
-          exportQuantity = data.exportQuantity;
-        } else if (data.exported !== undefined && data.exported !== null) {
-          exportQuantity = data.exported;
-        } else if (data.quantity !== undefined && data.quantity !== null) {
-          exportQuantity = data.quantity;
-        } else if (data.amount !== undefined && data.amount !== null) {
-          exportQuantity = data.amount;
-        } else if (data.qty !== undefined && data.qty !== null) {
-          exportQuantity = data.qty;
-        }
-        if (typeof exportQuantity === 'string') {
-          exportQuantity = parseFloat(exportQuantity) || 0;
-        }
-
-        totalExported += exportQuantity;
-        outboundRecords.push({
-          id: doc.id,
-          materialCode: data.materialCode,
-          poNumber: data.poNumber,
-          exportQuantity,
-          exportDate: data.exportDate,
-          location: data.location || 'N/A'
-        });
-      });
-
-      console.log(
-        `✅ FIFO total: ${totalExported} (${outboundRecords.length} dòng) IMD=${batchKey || 'ALL'}`
-      );
-      return { totalExported, outboundRecords };
-    } catch (error) {
-      console.error(`❌ Error getExportedQuantityFromOutboundFIFO:`, error);
-      return { totalExported: 0, outboundRecords: [] };
-    }
-  }
-
-
-
-  // 🔧 UPDATE LOGIC ĐƠN GIẢN: Cập nhật số lượng xuất từ Outbound
-  // - Lấy tổng số lượng xuất từ outbound theo Material + PO
-  // - Cập nhật trực tiếp vào inventory
-  async updateExportedFromOutboundFIFO(material: InventoryMaterial): Promise<void> {
-    try {
-      console.log(`🔄 Updating exported quantity for ${material.materialCode} - PO ${material.poNumber}`);
-      
-      const imdBase = this.getInventoryImdBaseKey(material);
-      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
-        material.materialCode,
-        material.poNumber,
-        imdBase
-      );
-      
-      console.log(`🔍 Debug: ${material.materialCode} - PO ${material.poNumber} - Total exported from outbound: ${totalExported}, Records: ${outboundRecords.length}`);
-      
-      // Debug chi tiết: Kiểm tra từng outbound record
-      if (outboundRecords.length > 0) {
-        console.log(`📋 Outbound records found:`);
-        outboundRecords.forEach((record, index) => {
-          console.log(`  ${index + 1}. Material: ${record.materialCode}, PO: ${record.poNumber}, Quantity: ${record.exportQuantity || record.quantity}, Date: ${record.exportDate}`);
-        });
-      } else {
-        console.log(`🔍 No outbound records found for ${material.materialCode} - ${material.poNumber} - ImportDate: ${material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A'}`);
-        console.log(`💡 Checking if outbound records exist with different criteria...`);
-        
-        // Kiểm tra tất cả outbound records có material code này
-        const allOutboundQuery = await this.firestore.collection('outbound-materials')
-          .ref
-          .where('factory', '==', this.selectedFactory)
-          .where('materialCode', '==', material.materialCode)
-          .limit(10)
-          .get();
-        
-        if (!allOutboundQuery.empty) {
-          console.log(`📋 Found ${allOutboundQuery.size} outbound records with material code ${material.materialCode}:`);
-          allOutboundQuery.forEach(doc => {
-            const data = doc.data() as any;
-            const outboundImportDate = data.importDate ? (typeof data.importDate === 'string' ? data.importDate : data.importDate.toLocaleDateString('en-GB').split('/').join('')) : 'N/A';
-            const inventoryImportDate = material.importDate ? material.importDate.toLocaleDateString('en-GB').split('/').join('') : 'N/A';
-            console.log(`  - PO: "${data.poNumber}" (type: ${typeof data.poNumber}), ImportDate: "${outboundImportDate}", Quantity: ${data.exportQuantity || data.quantity}`);
-            console.log(`    → Inventory PO: "${material.poNumber}" (type: ${typeof material.poNumber}), ImportDate: "${inventoryImportDate}"`);
-            
-            // Kiểm tra match
-            const poMatch = data.poNumber === material.poNumber;
-            const importDateMatch = outboundImportDate === inventoryImportDate;
-            console.log(`    → PO Match: ${poMatch}, ImportDate Match: ${importDateMatch}`);
-          });
-        } else {
-          console.log(`⚠️ No outbound records found at all for material code ${material.materialCode}`);
-        }
-      }
-      
-      // Cập nhật số lượng xuất trực tiếp - CHỈ CẬP NHẬT NẾU TÌM THẤY OUTBOUND RECORDS
-      if (outboundRecords.length > 0) {
-        console.log(`🔄 BEFORE UPDATE: material.exported = ${material.exported}, totalExported = ${totalExported}`);
-        
-        if (material.exported !== totalExported) {
-          const oldExported = material.exported;
-          material.exported = totalExported;
-          console.log(`🔄 UPDATING: ${oldExported} → ${totalExported}`);
-          
-          await this.updateExportedInFirebase(material, totalExported);
-          console.log(`✅ AFTER UPDATE: material.exported = ${material.exported}`);
-          
-          // Force UI update
-          this.filteredInventory = [...this.inventoryMaterials];
-          console.log(`🔄 UI updated, filteredInventory length: ${this.filteredInventory.length}`);
-        } else {
-          console.log(`📊 Exported quantity already up-to-date: ${material.exported}`);
-        }
-      } else {
-        // KHÔNG TÌM THẤY OUTBOUND RECORDS - GIỮ NGUYÊN GIÁ TRỊ EXPORTED HIỆN TẠI
-        console.log(`⚠️ No outbound records found - Keeping current exported: ${material.exported}`);
-        console.log(`💡 This prevents overwriting exported quantity to 0 when outbound data is missing`);
-      }
-
-    } catch (error) {
-      console.error(`❌ Error updating exported quantity for ${material.materialCode} - PO ${material.poNumber}:`, error);
-    }
-  }
-
-  // Helper method để cập nhật exported quantity vào Firebase
-  private async updateExportedInFirebase(material: InventoryMaterial, exportedQuantity: number): Promise<void> {
-    console.log(`🔍 updateExportedInFirebase called with:`);
-    console.log(`  - material.id: ${material.id}`);
-    console.log(`  - material.materialCode: ${material.materialCode}`);
-    console.log(`  - material.poNumber: ${material.poNumber}`);
-    console.log(`  - exportedQuantity: ${exportedQuantity}`);
-    
-    if (!material.id) {
-      console.error(`❌ Cannot update: material.id is missing for ${material.materialCode} - PO ${material.poNumber}`);
-      return;
-    }
-    
-    try {
-      console.log(`🔄 Updating Firebase document: inventory-materials/${material.id}`);
-      material.exported = exportedQuantity;
-      const updateData: any = {
-        exported: exportedQuantity,
-        updatedAt: new Date()
-      };
-      this.appendDerivedTotalBagsIfNeeded(material, updateData);
-      console.log(`📝 Update data:`, updateData);
-      
-      await this.firestore.collection('inventory-materials').doc(material.id).update(updateData);
-      console.log(`💾 Exported quantity saved to Firebase: ${material.materialCode} - PO ${material.poNumber} = ${exportedQuantity}`);
-    } catch (error) {
-      console.error(`❌ Error saving exported quantity to Firebase: ${material.materialCode} - PO ${material.poNumber}:`, error);
-      console.error(`❌ Full error details:`, error);
-    }
-  }
-  
-  // Test method để kiểm tra logic FIFO
-  async testFIFOLogic(materialCode: string, poNumber: string): Promise<void> {
-    try {
-      console.log(`🧪 Testing FIFO logic for ${materialCode} - PO ${poNumber}`);
-      
-      // Tìm tất cả dòng inventory cùng Material + PO
-      const allInventoryItems = this.inventoryMaterials.filter(item => 
-        item.materialCode === materialCode && 
-        item.poNumber === poNumber
-      );
-      
-      if (allInventoryItems.length === 0) {
-        console.log(`⚠️ No inventory items found for ${materialCode} - PO ${poNumber}`);
-        return;
-      }
-      
-      console.log(`📊 Found ${allInventoryItems.length} inventory items:`);
-      allInventoryItems.forEach(item => {
-        const availableStock = (item.openingStock || 0) + item.quantity - (item.xt || 0);
-        console.log(`  Item: Stock=${availableStock}, Exported=${item.exported || 0}, Current=${this.calculateCurrentStock(item)}`);
-      });
-      
-      // Lấy thông tin outbound - Lưu ý: testFIFOLogic không có batch cụ thể nên sẽ query theo Material + PO
-      const { totalExported } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
-      console.log(`📦 Total outbound: ${totalExported}`);
-      
-      // Mô phỏng phân bổ FIFO
-      let remainingExported = totalExported;
-      console.log(`🔄 FIFO Distribution Simulation:`);
-      
-      for (const item of allInventoryItems) {
-        if (remainingExported <= 0) break;
-        
-        const availableStock = (item.openingStock || 0) + item.quantity - (item.xt || 0);
-        if (availableStock <= 0) {
-          console.log(`  Item: Skip (no stock)`);
-          continue;
-        }
-        
-        const exportedFromThisItem = Math.min(remainingExported, availableStock);
-        console.log(`  Item: Export ${exportedFromThisItem} from ${availableStock} available, Remaining: ${remainingExported - exportedFromThisItem}`);
-        
-        remainingExported -= exportedFromThisItem;
-      }
-      
-      console.log(`✅ FIFO test completed for ${materialCode} - PO ${poNumber}`);
-      
-    } catch (error) {
-      console.error(`❌ Error testing FIFO logic for ${materialCode} - PO ${poNumber}:`, error);
-    }
-  }
-
-  // Test method để kiểm tra dữ liệu outbound
-  async testOutboundData(): Promise<void> {
-    try {
-      console.log('🔍 Testing outbound data...');
-      
-      // Kiểm tra collection outbound-materials
-      const outboundSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(10)
-        .get();
-      
-      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
-      
-      if (!outboundSnapshot.empty) {
-        outboundSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          console.log(`📦 Outbound: ${data.materialCode} - PO: ${data.poNumber} - Quantity: ${data.exportQuantity || data.exported || data.quantity || 'N/A'} - Date: ${data.exportDate}`);
-        });
-      } else {
-        console.log('⚠️ No outbound records found for ASM1');
-        
-        // Kiểm tra xem có collection nào khác không
-        console.log('🔍 Checking other possible collections...');
-        const collections = ['outbound', 'exports', 'shipments', 'materials-out'];
-        
-        for (const collectionName of collections) {
-          try {
-            const snapshot = await this.firestore.collection(collectionName).ref.limit(1).get();
-            if (snapshot && !snapshot.empty) {
-              console.log(`✅ Found collection: ${collectionName} with ${snapshot.size} documents`);
-              const sampleDoc = snapshot.docs[0].data() as any;
-              console.log(`📋 Sample document fields:`, Object.keys(sampleDoc));
-            }
-          } catch (e) {
-            console.log(`❌ Collection ${collectionName} not found`);
-          }
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ Error testing outbound data:', error);
-    }
-  }
-
-  /**
-   * Debug method để kiểm tra vấn đề matching giữa Outbound và Inventory
-   */
-  async debugInventoryMatching(): Promise<void> {
-    try {
-      console.log('🔍 Debugging RM1 Inventory matching issue...');
-      
-      // 1. Kiểm tra dữ liệu Outbound
-      console.log('\n📦 === CHECKING OUTBOUND DATA ===');
-      const outboundSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(10)
-        .get();
-      
-      console.log(`📊 Found ${outboundSnapshot.size} outbound records for ASM1`);
-      
-      if (!outboundSnapshot.empty) {
-        console.log('\n📋 Outbound Records:');
-        outboundSnapshot.forEach((doc) => {
-          const data = doc.data() as any;
-          console.log(`  ID: ${doc.id}`);
-          console.log(`     Material: ${data.materialCode}`);
-          console.log(`     PO: "${data.poNumber}" (type: ${typeof data.poNumber})`);
-          console.log(`     ImportDate: ${data.importDate} (type: ${typeof data.importDate})`);
-          console.log(`     ExportQuantity: ${data.exportQuantity}`);
-          console.log(`     ExportDate: ${data.exportDate}`);
-          console.log('     ---');
-        });
-      }
-      
-      // 2. Kiểm tra dữ liệu Inventory
-      console.log('\n📦 === CHECKING INVENTORY DATA ===');
-      const inventorySnapshot = await this.firestore.collection('inventory-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(10)
-        .get();
-      
-      console.log(`📊 Found ${inventorySnapshot.size} inventory records for ASM1`);
-      
-      if (!inventorySnapshot.empty) {
-        console.log('\n📋 Inventory Records:');
-        inventorySnapshot.forEach((doc) => {
-          const data = doc.data() as any;
-          console.log(`  ID: ${doc.id}`);
-          console.log(`     Material: ${data.materialCode}`);
-          console.log(`     PO: "${data.poNumber}" (type: ${typeof data.poNumber})`);
-          console.log(`     ImportDate: ${data.importDate} (type: ${typeof data.importDate})`);
-          console.log(`     Quantity: ${data.quantity}`);
-          console.log(`     Exported: ${data.exported}`);
-          console.log(`     Location: ${data.location}`);
-          console.log('     ---');
-        });
-      }
-      
-      // 3. Tìm matching records
-      console.log('\n🔍 === FINDING MATCHING RECORDS ===');
-      const outboundRecords: any[] = [];
-      const inventoryRecords: any[] = [];
-      
-      outboundSnapshot.forEach(doc => {
-        const data = doc.data() as any;
-        outboundRecords.push({ id: doc.id, ...data });
-      });
-      
-      inventorySnapshot.forEach(doc => {
-        const data = doc.data() as any;
-        inventoryRecords.push({ id: doc.id, ...data });
-      });
-      
-      let matchCount = 0;
-      let noMatchCount = 0;
-      
-      outboundRecords.forEach(outbound => {
-        console.log(`\n🔍 Checking outbound: ${outbound.materialCode} - PO: "${outbound.poNumber}"`);
-        
-        const matches = inventoryRecords.filter(inventory => {
-          const materialMatch = inventory.materialCode === outbound.materialCode;
-          const poMatch = inventory.poNumber === outbound.poNumber;
-          
-          // Check import date match
-          let importDateMatch = false;
-          if (outbound.importDate && inventory.importDate) {
-            let outboundDate = '';
-            let inventoryDate = '';
-            
-            // Parse outbound import date
-            if (outbound.importDate.toDate) {
-              outboundDate = outbound.importDate.toDate().toLocaleDateString('en-GB').split('/').join('');
-            } else {
-              outboundDate = outbound.importDate.toString();
-            }
-            
-            // Parse inventory import date
-            if (inventory.importDate.toDate) {
-              inventoryDate = inventory.importDate.toDate().toLocaleDateString('en-GB').split('/').join('');
-            } else {
-              inventoryDate = inventory.importDate.toString();
-            }
-            
-            importDateMatch = outboundDate === inventoryDate;
-          }
-          
-          return materialMatch && poMatch && importDateMatch;
-        });
-        
-        if (matches.length > 0) {
-          matchCount++;
-          console.log(`  ✅ FOUND ${matches.length} matching inventory records:`);
-          matches.forEach(match => {
-            console.log(`    - Inventory ID: ${match.id}`);
-            console.log(`    - Current Exported: ${match.exported || 0}`);
-            console.log(`    - Outbound Export: ${outbound.exportQuantity || outbound.quantity || 0}`);
-          });
-        } else {
-          noMatchCount++;
-          console.log(`  ❌ NO matching inventory records found`);
-          console.log(`    - Checking available inventory for material ${outbound.materialCode}:`);
-          
-          const materialMatches = inventoryRecords.filter(inv => inv.materialCode === outbound.materialCode);
-          if (materialMatches.length > 0) {
-            console.log(`    - Found ${materialMatches.length} records with same material:`);
-            materialMatches.forEach(match => {
-              console.log(`      * PO: "${match.poNumber}" vs "${outbound.poNumber}"`);
-              console.log(`      * ImportDate: ${match.importDate} vs ${outbound.importDate}`);
-            });
-          } else {
-            console.log(`    - No inventory records found for material ${outbound.materialCode}`);
-          }
-        }
-      });
-      
-      console.log(`\n📊 === SUMMARY ===`);
-      console.log(`✅ Matching records: ${matchCount}`);
-      console.log(`❌ No match records: ${noMatchCount}`);
-      
-      // 4. Kiểm tra logic update
-      console.log('\n🔧 === TESTING UPDATE LOGIC ===');
-      if (matchCount > 0) {
-        console.log('💡 Logic should work for matching records');
-        console.log('💡 Check if updateExportedFromOutboundFIFO is being called');
-        console.log('💡 Check if updateInventoryExported is being called');
-      } else {
-        console.log('⚠️ No matching records found - this explains why inventory is not updating');
-        console.log('💡 Possible issues:');
-        console.log('   - PO Number format mismatch');
-        console.log('   - Import Date format mismatch');
-        console.log('   - Missing inventory records');
-        console.log('   - Data type issues');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error during debug:', error);
-    }
-  }
-
-  // Test sync with detailed debug logging
-  async testSyncWithDebug(): Promise<void> {
-    try {
-      console.log('🧪 Testing sync with detailed debug logging...');
-      
-      // Kiểm tra dữ liệu hiện tại
-      console.log(`📋 Current inventory materials: ${this.inventoryMaterials.length}`);
-      if (this.inventoryMaterials.length > 0) {
-        const firstMaterial = this.inventoryMaterials[0];
-        console.log(`🔍 First material before sync:`, {
-          materialCode: firstMaterial.materialCode,
-          poNumber: firstMaterial.poNumber,
-          batchNumber: firstMaterial.batchNumber,
-          exported: firstMaterial.exported
-        });
-      }
-      
-      // Test sync với một material cụ thể
-      if (this.inventoryMaterials.length > 0) {
-        const testMaterial = this.inventoryMaterials[0];
-        console.log(`🧪 Testing sync for material: ${testMaterial.materialCode} - PO: ${testMaterial.poNumber}`);
-        await this.updateExportedFromOutboundFIFO(testMaterial);
-        
-        console.log(`🔍 First material after sync:`, {
-          materialCode: testMaterial.materialCode,
-          poNumber: testMaterial.poNumber,
-          batchNumber: testMaterial.batchNumber,
-          exported: testMaterial.exported
-        });
-        
-        // Force UI update
-        this.filteredInventory = [...this.inventoryMaterials];
-        console.log(`🔄 UI updated, filteredInventory length: ${this.filteredInventory.length}`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error testing sync with debug:', error);
-      alert(`❌ Error testing sync: ${error.message}`);
-    }
-  }
-
-  // Simple test method to check if data is loaded
-  async testDataLoading(): Promise<void> {
-    try {
-      console.log('🔍 Testing data loading...');
-      
-      // Check inventory data
-      console.log(`📋 Inventory materials loaded: ${this.inventoryMaterials.length}`);
-      if (this.inventoryMaterials.length > 0) {
-        const first = this.inventoryMaterials[0];
-        console.log(`📦 First material:`, {
-          id: first.id,
-          materialCode: first.materialCode,
-          poNumber: first.poNumber,
-          batchNumber: first.batchNumber,
-          exported: first.exported,
-          quantity: first.quantity
-        });
-      } else {
-        console.log('⚠️ No inventory data loaded, trying backup method...');
-        await this.loadInventoryBackup();
-      }
-      
-      // Check outbound data
-      const outboundSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(5)
-        .get();
-      
-      console.log(`📤 Outbound records found: ${outboundSnapshot.size}`);
-      if (!outboundSnapshot.empty) {
-        outboundSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          console.log(`📤 Outbound:`, {
-            materialCode: data.materialCode,
-            poNumber: data.poNumber,
-            batch: data.batch || data.batchNumber,
-            quantity: data.exportQuantity || data.exported || data.quantity
-          });
-        });
-      }
-      
-      // Test sync for first material
-      if (this.inventoryMaterials.length > 0) {
-        const material = this.inventoryMaterials[0];
-        console.log(`🔄 Testing sync for: ${material.materialCode} - PO: ${material.poNumber}`);
-        
-        const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(
-          material.materialCode, 
-          material.poNumber, 
-          material.batchNumber
-        );
-        
-        console.log(`📊 Sync result:`, {
-          totalExported,
-          outboundRecords: outboundRecords.length,
-          currentExported: material.exported
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Error testing data loading:', error);
-    }
-  }
-
-  // Backup method to load inventory data if subscription fails
-  async loadInventoryBackup(): Promise<void> {
-    try {
-      console.log('🔄 Loading inventory data using backup method...');
-      
-      const snapshot = await this.firestore.collection('inventory-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .orderBy('importDate', 'desc')
-        .limit(1000)
-        .get();
-      
-      console.log(`📦 Backup method found ${snapshot.size} inventory records`);
-      
-      this.inventoryMaterials = snapshot.docs.map(doc => {
-        const data = doc.data() as any;
-        const id = doc.id;
-        return {
-          id: id,
-          ...data,
-          factory: this.selectedFactory,
-          importDate: data.importDate ? new Date(data.importDate.seconds * 1000) : new Date(),
-          receivedDate: data.receivedDate ? new Date(data.receivedDate.seconds * 1000) : new Date(),
-          expiryDate: data.expiryDate ? new Date(data.expiryDate.seconds * 1000) : new Date(),
-          openingStock: data.openingStock || null,
-          xt: data.xt || 0,
-          source: data.source || 'manual'
-        };
-      });
-      
-      this.filteredInventory = [...this.inventoryMaterials];
-      console.log(`✅ Backup method loaded ${this.inventoryMaterials.length} materials`);
-      
-      // 🔧 SIMPLIFIED: Exported quantities loaded directly from Firebase (no auto-update needed)
-      console.log('✅ Backup method exported quantities loaded directly from Firebase');
-      
-    } catch (error) {
-      console.error('❌ Error in backup method:', error);
-    }
-  }
-
-  // Test method để kiểm tra link outbound-inventory
-  async testOutboundInventoryLink(materialCode: string, poNumber: string): Promise<void> {
-    try {
-      console.log(`🔗 Testing outbound-inventory link for ${materialCode} - PO ${poNumber}`);
-      
-      // 1. Kiểm tra dữ liệu outbound - Lưu ý: testOutboundInventoryLink không có batch cụ thể nên sẽ query theo Material + PO
-      const { totalExported, outboundRecords } = await this.getExportedQuantityFromOutboundFIFO(materialCode, poNumber);
-      console.log(`📦 Outbound data: ${totalExported} units from ${outboundRecords.length} records`);
-      
-      // 2. Kiểm tra dữ liệu inventory
-      const inventoryItems = this.inventoryMaterials.filter(item => 
-        item.materialCode === materialCode && 
-        item.poNumber === poNumber
-      );
-      console.log(`📋 Inventory items: ${inventoryItems.length} found`);
-      
-      inventoryItems.forEach((item, index) => {
-        console.log(`  ${index + 1}. ID: ${item.id}, Location: ${item.location}, Exported: ${item.exported}, Stock: ${this.calculateCurrentStock(item)}`);
-      });
-      
-      // 3. So sánh
-      const totalInventoryExported = inventoryItems.reduce((sum, item) => sum + (item.exported || 0), 0);
-      console.log(`🔍 Comparison: Outbound total = ${totalExported}, Inventory total = ${totalInventoryExported}`);
-      
-      if (totalExported === totalInventoryExported) {
-        console.log(`✅ Link is working correctly!`);
-      } else {
-        console.log(`⚠️ Link mismatch! Need to sync.`);
-      }
-      
-    } catch (error) {
-      console.error(`❌ Error testing outbound-inventory link:`, error);
-    }
-  }
-
-  // Tạo dữ liệu test outbound nếu không có
-  async createTestOutboundData(): Promise<void> {
-    try {
-      console.log('🧪 Creating test outbound data...');
-      
-      // Kiểm tra xem có dữ liệu outbound nào không
-      const existingSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(1)
-        .get();
-      
-      if (!existingSnapshot.empty) {
-        console.log('✅ Outbound data already exists, no need to create test data');
-        return;
-      }
-      
-      // Tạo dữ liệu test cho mã hàng B024052
-      const testData = [
-        {
-          factory: this.selectedFactory,
-          materialCode: 'B024052',
-          poNumber: 'KZP00525/0207',
-          exportQuantity: 5,
-          exportDate: new Date(),
-          location: 'A1',
-          notes: 'Test data - Auto generated'
-        },
-        {
-          factory: this.selectedFactory,
-          materialCode: 'B024052',
-          poNumber: 'KZP00625/0070',
-          exportQuantity: 3,
-          exportDate: new Date(),
-          location: 'B2',
-          notes: 'Test data - Auto generated'
-        }
-      ];
-      
-      // Thêm vào Firebase
-      for (const data of testData) {
-        await this.firestore.collection('outbound-materials').add(data);
-        console.log(`✅ Created test outbound record: ${data.materialCode} - PO ${data.poNumber} - Quantity: ${data.exportQuantity}`);
-      }
-      
-      console.log('✅ Test outbound data created successfully!');
-      
-      // Refresh dữ liệu
-      setTimeout(() => {
-        this.autoUpdateAllExportedFromOutbound();
-      }, 1000);
-      
-    } catch (error) {
-      console.error('❌ Error creating test outbound data:', error);
-    }
-  }
-
-  // Cập nhật display sau khi sync để tránh mất dữ liệu
-  private updateDisplayAfterSync(): void {
-    try {
-      console.log('🔄 Updating display after sync...');
-      
-      // Đảm bảo dữ liệu exported được giữ nguyên
-      this.filteredInventory = this.filteredInventory.map(item => {
-        const originalItem = this.inventoryMaterials.find(m => m.id === item.id);
-        if (originalItem && originalItem.exported !== undefined) {
-          item.exported = originalItem.exported;
-        }
-        return item;
-      });
-      
-      // Cập nhật counters
-      this.updateNegativeStockCount();
-      this.updateTotalStockCount();
-      
-      console.log('✅ Display updated after sync');
-      
-    } catch (error) {
-      console.error('❌ Error updating display after sync:', error);
-    }
-  }
-
-  // Auto-fix và test toàn bộ hệ thống
-  async autoFixAndTest(): Promise<void> {
-    try {
-      console.log('🔧 Starting auto-fix and test process...');
-      
-      // 1. Kiểm tra dữ liệu outbound
-      console.log('📋 Step 1: Checking outbound data...');
-      await this.testOutboundData();
-      
-      // 2. Tạo dữ liệu test nếu cần
-      console.log('📋 Step 2: Creating test data if needed...');
-      await this.createTestOutboundData();
-      
-      // 3. Sync dữ liệu từ outbound
-      console.log('📋 Step 3: Syncing data from outbound...');
-      await this.syncAllExportedFromOutbound();
-      
-      // 4. Test link cụ thể
-      console.log('📋 Step 4: Testing specific links...');
-      if (this.inventoryMaterials.length > 0) {
-        const firstMaterial = this.inventoryMaterials[0];
-        await this.testOutboundInventoryLink(firstMaterial.materialCode, firstMaterial.poNumber);
-      }
-      
-      console.log('✅ Auto-fix and test process completed!');
-      
-    } catch (error) {
-      console.error('❌ Error during auto-fix and test:', error);
-    }
-  }
-
-  // Fix cả 2 vấn đề: gộp dòng và hiển thị số lượng xuất
-  async fixInventoryIssues(): Promise<void> {
-    try {
-      console.log('🔧 Fixing inventory issues...');
-      
-      // 1. Kiểm tra trạng thái hiện tại
-      console.log(`📊 Current state: ${this.inventoryMaterials.length} materials, ${this.filteredInventory.length} filtered`);
-      
-      // 2. Gộp dòng trùng lặp (mã hàng + PO)
-      console.log('🔄 Step 1: Consolidating duplicate materials...');
-      const beforeCount = this.inventoryMaterials.length;
-      this.consolidateInventoryData();
-      const afterCount = this.inventoryMaterials.length;
-      console.log(`✅ Consolidation: ${beforeCount} → ${afterCount} items`);
-      
-      // 3. Tạo dữ liệu test outbound nếu cần
-      console.log('🔄 Step 2: Creating test outbound data...');
-      await this.createTestOutboundData();
-      
-      // 4. Sync số lượng xuất từ outbound
-      console.log('🔄 Step 3: Syncing exported quantities...');
-      await this.syncAllExportedFromOutbound();
-      
-      // 5. Kiểm tra kết quả
-      console.log('🔄 Step 4: Checking results...');
-      this.inventoryMaterials.forEach((material, index) => {
-        console.log(`${index + 1}. ${material.materialCode} - PO: ${material.poNumber} - Exported: ${material.exported} - Stock: ${this.calculateCurrentStock(material)}`);
-      });
-      
-      // 6. Cập nhật display
-      this.filteredInventory = [...this.inventoryMaterials];
-      this.updateNegativeStockCount();
-      
-      console.log('✅ Inventory issues fixed!');
-      
-    } catch (error) {
-      console.error('❌ Error fixing inventory issues:', error);
-    }
-  }
-
-  // Kiểm tra trạng thái gộp dòng
-  checkConsolidationStatus(): void {
-    try {
-      console.log('🔍 Checking consolidation status...');
-      
-      // Kiểm tra dữ liệu hiện tại
-      const materialPoMap = new Map<string, InventoryMaterial[]>();
-      
-      this.inventoryMaterials.forEach(material => {
-        // Gộp theo Mã hàng + PO + Batch
-        const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
-        if (!materialPoMap.has(key)) {
-          materialPoMap.set(key, []);
-        }
-        materialPoMap.get(key)!.push(material);
-      });
-      
-      // Hiển thị thống kê
-      console.log(`📊 Total materials: ${this.inventoryMaterials.length}`);
-      console.log(`📊 Unique Material+PO+Batch combinations: ${materialPoMap.size}`);
-      
-      // Hiển thị các dòng trùng lặp
-      materialPoMap.forEach((materials, key) => {
-        if (materials.length > 1) {
-          console.log(`⚠️ Duplicate found: ${key} (${materials.length} items)`);
-          materials.forEach((material, index) => {
-            console.log(`  ${index + 1}. ID: ${material.id}, Location: ${material.location}, Type: ${material.type}, Quantity: ${material.quantity}, Exported: ${material.exported}`);
-          });
-        }
-      });
-      
-      // Kiểm tra số lượng xuất
-      const materialsWithExported = this.inventoryMaterials.filter(m => m.exported && m.exported > 0);
-      console.log(`📦 Materials with exported quantities: ${materialsWithExported.length}`);
-      
-      if (materialsWithExported.length > 0) {
-        materialsWithExported.forEach(material => {
-          console.log(`  📦 ${material.materialCode} - PO ${material.poNumber}: Exported = ${material.exported}`);
-        });
-      } else {
-        console.log('⚠️ No materials have exported quantities!');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error checking consolidation status:', error);
-    }
-  }
-
-  // Gộp dòng ngay lập tức
-  forceConsolidateNow(): void {
-    try {
-      console.log('🚀 Force consolidating inventory data now...');
-      
-      const beforeCount = this.inventoryMaterials.length;
-      console.log(`📊 Before consolidation: ${beforeCount} items`);
-      
-      // Gộp dòng
-      this.consolidateInventoryData();
-      
-      const afterCount = this.inventoryMaterials.length;
-      console.log(`📊 After consolidation: ${afterCount} items`);
-      console.log(`✅ Reduced by: ${beforeCount - afterCount} items`);
-      
-      // Cập nhật display
-      this.filteredInventory = [...this.inventoryMaterials];
-      this.updateNegativeStockCount();
-      
-      console.log('✅ Force consolidation completed!');
-      
-    } catch (error) {
-      console.error('❌ Error during force consolidation:', error);
-    }
-  }
-
-  // Test gộp dòng đơn giản
-  simpleConsolidate(): void {
-    try {
-      console.log('🔧 Simple consolidation test...');
-      
-      if (!this.inventoryMaterials || this.inventoryMaterials.length === 0) {
-        console.log('⚠️ No materials to consolidate');
-        return;
-      }
-      
-      console.log(`📊 Input: ${this.inventoryMaterials.length} materials`);
-      
-      // Tạo map theo Material + PO + Batch
-      const map = new Map<string, InventoryMaterial>();
-      
-      this.inventoryMaterials.forEach((material, index) => {
-        const key = `${material.materialCode}_${material.poNumber}_${material.batchNumber || 'NO_BATCH'}`;
-        
-        console.log(`🔍 Row ${index + 1}: ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'} - Key: ${key}`);
-        
-        if (map.has(key)) {
-          // Gộp với dòng hiện có
-          const existing = map.get(key)!;
-          console.log(`🔄 Found duplicate! Merging with existing row...`);
-          console.log(`  Existing: Quantity=${existing.quantity}, Exported=${existing.exported}`);
-          console.log(`  New: Quantity=${material.quantity}, Exported=${material.exported}`);
-          
-          existing.quantity += material.quantity;
-          existing.exported = (existing.exported || 0) + (material.exported || 0);
-          existing.xt = (existing.xt || 0) + (material.xt || 0);
-          
-          // Vị trí và loại hình lấy từ dòng đầu tiên (không gộp)
-          // existing.location và existing.type giữ nguyên từ dòng đầu tiên
-          
-          console.log(`✅ After merge: Quantity=${existing.quantity}, Exported=${existing.exported}`);
-        } else {
-          // Dòng mới
-          map.set(key, { ...material });
-          console.log(`✅ New row added to map`);
-        }
-      });
-      
-      // Cập nhật dữ liệu
-      const beforeCount = this.inventoryMaterials.length;
-      this.inventoryMaterials = Array.from(map.values());
-      this.filteredInventory = [...this.inventoryMaterials];
-      
-      console.log(`✅ Simple consolidation: ${beforeCount} → ${this.inventoryMaterials.length} items`);
-      
-      // Hiển thị kết quả gộp
-      console.log(`📊 Final consolidated data:`);
-      this.inventoryMaterials.forEach((material, index) => {
-        console.log(`  ${index + 1}. ${material.materialCode} - PO ${material.poNumber} - Batch ${material.batchNumber || 'NO_BATCH'} - Quantity: ${material.quantity}`);
-      });
-      
-    } catch (error) {
-      console.error('❌ Error in simple consolidation:', error);
-    }
-  }
-
-  // Test gộp dòng cụ thể cho B001430
-  testB001430Consolidation(): void {
-    try {
-      console.log('🧪 Testing B001430 consolidation specifically...');
-      
-      if (!this.inventoryMaterials || this.inventoryMaterials.length === 0) {
-        console.log('⚠️ No materials to test');
-        return;
-      }
-      
-      // Tìm tất cả dòng B001430
-      const b001430Rows = this.inventoryMaterials.filter(m => m.materialCode === 'B001430');
-      console.log(`📊 Found ${b001430Rows.length} rows with B001430`);
-      
-      b001430Rows.forEach((row, index) => {
-        console.log(`  Row ${index + 1}: PO=${row.poNumber}, Batch=${row.batchNumber}, NK=${row.quantity}, Location=${row.location}`);
-      });
-      
-      // Tìm dòng trùng lặp theo PO + Batch
-      const poBatchMap = new Map<string, InventoryMaterial[]>();
-      
-      b001430Rows.forEach(row => {
-        const key = `${row.poNumber}_${row.batchNumber || 'NO_BATCH'}`;
-        if (!poBatchMap.has(key)) {
-          poBatchMap.set(key, []);
-        }
-        poBatchMap.get(key)!.push(row);
-      });
-      
-      console.log(`📊 PO+Batch combinations for B001430:`);
-      poBatchMap.forEach((rows, key) => {
-        console.log(`  ${key}: ${rows.length} rows`);
-        if (rows.length > 1) {
-          console.log(`    ⚠️ DUPLICATE FOUND! ${rows.length} rows with same PO+Batch`);
-          rows.forEach((row, index) => {
-            console.log(`      ${index + 1}. NK=${row.quantity}, Location=${row.location}`);
-          });
-        }
-      });
-      
-      // Thực hiện gộp test
-      console.log(`🔄 Testing consolidation for B001430...`);
-      this.simpleConsolidate();
-      
-    } catch (error) {
-      console.error('❌ Error in B001430 test:', error);
-    }
-  }
-
-  // Gộp dòng thủ công khi cần thiết (không tự động gộp)
-  async manualConsolidateData(): Promise<void> {
-    try {
-      console.log('🔄 Manual consolidation started...');
-      
-      // Lưu dữ liệu exported trước khi gộp
-      const exportedData = new Map<string, number>();
-      this.inventoryMaterials.forEach(material => {
-        const key = `${material.materialCode}_${material.poNumber}`;
-        if (material.exported && material.exported > 0) {
-          exportedData.set(key, material.exported);
-        }
-      });
-      
-      // Gộp dòng
-      this.consolidateInventoryData();
-      
-      // Khôi phục dữ liệu exported sau khi gộp
-      this.inventoryMaterials.forEach(material => {
-        const key = `${material.materialCode}_${material.poNumber}`;
-        if (exportedData.has(key)) {
-          material.exported = exportedData.get(key)!;
-          // Cập nhật Firebase
-          this.updateExportedInFirebase(material, material.exported);
-        }
-      });
-      
-      console.log('✅ Manual consolidation completed with exported data preserved!');
-      
-    } catch (error) {
-      console.error('❌ Error during manual consolidation:', error);
-    }
   }
 
   // Update XT (planned export) quantity
@@ -19342,138 +12585,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.updateNegativeStockCount();
   }
 
-
-
-
-
-
-
-  // Auto-update all exported quantities from RM1 outbound (silent, no user interaction)
-  private async autoUpdateAllExportedFromOutbound(): Promise<void> {
-    try {
-      console.log('🔄 Auto-updating exported quantities from RM1 outbound with FIFO logic...');
-      
-      // Debug: Kiểm tra dữ liệu outbound trước
-      console.log('🔍 Debug: Checking outbound data...');
-      const outboundSnapshot = await this.firestore.collection('outbound-materials')
-        .ref
-        .where('factory', '==', this.selectedFactory)
-        .limit(5)
-        .get();
-      
-      console.log(`🔍 Debug: Found ${outboundSnapshot.size} outbound records for ASM1`);
-      if (!outboundSnapshot.empty) {
-        outboundSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          console.log(`🔍 Debug: Outbound record - Material: ${data.materialCode}, PO: ${data.poNumber}, Quantity: ${data.exportQuantity || data.exported || data.quantity || 'N/A'}`);
-        });
-      }
-      
-      let updatedCount = 0;
-      let errorCount = 0;
-      
-      for (const material of this.inventoryMaterials) {
-        try {
-          console.log(`🔍 Debug: Processing material ${material.materialCode} - PO ${material.poNumber}, current exported: ${material.exported}`);
-          await this.updateExportedFromOutboundFIFO(material);
-          console.log(`🔍 Debug: After update - exported: ${material.exported}`);
-          updatedCount++;
-        } catch (error) {
-          console.error(`❌ Error auto-updating ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
-          errorCount++;
-        }
-      }
-      
-      console.log(`✅ Auto-update completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
-      
-      // Refresh the display
-      this.filteredInventory = [...this.inventoryMaterials];
-      
-      // KHÔNG gộp dòng sau khi cập nhật exported để tránh mất dữ liệu
-      // this.consolidateInventoryData();
-      
-      // Sắp xếp FIFO sau khi cập nhật
-      this.sortInventoryFIFO();
-      
-    } catch (error) {
-      console.error('❌ Error during auto-update:', error);
-    }
-  }
-
-  // Auto-update exported quantities for search results only
-  private async autoUpdateSearchResultsExportedFromOutbound(): Promise<void> {
-    try {
-      console.log('🔄 Auto-updating exported quantities for search results with FIFO logic...');
-      
-      let updatedCount = 0;
-      let errorCount = 0;
-      
-      for (const material of this.filteredInventory) {
-        try {
-          await this.updateExportedFromOutboundFIFO(material);
-          updatedCount++;
-        } catch (error) {
-          console.error(`❌ Error auto-updating search result ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
-          errorCount++;
-        }
-      }
-      
-      console.log(`✅ Search results auto-update completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
-      
-    } catch (error) {
-      console.error('❌ Error during search results auto-update:', error);
-    }
-  }
-
-  // Sync all exported quantities from RM1 outbound (manual sync - kept for backward compatibility)
-  async syncAllExportedFromOutbound(): Promise<void> {
-    try {
-      console.log('🔄 Starting manual sync of all exported quantities from RM1 outbound with FIFO logic...');
-      console.log(`📋 Total inventory materials to process: ${this.inventoryMaterials.length}`);
-      
-      let updatedCount = 0;
-      let errorCount = 0;
-      
-      for (let i = 0; i < this.inventoryMaterials.length; i++) {
-        const material = this.inventoryMaterials[i];
-        console.log(`\n🔄 Processing material ${i + 1}/${this.inventoryMaterials.length}: ${material.materialCode} - PO: ${material.poNumber}`);
-        console.log(`  Current exported: ${material.exported || 0}`);
-        
-        try {
-          await this.updateExportedFromOutboundFIFO(material);
-          console.log(`  Final exported: ${material.exported || 0}`);
-          updatedCount++;
-        } catch (error) {
-          console.error(`❌ Error syncing ${material.materialCode} - PO ${material.poNumber} - Location ${material.location}:`, error);
-          errorCount++;
-        }
-      }
-      
-      console.log(`\n✅ Manual sync completed with FIFO logic: ${updatedCount} materials updated, ${errorCount} errors`);
-      
-      // Refresh the display
-      this.filteredInventory = [...this.inventoryMaterials];
-      console.log(`🔄 Display refreshed, filteredInventory length: ${this.filteredInventory.length}`);
-      
-      // KHÔNG gộp dòng sau khi đồng bộ để tránh mất dữ liệu exported
-      // this.consolidateInventoryData();
-      
-      // Sắp xếp FIFO sau khi đồng bộ
-      this.sortInventoryFIFO();
-      
-      // Show success message
-      if (errorCount === 0) {
-        alert(`✅ Đồng bộ hoàn tất!\n\nĐã cập nhật ${updatedCount} mã hàng từ RM1 outbound.`);
-      } else {
-        alert(`⚠️ Đồng bộ hoàn tất với ${errorCount} lỗi!\n\nĐã cập nhật ${updatedCount} mã hàng từ RM1 outbound.`);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error during manual sync:', error);
-      alert('❌ Lỗi khi đồng bộ số lượng xuất từ RM1 outbound!');
-    }
-  }
-
   // Get count of materials with negative stock
   getNegativeStockCount(): number {
     // Always count from inventoryMaterials (not filteredInventory) to get real total
@@ -19491,7 +12602,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Update negative stock count manually (for real-time updates)
-  private updateNegativeStockCount(): void {
+  protected updateNegativeStockCount(): void {
     const count = this.getNegativeStockCount();
     console.log(`📊 Negative stock count updated: ${count}`);
     
@@ -19566,6 +12677,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Edit functions for Opening Stock
   startEditingOpeningStock(material: InventoryMaterial): void {
+    if (this.denyAction('edit')) return;
     if (!this.isManualStockEditOn) {
       alert('Tồn đầu đang khóa. Vào More → Manual ON (OTP Zalo ASP0106) để sửa.');
       return;
@@ -19580,21 +12692,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   cancelEditingOpeningStock(material: InventoryMaterial): void {
     material.isEditingOpeningStock = false;
-    // Revert to original value if needed
-  }
-
-  // Edit functions for XT
-  startEditingXT(material: InventoryMaterial): void {
-    this.openXtBagPopup(material);
-  }
-
-  finishEditingXT(material: InventoryMaterial): void {
-    material.isEditingXT = false;
-    this.updateXT(material);
-  }
-
-  cancelEditingXT(material: InventoryMaterial): void {
-    material.isEditingXT = false;
     // Revert to original value if needed
   }
 
@@ -19614,25 +12711,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       return num.toLocaleString('vi-VN', { 
         minimumFractionDigits: 0, 
-        maximumFractionDigits: 2 
+        maximumFractionDigits: isRmQtyDecimalFactory(this.selectedFactory) ? RM_QTY_DECIMALS_4 : 2
       });
     }
-  }
-
-  // Get material name from catalog
-  getMaterialName(materialCode: string): string {
-    if (this.catalogCache.has(materialCode)) {
-      return this.catalogCache.get(materialCode)!.materialName;
-    }
-    return materialCode;
-  }
-
-  // Get material unit from catalog
-  getMaterialUnit(materialCode: string): string {
-    if (this.catalogCache.has(materialCode)) {
-      return this.catalogCache.get(materialCode)!.unit;
-    }
-    return 'PCS';
   }
 
   // Get standard packing from catalog
@@ -19665,7 +12746,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Tick "đã kiểm kê" cho dòng — ghi kèm tài khoản đã tick vào đúng doc này, không đọc lại. */
   async toggleKk(material: InventoryMaterial): Promise<void> {
-    if (!this.canEdit || !material.id) return;
+    if (!this.canEdit || !material.id || this.denyAction('kkTick')) return;
     const next = !material.kkChecked;
     if (!next) {
       const code = String(material.materialCode || '').trim().toUpperCase() || '(không mã)';
@@ -19707,7 +12788,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         ...(next ? {} : { kkScanCount: 0 })
       });
       if (next) {
-        await this.firestore.collection('inventory-kk-history').add({
+        await this.kkLogAdd({
           inventoryDocId: material.id,
           factory: this.resolveKkFactoryForMaterial(material),
           materialCode: String(material.materialCode || '').trim().toUpperCase(),
@@ -19987,7 +13068,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private normalizeTimestamp(v: unknown): Date | null {
+  protected normalizeTimestamp(v: unknown): Date | null {
     if (!v) return null;
     if (v instanceof Date) return v;
     const ts = v as { toDate?: () => Date; seconds?: number };
@@ -20022,76 +13103,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.kkCheckByMaterial = [];
   }
 
-  /** @deprecated Dùng runKkCheckOnInventory — giữ tên cũ phòng chỗ gọi khác. */
-  openKkCheckPopup(): void {
-    this.runKkCheckOnInventory();
-  }
-
-  closeKkCheckPopup(): void {
-    if (this.kkCheckRunning) return;
-    this.showKkCheckPopup = false;
-  }
-
-  setKkCheckFactory(factory: 'ASM1' | 'ASM2' | 'ASM3'): void {
-    if (this.kkCheckRunning || this.kkCheckSelectedFactory === factory) return;
-    this.kkCheckSelectedFactory = factory;
-    this.kkCheckRan = false;
-    this.kkCheckTotalRows = 0;
-    this.kkCheckCheckedRows = 0;
-    this.kkCheckByMaterial = [];
-    this.kkCheckFilterMode = 'all';
-    this.kkCheckSearchCode = '';
-    this.kkCheckSearchLocation = '';
-    void this.runKkCheck();
-  }
-
-  setKkCheckFilterMode(mode: 'all' | 'checked' | 'unchecked'): void {
-    this.kkCheckFilterMode = mode;
-  }
-
   get kkCheckProgressPercent(): number {
     if (!this.kkCheckTotalRows) return 0;
     return Math.min(100, (this.kkCheckCheckedRows / this.kkCheckTotalRows) * 100);
   }
 
-  get kkTickedCountLabel(): number {
-    return this.kkTickedMaterialsCache.length || this.filteredInventory.length;
-  }
-
-  getKkRowProgress(row: { total: number; checked: number }): number {
-    if (!row?.total) return 0;
-    return Math.min(100, (row.checked / row.total) * 100);
-  }
-
-  get kkCheckDoneCount(): number {
-    return this.kkCheckByMaterial.filter((r) => r.remaining === 0).length;
-  }
-
-  get kkCheckPendingCount(): number {
-    return this.kkCheckByMaterial.filter((r) => r.remaining > 0).length;
-  }
-
-  /** Danh sách mã hiển thị trong bảng theo bộ lọc trạng thái + tìm mã / vị trí (nhóm vị trí). */
-  get kkCheckFilteredMaterials(): Array<{ materialCode: string; total: number; checked: number; remaining: number; locations: string }> {
-    let rows = this.kkCheckByMaterial;
-    if (this.kkCheckFilterMode === 'checked') {
-      rows = rows.filter((r) => r.remaining === 0);
-    } else if (this.kkCheckFilterMode === 'unchecked') {
-      rows = rows.filter((r) => r.remaining > 0);
-    }
-    const codeQ = (this.kkCheckSearchCode || '').trim().toUpperCase();
-    const locQ = (this.kkCheckSearchLocation || '').trim().toUpperCase();
-    if (codeQ) {
-      rows = rows.filter((r) => r.materialCode.includes(codeQ));
-    }
-    if (locQ) {
-      rows = rows.filter((r) => this.locationsTextMatchesGroup(r.locations, locQ));
-    }
-    return rows;
-  }
-
   /** Tồn kho từ raw Firestore doc — cùng công thức calculateCurrentStock. */
-  private stockFromInventoryDoc(data: any): number {
+  protected stockFromInventoryDoc(data: any): number {
     const openingRaw = data?.openingStock;
     const openingStockValue = openingRaw !== null && openingRaw !== undefined && openingRaw !== ''
       ? Number(openingRaw) || 0
@@ -20189,96 +13207,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  async exportKkCatalog(): Promise<void> {
-    if (this.kkCatalogExporting) return;
-    const dateKey = String(this.kkCatalogDate || '').trim();
-    if (!dateKey) {
-      alert('Vui lòng chọn ngày kiểm kê.');
-      return;
-    }
-
-    this.kkCatalogExporting = true;
-    try {
-      const factory = this.kkCheckSelectedFactory;
-      const rows: Array<Record<string, unknown>> = [];
-
-      const historySnapshot = await this.firestore
-        .collection('inventory-kk-history', ref =>
-          ref
-            .where('factory', '==', factory)
-            .where('checkedDateKey', '==', dateKey)
-            .limit(10000)
-        )
-        .get()
-        .toPromise();
-
-      for (const doc of historySnapshot?.docs || []) {
-        const data = doc.data() as any;
-        rows.push({
-          'Ngày kiểm': dateKey,
-          'Nhà máy': String(data.factory || factory),
-          'Mã hàng': String(data.materialCode || ''),
-          'Tên hàng': String(data.materialName || ''),
-          'PO': String(data.poNumber || ''),
-          'Batch': String(data.batchNumber || ''),
-          'Vị trí': String(data.location || ''),
-          'Số lượng lúc kiểm': Number(data.quantity) || 0,
-          'Tồn lúc kiểm': Number(data.stock) || 0,
-          'ĐVT': String(data.unit || ''),
-          'ID kiểm': String(data.checkedBy || ''),
-          'Thời gian kiểm': this.formatLastStatusDate(this.normalizeTimestamp(data.checkedAt)),
-          'Inventory Doc ID': String(data.inventoryDocId || '')
-        });
-      }
-
-      if (!rows.length) {
-        const docs = await this.loadKkDocsForFactory(factory);
-        docs.forEach((doc) => {
-          const data = doc.data() as any;
-          const kkAt = this.normalizeTimestamp(data.kkAt);
-          if (data.kkChecked !== true || this.toDateKey(kkAt) !== dateKey) return;
-          rows.push({
-            'Ngày kiểm': dateKey,
-            'Nhà máy': this.resolveKkFactoryFromDocData(data),
-            'Mã hàng': String(data.materialCode || '').trim().toUpperCase(),
-            'Tên hàng': String(data.materialName || ''),
-            'PO': String(data.poNumber || ''),
-            'Batch': String(data.batchNumber || ''),
-            'Vị trí': String(data.location || '').trim().toUpperCase(),
-            'Số lượng lúc kiểm': Number(data.quantity) || 0,
-            'Tồn lúc kiểm': this.calculateKkStockFromDoc(data),
-            'ĐVT': String(data.unit || ''),
-            'ID kiểm': String(data.kkBy || ''),
-            'Thời gian kiểm': this.formatLastStatusDate(kkAt),
-            'Inventory Doc ID': String(doc.id || '')
-          });
-        });
-      }
-
-      if (!rows.length) {
-        alert(`Không có dữ liệu danh mục KK cho ${factory} ngày ${dateKey}.`);
-        return;
-      }
-
-      rows.sort((a, b) => {
-        const aTime = String(a['Thời gian kiểm'] || '');
-        const bTime = String(b['Thời gian kiểm'] || '');
-        return aTime.localeCompare(bTime);
-      });
-
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Danh muc KK');
-      XLSX.writeFile(wb, `Danh_muc_KK_${factory}_${dateKey}.xlsx`);
-    } catch (e) {
-      console.error('❌ exportKkCatalog:', e);
-      alert('❌ Không tải được danh mục KK.');
-    } finally {
-      this.kkCatalogExporting = false;
-    }
-  }
-
   private async loadKkDocsForFactory(factory: 'ASM1' | 'ASM2' | 'ASM3'): Promise<any[]> {
     if (factory === 'ASM3') {
       const [snapAsm3, snapAsm1, snapAsm2] = await Promise.all([
@@ -20300,22 +13228,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         }
       }
-      return docs;
+      return this.filterKkExcludedDocs(docs);
     }
 
     const snapshot = await this.firestore
       .collection('inventory-materials', ref => ref.where('factory', '==', factory).limit(10000))
       .get()
       .toPromise();
-    return (snapshot?.docs || []).filter((doc) => !isAsm3OrWh3PrefixLocation(String((doc.data() as any).location || '')));
-  }
-
-  private calculateKkStockFromDoc(data: any): number {
-    const openingStock = data?.openingStock != null ? Number(data.openingStock) : 0;
-    const quantity = Number(data?.quantity) || 0;
-    const exported = Number(data?.exported) || 0;
-    const xt = Number(data?.xt) || 0;
-    return openingStock + quantity - exported - xt;
+    return (snapshot?.docs || []).filter((doc) => !isAsm3OrWh3PrefixLocation(String((doc.data() as any).location || '')))
+      .filter((doc) => !MaterialsComponent.isKkExcludedCode((doc.data() as any).materialCode));
   }
 
   private resolveKkFactoryFromDocData(data: any): 'ASM1' | 'ASM2' | 'ASM3' {
@@ -20326,11 +13247,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return 'ASM1';
   }
 
-  private resolveKkFactoryForMaterial(material: InventoryMaterial): 'ASM1' | 'ASM2' | 'ASM3' {
+  protected resolveKkFactoryForMaterial(material: InventoryMaterial): 'ASM1' | 'ASM2' | 'ASM3' {
     return this.resolveKkFactoryFromDocData(material);
   }
 
-  private toDateKey(value: Date | null | undefined): string {
+  protected toDateKey(value: Date | null | undefined): string {
     if (!value) return '';
     const yyyy = value.getFullYear();
     const mm = String(value.getMonth() + 1).padStart(2, '0');
@@ -20382,8 +13303,34 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return q % s === 0;
   }
 
+  /** Khóa in QR cho dòng có IMD từ ngày trong Matrix trở đi (rule qrLockEnabled / qrLockImdFrom). */
+  isQrLocked(material: InventoryMaterial): boolean {
+    if (!this.ruleBool('qrLockEnabled')) return false;
+    const from = matrixDateMs(this.matrixRules['qrLockImdFrom']);
+    if (!from) return false;
+    let ms = 0;
+    const d: unknown = material?.importDate;
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      ms = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    } else {
+      const m = /^(\d{2})(\d{2})(\d{4})/.exec(this.getDisplayIMD(material).replace(/\D/g, ''));
+      if (m) ms = new Date(+m[3], +m[2] - 1, +m[1]).getTime();
+    }
+    return ms >= from;
+  }
+
+  qrLockTitle(): string {
+    const d = String(this.matrixRules['qrLockImdFrom'] || '').split('-').reverse().join('/');
+    return `Đã khóa — ${this.selectedFactory}, IMD từ ${d}`;
+  }
+
   // Print QR Code for inventory items
   async printQRCode(material: InventoryMaterial): Promise<void> {
+    if (this.denyAction('printQr')) return;
+    if (this.isQrLocked(material)) {
+      alert(`🔒 ${this.qrLockTitle()} (Matrix rule).`);
+      return;
+    }
     const QRCode = await import('qrcode') as any;
     try {
       console.log('🏷️ Generating QR code for ASM1 material:', material.materialCode);
@@ -20543,49 +13490,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  // Scan QR for location change — ĐÃ KHÓA: không còn sử dụng
-  scanLocationQR(material: InventoryMaterial): void {
-    return; // Chức năng cột Change đã khóa
-    
-    const dialogData: QRScannerData = {
-      title: 'Quét Barcode Vị Trí',
-      message: 'Camera sẽ tự động quét barcode vị trí mới',
-      materialCode: material.materialCode
-    };
-
-    const dialogRef = this.dialog.open(QRScannerModalComponent, {
-      width: '500px',
-      maxWidth: '95vw',
-      data: dialogData,
-      disableClose: true, // Prevent accidental close
-      panelClass: 'qr-scanner-dialog'
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      console.log('📷 QR Scanner result:', result);
-      
-      if (result && result.success && result.location) {
-        // Update location
-        const oldLocation = material.location;
-        material.location = result.location;
-        
-        console.log(`📍 Location changed: ${oldLocation} → ${result.location}`);
-        
-        // Save to Firebase
-        this.updateLocation(material);
-        
-        // Show success message
-        const method = result.manual ? 'nhập thủ công' : 'quét QR';
-        alert(`✅ Đã thay đổi vị trí thành công!\n\nMã hàng: ${material.materialCode}\nVị trí cũ: ${oldLocation}\nVị trí mới: ${result.location}\n\nPhương thức: ${method}`);
-        
-      } else if (result && result.cancelled) {
-        console.log('❌ QR scan cancelled by user');
-      } else {
-        console.log('❌ QR scan failed or no result');
-      }
-    });
-  }
-
   get resetLowStockSelectedCount(): number {
     return this.resetLowStockRows.filter((r) => r.selected).length;
   }
@@ -20656,178 +13560,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** Bỏ tiền tố J5-/J-/WH3-/ASM3-/00- cũ trước khi gắn tiền tố mới. */
-  private stripDoiKhoWhPrefix(location: string): string {
+  protected stripDoiKhoWhPrefix(location: string): string {
     const raw = String(location || '').trim();
     const m = /^(J5|J|WH3|ASM3|00|TIEUHUY)-(.+)$/i.exec(raw);
     return m ? m[2] : raw;
-  }
-
-  openDoiKho(): void {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) {
-      this.tryUnlockLocationColumn();
-      return;
-    }
-    this.showDoiKho = true;
-    this.doiKhoScanInput = '';
-    this.doiKhoPallet = '';
-    this.doiKhoWh = null;
-    this.doiKhoRows = [];
-    this.doiKhoError = '';
-    this.doiKhoBusy = false;
-    this.doiKhoLoading = false;
-    setTimeout(() => {
-      const el = document.getElementById('doiKhoScanInput') as HTMLInputElement | null;
-      el?.focus();
-    }, 80);
-  }
-
-  closeDoiKho(): void {
-    if (this.doiKhoBusy) return;
-    this.showDoiKho = false;
-    this.doiKhoScanInput = '';
-    this.doiKhoPallet = '';
-    this.doiKhoWh = null;
-    this.doiKhoRows = [];
-    this.doiKhoError = '';
-  }
-
-  async submitDoiKhoPallet(event?: Event): Promise<void> {
-    event?.preventDefault?.();
-    if (this.doiKhoBusy || this.doiKhoLoading) return;
-    const pallet = this.normalizeGanPalletCode(this.doiKhoScanInput);
-    this.doiKhoScanInput = pallet;
-    if (!pallet) {
-      this.doiKhoError = 'Vui lòng scan số pallet.';
-      return;
-    }
-    this.doiKhoLoading = true;
-    this.doiKhoError = '';
-    this.doiKhoPallet = '';
-    this.doiKhoRows = [];
-    this.doiKhoWh = null;
-    this.cdr.detectChanges();
-    try {
-      const snap = await this.firestore
-        .collection('inventory-materials', (ref) => ref.where('factory', '==', this.selectedFactory).limit(10000))
-        .get()
-        .toPromise();
-      const rows: DoiKhoRow[] = [];
-      const seen = new Set<string>();
-      for (const doc of snap?.docs || []) {
-        const data = doc.data() as any;
-        const stock = this.stockFromInventoryDoc(data);
-        if (stock <= 0) continue;
-        const palletId = String(data.palletId || '').trim().toUpperCase();
-        if (palletId !== pallet) continue;
-        if (seen.has(doc.id)) continue;
-        seen.add(doc.id);
-        rows.push({
-          id: doc.id,
-          materialCode: String(data.materialCode || '').trim(),
-          poNumber: String(data.poNumber || '').trim(),
-          location: String(data.location || data.viTri || '').trim().toUpperCase(),
-          palletId,
-          stock,
-          selected: true
-        });
-      }
-      if (!rows.length) {
-        this.doiKhoError = `Không tìm thấy pallet ${pallet} trên ${this.selectedFactory}.`;
-        return;
-      }
-      this.doiKhoPallet = pallet;
-      this.doiKhoRows = rows;
-    } catch (e) {
-      console.error('submitDoiKhoPallet:', e);
-      this.doiKhoError = 'Không tải được tồn kho để dời pallet.';
-    } finally {
-      this.doiKhoLoading = false;
-      this.cdr.detectChanges();
-      setTimeout(() => {
-        const el = document.getElementById('doiKhoScanInput') as HTMLInputElement | null;
-        el?.focus();
-        el?.select();
-      }, 40);
-    }
-  }
-
-  /** Đổi tiền tố vị trí sang J/ASM3 — mã pallet giữ nguyên. */
-  async confirmDoiKho(): Promise<void> {
-    if (!this.isLocationColumnUnlocked && !this.canEdit) {
-      this.tryUnlockLocationColumn();
-      return;
-    }
-    const wh = this.doiKhoWh;
-    const selected = this.doiKhoRows.filter((r) => !!r.id);
-    if (!wh || !selected.length) return;
-    const prefix = this.whWritePrefix(wh);
-    const locHint = prefix
-      ? `Vị trí locker/BOX giữ nguyên tên. Vị trí khác thêm tiền tố "${prefix}-".`
-      : 'Vị trí giữ nguyên như đang ghi, không thêm J5-.';
-    const confirmed = confirm(
-      `Dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}?\n\n` +
-        `${locHint} Mã pallet giữ nguyên.`
-    );
-    if (!confirmed) return;
-
-    this.doiKhoBusy = true;
-    this.cdr.detectChanges();
-    try {
-      const modifiedBy = await this.resolveLocationOperatorId();
-      const batchSize = 50;
-      for (let i = 0; i < selected.length; i += batchSize) {
-        const chunk = selected.slice(i, i + batchSize);
-        const batch = this.firestore.firestore.batch();
-        chunk.forEach((row) => {
-          const newLocation = this.composeLocationWithWh(wh, row.location);
-          const docRef = this.firestore.collection('inventory-materials').doc(row.id).ref;
-          batch.update(docRef, {
-            location: newLocation,
-            palletId: row.palletId,
-            updatedAt: new Date(),
-            lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
-            modifiedBy,
-            locationManualOverride: true
-          });
-          const historyRef = this.firestore.collection('material-location-history').doc().ref;
-          batch.set(historyRef, {
-            factory: this.selectedFactory,
-            materialId: row.id,
-            materialCode: row.materialCode,
-            poNumber: row.poNumber || '',
-            fromLocation: row.location,
-            toLocation: newLocation,
-            palletId: row.palletId,
-            changedBy: modifiedBy,
-            changeType: 'doi-kho',
-            changedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-          });
-        });
-        await batch.commit();
-        if (i + batchSize < selected.length) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      }
-      const idSet = new Set(selected.map((r) => r.id));
-      this.inventoryMaterials.forEach((m) => {
-        if (!m.id || !idSet.has(m.id)) return;
-        m.location = this.composeLocationWithWh(wh, m.location);
-        m.palletId = this.doiKhoPallet;
-        m.lastStatusAt = new Date();
-        m.lastStatusKind = 'Change location';
-        m.lastStatusBy = modifiedBy;
-      });
-      this.applyFilters();
-      alert(`Đã dời ${selected.length} dòng pallet ${this.doiKhoPallet} sang kho ${wh}.`);
-      this.doiKhoBusy = false;
-      this.closeDoiKho();
-    } catch (error: any) {
-      console.error('confirmDoiKho:', error);
-      alert(`Lỗi khi dời kho: ${error?.message || error}`);
-    } finally {
-      this.doiKhoBusy = false;
-      this.cdr.markForCheck();
-    }
   }
 
   /** Reset: (1) ẩn tồn = 0, (2) popup chọn ẩn các mã tồn < 1. */
@@ -20906,25 +13642,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (/^\d+$/.test(suffix) && suffix.length > 0) return baseDate + suffix;
     }
     return baseDate;
-  }
-
-  private async deleteInventoryDocsByIds(ids: string[]): Promise<number> {
-    if (!ids.length) return 0;
-    const batchSize = 50;
-    let deletedCount = 0;
-    for (let i = 0; i < ids.length; i += batchSize) {
-      const batch = this.firestore.firestore.batch();
-      const chunk = ids.slice(i, i + batchSize);
-      chunk.forEach((id) => {
-        batch.delete(this.firestore.collection('inventory-materials').doc(id).ref);
-      });
-      await batch.commit();
-      deletedCount += chunk.length;
-      if (i + batchSize < ids.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-    return deletedCount;
   }
 
   private removeInventoryByIds(ids: Set<string>): void {
@@ -21123,15 +13840,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     };
   }
 
-  private formatInboundLabelQuantity(qty: string): string {
-    const raw = String(qty ?? '').trim().replace(/,/g, '');
-    if (raw === '') return '';
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return String(qty);
-    return n.toLocaleString('en-US');
-  }
-
-  private escapeHtmlForPrint(s: string): string {
+  protected escapeHtmlForPrint(s: string): string {
     return String(s ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -21142,6 +13851,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   // ─── In Tùy Chỉnh ───────────────────────────────────────────────────────────
 
   openCustomPrintDialog(): void {
+    if (this.denyAction('printLabels')) return;
     this.customPrintCode = '';
     this.customPrintPo = '';
     this.customPrintQty = '';
@@ -21293,20 +14003,6 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e) {
       console.warn('attachMaterialQrLabelHomeLocs failed:', e);
     }
-  }
-
-  // @deprecated Dùng ensureCatalogLoaded() — giữ để code cũ không gọi .get() riêng
-  private async loadCatalogOnce(): Promise<void> {
-    await this.ensureCatalogLoaded();
-  }
-
-  // Apply catalog data to existing inventory materials
-  private applyCatalogToInventory(): void {
-    if (!this.catalogLoaded || this.inventoryMaterials.length === 0) {
-      return;
-    }
-    this.applyCatalogToMaterials(this.inventoryMaterials);
-    this.cdr.detectChanges();
   }
 
   // Gộp dòng tự động khi load toàn bộ inventory
@@ -21857,51 +14553,55 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  // ── Cờ mở popup chỉ dùng ở trang Kiểm kê: để ở lớp cha vì điều kiện *ngIf ngoài cùng của template dùng chung được AOT kiểm tra ──
+  showNlPdaScan = false;
+  showKkScanGuide = false;
+  showKkShelfLabelPicker = false;
+  showKkMucReportPicker = false;
+  showKkCodeLookup = false;
+
+  showKkLog = false;
+
+  // ===== Log Zalo đủ / thiếu: nhân viên rep tin tồn kho của bot bằng "đủ" / "thiếu" (zalo-material-check-log) =====
+  showZaloCheckLog = false;
+
+  /** In bảng đang hiện (mọi dòng đang lọc) — khổ A4 ngang. */
+  /** Popup chọn in có / không lịch sử KK. */
+  kkPrintChoice = false;
+
+  // ===== Report cảnh báo KK =====
+  showKkWarnReport = false;
 
 
-  // Kiểm tra lịch sử xuất của material
-  checkExportHistory(material: InventoryMaterial): void {
-    console.log(`🔍 DEBUG: Checking export history for ${material.materialCode} - PO: ${material.poNumber} - Location: ${material.location}`);
-    console.log(`📊 Material details:`, {
-      id: material.id,
-      quantity: material.quantity,
-      exported: material.exported,
-      xt: material.xt,
-      calculatedStock: this.calculateCurrentStock(material),
-      location: material.location
-    });
+  // ===== Matrix rule & quyền (materials-matrix.ts) — mỗi nhà máy 1 doc app-settings/materials-matrix-<factory> =====
+  readonly matrixRuleDefs = RULE_DEFS;
 
-    // Kiểm tra trong collection outbound-materials - CHỈ LẤY THEO VỊ TRÍ CỤ THỂ
-    this.firestore.collection('outbound-materials', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('poNumber', '==', material.poNumber)
-         .where('location', '==', material.location) // Thêm điều kiện vị trí để tránh nhân đôi
-         .where('factory', '==', this.selectedFactory)
-         .orderBy('exportDate', 'desc')
-         .limit(10)
-    ).get().subscribe(snapshot => {
-      console.log(`📦 Found ${snapshot.docs.length} outbound records for ${material.materialCode} - ${material.poNumber} - Location ${material.location}`);
-      
-      snapshot.docs.forEach((doc, index) => {
-        const data = doc.data() as any;
-        console.log(`  ${index + 1}. Export: ${data.exportQuantity} from Location ${data.location} on ${data.exportDate?.toDate?.() || data.exportDate}`);
-      });
-    });
-
-    // Kiểm tra trong collection inventory-materials
-    this.firestore.collection('inventory-materials', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('poNumber', '==', material.poNumber)
-         .where('factory', '==', this.selectedFactory)
-    ).get().subscribe(snapshot => {
-      console.log(`📋 Found ${snapshot.docs.length} inventory records for ${material.materialCode} - ${material.poNumber}`);
-      
-      snapshot.docs.forEach((doc, index) => {
-        const data = doc.data() as any;
-        console.log(`  ${index + 1}. ID: ${doc.id}, Location: ${data.location}, Exported: ${data.exported}, Stock: ${data.stock}, Updated: ${data.updatedAt?.toDate?.() || data.updatedAt}`);
-      });
-    });
+  private async openTemLeGwStep(res: TemLeSplitResult, code: string, po: string, imd: string, sourceQty: number): Promise<void> {
+    let gwFull = 0;
+    let std = this.getStandardPacking(code) || 0;
+    try {
+      const cat = await this.nvlCatalogFull.getByCode(code);
+      gwFull = catalogBagWeight(cat);
+      if (!std) std = Number(cat?.standardPacking) || 0;
+    } catch { /* thiếu danh mục → yêu cầu nhập GW bag nguyên */ }
+    this.temLeGwStep = {
+      logId: res.logId, code, po, imd, clTag: res.clTag, clQty: res.clQty,
+      fullQty: std || sourceQty, gwFull, gwFullKnown: gwFull > 0
+    };
+    this.temLeGwCl = null;
+    this.temLeGwFullInput = null;
+    this.temLeGwMsg = '';
+    this.temLeGwOk = null;
+    this.cdr.detectChanges();
+    setTimeout(() => (document.getElementById('tem-le-gw-cl') as HTMLInputElement | null)?.focus(), 50);
   }
 
+  /** Menu thả xuống trên thanh chi tiết box: Lọc / Thao tác / Xuất. */
+  kkTypeMenu: 'filter' | 'action' | 'export' | null = null;
+
+  toggleKkTypeMenu(menu: 'filter' | 'action' | 'export', event?: Event): void {
+    event?.stopPropagation();
+    this.kkTypeMenu = this.kkTypeMenu === menu ? null : menu;
+  }
 
 }

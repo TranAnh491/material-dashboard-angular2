@@ -2,7 +2,7 @@
   <div class="dv-catalog-header">
     <div class="dv-catalog-header__title">
       <h2>Danh mục NVL &amp; TP</h2>
-      <p>Quản lý tập trung danh mục nguyên vật liệu (NVL) và thành phẩm (TP) &amp; mapping khách hàng.</p>
+      <p>Nguyên vật liệu, thành phẩm &amp; mapping khách hàng, quy tắc cân.</p>
     </div>
     <div class="dv-catalog-header__actions">
       <button type="button" class="dv-btn dv-btn--ghost" (click)="goToMenu()">
@@ -21,80 +21,102 @@
     <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'storage'" (click)="setTab('storage')">
       Storage Standard
     </button>
+    <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'weigh'" (click)="setTab('weigh')">
+      Check lượng / Cân
+      <span class="dv-weigh-badge" *ngIf="weighPending.length">{{ weighPending.length }}</span>
+    </button>
   </div>
 
   <!-- ===== NVL ===== -->
   <section class="dv-panel" *ngIf="activeTab === 'nvl'">
-    <div class="dv-toolbar">
-      <div class="dv-toolbar__left">
-        <div class="dv-btn-group" role="group" aria-label="Tiện ích">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="loadNvl(true)" [disabled]="isNvlLoading"
-                  title="Tải lại danh mục">
-            <i class="material-icons">refresh</i>
-            <span>{{ isNvlLoading ? 'Đang tải...' : 'Làm mới' }}</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--purple]="nvlOnlyWithStock"
-                  (click)="toggleNvlOnlyWithStock()" [disabled]="isNvlStockFilterLoading"
-                  title="Chỉ hiển thị mã đang có tồn kho (ASM1 + ASM2)">
-            <i class="material-icons">inventory_2</i>
-            <span>{{ isNvlStockFilterLoading ? 'Đang lọc...' : 'Chỉ có tồn' }}</span>
-          </button>
-        </div>
-        <div class="dv-btn-group" role="group" aria-label="Dọn dẹp">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="dedupeNvlDuplicates()" [disabled]="isNvlDeduping"
-                  title="Gộp mã trùng — mỗi mã giữ 1 dòng">
-            <i class="material-icons">merge_type</i>
-            <span>{{ isNvlDeduping ? 'Đang gộp...' : 'Xóa trùng' }}</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="auditStandardPackingFromOutbound()" [disabled]="isSpAuditRunning"
-                  title="Đề xuất Standard Packing cho mã thiếu/nghi sai (số thập phân) từ lịch sử Outbound">
-            <i class="material-icons">fact_check</i>
-            <span>{{ isSpAuditRunning ? 'Đang rà soát...' : 'Rà soát Standard Packing' }}</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--danger-text" (click)="openDeleteAllDialog('nvl')"
-                  title="Xóa toàn bộ danh mục NVL (cần OTP Zalo)">
-            <i class="material-icons">delete</i>
-            <span>Xóa tất cả</span>
-          </button>
-        </div>
+    <div class="dv-bar">
+      <div class="dv-search-bar dv-bar__search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="nvlSearchText" (input)="onNvlSearchChange()" placeholder="Tìm mã NVL, tên hoặc ĐVT...">
+        <button type="button" class="dv-search-clear" *ngIf="nvlSearchText" (click)="clearNvlSearch()">
+          <i class="material-icons">close</i>
+        </button>
       </div>
+      <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--active]="showNvlColumnFilters"
+              (click)="showNvlColumnFilters = !showNvlColumnFilters" title="Lọc theo từng cột">
+        <i class="material-icons">filter_list</i>
+        <span>Lọc<ng-container *ngIf="activeFilterCount(nvlColumnFilters)"> ({{ activeFilterCount(nvlColumnFilters) }})</ng-container></span>
+      </button>
+      <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--purple]="nvlOnlyWithStock"
+              (click)="toggleNvlOnlyWithStock()" [disabled]="isNvlStockFilterLoading"
+              title="Chỉ hiển thị mã đang có tồn kho (ASM1 + ASM2)">
+        <i class="material-icons">inventory_2</i>
+        <span>{{ isNvlStockFilterLoading ? 'Đang lọc...' : 'Chỉ có tồn' }}</span>
+      </button>
 
-      <div class="dv-toolbar__right">
-        <div class="dv-btn-group" role="group" aria-label="Danh mục NVL">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="downloadNvlTemplate()"
-                  title="Tải template Excel danh mục NVL">
-            <i class="material-icons">download</i>
-            <span>Template</span>
+      <div class="dv-bar__right">
+        <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" [class.dv-btn--active]="showNvlAddForm"
+                (click)="toggleNvlAddForm()" title="Thêm dòng thủ công">
+          <i class="material-icons">add</i>
+          <span>Thêm</span>
+        </button>
+        <div class="dv-menu">
+          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="toggleMenu('nvl-excel', $event)">
+            <i class="material-icons">table_view</i>
+            <span>{{ isNvlImporting || isNvlKhImporting ? 'Import...' : 'Excel' }}</span>
+            <i class="material-icons dv-menu__caret">expand_more</i>
           </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--active]="showNvlAddForm"
-                  (click)="toggleNvlAddForm()" title="Thêm dòng thủ công">
-            <i class="material-icons">add</i>
-            <span>Thêm</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="exportNvlCurrent()"
-                  title="Export danh sách hiện tại">
-            <i class="material-icons">file_download</i>
-            <span>Export</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="importNvlFromExcel()" [disabled]="isNvlImporting"
-                  title="Import Mã/Tên/ĐVT — cột A/D/E từ dòng 5">
-            <i class="material-icons">file_upload</i>
-            <span>{{ isNvlImporting ? 'Import...' : 'Import' }}</span>
-          </button>
+          <div class="dv-menu__list" *ngIf="openMenu === 'nvl-excel'">
+            <div class="dv-menu__label">Danh mục NVL</div>
+            <button type="button" (click)="importNvlFromExcel()" [disabled]="isNvlImporting">
+              <i class="material-icons">file_upload</i> Import NVL <small>Mã/Tên/ĐVT — cột A/D/E từ dòng 5</small>
+            </button>
+            <button type="button" (click)="exportNvlCurrent()">
+              <i class="material-icons">file_download</i> Export danh sách đang lọc
+            </button>
+            <button type="button" (click)="downloadNvlTemplate()">
+              <i class="material-icons">download</i> Tải template NVL
+            </button>
+            <div class="dv-menu__label">Khách hàng</div>
+            <button type="button" (click)="importNvlKhFromExcel()" [disabled]="isNvlKhImporting">
+              <i class="material-icons">groups</i> Import khách hàng <small>thay thế toàn bộ theo mã</small>
+            </button>
+            <button type="button" (click)="downloadNvlKhTemplate()">
+              <i class="material-icons">download</i> Tải template KH
+            </button>
+          </div>
         </div>
-        <div class="dv-btn-group dv-btn-group--accent" role="group" aria-label="Khách hàng">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="downloadNvlKhTemplate()"
-                  title="Tải template mapping khách hàng">
-            <i class="material-icons">download</i>
-            <span>Template KH</span>
+        <div class="dv-menu">
+          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="toggleMenu('nvl-tools', $event)" title="Công cụ">
+            <i class="material-icons">more_horiz</i>
+            <span>Công cụ</span>
           </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" (click)="importNvlKhFromExcel()" [disabled]="isNvlKhImporting"
-                  title="Import khách hàng — thay thế toàn bộ theo mã">
-            <i class="material-icons">groups</i>
-            <span>{{ isNvlKhImporting ? 'Import...' : 'Import KH' }}</span>
-          </button>
+          <div class="dv-menu__list dv-menu__list--right" *ngIf="openMenu === 'nvl-tools'">
+            <button type="button" (click)="loadNvl(true)" [disabled]="isNvlLoading">
+              <i class="material-icons">refresh</i> {{ isNvlLoading ? 'Đang tải...' : 'Làm mới' }}
+            </button>
+            <button type="button" (click)="dedupeNvlDuplicates()" [disabled]="isNvlDeduping">
+              <i class="material-icons">merge_type</i> {{ isNvlDeduping ? 'Đang gộp...' : 'Xóa mã trùng' }}
+            </button>
+            <button type="button" (click)="auditStandardPackingFromOutbound()" [disabled]="isSpAuditRunning">
+              <i class="material-icons">fact_check</i> {{ isSpAuditRunning ? 'Đang rà soát...' : 'Rà soát Standard Packing' }}
+            </button>
+            <button type="button" class="dv-menu__danger" (click)="openDeleteAllDialog('nvl')">
+              <i class="material-icons">delete</i> Xóa tất cả <small>cần OTP Zalo</small>
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+
+    <div class="dv-column-filters" *ngIf="showNvlColumnFilters">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialCode"
+             (ngModelChange)="applyNvlFilters()" placeholder="Mã NVL">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialName"
+             (ngModelChange)="applyNvlFilters()" placeholder="Tên">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
+             (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unitWeight"
+             (ngModelChange)="applyNvlFilters()" placeholder="Trọng lượng">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
+             (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.requiredLocation"
+             (ngModelChange)="applyNvlFilters()" placeholder="Vị trí yêu cầu">
     </div>
 
     <div class="dv-add-row" *ngIf="showNvlAddForm">
@@ -108,40 +130,9 @@
       </button>
     </div>
 
-    <div class="dv-filter-bar">
-      <div class="dv-search-bar">
-        <i class="material-icons">search</i>
-        <input type="search" [(ngModel)]="nvlSearchText" (input)="onNvlSearchChange()" placeholder="Nhập mã NVL, tên hoặc ĐVT...">
-        <button type="button" class="dv-search-clear" *ngIf="nvlSearchText" (click)="clearNvlSearch()">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-      <div class="dv-column-filters">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialCode"
-               (ngModelChange)="applyNvlFilters()" placeholder="Mã NVL">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialName"
-               (ngModelChange)="applyNvlFilters()" placeholder="Tên">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
-               (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unitWeight"
-               (ngModelChange)="applyNvlFilters()" placeholder="Trọng lượng">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
-               (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.requiredLocation"
-               (ngModelChange)="applyNvlFilters()" placeholder="Vị trí yêu cầu">
-      </div>
-    </div>
-
     <div class="dv-page-bar">
-      <label class="dv-page-size">
-        Hiển thị
-        <select [(ngModel)]="nvlPageSize" (ngModelChange)="onNvlPageSizeChange()">
-          <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
-        </select>
-        dòng
-      </label>
+      <span class="dv-page-total">{{ filteredNvlItems.length | number }} mã</span>
       <div class="dv-page-bar__right">
-        <span class="dv-page-total">Tổng: {{ filteredNvlItems.length | number }} dòng</span>
         <div class="dv-pagination" *ngIf="nvlTotalPages > 1">
           <button type="button" class="dv-page-btn" [disabled]="nvlCurrentPage === 1" (click)="setNvlPage(nvlCurrentPage - 1)">
             <i class="material-icons">chevron_left</i>
@@ -155,6 +146,11 @@
             <i class="material-icons">chevron_right</i>
           </button>
         </div>
+        <label class="dv-page-size">
+          <select [(ngModel)]="nvlPageSize" (ngModelChange)="onNvlPageSizeChange()">
+            <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }} / trang</option>
+          </select>
+        </label>
       </div>
     </div>
 
@@ -163,48 +159,59 @@
 
     <div class="dv-table-wrap" *ngIf="!isNvlLoading && pagedNvlItems.length">
       <div class="dv-table-scroll">
-      <table class="dv-catalog-table dv-catalog-table--nvl">
+      <table class="dv-catalog-table dv-catalog-table--lean dv-catalog-table--nvl2">
         <thead>
           <tr>
-            <th>Mã NVL</th>
-            <th>Tên</th>
+            <th>Mã / Tên NVL</th>
             <th>ĐVT</th>
-            <th>Trọng lượng</th>
-            <th title="Danh mục NVLKH — gộp vào đây để sửa cùng chỗ">Khách hàng</th>
-            <th title="Danh mục DV Lưu trữ — gộp vào đây để sửa cùng chỗ">DV Lưu trữ</th>
-            <th title="Vị trí yêu cầu theo loại hàng (gán ngoài box KK)">Vị trí yêu cầu</th>
-            <th>Standard Packing</th>
-            <th>Lock</th>
-            <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
-            <th>Thao tác</th>
-            <th title="Mã nhân viên người sửa gần nhất">ID</th>
+            <th title="Standard Packing — lượng 1 bag nguyên">Std Packing</th>
+            <th title="GW 1 bag nguyên (gram); dòng dưới = trọng lượng 1 đơn vị (GW bag ÷ Standard Packing)">GW bag (g)</th>
+            <th title="Lượng trong 1 thùng — dùng tính số tem thùng">Lượng thùng</th>
+            <th>Khách hàng</th>
+            <th title="DV Lưu trữ; dòng dưới = Vị trí yêu cầu">Lưu trữ</th>
+            <th title="Lock = khóa Standard Packing / Tên / ĐVT · Xuất thùng = cho quét Tem Thùng ở Outbound">Cài đặt</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of pagedNvlItems" [class.dv-row-editing]="isNvlEditing(row)">
-            <td class="dv-cell-code">
+            <td class="dv-cell-main">
               <button type="button" class="dv-code-link" (click)="startEditNvl(row)">{{ row.materialCode }}</button>
-            </td>
-            <td>
               <ng-container *ngIf="isNvlEditing(row); else nvlNameView">
                 <input type="text" class="dv-input dv-input--cell" [(ngModel)]="nvlEditDraft!.materialName"
-                       [disabled]="row.standardPackingLocked">
+                       [disabled]="row.standardPackingLocked" placeholder="Tên NVL">
               </ng-container>
-              <ng-template #nvlNameView>{{ row.materialName }}</ng-template>
+              <ng-template #nvlNameView><span class="dv-cell-sub" [title]="row.materialName">{{ row.materialName || '—' }}</span></ng-template>
             </td>
             <td>
               <ng-container *ngIf="isNvlEditing(row); else nvlUnitView">
                 <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.unit"
                        [disabled]="row.standardPackingLocked">
               </ng-container>
-              <ng-template #nvlUnitView>{{ row.unit }}</ng-template>
+              <ng-template #nvlUnitView>{{ row.unit || '—' }}</ng-template>
             </td>
             <td class="dv-cell-number">
-              <ng-container *ngIf="isNvlEditing(row); else nvlWeightView">
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.unitWeight"
+              <ng-container *ngIf="isNvlEditing(row); else nvlPackingInlineView">
+                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.standardPacking"
                        [disabled]="row.standardPackingLocked" min="0">
               </ng-container>
-              <ng-template #nvlWeightView>{{ row.unitWeight || 0 }}</ng-template>
+              <ng-template #nvlPackingInlineView>
+                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
+                       [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
+              </ng-template>
+            </td>
+            <td class="dv-cell-number">
+              <input type="number" class="dv-input dv-input--cell dv-input--sm" [ngModel]="row.gwBag || null"
+                     (change)="updateNvlGwBag(row, $any($event.target).value)" min="0" placeholder="—"
+                     title="GW 1 bag nguyên (gram)">
+              <span class="dv-cell-sub" *ngIf="nvlUnitWeightCalc(row) != null" title="Trọng lượng 1 đơn vị = GW bag ÷ Standard Packing">
+                {{ nvlUnitWeightCalc(row) | number:'1.0-4' }} g/{{ row.unit || 'đv' }}
+              </span>
+            </td>
+            <td class="dv-cell-number">
+              <input type="number" class="dv-input dv-input--cell dv-input--sm" [ngModel]="row.cartonQty || null"
+                     (change)="updateNvlCartonQty(row, $any($event.target).value)" min="0" step="any" placeholder="—"
+                     title="Lượng trong 1 thùng">
             </td>
             <td class="dv-cell-customers">
               <ng-container *ngIf="isNvlEditing(row); else nvlCustomerView">
@@ -226,23 +233,17 @@
                       [title]="row.storageUnitSize ? 'Sửa DV Lưu trữ' : 'Chọn DV Lưu trữ'">
                 {{ getStorageUnitLabel(row.storageUnitSize) || '—' }}
               </button>
+              <span class="dv-cell-sub" *ngIf="row.requiredLocation" title="Vị trí yêu cầu">📍 {{ row.requiredLocation }}</span>
             </td>
-            <td>{{ row.requiredLocation || '—' }}</td>
-            <td class="dv-cell-number">
-              <ng-container *ngIf="isNvlEditing(row); else nvlPackingInlineView">
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.standardPacking"
-                       [disabled]="row.standardPackingLocked" min="0">
-              </ng-container>
-              <ng-template #nvlPackingInlineView>
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
-                       [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
-              </ng-template>
-            </td>
-            <td class="dv-lock-cell">
-              <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
-            </td>
-            <td class="dv-lock-cell">
-              <mat-slide-toggle color="primary" [checked]="row.allowExportByCarton" (change)="toggleNvlAllowExportByCarton(row)"></mat-slide-toggle>
+            <td class="dv-cell-flags">
+              <label title="Khóa Standard Packing / Tên / ĐVT">
+                <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
+                <span>Lock</span>
+              </label>
+              <label title="Cho phép quét Tem Thùng để xuất kho ở Outbound">
+                <mat-slide-toggle color="primary" [checked]="row.allowExportByCarton" (change)="toggleNvlAllowExportByCarton(row)"></mat-slide-toggle>
+                <span>Xuất thùng</span>
+              </label>
             </td>
             <td class="dv-actions">
               <ng-container *ngIf="isNvlEditing(row); else nvlActionView">
@@ -254,15 +255,15 @@
                 </button>
               </ng-container>
               <ng-template #nvlActionView>
-                <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteNvlItem(row)" title="Xóa">
-                  <i class="material-icons">delete_outline</i>
-                </button>
                 <button type="button" class="dv-icon-btn dv-icon-btn--edit" (click)="startEditNvl(row)" title="Sửa">
                   <i class="material-icons">edit</i>
                 </button>
+                <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteNvlItem(row)" title="Xóa">
+                  <i class="material-icons">delete_outline</i>
+                </button>
               </ng-template>
+              <span class="dv-cell-sub dv-cell-by" *ngIf="row.lastEditedBy" title="Người sửa gần nhất">{{ row.lastEditedBy }}</span>
             </td>
-            <td class="dv-cell-code">{{ row.lastEditedBy || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -272,61 +273,87 @@
 
   <!-- ===== TP ===== -->
   <section class="dv-panel" *ngIf="activeTab === 'tp'">
-    <div class="dv-toolbar">
-      <div class="dv-toolbar__left">
-        <span class="dv-import-summary" *ngIf="tpLastImportAt">
-          Import: {{ formatUpdatedAt(tpLastImportAt) }}<span *ngIf="tpLastImportDetail"> · {{ tpLastImportDetail }}</span>
-        </span>
-        <div class="dv-btn-group" role="group" aria-label="Tiện ích">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="loadTp(true)" [disabled]="isTpLoading"
-                  title="Tải lại danh mục">
-            <i class="material-icons">refresh</i>
-            <span>{{ isTpLoading ? 'Đang tải...' : 'Làm mới' }}</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="deleteTpItemsWithoutCustomerCode()"
-                  title="Xóa dòng chưa có Mã KH">
-            <i class="material-icons">playlist_remove</i>
-            <span>Thiếu Mã KH</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--danger-text" (click)="openDeleteAllDialog('tp')"
-                  title="Xóa toàn bộ danh mục TP (cần OTP Zalo)">
-            <i class="material-icons">delete</i>
-            <span>Xóa tất cả</span>
-          </button>
-        </div>
-        <div class="dv-btn-group" role="group" aria-label="Copy dữ liệu">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="copyCartonPackingQtyFromStandard()" [disabled]="isTpCopyingCartonQty"
-                  title="Copy SL SP/thùng → Lượng Đóng Thùng (ghi đè)">
-            <i class="material-icons">content_copy</i>
-            <span>{{ isTpCopyingCartonQty ? 'Đang copy...' : 'Copy thùng' }}</span>
-          </button>
-        </div>
+    <div class="dv-bar">
+      <div class="dv-search-bar dv-bar__search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="tpSearchText" (input)="onTpSearchChange()" placeholder="Tìm mã vật tư, mã KH hoặc khách hàng...">
+        <button type="button" class="dv-search-clear" *ngIf="tpSearchText" (click)="clearTpSearch()">
+          <i class="material-icons">close</i>
+        </button>
       </div>
+      <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--active]="showTpColumnFilters"
+              (click)="showTpColumnFilters = !showTpColumnFilters" title="Lọc theo từng cột">
+        <i class="material-icons">filter_list</i>
+        <span>Lọc<ng-container *ngIf="activeFilterCount(tpColumnFilters)"> ({{ activeFilterCount(tpColumnFilters) }})</ng-container></span>
+      </button>
+      <button type="button" class="dv-mismatch-badge dv-mismatch-badge--btn" *ngIf="tpMismatchCount > 0"
+              (click)="openTpMismatchPanel()"
+              title="Cả SL SP/thùng và Lượng Đóng Thùng đều đã có giá trị nhưng khác nhau. Bấm để xem danh sách.">
+        <i class="material-icons">error_outline</i>
+        {{ tpMismatchCount | number }} mã lệch SP/thùng
+      </button>
 
-      <div class="dv-toolbar__right">
-        <div class="dv-btn-group" role="group" aria-label="Danh mục TP">
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="downloadTpTemplate()"
-                  title="Tải template Excel">
-            <i class="material-icons">download</i>
-            <span>Template</span>
+      <div class="dv-bar__right">
+        <span class="dv-import-summary" *ngIf="tpLastImportAt" [title]="tpLastImportDetail || ''">
+          Import: {{ formatUpdatedAt(tpLastImportAt) }}
+        </span>
+        <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" [class.dv-btn--active]="showTpAddForm"
+                (click)="toggleTpAddForm()" title="Thêm dòng thủ công">
+          <i class="material-icons">add</i>
+          <span>Thêm</span>
+        </button>
+        <div class="dv-menu">
+          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="toggleMenu('tp-excel', $event)">
+            <i class="material-icons">table_view</i>
+            <span>{{ isTpImporting ? 'Import...' : 'Excel' }}</span>
+            <i class="material-icons dv-menu__caret">expand_more</i>
           </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--active]="showTpAddForm"
-                  (click)="toggleTpAddForm()" title="Thêm dòng thủ công">
-            <i class="material-icons">add</i>
-            <span>Thêm</span>
+          <div class="dv-menu__list" *ngIf="openMenu === 'tp-excel'">
+            <button type="button" (click)="importTpFromExcel()" [disabled]="isTpImporting">
+              <i class="material-icons">file_upload</i> Import Excel <small>thay thế toàn bộ danh mục</small>
+            </button>
+            <button type="button" (click)="downloadTpCurrent()">
+              <i class="material-icons">file_download</i> Export danh sách đang lọc
+            </button>
+            <button type="button" (click)="downloadTpTemplate()">
+              <i class="material-icons">download</i> Tải template
+            </button>
+          </div>
+        </div>
+        <div class="dv-menu">
+          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="toggleMenu('tp-tools', $event)" title="Công cụ">
+            <i class="material-icons">more_horiz</i>
+            <span>Công cụ</span>
           </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="downloadTpCurrent()"
-                  title="Export danh sách hiện tại">
-            <i class="material-icons">file_download</i>
-            <span>Export</span>
-          </button>
-          <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" (click)="importTpFromExcel()" [disabled]="isTpImporting"
-                  title="Import Excel — thay thế toàn bộ danh mục">
-            <i class="material-icons">file_upload</i>
-            <span>{{ isTpImporting ? 'Import...' : 'Import' }}</span>
-          </button>
+          <div class="dv-menu__list dv-menu__list--right" *ngIf="openMenu === 'tp-tools'">
+            <button type="button" (click)="loadTp(true)" [disabled]="isTpLoading">
+              <i class="material-icons">refresh</i> {{ isTpLoading ? 'Đang tải...' : 'Làm mới' }}
+            </button>
+            <button type="button" (click)="copyCartonPackingQtyFromStandard()" [disabled]="isTpCopyingCartonQty">
+              <i class="material-icons">content_copy</i> {{ isTpCopyingCartonQty ? 'Đang copy...' : 'Copy SL SP/thùng → Lượng Đóng Thùng' }} <small>ghi đè</small>
+            </button>
+            <button type="button" (click)="deleteTpItemsWithoutCustomerCode()">
+              <i class="material-icons">playlist_remove</i> Xóa dòng thiếu Mã KH
+            </button>
+            <button type="button" class="dv-menu__danger" (click)="openDeleteAllDialog('tp')">
+              <i class="material-icons">delete</i> Xóa tất cả <small>cần OTP Zalo</small>
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+
+    <div class="dv-column-filters" *ngIf="showTpColumnFilters">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.materialCode"
+             (ngModelChange)="applyTpFilters()" placeholder="Mã vật tư">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.customerCode"
+             (ngModelChange)="applyTpFilters()" placeholder="Mã S.Phẩm KH">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.productName"
+             (ngModelChange)="applyTpFilters()" placeholder="Tên vật tư">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.unit"
+             (ngModelChange)="applyTpFilters()" placeholder="Đvt">
+      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.description"
+             (ngModelChange)="applyTpFilters()" placeholder="Khách hàng">
     </div>
 
     <div class="dv-add-row dv-add-row--wrap" *ngIf="showTpAddForm">
@@ -345,44 +372,9 @@
       </button>
     </div>
 
-    <div class="dv-filter-bar">
-      <div class="dv-search-bar">
-        <i class="material-icons">search</i>
-        <input type="search" [(ngModel)]="tpSearchText" (input)="onTpSearchChange()" placeholder="Nhập mã vật tư, mã KH hoặc tên khách hàng">
-        <button type="button" class="dv-search-clear" *ngIf="tpSearchText" (click)="clearTpSearch()">
-          <i class="material-icons">close</i>
-        </button>
-      </div>
-      <div class="dv-column-filters">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.materialCode"
-               (ngModelChange)="applyTpFilters()" placeholder="Mã vật tư">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.customerCode"
-               (ngModelChange)="applyTpFilters()" placeholder="Mã S.Phẩm KH">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.productName"
-               (ngModelChange)="applyTpFilters()" placeholder="Tên vật tư">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.unit"
-               (ngModelChange)="applyTpFilters()" placeholder="Đvt">
-        <input type="text" class="dv-input dv-col-filter" [(ngModel)]="tpColumnFilters.description"
-               (ngModelChange)="applyTpFilters()" placeholder="Khách hàng">
-      </div>
-    </div>
-
     <div class="dv-page-bar">
-      <label class="dv-page-size">
-        Hiển thị
-        <select [(ngModel)]="tpPageSize" (ngModelChange)="onTpPageSizeChange()">
-          <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
-        </select>
-        dòng
-      </label>
+      <span class="dv-page-total">{{ filteredTpItems.length | number }} mã</span>
       <div class="dv-page-bar__right">
-        <span class="dv-page-total">Tổng: {{ filteredTpItems.length | number }} dòng</span>
-        <button type="button" class="dv-mismatch-badge dv-mismatch-badge--btn" *ngIf="tpMismatchCount > 0"
-                (click)="openTpMismatchPanel()"
-                title="Cả SL SP/thùng và Lượng Đóng Thùng đều đã có giá trị nhưng khác nhau (không tính mã đang trống Lượng Đóng Thùng). Bấm để xem danh sách.">
-          <i class="material-icons">error_outline</i>
-          {{ tpMismatchCount | number }} mã lệch SL SP/thùng ≠ Lượng Đóng Thùng
-        </button>
         <div class="dv-pagination" *ngIf="tpTotalPages > 1">
           <button type="button" class="dv-page-btn" [disabled]="tpCurrentPage === 1" (click)="setTpPage(tpCurrentPage - 1)">
             <i class="material-icons">chevron_left</i>
@@ -396,6 +388,11 @@
             <i class="material-icons">chevron_right</i>
           </button>
         </div>
+        <label class="dv-page-size">
+          <select [(ngModel)]="tpPageSize" (ngModelChange)="onTpPageSizeChange()">
+            <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }} / trang</option>
+          </select>
+        </label>
       </div>
     </div>
 
@@ -404,28 +401,25 @@
 
     <div class="dv-table-wrap" *ngIf="!isTpLoading && pagedTpItems.length">
       <div class="dv-table-scroll">
-        <table class="dv-catalog-table">
+        <table class="dv-catalog-table dv-catalog-table--lean dv-catalog-table--tp2">
           <thead>
             <tr>
-              <th>Mã vật tư</th>
-              <th>Mã S.Phẩm KH</th>
+              <th>Mã vật tư / Mã KH</th>
               <th>Tên vật tư</th>
               <th>Đvt</th>
               <th>Khách hàng</th>
               <th>K.Thước thùng (cm)</th>
-              <th>Gross Weight</th>
-              <th>Net Weight</th>
-              <th>SL SP/thùng</th>
-              <th title="Danh mục riêng của Kho — ưu tiên dùng thay SL SP/thùng khi tính Carton ở FG In">Lượng Đóng Thùng</th>
-              <th title="Chỉ hiện ở mã đang lệch SL SP/thùng ≠ Lượng Đóng Thùng — bấm để báo nhóm mail ENG">Gửi mail</th>
+              <th title="Gross Weight / Net Weight">GW / NW</th>
+              <th title="SL SP/thùng (ENG) / Lượng Đóng Thùng (Kho — ưu tiên khi tính Carton ở FG In). Đỏ = lệch nhau.">SP/thùng · Đóng thùng</th>
               <th></th>
-              <th title="Mã nhân viên người sửa gần nhất">ID</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of pagedTpItems">
-              <td class="dv-cell-code">{{ item.materialCode }}</td>
-              <td class="dv-cell-code">{{ item.customerCode }}</td>
+            <tr *ngFor="let item of pagedTpItems" [class.dv-row-mismatch]="isTpRowMismatched(item)">
+              <td class="dv-cell-main">
+                <span class="dv-cell-code-strong">{{ item.materialCode }}</span>
+                <span class="dv-cell-sub">{{ item.customerCode || '—' }}</span>
+              </td>
               <td>
                 <input type="text" class="dv-input dv-input--cell" [(ngModel)]="item.productName" (change)="updateTpItem(item)">
               </td>
@@ -438,20 +432,14 @@
               <td>
                 <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.cartonSize" (change)="updateTpItem(item)">
               </td>
-              <td>
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.grossWeight" (change)="updateTpItem(item)">
+              <td class="dv-cell-pair">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.grossWeight" (change)="updateTpItem(item)" placeholder="GW" title="Gross Weight">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.netWeight" (change)="updateTpItem(item)" placeholder="NW" title="Net Weight">
               </td>
-              <td>
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.netWeight" (change)="updateTpItem(item)">
-              </td>
-              <td>
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.standard" (change)="updateTpItem(item)">
-              </td>
-              <td>
+              <td class="dv-cell-pair">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.standard" (change)="updateTpItem(item)" placeholder="SP/thùng" title="SL SP/thùng">
                 <input type="number" class="dv-input dv-input--cell dv-input--sm" min="0" [(ngModel)]="item.cartonPackingQty"
-                       (change)="updateTpCartonPackingQty(item)" placeholder="—">
-              </td>
-              <td class="dv-cell-mail">
+                       (change)="updateTpCartonPackingQty(item)" placeholder="Đóng thùng" title="Lượng Đóng Thùng">
                 <button type="button" class="dv-btn dv-btn--sm dv-btn--mail" *ngIf="isTpRowMismatched(item)"
                         [disabled]="isTpMailSending(item)" (click)="sendTpMismatchMail(item)"
                         title="Gửi mail báo mã này lệch SL SP/thùng ≠ Lượng Đóng Thùng tới nhóm mail ENG">
@@ -459,9 +447,11 @@
                 </button>
               </td>
               <td class="dv-actions">
-                <button type="button" class="dv-btn dv-btn--sm dv-btn--danger" (click)="deleteTpItem(item)">Xóa</button>
+                <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteTpItem(item)" title="Xóa">
+                  <i class="material-icons">delete_outline</i>
+                </button>
+                <span class="dv-cell-sub dv-cell-by" *ngIf="item.lastEditedBy" title="Người sửa gần nhất">{{ item.lastEditedBy }}</span>
               </td>
-              <td class="dv-cell-code">{{ item.lastEditedBy || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -672,6 +662,154 @@
       </div>
     </div>
   </div>
+
+  <!-- ===== Check lượng / Cân (1 nguồn — trước ở Work Order Status) ===== -->
+  <section class="dv-panel dv-weigh" *ngIf="activeTab === 'weigh'">
+    <div class="dv-bar">
+      <div class="dv-seg" role="tablist">
+        <button type="button" [class.dv-seg--on]="weighSection === 'pending'" (click)="weighSection = 'pending'">
+          Chờ duyệt <b [class.dv-seg__alert]="weighPending.length">{{ weighPending.length }}</b>
+        </button>
+        <button type="button" [class.dv-seg--on]="weighSection === 'exempt'" (click)="weighSection = 'exempt'">
+          Không cần cân <b>{{ weighExempt.length }}</b>
+        </button>
+        <button type="button" [class.dv-seg--on]="weighSection === 'include'" (click)="weighSection = 'include'">
+          Thêm check lượng <b>{{ weighInclude.length }}</b>
+        </button>
+        <button type="button" [class.dv-seg--on]="weighSection === 'temle'" (click)="weighSection = 'temle'">
+          Tem lẻ không cân <b>{{ temLeNoWeigh.length }}</b>
+        </button>
+        <button type="button" [class.dv-seg--on]="weighSection === 'k100'" (click)="weighSection = 'k100'">
+          Kiểm 100% <b>{{ k100Rows.length }}</b>
+        </button>
+      </div>
+      <div class="dv-bar__right">
+        <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="loadWeigh()" [disabled]="weighLoading">
+          <i class="material-icons">refresh</i>
+          <span>{{ weighLoading ? 'Đang tải…' : 'Tải lại' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <p class="dv-weigh__note">
+      <i class="material-icons">info_outline</i>
+      <span>Phải cân (tách tem lẻ, bag lẻ Outbound, check lượng PXK): đầu mã <b>{{ weighPrefixes.join(', ') }}</b>
+      + mã ở <b>Thêm check lượng</b>, trừ mã <b>Không cần cân</b>. GW bag ở Inbound: chỉ mã <b>Kiểm 100%</b>.</span>
+    </p>
+
+    <!-- Chờ duyệt -->
+    <ng-container *ngIf="weighSection === 'pending'">
+      <p class="dv-weigh__hint">Báo cáo "không cân được" từ Work Order / Materials / Outbound — duyệt ở đây hoặc rep "duyệt" trong nhóm Zalo Quản lý kho.</p>
+      <div class="dv-table-wrap"><div class="dv-table-scroll">
+        <table class="dv-catalog-table dv-catalog-table--lean">
+          <thead><tr><th>Mã hàng</th><th>Lý do</th><th>LSX · Kho · PO</th><th>Người gửi · Thời gian</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngIf="!weighPending.length"><td colspan="5" class="dv-weigh__empty">Không có báo cáo chờ duyệt.</td></tr>
+            <tr *ngFor="let r of weighPending">
+              <td><strong>{{ r.materialCode }}</strong></td>
+              <td>{{ r.reason }}</td>
+              <td>{{ r.lsx || '—' }}<span class="dv-cell-sub">{{ r.maKho || '—' }} · PO {{ r.po || '—' }}</span></td>
+              <td>{{ r.reportedBy || '—' }}<span class="dv-cell-sub">{{ weighTime(r.createdAt) }}</span></td>
+              <td class="dv-weigh__acts">
+                <button type="button" class="dv-weigh__ok" (click)="approveWeigh(r)" [disabled]="weighBusy">Duyệt</button>
+                <button type="button" class="dv-weigh__no" (click)="rejectWeigh(r)" [disabled]="weighBusy">Từ chối</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div></div>
+    </ng-container>
+
+    <!-- Không cần cân -->
+    <ng-container *ngIf="weighSection === 'exempt'">
+      <div class="dv-weigh__tools">
+        <div class="dv-search-bar">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="weighExemptQuery" placeholder="Tìm mã / lý do…">
+        </div>
+        <span class="dv-weigh__hint">Mã đã duyệt — không cân, không check lượng.</span>
+      </div>
+      <div class="dv-table-wrap"><div class="dv-table-scroll">
+        <table class="dv-catalog-table dv-catalog-table--lean">
+          <thead><tr><th>Mã hàng</th><th>Lý do</th><th>LSX</th><th>Người duyệt · Thời gian</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngIf="!weighExemptFiltered.length"><td colspan="5" class="dv-weigh__empty">Chưa có mã.</td></tr>
+            <tr *ngFor="let r of weighExemptFiltered">
+              <td><strong>{{ r.code }}</strong></td>
+              <td>{{ r.reason || '—' }}</td>
+              <td>{{ r.lsx || '—' }}</td>
+              <td>{{ r.approvedBy || '—' }}<span class="dv-cell-sub">{{ weighTime(r.approvedAt) }}</span></td>
+              <td><button type="button" class="dv-weigh__no" (click)="removeWeighExempt(r.code)" [disabled]="weighBusy" title="Mã lại phải cân / check lượng">Bỏ</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div></div>
+    </ng-container>
+
+    <!-- Thêm check lượng -->
+    <ng-container *ngIf="weighSection === 'include'">
+      <p class="dv-weigh__hint">Mã ngoài nhóm đầu mã nhưng vẫn phải cân / check lượng PXK.</p>
+      <form class="dv-weigh__add" (submit)="$event.preventDefault(); addWeighInclude()">
+        <input type="text" [(ngModel)]="weighIncludeDraft" name="weighIncludeDraft" placeholder="Nhập mã hàng cần check…" maxlength="40" autocomplete="off">
+        <button type="submit" [disabled]="weighBusy || !weighIncludeDraft.trim()">Thêm mã</button>
+      </form>
+      <div class="dv-weigh__chips">
+        <span class="dv-weigh__chip" *ngFor="let c of weighInclude">{{ c }} <button type="button" (click)="removeWeighInclude(c)" [disabled]="weighBusy">✕</button></span>
+        <span class="dv-weigh__empty" *ngIf="!weighInclude.length">Chưa thêm mã nào.</span>
+      </div>
+    </ng-container>
+
+    <!-- Tem lẻ không cân -->
+    <ng-container *ngIf="weighSection === 'temle'">
+      <p class="dv-weigh__hint">Đầu mã (vd B030) hoặc mã đầy đủ: in tem lẻ ở Materials / Outbound không bắt nhập GW CL, GW bag nguyên, chụp hình hay GW TL — cứ in. Không ảnh hưởng cân bag lẻ khi scan xuất.</p>
+      <form class="dv-weigh__add" (submit)="$event.preventDefault(); addTemLeNoWeigh()">
+        <input type="text" [(ngModel)]="temLeNoWeighDraft" name="temLeNoWeighDraft" placeholder="Nhập đầu mã hoặc mã hàng…" maxlength="40" autocomplete="off">
+        <button type="submit" [disabled]="weighBusy || !temLeNoWeighDraft.trim()">Thêm</button>
+      </form>
+      <div class="dv-weigh__chips">
+        <span class="dv-weigh__chip" *ngFor="let p of temLeNoWeigh">{{ p }} <button type="button" (click)="removeTemLeNoWeigh(p)" [disabled]="weighBusy">✕</button></span>
+        <span class="dv-weigh__empty" *ngIf="!temLeNoWeigh.length">Chưa có đầu mã nào.</span>
+      </div>
+    </ng-container>
+
+    <!-- Kiểm 100% -->
+    <ng-container *ngIf="weighSection === 'k100'">
+      <p class="dv-weigh__hint">
+        Tự động: mã có "bổ sung" ở cột Diễn giải bảng kê xuất SXXK (từ 01/01/2026, 2 tuần tính lại) + mã nhập tay ({{ k100ManualCount }}).
+        Có ghi chú KIỂM 100% trên TBHD / bảng nhập hàng và phải nhập GW bag ở Inbound.
+      </p>
+      <div class="dv-weigh__tools">
+        <div class="dv-search-bar">
+          <i class="material-icons">search</i>
+          <input type="search" [(ngModel)]="k100Query" placeholder="Tìm mã / lý do…">
+        </div>
+        <form class="dv-weigh__add" (submit)="$event.preventDefault(); addK100()">
+          <input type="text" [(ngModel)]="k100NewCode" name="k100NewCode" placeholder="Mã vật tư, vd B018329" maxlength="20" autocomplete="off">
+          <input type="text" [(ngModel)]="k100NewNote" name="k100NewNote" placeholder="Lý do (không bắt buộc)" maxlength="200" autocomplete="off">
+          <button type="submit" [disabled]="weighBusy || !k100NewCode.trim()">Thêm mã</button>
+        </form>
+      </div>
+      <p class="dv-weigh__err" *ngIf="k100Error">{{ k100Error }}</p>
+      <div class="dv-table-wrap"><div class="dv-table-scroll">
+        <table class="dv-catalog-table dv-catalog-table--lean">
+          <thead><tr><th>Mã hàng ({{ k100Filtered.length }})</th><th>Nguồn</th><th>Lý do / lần gần nhất</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngIf="!k100Filtered.length"><td colspan="4" class="dv-weigh__empty">Không có mã.</td></tr>
+            <tr *ngFor="let r of k100Filtered | slice:0:300">
+              <td><strong>{{ r.code }}</strong></td>
+              <td>{{ r.source === 'manual' ? 'Nhập tay' : 'SXXK' }}</td>
+              <td>
+                <ng-container *ngIf="r.source === 'manual'">{{ r.reason }} · {{ r.by || '—' }} · {{ r.last }}</ng-container>
+                <ng-container *ngIf="r.source !== 'manual'">{{ r.n }} lần xuất bổ sung · gần nhất {{ r.last }} · {{ r.voucher }}</ng-container>
+              </td>
+              <td><button type="button" class="dv-weigh__no" *ngIf="r.source === 'manual'" (click)="removeK100(r.code)" [disabled]="weighBusy">Xóa</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div></div>
+      <p class="dv-weigh__empty" *ngIf="k100Filtered.length > 300">Đang hiện 300 mã đầu — gõ vào ô Tìm để lọc.</p>
+    </ng-container>
+  </section>
 
   <app-storage-unit-picker
     [visible]="showStorageUnitPicker"

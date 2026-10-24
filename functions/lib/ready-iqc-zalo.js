@@ -33,6 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.sendText = sendText;
+exports.resolvePlnChatId = resolvePlnChatId;
 exports.notifyReadyIqcWaiting = notifyReadyIqcWaiting;
 /**
  * LSX Ready-IQC: báo nhóm PLN các mã NVL đang ở vị trí IQC, chưa Pass.

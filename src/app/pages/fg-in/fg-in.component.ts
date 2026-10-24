@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener, NgZone, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -329,7 +329,6 @@ export class FgInComponent implements OnInit, OnDestroy {
             updatedAt: data.updatedAt ? new Date(data.updatedAt.seconds * 1000) : new Date()
           };
           
-          console.log('Loaded material:', material);
           return material;
         });
         
@@ -367,9 +366,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       customLocation !== undefined && String(customLocation).trim()
         ? String(customLocation).trim()
         : material.location || 'Temp-1';
-    console.log(
-      `Adding ${material.materialCode} to FG Inventory with quantity: ${quantity}, batch: ${batchNumber}, location: ${location}...`
-    );
 
     // Tìm thông tin từ catalog
     const catalogItem = this.catalogItems.find(item => item.materialCode === material.materialCode);
@@ -418,8 +414,6 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('fg-inventory').add(inventoryMaterial)
       .then((docRef) => {
-        console.log(`Successfully added ${material.materialCode} to FG inventory with ID: ${docRef.id}`);
-        console.log(`Carton: ${carton}, ODD: ${odd} (Lượng đóng thùng: ${standard})`);
       })
       .catch(error => {
         console.error(`Error adding ${material.materialCode} to FG inventory:`, error);
@@ -445,7 +439,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       const materialId = material.id;
       this.firestore.collection('fg-in').doc(materialId).update(updateData)
         .then(() => {
-          console.log('FG In material updated in Firebase successfully');
         })
         .catch(error => {
           console.error('Error updating FG In material in Firebase:', error);
@@ -472,7 +465,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     // nhưng document vẫn còn (F5 lại thấy dòng cũ, nhất là khi vừa bỏ khóa rồi xóa liền).
     this.firestore.collection('fg-in').doc(materialId).delete()
       .then(() => {
-        console.log('✅ Deleted:', material.materialCode);
         // Ghi tombstone — nếu không, doc này vẫn còn trong snapshot backup hôm qua (FgDailyBackupService)
         // và sẽ tái xuất hiện mỗi lần load (F5) cho tới khi backup ngày mai chạy lại.
         void this.fgDailyBackup.markDeleted('fg-in', materialId);
@@ -536,11 +528,6 @@ export class FgInComponent implements OnInit, OnDestroy {
         return isInDateRange;
       });
       
-      console.log('FG In search results:', {
-        searchTerm: this.searchTerm,
-        totalMaterials: this.materials.length,
-        filteredMaterials: this.filteredMaterials.length
-      });
     }, 0);
   }
 
@@ -884,36 +871,20 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Refresh data after operations (import, update, delete)
   refreshData(): void {
-    console.log('Refreshing data...');
     this.loadMaterialsFromFirebase();
   }
 
   // Manual refresh for testing
   manualRefresh(): void {
-    console.log('Manual refresh triggered');
     this.refreshData();
   }
 
   // Debug method to check materials
   debugMaterials(): void {
-    console.log('=== DEBUG MATERIALS ===');
-    console.log('Total materials:', this.materials.length);
-    console.log('Filtered materials:', this.filteredMaterials.length);
-    console.log('Catalog items:', this.catalogItems.length);
     
     this.materials.forEach((material, index) => {
       const calculation = this.calculateCartonAndOdd(material);
-      console.log(`Material ${index + 1}:`, {
-        id: material.id,
-        materialCode: material.materialCode,
-        batchNumber: material.batchNumber,
-        quantity: material.quantity,
-        hasId: !!material.id,
-        calculatedCarton: calculation.carton,
-        calculatedOdd: calculation.odd
-      });
     });
-    console.log('=== END DEBUG ===');
   }
 
   async loadCartonPackingQty(forceRefresh = false): Promise<void> {
@@ -967,14 +938,12 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Clear all data from Firebase (for testing)
   clearAllData(): void {
     if (confirm('⚠️ XÁC NHẬN XÓA TẤT CẢ DỮ LIỆU FG IN? Hành động này không thể hoàn tác!')) {
-      console.log('Clearing all FG In data...');
       
       // Get all documents and delete them
       this.firestore.collection('fg-in').get().subscribe(querySnapshot => {
         const deletePromises = querySnapshot.docs.map(doc => doc.ref.delete());
         
         Promise.all(deletePromises).then(() => {
-          console.log('All FG In data cleared successfully');
           alert('✅ Đã xóa tất cả dữ liệu FG In');
           this.refreshData();
         }).catch(error => {
@@ -1006,10 +975,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (!this.selectedFactory || !this.availableFactories.includes(this.selectedFactory)) {
       this.selectedFactory = 'ASM1';
     }
-    console.log('🏭 Factory filter FG In:', {
-      selectedFactory: this.selectedFactory,
-      availableFactories: this.availableFactories
-    });
   }
 
   // Check if user can edit material (ASM1, ASM2 đều cho phép sửa khi chưa lock)
@@ -1338,7 +1303,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       
       return this.firestore.collection('fg-in').add(materialData)
         .then((docRef) => {
-          console.log('FG In material saved to Firebase successfully with ID:', docRef.id);
           return docRef.id;
         })
         .catch(error => {
@@ -1348,7 +1312,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     });
     
     return Promise.all(savePromises).then(() => {
-      console.log('All materials saved to Firebase successfully');
     });
   }
 
@@ -1418,13 +1381,11 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (newLocation !== null) {
       material.location = this.normalizeFgLocationValue(newLocation);
       material.updatedAt = new Date();
-      console.log(`Updated location for ${material.materialCode}: ${material.location}`);
       this.updateMaterialInFirebase(material);
     }
   }
 
   updateNotes(material: FgInItem): void {
-    console.log('Updating notes for material:', material.materialCode, 'to:', material.notes);
     this.updateMaterialInFirebase(material);
   }
 
@@ -1463,7 +1424,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
 
     const prefix = this.unhideMaterialCode.substring(0, 7);
-    console.log('🔍 Unhiding materials with prefix:', prefix);
 
     // Mở rộng khoảng thời gian để tìm tất cả
     this.startDate = new Date(2020, 0, 1);
@@ -1474,7 +1434,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.applyFilters();
     
     this.closeUnhideDialog();
-    console.log(`✅ Showing materials starting with ${prefix}:`, this.filteredMaterials.length);
   }
 
   // REPORT Dialog Functions
@@ -1500,8 +1459,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     const startOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
     const endOfMonth = new Date(parseInt(year), parseInt(month), 0);
 
-    console.log('📊 Downloading report for:', this.reportMonth);
-    console.log('Date range:', startOfMonth, 'to', endOfMonth);
 
     // Query materials within the month
     this.firestore.collection('fg-in', ref =>
@@ -1540,7 +1497,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       const fileName = `FG_In_Report_${this.reportMonth}.xlsx`;
       XLSX.writeFile(wb, fileName);
       
-      console.log(`✅ Downloaded report: ${fileName}`);
       alert(`✅ Đã tải báo cáo: ${fileName} (${reportData.length} dòng)`);
       this.closeReportDialog();
     });
@@ -1554,11 +1510,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.showTimeRangeDialog = false;
     
-    console.log('View all FG In materials:', {
-      totalMaterials: this.materials.length,
-      filteredMaterials: this.filteredMaterials.length,
-      materials: this.materials
-    });
   }
 
   applyTimeRangeFilter(): void {
@@ -1575,7 +1526,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       .then(items => {
         this.catalogItems = items;
         this.applyCatalogFilters();
-        console.log('Loaded FG Catalog (cached):', this.catalogItems.length);
       })
       .catch(err => console.error('Load fg-catalog (cached) failed:', err));
   }
@@ -1680,7 +1630,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       
       this.firestore.collection('fg-catalog').add(itemData)
         .then((docRef) => {
-          console.log('FG Catalog item saved to Firebase successfully with ID:', docRef.id);
         })
         .catch(error => {
           console.error('Error saving FG Catalog item to Firebase:', error);
@@ -1713,7 +1662,6 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('fg-catalog').add(newItem)
       .then((docRef) => {
-        console.log('FG Catalog item added successfully with ID:', docRef.id);
         alert(`✅ Đã thêm "${newItem.materialCode}" vào danh mục`);
         
         // Refresh catalog data
@@ -1741,7 +1689,6 @@ export class FgInComponent implements OnInit, OnDestroy {
         this.firestore.collection('fg-catalog').doc(item.id).get().subscribe(doc => {
           if (doc.exists) {
             doc.ref.delete().then(() => {
-              console.log('FG Catalog item deleted from Firebase successfully');
               alert(`✅ Đã xóa "${item.materialCode}" khỏi danh mục`);
               // Refresh catalog data
               this.loadCatalogFromFirebase();
@@ -1783,7 +1730,6 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Sync customer code from mapping to catalog
   syncCustomerCodeFromMapping(): void {
-    console.log('🔄 Starting sync customer code from mapping to catalog...');
     
     // Ensure mapping is loaded
     if (this.mappingItems.length === 0) {
@@ -1823,7 +1769,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       }
     });
 
-    console.log(`📊 Found ${mappingMap.size} unique material codes in mapping`);
 
     // Update existing catalog items
     this.catalogItems.forEach(catalogItem => {
@@ -1833,7 +1778,6 @@ export class FgInComponent implements OnInit, OnDestroy {
         if (customerCodeFromMapping) {
           // Only update if customerCode is different or empty
           if (catalogItem.customerCode !== customerCodeFromMapping) {
-            console.log(`🔄 Updating catalog item ${catalogItem.materialCode}: ${catalogItem.customerCode || '(empty)'} -> ${customerCodeFromMapping}`);
             updatedCount++;
             
             const updatePromise = this.firestore.collection('fg-catalog').doc(catalogItem.id).update({
@@ -1843,7 +1787,6 @@ export class FgInComponent implements OnInit, OnDestroy {
             .then(() => {
               // Update local item
               catalogItem.customerCode = customerCodeFromMapping;
-              console.log(`✅ Updated catalog item ${catalogItem.materialCode}`);
             })
             .catch(error => {
               console.error(`❌ Error updating catalog item ${catalogItem.materialCode}:`, error);
@@ -1880,7 +1823,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       .then(items => {
         this.mappingItems = items;
         this.applyMappingFilters();
-        console.log('Loaded Customer Code Mapping (cached):', this.mappingItems.length);
       })
       .catch(err => console.error('Load fg-customer-mapping (cached) failed:', err));
   }
@@ -1995,7 +1937,6 @@ export class FgInComponent implements OnInit, OnDestroy {
       
       this.firestore.collection('fg-customer-mapping').add(itemData)
         .then((docRef) => {
-          console.log('Customer Code Mapping item saved to Firebase successfully with ID:', docRef.id);
         })
         .catch(error => {
           console.error('Error saving Customer Code Mapping item to Firebase:', error);
@@ -2028,7 +1969,6 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('fg-customer-mapping').add(newItem)
       .then((docRef) => {
-        console.log('Customer Code Mapping item added successfully with ID:', docRef.id);
         alert(`✅ Đã thêm mapping "${newItem.customerCode}" → "${newItem.materialCode}"`);
         
         // Refresh mapping data
@@ -2054,7 +1994,6 @@ export class FgInComponent implements OnInit, OnDestroy {
         this.firestore.collection('fg-customer-mapping').doc(item.id).get().subscribe(doc => {
           if (doc.exists) {
             doc.ref.delete().then(() => {
-              console.log('Customer Code Mapping item deleted from Firebase successfully');
               alert(`✅ Đã xóa mapping "${item.customerCode}"`);
               // Refresh mapping data
               this.loadMappingFromFirebase();
@@ -2313,15 +2252,35 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Get pending materials (not yet locked)
   getPendingMaterials(): FgInItem[] {
-    return this.filteredMaterials.filter(m => !m.isReceived);
+    return this.memoTick('pending', () => this.filteredMaterials.filter(m => !m.isReceived));
   }
 
-  getMobilePendingMaterials(): FgInItem[] {
-    const list = this.getPendingMaterials();
-    if (!this.mobilePendingZoneFilter) {
-      return list;
+  /** Cache theo 1 chu kỳ change detection: template gọi các getter này nhiều lần mỗi lượt. */
+  private tickCache = new Map<string, unknown>();
+
+  /** Xóa cache ngoài NgZone: microtask trong zone sẽ kích hoạt thêm một vòng change detection liên tục. */
+  private cacheZone = inject(NgZone);
+
+  private memoTick<T>(key: string, compute: () => T): T {
+    if (this.tickCache.has(key)) return this.tickCache.get(key) as T;
+    const value = compute();
+    if (this.tickCache.size === 0) {
+      this.cacheZone.runOutsideAngular(() => Promise.resolve().then(() => this.tickCache.clear()));
     }
-    return list.filter(m => this.getTempZoneBadge(m.location) === this.mobilePendingZoneFilter);
+    this.tickCache.set(key, value);
+    return value;
+  }
+
+  trackByMaterial = (index: number, item: { id?: string }): string | number => item?.id ?? index;
+
+  getMobilePendingMaterials(): FgInItem[] {
+    return this.memoTick('mobilePending:' + (this.mobilePendingZoneFilter || ''), () => {
+      const list = this.getPendingMaterials();
+      if (!this.mobilePendingZoneFilter) {
+        return list;
+      }
+      return list.filter(m => this.getTempZoneBadge(m.location) === this.mobilePendingZoneFilter);
+    });
   }
 
   togglePendingZoneFilter(zone: '1' | '2' | '3'): void {
@@ -2403,7 +2362,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Get pending count
   getPendingCount(): number {
-    return this.filteredMaterials.filter(m => !m.isReceived).length;
+    return this.getPendingMaterials().length;
   }
 
   private isTemporaryLocation(location: string | undefined | null): boolean {
@@ -2421,7 +2380,8 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   // Mobile: đã tick khóa nhưng vẫn ở trạng thái Temporary (chưa có vị trí thật)
   getLockedWithoutLocationMaterials(): FgInItem[] {
-    return this.filteredMaterials.filter(m => m.isReceived && this.isTemporaryLocation(m.location));
+    return this.memoTick('lockedNoLoc', () =>
+      this.filteredMaterials.filter(m => m.isReceived && this.isTemporaryLocation(m.location)));
   }
 
   getLockedWithoutLocationCount(): number {
@@ -2508,9 +2468,9 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   /** Danh sách phiếu ở vùng Temp (đã khóa hoặc chưa) — vị trí bắt đầu Temp-1/2/3. */
   getTempZoneMaterials(zone: '1' | '2' | '3'): FgInItem[] {
-    return this.filteredMaterials.filter(
+    return this.memoTick('tempZone:' + zone, () => this.filteredMaterials.filter(
       (m) => this.getTempZoneBadge(m.location) === zone
-    );
+    ));
   }
 
   getTempZoneCount(zone: '1' | '2' | '3'): number {
@@ -2523,7 +2483,8 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   getMobileTempTotalCount(): number {
-    return this.filteredMaterials.filter((m) => this.getTempZoneBadge(m.location) !== null).length;
+    return this.memoTick('tempTotal', () =>
+      this.filteredMaterials.filter((m) => this.getTempZoneBadge(m.location) !== null).length);
   }
 
   /** Vị trí đã đủ để khóa: Temp OK; kệ thật cần ô A/B/C + mã QR pallet. */
@@ -2554,7 +2515,6 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (!this.palletQrValue || !this.palletQrValue.trim()) return;
     this.palletQrValue = normalizePalletQrCode(this.palletQrValue);
     this.applyPalletQrToActive(this.palletQrValue);
-    console.log(`✅ Pallet QR saved: ${this.palletQrValue}`);
   }
 
   clearPalletQr(): void {

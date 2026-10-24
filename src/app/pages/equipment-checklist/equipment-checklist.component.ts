@@ -4,6 +4,7 @@ import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 import * as QRCode from 'qrcode';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { UserPermissionService } from '../../services/user-permission.service';
 import {
   dateKey,
   daysOfMonth,
@@ -29,7 +30,7 @@ import {
   MaintenanceCycle
 } from './equipment-checklist.models';
 
-type PageView = 'check' | 'list' | 'groups' | 'items' | 'history' | 'labels' | 'scan' | 'staff';
+type PageView = 'check' | 'overview' | 'maint' | 'list' | 'items' | 'history' | 'labels' | 'scan' | 'staff';
 type ResultFilter = 'all' | 'NOT_CHECKED' | 'PASS' | 'FAIL';
 
 @Component({
@@ -49,6 +50,21 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   readonly frequencyLabel = frequencyLabel;
 
   view: PageView = 'check';
+  private readonly allTabs: Array<{ key: PageView; icon: string; label: string; manage?: boolean }> = [
+    { key: 'check', icon: 'fact_check', label: 'Kiểm tra' },
+    { key: 'overview', icon: 'dashboard', label: 'Tổng quan' },
+    { key: 'maint', icon: 'build', label: 'Bảo dưỡng' },
+    { key: 'list', icon: 'list_alt', label: 'Danh sách', manage: true },
+    { key: 'items', icon: 'checklist', label: 'Hạng mục', manage: true },
+    { key: 'history', icon: 'history', label: 'Lịch sử' },
+    { key: 'labels', icon: 'qr_code_2', label: 'Tem QR' },
+    { key: 'scan', icon: 'qr_code_scanner', label: 'Quét' },
+    { key: 'staff', icon: 'groups', label: 'Nhân sự', manage: true }
+  ];
+
+  get tabs(): Array<{ key: PageView; icon: string; label: string }> {
+    return this.allTabs.filter(tab => !tab.manage || this.canManage);
+  }
   collapsed = new Set<string>();
   private collapseReady = false;
   searchQuery = '';
@@ -87,17 +103,12 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   editing = false;
   form: Equipment = this.emptyEquipment();
   showDelete = false;
-  deletePassword = '';
-  /** Mật khẩu mở mục Danh sách thiết bị (chỉ chặn trên giao diện, giống mật khẩu Xóa). */
-  private static readonly LIST_PASSWORD = '2026';
-  showListPassword = false;
-  listPassword = '';
-  listPasswordError = '';
-  private listUnlocked = false;
-  deleteError = '';
+  /**
+   * Quyền quản lý (Settings > quyền Xóa, hoặc admin; không áp dụng cho phiên quét thẻ): sửa danh mục, hạng mục, nhân sự, xóa.
+   * Firestore rules chặn ghi ở server; cờ này chỉ để ẩn các nút người dùng không dùng được.
+   */
+  canManage = false;
   deleting = false;
-  showInspect = false;
-  showMaintenanceForm = false;
   maintenanceDoneKeys = new Set<string>();
   readonly maintenanceGroups: Array<{ by: 'internal' | 'external'; title: string }> = [
     { by: 'internal', title: 'Bảo dưỡng trong' },
@@ -141,38 +152,53 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   constructor(
     private api: EquipmentChecklistService,
     private auth: FirebaseAuthService,
+    private perms: UserPermissionService,
     private fns: AngularFireFunctions,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
-    const seeded = await this.api.ensureSeeded().catch(() => 0);
+    this.mobileUi = this.isHandheld();
     const user = await firstValueFrom(this.auth.user$);
     this.userName = user?.displayName || user?.employeeId || '';
     this.userRole = user?.role || '';
+    const claims = await firstValueFrom(this.auth.claims());
+    this.canManage = claims.admin || (!claims.scan && !!user?.uid && await this.perms.hasDeletePermission(user.uid));
     await this.reload();
-    if (seeded) this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
+    if (this.mobileUi) {
+      this.cdr.detectChanges();
+      this.focusMobileScan();
+    }
+    void this.syncInBackground();
+  }
+
+  /** Nạp danh mục gốc và ghi bù kiểm tra Đạt sau khi trang đã hiện, không chặn người dùng. */
+  private async syncInBackground(): Promise<void> {
     try {
+      let changed = false;
+      const seeded = await this.api.ensureSeeded().catch(() => 0);
+      if (seeded) {
+        this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
+        changed = true;
+        await this.reload();
+      }
       const filled = await this.api.fillPassedChecksUntil(this.equipment, '2026-10-10', (eq) => ({
         inspector: eq.responsiblePerson?.trim() || this.staff[0]?.name || 'Nguyễn Hoàng Tuấn',
         items: this.namesFor(eq)
       }));
       if (filled > 0) {
         this.flash(`Đã ghi ${filled} lần kiểm tra Đạt đến 10/10/2026.`);
-        await this.reload();
+        changed = true;
       }
+      if (changed) await this.reload();
     } catch (e: unknown) {
-      this.flash(e instanceof Error ? e.message : 'Không ghi được dữ liệu kiểm tra Đạt.', true);
-    }
-    this.mobileUi = this.isHandheld();
-    if (this.mobileUi) {
-      this.cdr.detectChanges();
-      this.focusMobileScan();
+      this.flash(e instanceof Error ? e.message : 'Không đồng bộ được dữ liệu ban đầu.', true);
     }
   }
 
   ngOnDestroy(): void {
+    window.clearTimeout(this.flashTimer);
     void this.stopScan();
   }
 
@@ -494,14 +520,7 @@ button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
   }
 
   openMaintenanceForm(): void {
-    this.showInspect = false;
-    this.showMaintenanceForm = true;
-    this.cdr.markForCheck();
-  }
-
-  closeMaintenanceForm(): void {
-    this.showMaintenanceForm = false;
-    this.cdr.markForCheck();
+    this.setView('maint');
   }
 
   maintenanceEquipment(by: 'internal' | 'external'): Equipment[] {
@@ -664,7 +683,6 @@ ${section('Bảo dưỡng ngoài', 'external')}
     });
     this.selectedDay = day;
     this.dialogOpen = true;
-    this.view = 'check';
     this.cdr.markForCheck();
     return true;
   }
@@ -690,6 +708,12 @@ ${section('Bảo dưỡng ngoài', 'external')}
   onItemResult(row: { result: 'PASS' | 'FAIL' | '' }, value: string): void {
     row.result = value === 'FAIL' || value === 'PASS' ? value : '';
     if (value === 'FAIL') this.dialogResult = 'FAIL';
+  }
+
+  allItemsPass(): void {
+    this.itemRows.forEach(row => { row.result = 'PASS'; });
+    if (this.dialogResult === 'FAIL') this.dialogResult = 'PASS';
+    this.cdr.markForCheck();
   }
 
   dialogItems(): string[] {
@@ -721,7 +745,7 @@ ${section('Bảo dưỡng ngoài', 'external')}
     }
     this.dialogSaving = true;
     try {
-      await this.api.upsertInspection({
+      const saved = await this.api.upsertInspection({
         inspectionId: '',
         equipmentId: this.dialogEquipment.equipmentId,
         inspectionDate: this.dialogDate,
@@ -734,7 +758,10 @@ ${section('Bảo dưỡng ngoài', 'external')}
         checkedItems: this.itemRows.filter(row => row.result === 'PASS').map(row => row.name),
         itemResults: this.itemRows.map(row => ({ itemName: row.name, result: row.result, note: row.note.trim() }))
       });
-      await this.reload();
+      this.records = [
+        ...this.records.filter(r => !(r.equipmentId === saved.equipmentId && r.inspectionDate === saved.inspectionDate)),
+        saved
+      ];
       this.dialogOpen = false;
       if (this.mobileUi) {
         const rest = this.dialogEquipment ? this.lateDatesFor(this.dialogEquipment) : [];
@@ -783,34 +810,11 @@ ${section('Bảo dưỡng ngoài', 'external')}
       void this.startScan();
       return;
     }
-    if (view === 'list' && !this.listUnlocked) {
-      this.listPassword = '';
-      this.listPasswordError = '';
-      this.showListPassword = true;
-      this.cdr.markForCheck();
+    if ((view === 'list' || view === 'items' || view === 'staff') && !this.canManage) {
+      this.flash('Bạn không có quyền mở mục này. Nhờ quản lý bật quyền trong Settings.', true);
       return;
     }
     this.view = view;
-    this.cdr.markForCheck();
-  }
-
-  /** Mở mục Danh sách thiết bị: cần mật khẩu, nhập đúng 1 lần thì mở được tới khi rời tab. */
-  confirmListPassword(): void {
-    if (this.listPassword !== EquipmentChecklistComponent.LIST_PASSWORD) {
-      this.listPasswordError = 'Sai mật khẩu.';
-      this.cdr.markForCheck();
-      return;
-    }
-    this.listUnlocked = true;
-    this.showListPassword = false;
-    this.listPassword = '';
-    this.setView('list');
-  }
-
-  cancelListPassword(): void {
-    this.showListPassword = false;
-    this.listPassword = '';
-    this.listPasswordError = '';
     this.cdr.markForCheck();
   }
 
@@ -954,18 +958,16 @@ ${section('Bảo dưỡng ngoài', 'external')}
       this.flash('Chọn ít nhất một thiết bị để xóa.', true);
       return;
     }
-    this.deletePassword = '';
-    this.deleteError = '';
+    if (!this.canManage) {
+      this.flash('Bạn không có quyền xóa thiết bị.', true);
+      return;
+    }
     this.showDelete = true;
     this.cdr.markForCheck();
   }
 
   async confirmDelete(): Promise<void> {
-    if (this.deletePassword !== '2026') {
-      this.deleteError = 'Sai mật khẩu.';
-      this.cdr.markForCheck();
-      return;
-    }
+    if (!this.canManage) return;
     const ids = [...this.labelSelection];
     this.deleting = true;
     this.cdr.markForCheck();
@@ -974,7 +976,6 @@ ${section('Bảo dưỡng ngoài', 'external')}
       ids.forEach(id => this.labelSelection.delete(id));
       if (this.dialogEquipment && ids.includes(this.dialogEquipment.equipmentId)) this.dialogOpen = false;
       this.showDelete = false;
-      this.deletePassword = '';
       this.flash(`Đã xóa ${ids.length} thiết bị.`);
       await this.reload();
     } catch (e: unknown) {
@@ -990,6 +991,7 @@ ${section('Bảo dưỡng ngoài', 'external')}
     eq.responsibleEmployeeId = eq.responsibleEmployeeId?.trim().toUpperCase() || null;
     try {
       await this.api.saveEquipment(eq, false);
+      this.flash('Đã lưu.');
     } catch (e: unknown) {
       this.flash(e instanceof Error ? e.message : 'Không lưu được thiết bị.', true);
     }
@@ -1250,6 +1252,7 @@ ${section('Bảo dưỡng ngoài', 'external')}
     });
     try {
       await this.api.saveItemCatalog(checklists, this.maintenanceItems.map(item => item.trim()).filter(Boolean));
+      this.flash('Đã lưu.');
     } catch (e: unknown) {
       this.flash(e instanceof Error ? e.message : 'Không lưu được hạng mục.', true);
     }
@@ -1921,9 +1924,16 @@ ${section('Bảo dưỡng ngoài', 'external')}
     });
   }
 
+  private flashTimer = 0;
+
   private flash(text: string, error = false): void {
     this.message = text;
     this.messageError = error;
+    window.clearTimeout(this.flashTimer);
+    this.flashTimer = window.setTimeout(() => {
+      this.message = '';
+      this.cdr.markForCheck();
+    }, error ? 6000 : 2500);
     this.cdr.markForCheck();
   }
 }

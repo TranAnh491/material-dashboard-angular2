@@ -562,7 +562,7 @@
         <span class="select-all-text">Chọn toàn bộ</span>
       </div>
       <div class="items-list">
-        <div class="item-card" *ngFor="let item of itemsAtLocation" [class.selected]="item.selected"
+        <div class="item-card" *ngFor="let item of itemsAtLocation; trackBy: trackById" [class.selected]="item.selected"
              (click)="toggleItemSelection(item)">
           <div class="item-checkbox">
             <i class="material-icons">{{ item.selected ? 'check_box' : 'check_box_outline_blank' }}</i>

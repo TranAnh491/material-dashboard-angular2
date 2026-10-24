@@ -72,7 +72,8 @@ export function parseMaterialQrLabelFields(qrData: string): {
   bag: string;
 } {
   const parts = String(qrData || '').split('|');
-  const p4 = (parts[3] || '').trim();
+  // Bỏ đuôi tem lẻ (TL-01)/(CL-01) khỏi IMD/BAG — đuôi in riêng ở dòng cuối tem
+  const p4 = (parts[3] || '').trim().replace(/\(\s*(?:TL|CL)\s*-?\s*\d{1,3}\s*\)\s*$/i, '').trim();
   const di = p4.indexOf('-');
   const bagOnly = di < 0 && /^\d+\/\d+$/.test(p4);
   const imd = di >= 0 ? p4.slice(0, di).trim() : bagOnly ? '' : p4;
@@ -89,7 +90,9 @@ export function parseMaterialQrLabelFields(qrData: string): {
 function bagLotRowHtml(unitLabel: string, unitValue: string, batchNumber: string): string {
   const e = escapeMaterialLabelHtml;
   const lot = formatMaterialLabelLotNumber(batchNumber);
-  const lotHtml = lot ? `<span class="bag-lot-item">Lô: ${e(lot)}</span>` : '';
+  // Tem Inventory/Materials: bỏ thông tin Lô (lô dài làm tràn tem) — 19/10/2026
+  void lot;
+  const lotHtml = '';
   return `<div class="info-row info-row-bag-lot">
                           <span class="bag-lot-item">${e(unitLabel)}: ${e(unitValue)}</span>
                           ${lotHtml}
@@ -123,6 +126,10 @@ export function renderMaterialQrLabelHtml(label: MaterialQrLabel): string {
     label.kind === 'carton'
       ? bagLotRowHtml('THÙNG', `${label.cartonIndex ?? ''}/${label.cartonTotal ?? ''}`, label.batchNumber || '')
       : bagLotRowHtml('BAG', f.bag, label.batchNumber || '');
+  // Tem lẻ: TL-01 (phần tách đem xuất) / CL-01 (bịch còn lại) — in ở dòng dưới cùng tem
+  const tagM = /\(\s*(TL|CL)\s*-?\s*(\d{1,3})\s*\)\s*$/i.exec(String(label.qrData || '').split('|')[3] || '');
+  const splitTag = tagM ? `${tagM[1].toUpperCase()}-${tagM[2].padStart(2, '0')}` : '';
+  const splitTagHtml = splitTag ? `<div class="info-row info-row-split">${e(splitTag)}</div>` : '';
   const iconHtml = label.iconType ? `<div class="icon-badge">${label.iconType}</div>` : '';
   const loc = formatMaterialLabelHomeLoc(label.homeLoc);
   const locHtml = loc ? `<div class="req-loc">${e(loc)}</div>` : '';
@@ -141,6 +148,7 @@ export function renderMaterialQrLabelHtml(label: MaterialQrLabel): string {
                           ${unitRow}
                           ${typeRowHtml(label.labelType || '')}
                         </div>
+                        ${splitTagHtml}
                       </div>
                       ${iconHtml}
                       ${locHtml}
@@ -213,6 +221,16 @@ const MATERIAL_QR_LABEL_CSS = `
     line-height: 1.05 !important;
     letter-spacing: 0.2px !important;
   }
+  .info-row.info-row-split {
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0.3mm 1.2mm !important;
+    background: #000000 !important;
+    color: #FFFFFF !important;
+    letter-spacing: 0.5px !important;
+  }
   .icon-badge {
     position: absolute !important;
     bottom: 1mm !important;
@@ -275,6 +293,32 @@ const MATERIAL_QR_LABEL_CSS = `
     @page { margin: 0 !important; size: 57mm 32mm !important; padding: 0 !important; }
     .info-section { justify-content: flex-start !important; }
   }
+`;
+
+/**
+ * Script chạy trong cửa sổ in: dòng chữ nào dài hơn khung thông tin của tem (vd Lô dài) thì
+ * tự giảm cỡ chữ của riêng dòng đó tới khi vừa (tối thiểu 5px). Gọi window.__fitMaterialLabels().
+ */
+export const MATERIAL_LABEL_FIT_SCRIPT = `
+  window.__fitMaterialLabels = function () {
+    var secs = document.querySelectorAll('.info-section');
+    for (var i = 0; i < secs.length; i++) {
+      var sec = secs[i];
+      var cs = getComputedStyle(sec);
+      var avail = sec.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      if (!(avail > 0)) continue;
+      var rows = sec.querySelectorAll('.info-row');
+      for (var j = 0; j < rows.length; j++) {
+        var row = rows[j];
+        var fs = parseFloat(getComputedStyle(row).fontSize) || 10;
+        var guard = 0;
+        while (row.scrollWidth > avail + 0.5 && fs > 5 && guard++ < 60) {
+          fs = Math.max(5, fs - 0.4);
+          row.style.setProperty('font-size', fs + 'px', 'important');
+        }
+      }
+    }
+  };
 `;
 
 /** Trang in đầy đủ (HTML) cho danh sách tem — mỗi tem 1 trang 57×32mm. */

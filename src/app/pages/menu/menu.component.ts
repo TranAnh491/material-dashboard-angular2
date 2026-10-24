@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { MobileDetectionService } from '../../services/mobile-detection.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { APP_TABS } from '../../routes/app-tabs';
 
 @Component({
   selector: 'app-menu',
@@ -34,86 +35,15 @@ export class MenuComponent implements OnInit, OnDestroy {
     return this.mobileDetection.desktopOnlyTabPaths;
   }
 
-  menuTabs: MenuTab[] = [
-    // Dashboard - First
-    { path: '/dashboard', title: 'Dashboard', icon: 'speed', iconImage: 'assets/img/dasboard.png', category: 'Main' },
-    // Main - Additional tools
-    { path: '/work-order-status', title: 'Work Order', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Main' },
-    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Main' },
-    {
-      path: '/location',
-      title: 'Materials',
-      icon: 'inventory_2',
-      iconImage: 'assets/img/location.png',
-      category: 'Main',
-      subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-    },
-    {
-      path: '/danh-muc-nvl-tp',
-      title: 'Danh Mục',
-      icon: 'menu_book',
-      iconImage: 'assets/img/rminventory.png',
-      category: 'Main',
-      subtitle: 'Quản lý danh mục NVL & TP',
-    },
-    {
-      path: '/j-warehouse',
-      title: 'J Warehouse',
-      icon: 'warehouse',
-      iconImage: 'assets/img/location.png',
-      category: 'Main',
-      subtitle: 'Sơ đồ kho J — 105m × 30m',
-    },
-
-    // Report
-    { path: '/report', title: 'Report', icon: 'analytics', iconImage: 'assets/img/dasboard.png', category: 'Report' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', iconImage: 'assets/img/dasboard.png', category: 'Report' },
-
-    // Production
-    { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', iconImage: 'assets/img/analytics.png', category: 'Production' },
-    
-    // RM — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-    { path: '/inbound', title: 'RM Inbound', icon: 'download', iconImage: 'assets/img/rmin.png', category: 'RM' },
-    { path: '/outbound', title: 'RM Outbound', icon: 'upload', iconImage: 'assets/img/rmout.png', category: 'RM' },
-    { path: '/materials', title: 'RM Inventory', icon: 'warehouse', iconImage: 'assets/img/rminventory.png', category: 'RM' },
-    { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'fact_check', iconImage: 'assets/img/shipcheck.png', category: 'RM' },
-    { path: '/inventory-overview', title: 'RM Overview', icon: 'bar_chart', iconImage: 'assets/img/stocktaking.png', category: 'RM' },
-    { path: '/bag-history', title: 'Control Batch', icon: 'history', iconImage: 'assets/img/traceback.png', category: 'RM' },
-    { path: '/label', title: 'Label', icon: 'local_offer', iconImage: 'assets/img/label.png', category: 'RM' },
-
-    // Quality
-    { path: '/qc', title: 'Quality', icon: 'verified', iconImage: 'assets/img/qc.png', category: 'Quality' },
-    { path: '/nhiet-do', title: 'Nhiệt Độ', icon: 'thermostat', iconImage: 'assets/img/qc.png', category: 'Quality' },
-    { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', iconImage: 'assets/img/qc.png', category: 'Quality', subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo' },
-    { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', iconImage: 'assets/img/traceback.png', category: 'Quality' },
-
-    // ASM FG
-    { path: '/fg-in', title: 'FG In', icon: 'input', iconImage: 'assets/img/fgin.png', category: 'ASM FG' },
-    { path: '/fg-out', title: 'FG Out', icon: 'output', iconImage: 'assets/img/fgout.png', category: 'ASM FG' },
-    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', iconImage: 'assets/img/shipcheck.png', category: 'ASM FG' },
-    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', iconImage: 'assets/img/fginventory.png', category: 'ASM FG' },
-    { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', iconImage: 'assets/img/stocktaking.png', category: 'ASM FG' },
-    { path: '/fg-location', title: 'FG Location', icon: 'edit_location', iconImage: 'assets/img/fglocation.png', category: 'ASM FG' },
-    { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', iconImage: 'assets/img/palletid.png', category: 'ASM FG' },
-    
-    // Tools & Operations
-    { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', iconImage: 'assets/img/workorder.png', category: 'Tools' },
-    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', iconImage: 'assets/img/delivery.png', category: 'Tools' },
-    { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', iconImage: 'assets/img/shipment.png', category: 'Tools' },
-    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', iconImage: 'assets/img/dasboard.png', category: 'Tools' },
-    { path: '/stock-check', title: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png', category: 'Stock Check', subtitle: 'Quét vị trí, kiểm mã và lượng tồn' },
-    { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', iconImage: 'assets/img/workorder.png', category: 'Tools' },
-    
-    // Admin & Reports
-    { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', iconImage: 'assets/img/sxxk.png', category: 'Admin' },
-    { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', iconImage: 'assets/img/scrap.png', category: 'Admin' },
-    { path: '/checklist', title: 'Safety & Quality', icon: 'check_circle', iconImage: 'assets/img/safety.png', category: 'Admin' },
-    { path: '/equipment', title: 'Training', icon: 'school', iconImage: 'assets/img/training.png', category: 'Admin' },
-    { path: '/tai-khoan', title: 'Quản lý tài khoản', icon: 'manage_accounts', iconImage: 'assets/img/setting.png', category: 'Admin', subtitle: 'Đổi tên và mật khẩu của tài khoản đang đăng nhập' },
-    { path: '/settings', title: 'Settings', icon: 'settings', iconImage: 'assets/img/setting.png', category: 'Admin' },
-    { path: '/zalo', title: 'Zalo', icon: 'chat', iconImage: 'assets/img/setting.png', category: 'Admin' }
-  ];
+  // Danh sách thẻ — nguồn chung ở routes/app-tabs.ts (tab có khai báo `menu`)
+  menuTabs: MenuTab[] = APP_TABS.filter(t => t.menu).map(t => ({
+    path: t.path,
+    title: t.title,
+    icon: t.menu!.icon,
+    iconImage: t.menu!.iconImage,
+    category: t.menu!.category,
+    subtitle: t.subtitle,
+  }));
 
   private readonly iconAccentByPath: Record<string, { bg: string; border: string; fg: string }> = {
     '/dashboard': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' },
@@ -222,53 +152,9 @@ export class MenuComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  private readonly subtitleByPath: Record<string, string> = {
-    '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
-    '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
-    '/lich-lam-viec': 'Phân công tuần: soạn LSX, nhận NVL, giao LSX theo nhóm',
-    '/shipment': 'Kế hoạch và theo dõi giao hàng',
-    '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-    '/report': 'Báo cáo và phân tích',
-    '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
-    '/pd-control': 'Giám sát điều khiển sản xuất',
-    '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
-    '/outbound': 'Xuất kho nguyên liệu (ASM1 & ASM2)',
-    '/materials': 'Quản lý tồn kho nguyên liệu (ASM1 & ASM2)',
-    '/quan-ly-nguyen-lieu': 'Kiểm tra KK theo loại hàng, mã hàng và vị trí',
-    '/inventory-overview': 'Xem tổng quan tồn kho (ASM1 & ASM2)',
-    '/bag-history': 'Kiểm soát batch và bịch xuất',
-    '/label': 'In tem nhãn nguyên liệu',
-    '/qc': 'Kiểm tra chất lượng nguyên liệu',
-    '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
-    '/equipment-checklist': 'Checklist thiết bị kho, tem QR và nhắc kiểm tra',
-    '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
-    '/fg-in': 'Nhập thành phẩm vào kho',
-    '/fg-out': 'Xuất thành phẩm',
-    '/fg-check': 'Kiểm tra thành phẩm trước khi xuất',
-    '/fg-inventory': 'Quản lý tồn kho thành phẩm',
-    '/fg-overview': 'Tổng quan tồn kho thành phẩm',
-    '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
-    '/pallet-id': 'In tem nội bộ kho',
-    '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
-    '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
-    '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
-    '/stock-check': 'Quét vị trí, kiểm từng mã và xác nhận lượng',
-    '/bieu-mau': 'Phiếu xuất kho, biểu mẫu 5S',
-    '/sxxk': 'Quản lý sản xuất xuất khẩu',
-    '/scrap': 'Quản lý phế liệu',
-    '/checklist': 'An toàn và chất lượng',
-    '/equipment': 'Đào tạo nhân viên kho',
-    '/settings': 'Cài đặt tài khoản và phân quyền',
-    '/zalo': 'Tích hợp thông báo Zalo',
-  };
-
   getMenuCardSubtitle(tab: MenuTabView): string {
     if (tab.subtitle) {
       return tab.subtitle;
-    }
-    const byPath = this.subtitleByPath[tab.path];
-    if (byPath) {
-      return byPath;
     }
     const byCategory: Record<string, string> = {
       Main: 'Quản lý vận hành và giao hàng',

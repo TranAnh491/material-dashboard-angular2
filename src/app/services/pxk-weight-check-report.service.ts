@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
+import { TEM_LE_NO_WEIGH_DEFAULT } from './weigh-exempt-report';
 
 export interface PxkWeightCheckReport {
   id: string;
@@ -21,11 +22,30 @@ export class PxkWeightCheckReportService {
   static readonly REPORTS = 'pxk-weight-check-reports';
   static readonly EXEMPT = 'pxk-weight-check-exempt';
   static readonly INCLUDE = 'pxk-weight-check-include';
+  static readonly TEM_LE_NO_WEIGH = 'app-settings/tem-le-no-weigh';
 
   constructor(
     private firestore: AngularFirestore,
     private fns: AngularFireFunctions
   ) {}
+
+  /** Đầu mã / mã in tem lẻ không cần cân (chưa lưu lần nào → danh sách mặc định). */
+  async loadTemLeNoWeighPrefixes(): Promise<string[]> {
+    const snap = await this.firestore.firestore.doc(PxkWeightCheckReportService.TEM_LE_NO_WEIGH).get();
+    const list = snap.exists ? (snap.data() as any)?.prefixes : null;
+    return Array.isArray(list)
+      ? list.map((p: any) => String(p || '').trim().toUpperCase()).filter(Boolean).sort()
+      : [...TEM_LE_NO_WEIGH_DEFAULT];
+  }
+
+  async saveTemLeNoWeighPrefixes(prefixes: string[], updatedBy: string): Promise<void> {
+    const list = Array.from(new Set(prefixes.map((p) => String(p || '').trim().toUpperCase()).filter(Boolean))).sort();
+    await this.firestore.firestore.doc(PxkWeightCheckReportService.TEM_LE_NO_WEIGH).set({
+      prefixes: list,
+      updatedAt: new Date(),
+      updatedBy: String(updatedBy || '').trim().toUpperCase().slice(0, 20)
+    });
+  }
 
   async loadIncludeCodes(): Promise<string[]> {
     const snap = await firstValueFrom(
@@ -61,6 +81,31 @@ export class PxkWeightCheckReportService {
     return snap.docs
       .map((d) => String(d.id || '').trim().toUpperCase())
       .filter(Boolean);
+  }
+
+  /** Mã đã duyệt "không cần cân / không check lượng" — kèm lý do, người duyệt. */
+  async loadExemptRows(): Promise<Array<{ code: string; reason: string; lsx: string; approvedBy: string; approvedAt: any }>> {
+    const snap = await firstValueFrom(this.firestore.collection(PxkWeightCheckReportService.EXEMPT).get());
+    return snap.docs
+      .map((d) => {
+        const x = d.data() as any;
+        return {
+          code: String(d.id || '').trim().toUpperCase(),
+          reason: String(x?.reason || ''),
+          lsx: String(x?.lsx || ''),
+          approvedBy: String(x?.approvedBy || ''),
+          approvedAt: x?.approvedAt
+        };
+      })
+      .filter((r) => !!r.code)
+      .sort((a, b) => this.millis(b.approvedAt) - this.millis(a.approvedAt));
+  }
+
+  /** Bỏ mã khỏi danh sách "không cần cân" → mã lại phải cân / check lượng. */
+  async removeExempt(materialCode: string): Promise<void> {
+    const code = materialCode.trim().toUpperCase();
+    if (!code) return;
+    await this.firestore.collection(PxkWeightCheckReportService.EXEMPT).doc(code).delete();
   }
 
   async loadPending(): Promise<PxkWeightCheckReport[]> {

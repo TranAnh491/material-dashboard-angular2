@@ -110,6 +110,14 @@
       </div>
     </div>
     <div class="nhiet-do-toolbar__actions">
+      <button type="button" class="tool-icon tool-icon--scan" *ngIf="canScan"
+              (click)="openScan()" [disabled]="isLoading || isSaving"
+              title="Scan màn hình nhiệt độ / Scan display" aria-label="Scan màn hình nhiệt độ">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
       <button type="button" class="tool-icon tool-icon--settings"
               (click)="openZaloSettings(activeForm.factory)"
               [attr.title]="'Cài đặt Zalo ' + activeForm.factory"
@@ -120,7 +128,7 @@
         </svg>
       </button>
       <button type="button" class="tool-icon tool-icon--save"
-              (click)="saveMonth()" [disabled]="isSaving || isLoading"
+              (click)="onSaveClick()" [disabled]="isSaving || isLoading"
               [title]="isSaving ? 'Đang lưu…' : 'Lưu'"
               [attr.aria-label]="isSaving ? 'Đang lưu' : 'Lưu'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -244,7 +252,8 @@
               <input type="number" step="0.1" class="cell-input" inputmode="decimal"
                      [disabled]="!isDayActive(d)"
                      [ngModel]="days[d-1].tempMorning"
-                     (ngModelChange)="onDayNumberChange(d, 'tempMorning', $event)" />
+                     (ngModelChange)="onDayNumberChange(d, 'tempMorning', $event)"
+                     (change)="onDayNumberCommitted()" />
             </td>
             <td class="ucl-cell"></td>
           </tr>
@@ -260,7 +269,8 @@
               <input type="number" step="0.1" class="cell-input" inputmode="decimal"
                      [disabled]="!isDayActive(d)"
                      [ngModel]="days[d-1].tempAfternoon"
-                     (ngModelChange)="onDayNumberChange(d, 'tempAfternoon', $event)" />
+                     (ngModelChange)="onDayNumberChange(d, 'tempAfternoon', $event)"
+                     (change)="onDayNumberCommitted()" />
             </td>
             <td class="ucl-cell"></td>
           </tr>
@@ -280,7 +290,8 @@
               <input type="number" step="0.1" class="cell-input" inputmode="decimal"
                      [disabled]="!isDayActive(d)"
                      [ngModel]="days[d-1].humidityMorning"
-                     (ngModelChange)="onDayNumberChange(d, 'humidityMorning', $event)" />
+                     (ngModelChange)="onDayNumberChange(d, 'humidityMorning', $event)"
+                     (change)="onDayNumberCommitted()" />
             </td>
             <td class="ucl-cell"></td>
           </tr>
@@ -296,7 +307,8 @@
               <input type="number" step="0.1" class="cell-input" inputmode="decimal"
                      [disabled]="!isDayActive(d)"
                      [ngModel]="days[d-1].humidityAfternoon"
-                     (ngModelChange)="onDayNumberChange(d, 'humidityAfternoon', $event)" />
+                     (ngModelChange)="onDayNumberChange(d, 'humidityAfternoon', $event)"
+                     (change)="onDayNumberCommitted()" />
             </td>
             <td class="ucl-cell"></td>
           </tr>
@@ -559,6 +571,15 @@
     </div>
 
   </div><!-- /form-sheet -->
+
+  <button type="button" class="scan-fab no-print" *ngIf="canScan"
+          (click)="openScan()" [disabled]="isLoading || isSaving">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+    <span>Chụp nhiệt độ</span>
+  </button>
   </div><!-- /nhiet-do-form-view -->
   </div><!-- /nhiet-do-form-layout__main -->
   </div><!-- /nhiet-do-form-layout -->
@@ -689,6 +710,142 @@
       <button type="button" class="btn btn-outline" (click)="closeZaloSettings()">Hủy / Cancel</button>
       <button type="button" class="btn btn-primary" (click)="saveZaloSettings()" [disabled]="zaloSettingsSaving || zaloSettingsLoading || zaloTestSending">
         {{ zaloSettingsSaving ? 'Đang lưu…' : 'Lưu / Save' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Scan màn hình nhiệt độ / độ ẩm ══ -->
+<div class="scan-overlay no-print" *ngIf="showScan" (click)="scanMobile ? null : closeScan()">
+  <div class="scan-modal" [class.scan-modal--mobile]="scanMobile" (click)="$event.stopPropagation()">
+    <div class="scan-modal__head">
+      <div>
+        <h3>Scan nhiệt độ &amp; độ ẩm</h3>
+        <p class="scan-modal__sub">{{ activeForm?.factory }} — {{ activeForm?.titleVi }} · Ngày {{ scanDay }}/{{ selectedMonth }} · Ca {{ scanSlotLabel }}</p>
+      </div>
+      <button type="button" class="scan-modal__close" *ngIf="!scanMobile" (click)="closeScan()" aria-label="Đóng">×</button>
+    </div>
+
+    <div class="scan-modal__view">
+      <div class="scan-modal__stage" [hidden]="!!scanImageUrl">
+        <video #scanVideo class="scan-modal__video" playsinline muted autoplay></video>
+        <div class="scan-modal__frame" *ngIf="scanCameraOn"></div>
+      </div>
+      <img *ngIf="scanImageUrl" [src]="scanImageUrl" class="scan-modal__photo" alt="Ảnh đã chụp" />
+      <div class="scan-modal__busy" *ngIf="scanBusy">{{ scanStatus || 'Đang đọc số…' }}</div>
+    </div>
+
+    <!-- Điện thoại: Chụp → báo kết quả → Lưu / Chụp lại / Thoát -->
+    <ng-container *ngIf="scanMobile">
+      <div class="scan-mobile-result" *ngIf="scanImageUrl && !scanBusy"
+           [class.scan-mobile-result--ok]="scanReadOk" [class.scan-mobile-result--ng]="!scanReadOk">
+        <div class="scan-mobile-result__item">
+          <span class="scan-mobile-result__label">Nhiệt độ</span>
+          <span class="scan-mobile-result__value">{{ scanTemp != null ? scanTemp : '—' }}<small>°C</small></span>
+        </div>
+        <div class="scan-mobile-result__item">
+          <span class="scan-mobile-result__label">Độ ẩm</span>
+          <span class="scan-mobile-result__value">{{ scanHum != null ? scanHum : '—' }}<small>%</small></span>
+        </div>
+      </div>
+      <p class="scan-modal__error" *ngIf="scanError">{{ scanError }}</p>
+      <p class="scan-modal__hint" *ngIf="scanImageUrl && !scanBusy && scanReadOk">
+        Số đúng với màn hình đồng hồ thì bấm <strong>Lưu</strong>, sai thì bấm <strong>Chụp lại</strong>.
+      </p>
+      <div class="scan-modal__foot scan-modal__foot--mobile">
+        <button type="button" class="btn btn-outline" (click)="closeScan()" [disabled]="isSaving">Thoát</button>
+        <button type="button" class="btn btn-primary" *ngIf="!scanImageUrl"
+                (click)="captureScan()" [disabled]="!scanCameraOn || scanBusy">Chụp</button>
+        <button type="button" class="btn btn-outline" *ngIf="scanImageUrl"
+                (click)="startScanCamera()" [disabled]="scanBusy || isSaving">Chụp lại</button>
+        <button type="button" class="btn btn-success" *ngIf="scanImageUrl"
+                (click)="applyScan()" [disabled]="scanBusy || isSaving || isLoading || !scanReadOk">
+          {{ isSaving ? 'Đang lưu…' : 'Lưu' }}
+        </button>
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="!scanMobile">
+    <div class="scan-modal__actions">
+      <button type="button" class="btn btn-primary" *ngIf="!scanImageUrl"
+              (click)="captureScan()" [disabled]="!scanCameraOn || scanBusy">Chụp</button>
+      <button type="button" class="btn btn-outline" *ngIf="scanImageUrl"
+              (click)="startScanCamera()" [disabled]="scanBusy">Chụp lại</button>
+      <label class="btn btn-outline scan-modal__file" [class.scan-modal__file--disabled]="scanBusy">
+        Chọn ảnh
+        <input type="file" accept="image/*" capture="environment" (change)="onScanFile($event)" [disabled]="scanBusy" />
+      </label>
+    </div>
+
+    <p class="scan-modal__error" *ngIf="scanError">{{ scanError }}</p>
+
+    <div class="scan-modal__result">
+      <label>
+        <span>Nhiệt độ (°C)</span>
+        <input type="number" step="0.1" inputmode="decimal" [(ngModel)]="scanTemp" [disabled]="scanBusy" />
+      </label>
+      <label>
+        <span>Độ ẩm (%)</span>
+        <input type="number" step="0.1" inputmode="decimal" [(ngModel)]="scanHum" [disabled]="scanBusy" />
+      </label>
+      <label>
+        <span>Ngày</span>
+        <select [(ngModel)]="scanDay" [disabled]="scanBusy">
+          <option *ngFor="let d of scanDayOptions" [ngValue]="d">{{ d }}/{{ selectedMonth }}</option>
+        </select>
+      </label>
+      <label>
+        <span>Ca</span>
+        <select [(ngModel)]="scanSlot" [disabled]="scanBusy">
+          <option value="morning">Sáng</option>
+          <option value="afternoon">Chiều</option>
+        </select>
+      </label>
+    </div>
+    <p class="scan-modal__raw" *ngIf="scanRawText">Đọc được: {{ scanRawText }}</p>
+
+    <div class="scan-modal__foot">
+      <button type="button" class="btn btn-outline" (click)="closeScan()">Hủy</button>
+      <button type="button" class="btn btn-primary" (click)="applyScan()"
+              [disabled]="scanBusy || isSaving || isLoading || (scanTemp == null && scanHum == null)">
+        Điền &amp; Lưu
+      </button>
+    </div>
+    </ng-container>
+  </div>
+</div>
+
+<!-- ══ Sửa số đã lưu → nhập pass ══ -->
+<div class="scan-overlay no-print" *ngIf="editConfirm">
+  <div class="scan-modal edit-pass-modal" role="dialog" aria-label="Xác nhận sửa số">
+    <div class="scan-modal__head">
+      <div>
+        <h3>Xác nhận sửa số</h3>
+        <p class="scan-modal__sub">{{ activeForm?.factory }} — {{ activeForm?.titleVi }} · Tháng {{ selectedMonth }}/{{ selectedYear }}</p>
+      </div>
+      <button type="button" class="scan-modal__close" (click)="cancelNumberEdit()" [disabled]="isSaving" aria-label="Đóng">×</button>
+    </div>
+
+    <ul class="edit-pass-modal__list">
+      <li *ngFor="let e of editConfirm">
+        <span>Ngày {{ e.day }} · {{ e.label }}</span>
+        <strong>{{ e.oldValue }} → {{ e.newValue != null ? e.newValue : '(trống)' }}</strong>
+      </li>
+    </ul>
+
+    <div class="scan-modal__result edit-pass-modal__field">
+      <label>
+        <span>Mật khẩu</span>
+        <input id="nhiet-do-edit-pass" type="password" autocomplete="off" [(ngModel)]="editPass"
+               [disabled]="isSaving" (keyup.enter)="confirmNumberEdit()" />
+      </label>
+    </div>
+    <p class="scan-modal__error" *ngIf="editPassError">{{ editPassError }}</p>
+
+    <div class="scan-modal__foot">
+      <button type="button" class="btn btn-outline" (click)="cancelNumberEdit()" [disabled]="isSaving">Hủy</button>
+      <button type="button" class="btn btn-primary" (click)="confirmNumberEdit()" [disabled]="isSaving || !editPass">
+        {{ isSaving ? 'Đang lưu…' : 'Xác nhận & Lưu' }}
       </button>
     </div>
   </div>

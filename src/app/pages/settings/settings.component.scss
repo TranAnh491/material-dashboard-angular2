@@ -2193,6 +2193,15 @@
   }
 }
 
+.import-employees-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--sg-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .btn-register-green {
   display: inline-flex;
   align-items: center;

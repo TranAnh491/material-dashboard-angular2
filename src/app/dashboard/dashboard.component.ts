@@ -14,6 +14,7 @@ import { MaterialLifecycleService } from '../services/material-lifecycle.service
 import { WoCreatedByStaffService } from '../services/wo-created-by-staff.service';
 import { WorkOrderOutboundCreatedByService } from '../services/work-order-outbound-created-by.service';
 import * as XLSX from 'xlsx';
+import { APP_TABS, DESKTOP_ONLY_TAB_PATHS, getAppTab } from '../routes/app-tabs';
 
 interface WorkOrderStatusRow {
   code: string;
@@ -384,27 +385,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   mobileDrillCategory: string | null = null;
   mobileSearchExpanded = false;
 
-  /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). */
-  private readonly desktopOnlyTabPaths: string[] = [
-    '/dashboard',
-    '/bag-history',
-    '/fg-overview',
-    '/qc',
-    '/qc-traceability',
-    '/label',
-    '/work-order-status',
-    '/shipment',
-    '/inventory-overview',
-    '/fg-out',
-    '/fg-inventory',
-    '/pallet-id',
-    '/checklist',
-    '/equipment',
-    '/sxxk',
-    '/settings',
-    '/zalo',
-    '/shorted-materials'
-  ];
+  /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). Nguồn chung ở routes/app-tabs.ts. */
+  private readonly desktopOnlyTabPaths: string[] = DESKTOP_ONLY_TAB_PATHS;
 
   readonly mobileCategoryOrder = [
     'Main',
@@ -417,61 +399,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     'Admin'
   ];
 
-  // Menu tabs for icon grid (+ Main giống menu hệ thống)
-  menuTabs = [
-    { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
-    { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', category: 'Main' },
-    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
-    {
-      path: '/location',
-      title: 'Materials',
-      icon: 'inventory_2',
-      category: 'Main',
-      subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-    },
-    // Report
-    { path: '/report', title: 'Report', icon: 'analytics', category: 'Report' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
-    // RM — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-    { path: '/inbound', title: 'RM Inbound', icon: 'arrow_downward', category: 'RM' },
-    { path: '/outbound', title: 'RM Outbound', icon: 'arrow_upward', category: 'RM' },
-    { path: '/materials', title: 'RM Inventory', icon: 'inventory', category: 'RM' },
-    { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'fact_check', category: 'RM' },
-    { path: '/inventory-overview', title: 'RM Overview', icon: 'assessment', category: 'RM' },
-    { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'RM' },
-
-    { path: '/qc', title: 'Quality', icon: 'verified', category: 'Quality' },
-    { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', category: 'Quality', subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo' },
-    { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', category: 'Quality' },
-
-    // ASM FG
-    { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM FG' },
-    { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM FG' },
-    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
-    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
-    { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', category: 'ASM FG' },
-    { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
-    { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', category: 'ASM FG' },
-
-    // Production
-    { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', category: 'Production' },
-
-    // Tools & Operations
-    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', category: 'Tools' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Tools' },
-    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', category: 'Tools' },
-    { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
-    { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', category: 'Tools' },
-
-    // Admin & Reports
-    { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
-    { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
-    { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
-    { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
-    { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', category: 'Admin' },
-    { path: '/zalo', title: 'Zalo', icon: 'chat', category: 'Admin' },
-    { path: '/settings', title: 'Settings', icon: 'settings', category: 'Admin' }
-  ];
+  // Lưới module mobile — nguồn chung ở routes/app-tabs.ts (tab có khai báo `dashboard`)
+  menuTabs: Array<{ path: string; title: string; icon: string; category: string; subtitle?: string }> =
+    APP_TABS.filter(t => t.dashboard).map(t => ({
+      path: t.path,
+      title: t.title,
+      icon: t.dashboard!.icon,
+      category: t.dashboard!.category,
+      subtitle: t.subtitle,
+    }));
 
   constructor(
     private firestore: AngularFirestore,
@@ -563,47 +499,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (tab?.subtitle) {
       return tab.subtitle;
     }
-    const byPath: Record<string, string> = {
-      '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
-      '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
-      '/lich-lam-viec': 'Phân công tuần: soạn LSX, nhận NVL, giao LSX theo nhóm',
-      '/shipment': 'Kế hoạch và theo dõi giao hàng',
-      '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-      '/report': 'Báo cáo và phân tích',
-      '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
-      '/pd-control': 'Giám sát điều khiển sản xuất',
-      '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
-      '/outbound': 'Xuất kho nguyên liệu (ASM1 & ASM2)',
-      '/materials': 'Quản lý tồn kho nguyên liệu (ASM1 & ASM2)',
-      '/quan-ly-nguyen-lieu': 'Kiểm tra KK theo loại hàng, mã hàng và vị trí',
-      '/inventory-overview': 'Xem tổng quan tồn kho (ASM1 & ASM2)',
-      '/bag-history': 'Kiểm soát batch và bịch xuất',
-      '/label': 'In tem nhãn nguyên liệu',
-      '/qc': 'Kiểm tra chất lượng nguyên liệu',
-      '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
-      '/equipment-checklist': 'Checklist thiết bị kho, tem QR và nhắc kiểm tra',
-      '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
-      '/fg-in': 'Nhập thành phẩm vào kho',
-      '/fg-out': 'Xuất thành phẩm',
-      '/fg-check': 'Kiểm tra thành phẩm trước khi xuất',
-      '/fg-inventory': 'Quản lý tồn kho thành phẩm',
-      '/fg-overview': 'Tổng quan tồn kho thành phẩm',
-      '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
-      '/pallet-id': 'In tem nội bộ kho',
-      '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
-      '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
-      '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
-      '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
-      '/index': 'Báo cáo kho ngoại quan',
-      '/sxxk': 'Quản lý sản xuất xuất khẩu',
-      '/scrap': 'Quản lý phế liệu',
-      '/checklist': 'An toàn và chất lượng',
-      '/equipment': 'Đào tạo nhân viên kho',
-      '/settings': 'Cài đặt tài khoản và phân quyền',
-      '/zalo': 'Tích hợp thông báo Zalo',
-    };
-    if (tab?.path && byPath[tab.path]) {
-      return byPath[tab.path];
+    const appTab = tab?.path ? getAppTab(tab.path) : undefined;
+    if (appTab?.subtitle) {
+      return appTab.subtitle;
     }
     const hit = this.menuTabs.find(
       (t) => t.path === tab?.path || t.title === tab?.title

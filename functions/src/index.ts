@@ -880,6 +880,50 @@ export const notifyPxkWeightCheckReportFn = functions
     }
   });
 
+/** Tem lẻ: 8h sáng hằng ngày (VN) — email mã tách bag CL có GW lệch > 5% tới wh1@airspeedmfgvn.com. */
+export const notifyTemLeGwSuspectsDaily = functions
+  .runWith({ secrets: [emailPass] })
+  .pubsub.schedule('0 8 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runTemLeGwSuspectEmail } = await import('./tem-le-gw-email');
+    await runTemLeGwSuspectEmail(admin.firestore());
+  });
+
+/** Materials (Inventory): báo cáo "Đã hết stock" — Zalo tới nhóm Quản lý kho. */
+export const notifyInventoryStockReportFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : '');
+    if (!str(data?.materialCode).trim()) {
+      throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã hàng.');
+    }
+    try {
+      const { notifyInventoryStockReport } = await import('./inventory-stock-report');
+      await notifyInventoryStockReport(admin.firestore(), {
+        factory: str(data?.factory),
+        materialCode: str(data?.materialCode),
+        po: str(data?.po),
+        imd: str(data?.imd),
+        stock: str(data?.stock),
+        location: str(data?.location),
+        status: str(data?.status),
+        reportedBy: str(data?.reportedBy),
+        detail: str(data?.detail)
+      });
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(
+        msg.includes('Thiếu') || msg.includes('Quản lý kho') ? 'failed-precondition' : 'internal',
+        msg
+      );
+    }
+  });
+
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
 export const verifyFgLotLsxOtpFn = functions
   .runWith({ secrets: [zaloBotToken] })
@@ -1004,6 +1048,21 @@ export const notifyFgOverviewMissingImportWeekdays = functions
     await runFgOverviewImportNotify(admin.firestore());
   });
 
+/**
+ * Thứ 3 / 5 / 7 lúc 9h, 12h, 15h, 17h: FG Overview (ASM1/ASM2) và Inventory Overview LinkQ (ASM1/ASM2)
+ * chưa có bản import của thứ 2 / 4 / 6 hôm trước → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
+ */
+export const notifyImportOverdueZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .pubsub.schedule('0 9,12,15,17 * * 2,4,6')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runImportOverdueZalo } = await import('./import-overdue-zalo');
+    const result = await runImportOverdueZalo(admin.firestore());
+    console.log('import overdue zalo', JSON.stringify({ overdue: result.overdue, sent: result.sent }));
+    return null;
+  });
+
 /** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
 export const sendPrintLabelLateNotifyManualFn = functions
   .runWith({ secrets: [emailPass] })
@@ -1097,6 +1156,7 @@ export const sendQcMonthlyReportManualFn = functions
 
 /** Admin: đổi password user theo uid (không cần password hiện tại). */
 export const adminUpdateUserPasswordFn = functions
+  .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: { uid?: string; newPassword?: string }, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -1110,8 +1170,8 @@ export const adminUpdateUserPasswordFn = functions
 
     try {
       const { adminUpdateUserPassword } = await import('./admin-update-user-password');
-      await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
-      return { ok: true };
+      const zaloSent = await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
+      return { ok: true, zaloSent };
     } catch (e: unknown) {
       const anyErr = e as any;
       const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
@@ -1120,7 +1180,7 @@ export const adminUpdateUserPasswordFn = functions
       if (msg === 'permission-denied' || code === 'permission-denied') {
         throw new functions.https.HttpsError(
           'permission-denied',
-          'Chỉ Admin/Quản lý mới đổi được password.'
+          'Chỉ admin mới đổi được password.'
         );
       }
 
@@ -1141,6 +1201,7 @@ export const adminUpdateUserPasswordFn = functions
 
 /** Admin: tạo mật khẩu mới 6 số ngẫu nhiên và đổi theo uid. */
 export const adminResetUserPasswordFn = functions
+  .runWith({ secrets: [zaloBotToken] })
   .https.onCall(async (data: { uid?: string }, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -1168,7 +1229,7 @@ export const adminResetUserPasswordFn = functions
       });
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đổi được password.');
       }
       if (code === 'auth/user-not-found') {
         throw new functions.https.HttpsError('not-found', 'Không tìm thấy user trong Firebase Auth.');
@@ -1188,7 +1249,7 @@ export const adminResetUserPasswordFn = functions
   });
 
 /** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
-export const adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(
+export const adminSetUserPasswordByEmployeeIdFn = functions.runWith({ secrets: [zaloBotToken] }).https.onCall(
   async (data: { employeeId?: string; newPassword?: string }, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -1204,14 +1265,14 @@ export const adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(
     try {
       const { adminSetUserPasswordByEmployeeId } = await import('./admin-update-user-password');
       const r = await adminSetUserPasswordByEmployeeId(context.auth.uid, employeeId, newPassword);
-      return { ok: true, uid: r.uid, email: r.email };
+      return { ok: true, uid: r.uid, email: r.email, zaloSent: r.zaloSent };
     } catch (e: unknown) {
       const anyErr = e as any;
       const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
       const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đổi được password.');
       }
       if (msg.includes('Không tìm thấy Firebase Auth user')) {
         throw new functions.https.HttpsError('not-found', msg);
@@ -1242,7 +1303,7 @@ export const adminDeleteUserByEmployeeIdFn = functions
       const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới xóa được user.');
       }
       if (msg.includes('Không tìm thấy Firebase Auth user')) {
         throw new functions.https.HttpsError('not-found', msg);
@@ -1276,7 +1337,7 @@ export const adminDeleteUserByUidFn = functions.https.onCall(async (data: { uid?
     const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
     if (msg === 'permission-denied' || code === 'permission-denied') {
-      throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+      throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới xóa được user.');
     }
     if (msg.includes('Không tìm thấy tài khoản')) {
       throw new functions.https.HttpsError('not-found', msg);
@@ -1309,7 +1370,7 @@ export const adminReleaseRegistrationEmailFn = functions.https.onCall(async (dat
     const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
     if (msg === 'permission-denied' || code === 'permission-denied') {
-      throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới thực hiện được.');
+      throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới thực hiện được.');
     }
     if (msg.includes('Email không hợp lệ')) {
       throw new functions.https.HttpsError('invalid-argument', msg);
@@ -1354,7 +1415,7 @@ export const adminUpdateUserProfileFn = functions.https.onCall(
       if (msg === 'permission-denied' || code === 'permission-denied') {
         throw new functions.https.HttpsError(
           'permission-denied',
-          'Chỉ Admin/Quản lý mới sửa được hồ sơ.'
+          'Chỉ admin mới sửa được hồ sơ.'
         );
       }
       if (msg.includes('đã được dùng')) {
@@ -1394,7 +1455,7 @@ export const registerAspUserWithEmailFn = functions
       const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đăng ký được.');
       }
       if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
         throw new functions.https.HttpsError('already-exists', msg);
@@ -1411,6 +1472,34 @@ export const registerAspUserWithEmailFn = functions
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
   });
+
+/** Admin: import mã + tên, tạo tài khoản chưa có. Mật khẩu 6 số ngẫu nhiên, gửi về Zalo ASP0106. */
+export const importAspUsersFn = functions.runWith({ secrets: [zaloBotToken], timeoutSeconds: 300, memory: '512MB' }).https.onCall(
+  async (
+    data: { users?: Array<{ employeeId?: string; fullName?: string; department?: string }> },
+    context
+  ) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const users = Array.isArray(data?.users) ? data.users : [];
+    if (!users.length) {
+      throw new functions.https.HttpsError('invalid-argument', 'File không có dòng hợp lệ.');
+    }
+    try {
+      const { importAspUsers } = await import('./admin-register-user');
+      return await importAspUsers(context.auth.uid, users);
+    } catch (e: unknown) {
+      const anyErr = e as any;
+      const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? String(e);
+      const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
+      if (msg === 'permission-denied' || code === 'permission-denied') {
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới import được.');
+      }
+      throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+  }
+);
 
 /** Admin: đăng ký user không cần email — mật khẩu trả về cho admin (Auth + Firestore) + Zalo welcome nếu đã liên kết. */
 export const registerAspUserWithoutEmailFn = functions
@@ -1437,7 +1526,7 @@ export const registerAspUserWithoutEmailFn = functions
       const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đăng ký được.');
       }
       if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
         throw new functions.https.HttpsError('already-exists', msg);
@@ -1507,7 +1596,7 @@ export const adminDeleteAuthUsersNotInSettingsFn = functions
       const code = typeof anyErr?.code === 'string' ? anyErr.code : '';
 
       if (msg === 'permission-denied' || code === 'permission-denied') {
-        throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
+        throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới được phép xóa.');
       }
       throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
@@ -1631,6 +1720,16 @@ export const purgeInventoryHiddenDaily = functions
   .onRun(async () => {
     const { runInventoryHiddenPurgeJob } = await import('./inventory-hidden-purge');
     await runInventoryHiddenPurgeJob(admin.firestore());
+  });
+
+/** Hình bag lẻ đã cân — xóa file Storage > 6 tháng, mỗi ngày 02:30 (VN). */
+export const purgePxkWeightPhotosDaily = functions
+  .runWith({ timeoutSeconds: 300, memory: '256MB' })
+  .pubsub.schedule('30 2 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runPxkWeightPhotoPurgeJob } = await import('./pxk-weight-photo-purge');
+    await runPxkWeightPhotoPurgeJob();
   });
 
 /**

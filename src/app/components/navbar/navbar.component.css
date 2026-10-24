@@ -144,7 +144,9 @@
 .navbar.navbar--inventory-overview-pass-through,
 .navbar.navbar--inventory-overview-pass-through .container-fluid,
 .navbar.navbar--work-schedule-pass-through,
-.navbar.navbar--work-schedule-pass-through .container-fluid {
+.navbar.navbar--work-schedule-pass-through .container-fluid,
+.navbar.navbar--scrap-pass-through,
+.navbar.navbar--scrap-pass-through .container-fluid {
   pointer-events: none;
 }
 

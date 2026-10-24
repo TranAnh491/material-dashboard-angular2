@@ -39,16 +39,7 @@ exports.adminDeleteUserByUid = adminDeleteUserByUid;
 exports.adminDeleteUserByEmployeeId = adminDeleteUserByEmployeeId;
 exports.adminDeleteAuthUsersNotInSettings = adminDeleteAuthUsersNotInSettings;
 const admin = __importStar(require("firebase-admin"));
-function isAdminOrManager(role) {
-    const r = (role || '').toString().trim().toLowerCase();
-    const normalized = r
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '');
-    return (normalized === 'admin' ||
-        normalized === 'quan ly' ||
-        r === 'admin' ||
-        r === 'quản lý');
-}
+const authz_1 = require("./authz");
 function normalizeAspEmployeeId(input) {
     const t = (input || '').trim().toUpperCase();
     if (!t)
@@ -79,14 +70,9 @@ async function deleteUserFirestoreAndAuth(uid) {
 }
 /** Admin: giải phóng email bị kẹt trong Firebase Auth nhưng không còn trong danh sách Settings. */
 async function adminReleaseRegistrationEmail(callerUid, emailRaw) {
-    var _a;
     if (!callerUid)
         throw new Error('Thiếu callerUid.');
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     const email = (emailRaw || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new Error('Email không hợp lệ.');
@@ -128,17 +114,12 @@ async function adminReleaseRegistrationEmail(callerUid, emailRaw) {
  * Hỗ trợ orphan: chỉ còn user-permissions / user-tab-permissions, hoặc Auth lệch uid theo email.
  */
 async function adminDeleteUserByUid(callerUid, targetUidRaw, emailHintRaw) {
-    var _a;
     if (!callerUid)
         throw new Error('Thiếu callerUid.');
     const targetUid = (targetUidRaw || '').trim();
     if (!targetUid)
         throw new Error('Thiếu uid.');
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     if (targetUid === callerUid) {
         throw new Error('Không thể xóa chính tài khoản đang đăng nhập.');
     }
@@ -214,7 +195,6 @@ async function adminDeleteUserByUid(callerUid, targetUidRaw, emailHintRaw) {
  * - Xóa Firestore docs: users / user-permissions / user-tab-permissions theo uid
  */
 async function adminDeleteUserByEmployeeId(callerUid, employeeIdRaw) {
-    var _a;
     if (!callerUid)
         throw new Error('Thiếu callerUid.');
     if (!employeeIdRaw)
@@ -222,11 +202,7 @@ async function adminDeleteUserByEmployeeId(callerUid, employeeIdRaw) {
     const employeeId = normalizeAspEmployeeId(employeeIdRaw);
     if (!employeeId)
         throw new Error('employeeId không đúng định dạng (ASPxxxx hoặc xxxx).');
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     const digits = employeeId.replace(/^ASP/, '');
     const emailCandidates = [
         `asp${digits.toLowerCase()}@asp.com`,
@@ -290,15 +266,10 @@ async function adminDeleteUserByEmployeeId(callerUid, employeeIdRaw) {
  * 3) listUsers và delete những uid không thuộc allowedUids
  */
 async function adminDeleteAuthUsersNotInSettings(callerUid) {
-    var _a;
     if (!callerUid) {
         throw new Error('Thiếu callerUid.');
     }
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     const usersSnap = await admin.firestore().collection('users').get();
     const permSnap = await admin.firestore().collection('user-permissions').get();
     const allowedUids = new Set();

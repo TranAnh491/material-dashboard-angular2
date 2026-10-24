@@ -3796,10 +3796,14 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     const scannedEmployeeId = normalizedInput.substring(0, 7).toUpperCase();
     console.log('🔍 Extracted employee ID:', scannedEmployeeId);
 
-    // Hardcoded list of allowed QA employee IDs
-    const allowedEmployeeIds = ['ASP0106', 'ASP1752', 'ASP0028', 'ASP1747', 'ASP2083', 'ASP2137'];
+    if (!/^ASP\d{4}$/.test(scannedEmployeeId)) {
+      alert('Mã nhân viên không đúng. Quét mã ASP + 4 số.');
+      this.iqcScanInput = '';
+      return;
+    }
 
-    if (allowedEmployeeIds.includes(scannedEmployeeId)) {
+    const allowed = await this.employeeCanScanIqc(scannedEmployeeId);
+    if (allowed) {
       console.log('✅ Employee verified:', scannedEmployeeId);
       this.iqcEmployeeId = scannedEmployeeId;
       this.iqcEmployeeVerified = true;
@@ -3815,8 +3819,23 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       }, 300);
     } else {
       console.log('❌ Employee not authorized:', scannedEmployeeId);
-      alert(`❌ Nhân viên ${scannedEmployeeId} không có quyền thực hiện IQC. Chỉ nhân viên QA mới được phép.`);
+      alert(`Nhân viên ${scannedEmployeeId} không được quét IQC. Chỉ nhân viên bộ phận Kho (WH) hoặc QA.`);
       this.iqcScanInput = '';
+    }
+  }
+
+  /** Kho = bộ phận WH trên Settings, QA = QA. Không khóa theo danh sách mã cố định. */
+  private async employeeCanScanIqc(employeeId: string): Promise<boolean> {
+    try {
+      const snap = await this.firestore.collection('users', ref =>
+        ref.where('employeeId', '==', employeeId).limit(1)
+      ).get().toPromise();
+      if (!snap || snap.empty) return false;
+      const department = String((snap.docs[0].data() as any)?.department || '').trim().toUpperCase();
+      return department === 'WH' || department === 'KHO' || department === 'QA';
+    } catch (e) {
+      console.warn('IQC employee lookup failed:', e);
+      return false;
     }
   }
 

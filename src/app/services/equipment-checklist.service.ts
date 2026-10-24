@@ -184,7 +184,7 @@ export class EquipmentChecklistService {
   }
 
   /** Một thiết bị chỉ một kết quả cho một ngày. Kiểm tra lại cùng ngày thì cập nhật bản ghi cũ. */
-  async upsertInspection(record: InspectionRecord): Promise<void> {
+  async upsertInspection(record: InspectionRecord): Promise<InspectionRecord> {
     const equipmentId = record.equipmentId.trim();
     const inspectionDate = record.inspectionDate;
     if (!equipmentId || !inspectionDate) throw new Error('Thiếu thiết bị hoặc ngày kiểm tra.');
@@ -201,7 +201,9 @@ export class EquipmentChecklistService {
       createdAt: existing?.exists ? (existing.data() as InspectionRecord).createdAt || now : now,
       updatedAt: now
     };
-    await ref.set(stripEmpty(payload));
+    const saved = stripEmpty(payload);
+    await ref.set(saved);
+    return saved;
   }
 
   /**

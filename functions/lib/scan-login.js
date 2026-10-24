@@ -35,6 +35,13 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.signInFromScan = signInFromScan;
 const admin = __importStar(require("firebase-admin"));
+const authz_1 = require("./authz");
+/**
+ * Đăng nhập bằng quét thẻ nhân viên: thẻ chỉ chứa mã ASP, không có mật khẩu,
+ * nên phiên này bị giới hạn:
+ * - Tài khoản admin không được đăng nhập bằng thẻ.
+ * - Token mang claim `scan: true`; Firestore rules không cho phiên quét thẻ làm việc quản trị.
+ */
 async function signInFromScan(raw) {
     const text = String(raw || '').trim().toUpperCase();
     const key = text.slice(0, 7);
@@ -52,7 +59,10 @@ async function signInFromScan(raw) {
     catch (_a) {
         throw new Error('permission-denied');
     }
-    const token = await admin.auth().createCustomToken(uid);
+    if (await (0, authz_1.isAdminAccount)(uid)) {
+        throw new Error('permission-denied');
+    }
+    const token = await admin.auth().createCustomToken(uid, { scan: true });
     return { token };
 }
 //# sourceMappingURL=scan-login.js.map

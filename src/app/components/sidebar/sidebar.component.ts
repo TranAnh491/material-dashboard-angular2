@@ -99,7 +99,8 @@ export class SidebarComponent implements OnInit, OnDestroy {
       '/location',           // Tab 17
       '/stock-check',        // Tab 18
       '/bag-history',
-      '/xe-tai'
+      '/xe-tai',
+      '/nhiet-do'
     ];
 
     return menuItems.map(menuItem => {

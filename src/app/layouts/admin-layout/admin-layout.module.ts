@@ -41,9 +41,6 @@ import { ComponentsModule } from '../../components/components.module';
 
 // Các component materials mới
 
-import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
-import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
-import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
@@ -56,7 +53,6 @@ import { SettingsGuard } from '../../guards/settings.guard';
 import { PrintOptionDialogComponent } from '../../components/print-option-dialog/print-option-dialog.component';
 import { LocationUnlockDialogComponent } from '../../components/location-unlock-dialog/location-unlock-dialog.component';
 
-import { ChartComponent } from '../../pages/chart/chart.component';
 import { ZaloComponent } from '../../pages/zalo/zalo.component';
 import { EquipmentChecklistComponent } from '../../pages/equipment-checklist/equipment-checklist.component';
 import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-schedule-shared.module';
@@ -97,9 +93,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
   declarations: [
     MenuComponent,
     AccountComponent,
-    KpiReportsComponent,
-    InboundFgsComponent,
-    OutboundFgsComponent,
     StockCheckComponent,
     IndexComponent,
     SxxkComponent,
@@ -111,7 +104,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
     PrintOptionDialogComponent,
     LocationUnlockDialogComponent,
 
-    ChartComponent,
     ZaloComponent,
     EquipmentChecklistComponent,
   ],

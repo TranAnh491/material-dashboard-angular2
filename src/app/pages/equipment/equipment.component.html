@@ -1,121 +1,164 @@
-<div class="main-content eq-page">
-  <div class="container-fluid">
-    <header class="eq-dash-topbar no-print">
-      <div class="eq-dash-brand">
-        <img [src]="logoSrc" alt="AIRSPEED" class="eq-page-logo" />
+<div class="main-content eq-page eq-shell">
+  <section class="eq-main">
+    <header class="eq-bar no-print">
+      <div class="eq-bar__brand">
+        <img [src]="logoSrc" alt="AIRSPEED" />
         <div>
-          <h1>{{ isEnglish ? 'Equipment & Training Management' : 'Thiết bị & Đào tạo' }}</h1>
-          <p>{{ isEnglish ? 'Warehouse Learning System' : 'Hệ thống đào tạo nhân viên kho' }}</p>
+          <strong>{{ isEnglish ? 'Equipment & Training' : 'Thiết bị & Đào tạo' }}</strong>
+          <small>{{ isEnglish ? 'Warehouse Learning System' : 'Hệ thống đào tạo kho' }}</small>
         </div>
       </div>
-      <div class="eq-dash-topbar__right">
-        <div class="eq-dash-search">
-          <i class="material-icons">search</i>
-          <input type="text"
-                 [(ngModel)]="dashboardSearch"
-                 [placeholder]="isEnglish ? 'Search SOPs, courses, employees...' : 'Tìm SOP, khóa học, nhân viên...'">
-        </div>
-        <button class="eq-lang-btn" type="button" (click)="toggleLanguage()">
-          <i class="material-icons">language</i>
-          {{ isEnglish ? 'Tiếng Việt' : 'English' }}
+      <nav class="eq-tabs">
+        <button type="button" class="eq-tabs__item" [class.is-active]="!activeSection" (click)="goSection(null)">
+          <i class="material-icons">space_dashboard</i>
+          <span>{{ isEnglish ? 'Overview' : 'Tổng quan' }}</span>
         </button>
-        <button type="button" class="eq-dash-icon-btn" title="Notifications">
-          <i class="material-icons">notifications_none</i>
+        <button type="button" class="eq-tabs__item" *ngFor="let n of navItems"
+                [class.is-active]="activeSection === n.key" (click)="goSection(n.key)">
+          <i class="material-icons">{{ n.icon }}</i>
+          <span>{{ isEnglish ? n.en : n.vi }}</span>
         </button>
-        <div class="eq-dash-user">
-          <span class="eq-dash-user__avatar">A</span>
-          <span class="eq-dash-user__name">Admin</span>
-        </div>
-        <button type="button" class="eq-dash-icon-btn eq-dash-menu-btn" (click)="goToMenu()" title="Về Menu">
-          <i class="material-icons">apps</i>
+      </nav>
+      <div class="eq-bar__right">
+        <button type="button" class="eq-btn eq-btn--primary" (click)="createNewSop()" *ngIf="activeSection !== 'templates'">
+          <i class="material-icons">add</i>
+          {{ isEnglish ? 'New SOP' : 'Tạo SOP mới' }}
+        </button>
+        <button type="button" class="eq-btn" (click)="toggleLanguage()" [title]="isEnglish ? 'Tiếng Việt' : 'English'">
+          <i class="material-icons">translate</i> {{ isEnglish ? 'VI' : 'EN' }}
+        </button>
+        <button type="button" class="eq-btn" (click)="goToMenu()" [title]="isEnglish ? 'Back to menu' : 'Về Menu'">
+          <i class="material-icons">apps</i> Menu
         </button>
       </div>
     </header>
 
-    <div class="eq-dash-home no-print" *ngIf="!activeSection">
-      <div class="eq-dash-hero">
+    <div class="eq-content">
+
+    <div class="eq-home no-print" *ngIf="!activeSection">
+      <div class="eq-pagehead">
         <div>
-          <h2>{{ isEnglish ? 'Hello' : 'Xin chào' }}, {{ dashGreetingName }} 👋</h2>
-          <p>{{ isEnglish ? 'Warehouse staff training management' : 'Quản lý đào tạo nhân viên kho' }}</p>
+          <h1>{{ isEnglish ? 'Training overview' : 'Tổng quan đào tạo' }}</h1>
+          <p>{{ isEnglish ? 'Warehouse staff training, testing and skill matrix' : 'Đào tạo, kiểm tra và ma trận kỹ năng nhân viên kho' }}</p>
         </div>
-        <button type="button" class="eq-dash-create-btn" (click)="createNewSop()">
-          <i class="material-icons">add</i>
-          {{ isEnglish ? 'Create new SOP' : 'Tạo SOP mới' }}
-        </button>
-      </div>
-
-      <div class="eq-dash-stats">
-        <div class="eq-stat-card">
-          <span class="eq-stat-card__label">{{ isEnglish ? 'Total SOP' : 'Tổng SOP' }}</span>
-          <strong class="eq-stat-card__value">{{ dashTotalSop }}</strong>
-          <small>{{ isEnglish ? 'documents' : 'tài liệu' }}</small>
-        </div>
-        <div class="eq-stat-card">
-          <span class="eq-stat-card__label">{{ isEnglish ? 'Trained' : 'Đã đào tạo' }}</span>
-          <strong class="eq-stat-card__value">{{ dashTrainedCount }}</strong>
-          <small>{{ isEnglish ? 'employees' : 'nhân viên' }}</small>
-        </div>
-        <div class="eq-stat-card">
-          <span class="eq-stat-card__label">{{ isEnglish ? 'Pending training' : 'Chờ đào tạo' }}</span>
-          <strong class="eq-stat-card__value eq-stat-card__value--warn">{{ dashPendingCount }}</strong>
-          <small>{{ isEnglish ? 'employees' : 'nhân viên' }}</small>
-        </div>
-        <div class="eq-stat-card">
-          <span class="eq-stat-card__label">Test Pass Rate</span>
-          <strong class="eq-stat-card__value eq-stat-card__value--ok">{{ dashPassRate }}%</strong>
-          <small>{{ isEnglish ? 'success rate' : 'tỷ lệ đạt' }}</small>
+        <div class="eq-bar__search">
+          <i class="material-icons">search</i>
+          <input type="text"
+                 [(ngModel)]="dashboardSearch"
+                 [placeholder]="isEnglish ? 'Search functions...' : 'Tìm chức năng...'">
         </div>
       </div>
 
-      <div class="eq-summary-grid eq-dash-features">
-        <button type="button" class="eq-summary-card eq-summary-card--purple"
-                *ngIf="matchesDashboardSearch('SOP Mẫu đào tạo templates')"
-                (click)="openSection('templates')">
-          <span class="eq-summary-icon"><i class="material-icons">description</i></span>
-          <span class="eq-summary-text">
+      <div class="eq-kpis">
+        <div class="eq-kpi">
+          <span class="eq-kpi__icon eq-tone--blue"><i class="material-icons">description</i></span>
+          <div>
+            <span class="eq-kpi__label">{{ isEnglish ? 'Total SOP' : 'Tổng SOP' }}</span>
+            <strong class="eq-kpi__value">{{ dashTotalSop }}</strong>
+            <small>{{ isEnglish ? 'documents' : 'tài liệu' }}</small>
+          </div>
+        </div>
+        <div class="eq-kpi">
+          <span class="eq-kpi__icon eq-tone--green"><i class="material-icons">how_to_reg</i></span>
+          <div>
+            <span class="eq-kpi__label">{{ isEnglish ? 'Trained' : 'Đã đào tạo' }}</span>
+            <strong class="eq-kpi__value">{{ dashTrainedCount }}</strong>
+            <small>{{ isEnglish ? 'employees' : 'nhân viên' }}</small>
+          </div>
+        </div>
+        <div class="eq-kpi">
+          <span class="eq-kpi__icon eq-tone--amber"><i class="material-icons">pending_actions</i></span>
+          <div>
+            <span class="eq-kpi__label">{{ isEnglish ? 'Pending training' : 'Chờ đào tạo' }}</span>
+            <strong class="eq-kpi__value eq-kpi__value--warn">{{ dashPendingCount }}</strong>
+            <small>{{ isEnglish ? 'employees' : 'nhân viên' }}</small>
+          </div>
+        </div>
+        <div class="eq-kpi">
+          <span class="eq-kpi__icon eq-tone--violet"><i class="material-icons">verified</i></span>
+          <div>
+            <span class="eq-kpi__label">Test pass rate</span>
+            <strong class="eq-kpi__value eq-kpi__value--ok">{{ dashPassRate }}%</strong>
+            <small>{{ isEnglish ? 'success rate' : 'tỷ lệ đạt' }}</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="eq-block-head">
+        <h2>{{ isEnglish ? 'Functions' : 'Chức năng' }}</h2>
+      </div>
+      <div class="eq-tiles">
+        <button type="button" class="eq-tile" *ngIf="matchesDashboardSearch('SOP Mẫu đào tạo templates')" (click)="goSection('templates')">
+          <span class="eq-tile__icon eq-tone--blue"><i class="material-icons">description</i></span>
+          <span class="eq-tile__text">
             <strong>SOP / {{ isEnglish ? 'Training Templates' : 'Mẫu đào tạo' }}</strong>
             <small>{{ isEnglish ? 'Warehouse documents & standardized training templates' : 'Tài liệu kho & mẫu đào tạo chuẩn hóa' }}</small>
           </span>
-          <i class="material-icons eq-summary-arrow">chevron_right</i>
+          <i class="material-icons eq-tile__arrow">arrow_forward</i>
         </button>
-
-        <button type="button" class="eq-summary-card eq-summary-card--amber"
-                *ngIf="matchesDashboardSearch('Reports Báo cáo')"
-                (click)="openSection('report')">
-          <span class="eq-summary-icon"><i class="material-icons">assessment</i></span>
-          <span class="eq-summary-text">
-            <strong>Reports / {{ isEnglish ? 'Reports' : 'Báo cáo' }}</strong>
+        <button type="button" class="eq-tile" *ngIf="matchesDashboardSearch('Reports Báo cáo')" (click)="goSection('report')">
+          <span class="eq-tile__icon eq-tone--amber"><i class="material-icons">assessment</i></span>
+          <span class="eq-tile__text">
+            <strong>{{ isEnglish ? 'Training reports' : 'Báo cáo đào tạo' }}</strong>
             <small>{{ isEnglish ? 'Training reports & employee progress statistics' : 'Báo cáo đào tạo & thống kê tiến độ nhân viên' }}</small>
           </span>
-          <i class="material-icons eq-summary-arrow">chevron_right</i>
+          <i class="material-icons eq-tile__arrow">arrow_forward</i>
         </button>
-
-        <button type="button" class="eq-summary-card eq-summary-card--pink"
-                *ngIf="matchesDashboardSearch('Training Matrix Ma trận')"
-                (click)="openSection('matrix')">
-          <span class="eq-summary-icon"><i class="material-icons">grid_view</i></span>
-          <span class="eq-summary-text">
+        <button type="button" class="eq-tile" *ngIf="matchesDashboardSearch('Training Matrix Ma trận')" (click)="goSection('matrix')">
+          <span class="eq-tile__icon eq-tone--violet"><i class="material-icons">grid_view</i></span>
+          <span class="eq-tile__text">
             <strong>Training Matrix</strong>
             <small>{{ isEnglish ? 'Warehouse staff skill matrix' : 'Ma trận kỹ năng nhân viên kho' }}</small>
           </span>
-          <i class="material-icons eq-summary-arrow">chevron_right</i>
+          <i class="material-icons eq-tile__arrow">arrow_forward</i>
         </button>
-
-        <button type="button" class="eq-summary-card eq-summary-card--green"
-                *ngIf="matchesDashboardSearch('Knowledge Test Kiểm tra')"
-                (click)="openSection('test')">
-          <span class="eq-summary-icon"><i class="material-icons">quiz</i></span>
-          <span class="eq-summary-text">
+        <button type="button" class="eq-tile" *ngIf="matchesDashboardSearch('Knowledge Test Kiểm tra')" (click)="goSection('test')">
+          <span class="eq-tile__icon eq-tone--green"><i class="material-icons">quiz</i></span>
+          <span class="eq-tile__text">
             <strong>Knowledge Test</strong>
             <small>{{ isEnglish ? 'Online knowledge testing & competency assessment' : 'Kiểm tra kiến thức online & đánh giá năng lực' }}</small>
           </span>
-          <i class="material-icons eq-summary-arrow">chevron_right</i>
+          <i class="material-icons eq-tile__arrow">arrow_forward</i>
         </button>
       </div>
 
-      <div class="eq-dash-bottom">
-        <div class="eq-dash-panel">
-          <h3>{{ isEnglish ? 'Recent activity' : 'Hoạt động gần đây' }}</h3>
+      <div class="eq-grid3">
+        <div class="eq-card">
+          <div class="eq-card__head"><h3>{{ isEnglish ? 'Training progress' : 'Tiến độ đào tạo' }}</h3></div>
+          <div class="eq-progress-wrap">
+            <div class="eq-donut" [style.background]="'conic-gradient(#2563eb ' + dashWarehouseProgress + '%, #e8ecf1 0)'">
+              <div class="eq-donut__inner">
+                <strong>{{ dashWarehouseProgress }}%</strong>
+                <span>{{ isEnglish ? 'Completed' : 'Hoàn thành' }}</span>
+              </div>
+            </div>
+            <div class="eq-month-bars">
+              <div class="eq-month-bar" *ngFor="let bar of dashMonthlyBars">
+                <div class="eq-month-bar__fill" [style.height.%]="bar.value"></div>
+                <span>{{ bar.label }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="eq-card">
+          <div class="eq-card__head"><h3>{{ isEnglish ? 'Warehouse progress' : 'Tiến độ Kho' }}</h3></div>
+          <div class="eq-warehouse-progress">
+            <div class="eq-warehouse-row">
+              <span>Warehouse</span>
+              <div class="eq-warehouse-bar">
+                <div class="eq-warehouse-bar__fill" [style.width.%]="dashWarehouseProgress"></div>
+              </div>
+              <strong>{{ dashWarehouseProgress }}%</strong>
+            </div>
+            <p class="eq-warehouse-note">
+              {{ isEnglish ? 'Focused on warehouse operations only.' : 'Chỉ theo dõi tiến độ đào tạo nhân viên kho.' }}
+            </p>
+          </div>
+        </div>
+
+        <div class="eq-card">
+          <div class="eq-card__head"><h3>{{ isEnglish ? 'Recent activity' : 'Hoạt động gần đây' }}</h3></div>
           <ul class="eq-activity-list" *ngIf="dashRecentActivities.length; else noActivity">
             <li *ngFor="let act of dashRecentActivities">
               <span class="eq-activity-icon" [style.background]="act.color + '22'" [style.color]="act.color">
@@ -131,168 +174,95 @@
             <p class="eq-dash-empty">{{ isEnglish ? 'No recent warehouse training activity.' : 'Chưa có hoạt động đào tạo kho gần đây.' }}</p>
           </ng-template>
         </div>
+      </div>
 
-        <div class="eq-dash-panel">
-          <h3>{{ isEnglish ? 'Training progress' : 'Tiến độ đào tạo' }}</h3>
-          <div class="eq-progress-wrap">
-            <div class="eq-donut" [style.background]="'conic-gradient(#3b82f6 ' + dashWarehouseProgress + '%, #e8ecf1 0)'">
-              <div class="eq-donut__inner">
-                <strong>{{ dashWarehouseProgress }}%</strong>
-                <span>{{ isEnglish ? 'Completed' : 'Hoàn thành' }}</span>
-              </div>
-            </div>
-            <div class="eq-month-bars">
-              <div class="eq-month-bar" *ngFor="let bar of dashMonthlyBars">
-                <div class="eq-month-bar__fill" [style.height.%]="bar.value"></div>
-                <span>{{ bar.label }}</span>
-              </div>
-            </div>
+      <div class="eq-block-head">
+        <h2>{{ isEnglish ? 'Training documents' : 'Tài liệu hướng dẫn' }}</h2>
+        <span>{{ isEnglish ? 'Download and use for staff training' : 'Tải về để đào tạo nhân viên' }}</span>
+      </div>
+      <div class="eq-docs2">
+        <article class="eq-doc2" *ngFor="let d of trainingDocs">
+          <span class="eq-doc2__type">{{ d.type }}</span>
+          <div class="eq-doc2__body">
+            <h4>{{ d.title }}</h4>
+            <p>{{ d.desc }}</p>
+            <small>{{ d.pages }} {{ isEnglish ? 'slides' : 'trang' }} · {{ d.updated }}</small>
           </div>
-        </div>
-
-        <div class="eq-dash-panel">
-          <h3>{{ isEnglish ? 'Warehouse progress' : 'Tiến độ Kho' }}</h3>
-          <div class="eq-warehouse-progress">
-            <div class="eq-warehouse-row">
-              <span>Warehouse</span>
-              <div class="eq-warehouse-bar">
-                <div class="eq-warehouse-bar__fill" [style.width.%]="dashWarehouseProgress"></div>
-              </div>
-              <strong>{{ dashWarehouseProgress }}%</strong>
-            </div>
-            <p class="eq-warehouse-note">
-              {{ isEnglish ? 'Focused on warehouse operations only.' : 'Chỉ theo dõi tiến độ đào tạo nhân viên kho.' }}
-            </p>
-          </div>
-        </div>
+          <a class="eq-btn" [href]="d.file" [attr.download]="trainingDocFileName(d.file)">
+            <i class="material-icons">download</i> Download
+          </a>
+        </article>
       </div>
     </div>
 
-    <button type="button" class="eq-back-dash no-print" *ngIf="activeSection" (click)="closeAll()">
-      <i class="material-icons">arrow_back</i>
-      {{ isEnglish ? 'Back to dashboard' : 'Về trang tổng quan' }}
-    </button>
+    <div *ngIf="isSectionOpen('test')" class="eq-section">
+      <div class="eq-pagehead">
+        <div>
+          <h1>Knowledge Test</h1>
+          <p>{{ isEnglish ? 'Online knowledge tests for warehouse staff' : 'Bài kiểm tra kiến thức online cho nhân viên kho' }}</p>
+        </div>
+      </div>
+      <div class="eq-tests">
+        <article class="eq-test">
+          <div class="eq-test__top">
+            <span class="eq-test__icon eq-tone--blue"><i class="material-icons">inventory_2</i></span>
+            <span class="eq-chip eq-chip--new">{{ isEnglish ? 'New' : 'Mới' }}</span>
+          </div>
+          <span class="eq-test__kind">{{ isEnglish ? 'Materials Test' : 'Kiểm tra Nguyên vật liệu' }}</span>
+          <h3>{{ isEnglish ? 'Raw Materials Import/Export Test' : 'Kiểm tra Xuất nhập Nguyên vật liệu' }}</h3>
+          <div class="eq-test__meta">
+            <span><i class="material-icons">help_outline</i> {{ isEnglish ? '20 questions' : '20 câu hỏi' }}</span>
+            <span><i class="material-icons">timer</i> {{ isEnglish ? '30 minutes' : '30 phút' }}</span>
+          </div>
+          <button type="button" class="eq-btn eq-btn--primary eq-btn--block" (click)="openMaterialsTest()">
+            <i class="material-icons">play_arrow</i> {{ isEnglish ? 'Start test' : 'Làm bài' }}
+          </button>
+        </article>
 
-    <div *ngIf="isSectionOpen('test')" class="eq-panel test-content">
-      <div class="content-header">
-        <h2>
-          <i class="material-icons">quiz</i>
-          {{ isEnglish ? 'Test list' : 'Test list' }}
-        </h2>
-        <button class="close-btn" (click)="closeAll()">
-          <i class="material-icons">close</i>
+        <article class="eq-test">
+          <div class="eq-test__top">
+            <span class="eq-test__icon eq-tone--violet"><i class="material-icons">check_circle_outline</i></span>
+            <span class="eq-chip eq-chip--new">{{ isEnglish ? 'New' : 'Mới' }}</span>
+          </div>
+          <span class="eq-test__kind">{{ isEnglish ? 'Finished Goods Test' : 'Kiểm tra Thành phẩm' }}</span>
+          <h3>{{ isEnglish ? 'Finished Goods Import/Export Test' : 'Kiểm tra Xuất nhập Thành phẩm' }}</h3>
+          <div class="eq-test__meta">
+            <span><i class="material-icons">help_outline</i> {{ isEnglish ? '20 questions' : '20 câu hỏi' }}</span>
+            <span><i class="material-icons">timer</i> {{ isEnglish ? '30 minutes' : '30 phút' }}</span>
+          </div>
+          <button type="button" class="eq-btn eq-btn--primary eq-btn--block" (click)="openFinishedGoodsTest()">
+            <i class="material-icons">play_arrow</i> {{ isEnglish ? 'Start test' : 'Làm bài' }}
+          </button>
+        </article>
+
+        <article class="eq-test">
+          <div class="eq-test__top">
+            <span class="eq-test__icon eq-tone--amber"><i class="material-icons">thermostat</i></span>
+          </div>
+          <span class="eq-test__kind">{{ isEnglish ? 'Temperature Test' : 'Kiểm tra Nhiệt độ' }}</span>
+          <h3>{{ isEnglish ? 'Temperature & Humidity Knowledge Test' : 'Kiểm tra kiến thức Nhiệt độ & Độ ẩm' }}</h3>
+          <div class="eq-test__meta">
+            <span><i class="material-icons">help_outline</i> {{ isEnglish ? '20 questions' : '20 câu hỏi' }}</span>
+            <span><i class="material-icons">timer</i> {{ isEnglish ? '25 minutes' : '25 phút' }}</span>
+          </div>
+          <button type="button" class="eq-btn eq-btn--primary eq-btn--block" (click)="openTemperatureKnowledgeTest()">
+            <i class="material-icons">play_arrow</i> {{ isEnglish ? 'Start test' : 'Làm bài' }}
+          </button>
+        </article>
+      </div>
+    </div>
+
+    <div *ngIf="isSectionOpen('report')" class="eq-section report-content">
+      <div class="eq-pagehead">
+        <div>
+          <h1>{{ isEnglish ? 'Training reports' : 'Báo cáo đào tạo' }}</h1>
+          <p>{{ isEnglish ? 'Test results of ASP employees — download or remove records' : 'Kết quả kiểm tra của nhân viên ASP — tải file hoặc xóa bản ghi' }}</p>
+        </div>
+        <button type="button" class="eq-btn" (click)="refreshReportData()" [disabled]="isLoadingReport">
+          <i class="material-icons">refresh</i> {{ isEnglish ? 'Refresh' : 'Làm mới' }}
         </button>
       </div>
-      <div class="test-content-expanded">
-        
-        <!-- Materials Test Card -->
-        <div class="modern-checklist-card materials">
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">inventory_2</i>
-            </div>
-            <div class="status-badge materials">
-              {{ isEnglish ? 'Materials Test' : 'Kiểm tra Nguyên vật liệu' }}
-              <span class="new-badge">{{ isEnglish ? 'New' : 'Mới' }}</span>
-            </div>
-          </div>
-
-          <div class="card-content">
-            <h3 class="checklist-title">{{ isEnglish ? 'Raw Materials Import/Export Test' : 'Kiểm tra Xuất nhập Nguyên vật liệu' }}</h3>
-            <div class="test-info">
-              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
-              <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
-            </div>
-          </div>
-
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="openMaterialsTest()">
-              <i class="material-icons">inventory_2</i>
-              {{ isEnglish ? 'Start Materials Test' : 'Làm bài kiểm tra Nguyên vật liệu' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Finished Goods Test Card -->
-        <div class="modern-checklist-card finished-goods">
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">check_circle_outline</i>
-            </div>
-            <div class="status-badge finished-goods">
-              {{ isEnglish ? 'Finished Goods Test' : 'Kiểm tra Thành phẩm' }}
-              <span class="new-badge">{{ isEnglish ? 'New' : 'Mới' }}</span>
-            </div>
-          </div>
-
-          <div class="card-content">
-            <h3 class="checklist-title">{{ isEnglish ? 'Finished Goods Import/Export Test' : 'Kiểm tra Xuất nhập Thành phẩm' }}</h3>
-            <div class="test-info">
-              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
-              <span class="test-detail">{{ isEnglish ? 'Time: 30 minutes' : 'Thời gian: 30 phút' }}</span>
-            </div>
-          </div>
-
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="openFinishedGoodsTest()">
-              <i class="material-icons">check_circle_outline</i>
-              {{ isEnglish ? 'Start Finished Goods Test' : 'Làm bài kiểm tra Thành phẩm' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Temperature Knowledge Test Card -->
-        <div class="modern-checklist-card temperature">
-          <div class="card-header">
-            <div class="checklist-icon">
-              <i class="material-icons">thermostat</i>
-            </div>
-            <div class="status-badge temperature">
-              {{ isEnglish ? 'Temperature Test' : 'Kiểm tra Nhiệt độ' }}
-            </div>
-          </div>
-
-          <div class="card-content">
-            <h3 class="checklist-title">{{ isEnglish ? 'Temperature & Humidity Knowledge Test' : 'Kiểm tra kiến thức Nhiệt độ & Độ ẩm' }}</h3>
-            <div class="test-info">
-              <span class="test-detail">{{ isEnglish ? '20 Questions' : '20 câu hỏi' }}</span>
-              <span class="test-detail">{{ isEnglish ? 'Time: 25 minutes' : 'Thời gian: 25 phút' }}</span>
-            </div>
-          </div>
-
-          <div class="card-actions">
-            <button class="action-btn primary" (click)="openTemperatureKnowledgeTest()">
-              <i class="material-icons">thermostat</i>
-              {{ isEnglish ? 'Start Temperature Test' : 'Làm bài kiểm tra Nhiệt độ' }}
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <div *ngIf="isSectionOpen('report')" class="eq-panel report-content">
-      <div class="content-header">
-        <h2>
-          <i class="material-icons">assessment</i>
-          {{ isEnglish ? 'Training Report' : 'Report' }}
-        </h2>
-        <div class="header-actions">
-          <button mat-icon-button 
-                  color="primary" 
-                  (click)="refreshReportData()"
-                  [matTooltip]="isEnglish ? 'Refresh data' : 'Làm mới dữ liệu'"
-                  class="refresh-btn"
-                  [disabled]="isLoadingReport">
-            <mat-icon>refresh</mat-icon>
-          </button>
-          <button class="close-btn" (click)="closeAll()">
-            <i class="material-icons">close</i>
-          </button>
-        </div>
-      </div>
-      <div class="report-content-expanded">
-        <!-- Simple Training Report Table -->
+      <div class="eq-card eq-card--flush">
         <div class="report-table-container">
           <div *ngIf="isLoadingReport" class="loading-container">
             <mat-spinner diameter="40"></mat-spinner>
@@ -307,8 +277,9 @@
             <h3>{{ isEnglish ? 'No report data available' : 'Chưa có dữ liệu báo cáo' }}</h3>
             <p>{{ isEnglish ? 'No training data available for ASP employees.' : 'Không có dữ liệu đào tạo nào cho nhân viên ASP.' }}</p>
             
-            <!-- Debug buttons for testing -->
-            <div class="debug-actions" style="margin-top: 20px; text-align: center;">
+            <details class="eq-debug">
+            <summary>{{ isEnglish ? 'Technical tools' : 'Công cụ kỹ thuật' }}</summary>
+            <div class="debug-actions" style="margin-top: 12px; text-align: center;">
               <button mat-raised-button 
                       color="primary" 
                       (click)="debugFirebaseService.debugAllCollections()"
@@ -358,18 +329,15 @@
                 Create ASP Data
               </button>
             </div>
+            </details>
           </div>
 
           <div *ngIf="!isLoadingReport && filteredReportData.length > 0" class="table-responsive">
-            <div class="table-info">
-              <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 15px;">
-                <mat-icon style="font-size: 14px; vertical-align: middle;">info</mat-icon>
-                {{ isEnglish ? 'Not seeing the latest test? Click the' : 'Không thấy bài kiểm tra mới nhất? Nhấn nút' }}
-                <mat-icon style="font-size: 14px; vertical-align: middle;">refresh</mat-icon> 
-                {{ isEnglish ? 'button to refresh data.' : 'để làm mới dữ liệu.' }}
-              </p>
+            <div class="eq-table-info">
+              <span>{{ filteredReportData.length }} {{ isEnglish ? 'records' : 'bản ghi' }}</span>
+              <small>{{ isEnglish ? 'Not seeing the latest test? Press Refresh.' : 'Không thấy bài kiểm tra mới nhất? Bấm Làm mới.' }}</small>
             </div>
-            <table mat-table [dataSource]="filteredReportData" class="report-table mat-elevation-2">
+            <table mat-table [dataSource]="filteredReportData" class="report-table">
               
               <!-- Employee ID Column -->
               <ng-container matColumnDef="employeeId">
@@ -459,49 +427,34 @@
       </div>
     </div>
 
-    <div *ngIf="isSectionOpen('matrix')" class="eq-panel matrix-training-content">
-      <div class="content-header">
-        <h2>
-          <i class="material-icons">grid_view</i>
-          {{ isEnglish ? 'Training Matrix Report' : 'Báo cáo Ma trận Đào tạo' }}
-        </h2>
-        <button class="close-btn" (click)="closeAll()">
-          <i class="material-icons">close</i>
-        </button>
+    <div *ngIf="isSectionOpen('matrix')" class="eq-section matrix-training-content">
+      <div class="eq-pagehead">
+        <div>
+          <h1>Training Matrix</h1>
+          <p>{{ isEnglish ? 'Skill matrix of warehouse staff from completed tests' : 'Ma trận kỹ năng nhân viên kho từ các bài kiểm tra đã hoàn thành' }}</p>
+        </div>
       </div>
       <div class="matrix-training-content-expanded">
-        
-
-        
-        <!-- Matrix Summary Stats -->
-        <div class="matrix-summary">
-          <div class="summary-card">
-            <div class="summary-icon">
-              <i class="material-icons">people</i>
-            </div>
-            <div class="summary-info">
-              <h3>{{ allMatrixEmployees.length }}</h3>
-              <p>{{ isEnglish ? 'Total Employees' : 'Tổng số nhân viên' }}</p>
+        <div class="eq-kpis eq-kpis--3">
+          <div class="eq-kpi">
+            <span class="eq-kpi__icon eq-tone--blue"><i class="material-icons">people</i></span>
+            <div>
+              <span class="eq-kpi__label">{{ isEnglish ? 'Total employees' : 'Tổng số nhân viên' }}</span>
+              <strong class="eq-kpi__value">{{ allMatrixEmployees.length }}</strong>
             </div>
           </div>
-          
-          <div class="summary-card">
-            <div class="summary-icon">
-              <i class="material-icons">school</i>
-            </div>
-            <div class="summary-info">
-              <h3>1</h3>
-              <p>{{ isEnglish ? 'Training Skills' : 'Kỹ năng đào tạo' }}</p>
+          <div class="eq-kpi">
+            <span class="eq-kpi__icon eq-tone--violet"><i class="material-icons">school</i></span>
+            <div>
+              <span class="eq-kpi__label">{{ isEnglish ? 'Training skills' : 'Kỹ năng đào tạo' }}</span>
+              <strong class="eq-kpi__value">1</strong>
             </div>
           </div>
-          
-          <div class="summary-card">
-            <div class="summary-icon">
-              <i class="material-icons">trending_up</i>
-            </div>
-            <div class="summary-info">
-              <h3>{{ averageCompletionRate }}%</h3>
-              <p>{{ isEnglish ? 'Average Completion' : 'Tỷ lệ hoàn thành TB' }}</p>
+          <div class="eq-kpi">
+            <span class="eq-kpi__icon eq-tone--green"><i class="material-icons">trending_up</i></span>
+            <div>
+              <span class="eq-kpi__label">{{ isEnglish ? 'Average completion' : 'Tỷ lệ hoàn thành TB' }}</span>
+              <strong class="eq-kpi__value eq-kpi__value--ok">{{ averageCompletionRate }}%</strong>
             </div>
           </div>
         </div>
@@ -614,17 +567,14 @@
     </div>
 
     <!-- Mẫu đào tạo -->
-    <div *ngIf="isSectionOpen('templates')" class="eq-panel eq-panel--templates">
-      <div class="eq-panel-head no-print">
-        <div class="eq-panel-head-left">
-          <span class="eq-panel-head-icon"><i class="material-icons">description</i></span>
-          <div>
-            <h2>Mẫu đào tạo</h2>
-            <p>Biểu mẫu đào tạo nhân viên kho mới</p>
-          </div>
+    <div *ngIf="isSectionOpen('templates')" class="eq-section eq-section--templates">
+      <div class="eq-pagehead no-print">
+        <div>
+          <h1>SOP / {{ isEnglish ? 'Training templates' : 'Mẫu đào tạo' }}</h1>
+          <p>{{ isEnglish ? 'New warehouse staff training form, warehouse manual and training quiz' : 'Biểu mẫu đào tạo nhân viên kho mới, tài liệu hướng dẫn kho và bài KT đào tạo' }}</p>
         </div>
-        <button type="button" class="eq-panel-close" (click)="closeAll()"><i class="material-icons">close</i></button>
       </div>
+      <div class="eq-card eq-card--flush">
 
       <div class="eq-template-tabs no-print">
         <button type="button" class="eq-template-tab" [class.active]="trainingTemplateTab === 'form'" (click)="setTrainingTemplateTab('form')">
@@ -655,7 +605,7 @@
 
       <div class="eq-doc-viewport">
         <div *ngIf="trainingTemplateTab === 'form'">
-        <div id="warehouseTrainingPrintArea" class="eq-doc-paper" [class.eq-form-capture-mode]="isCapturingTrainingForm">
+        <div id="warehouseTrainingPrintArea" class="eq-doc-paper" [class.eq-form-capture-mode]="isCapturingTrainingForm" (input)="saveFormDraft()" (change)="saveFormDraft()">
           <table class="pxk-doc-header">
             <tr>
               <td class="logo-cell"><img [src]="logoSrc" alt="AIRSPEED" /></td>
@@ -822,6 +772,9 @@
 
         <app-warehouse-training-quiz *ngIf="trainingTemplateTab === 'quiz' && quizTabOpened"></app-warehouse-training-quiz>
       </div>
+      </div>
     </div>
-  </div>
-</div> 
+
+    </div>
+  </section>
+</div>

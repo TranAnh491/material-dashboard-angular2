@@ -1,6 +1,7 @@
 import { Component, HostListener } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Router } from '@angular/router';
+import { KkHistoryLogService } from '../../services/kk-history-log.service';
 import { isAsm3OrWh3PrefixLocation } from '../layout-warehouse/layout-warehouse-location.util';
 
 type KkFactory = 'ASM1' | 'ASM2';
@@ -112,10 +113,17 @@ export class StockCheckComponent {
 
   constructor(
     private firestore: AngularFirestore,
-    private router: Router
+    private router: Router,
+    private kkLog: KkHistoryLogService
   ) {
     this.syncViewportMode();
     this.applySavedFactory();
+  }
+
+  /** Ghi inventory-kk-history + log KK (lưu 1 năm). */
+  private addKkHistory(data: Record<string, any>): Promise<unknown> {
+    this.kkLog.enqueue({ ...data, source: data.source || 'stock-check' });
+    return this.firestore.collection('inventory-kk-history').add(data);
   }
 
   @HostListener('window:resize')
@@ -498,7 +506,7 @@ export class StockCheckComponent {
         kkAt: null,
         updatedAt: kkAt
       });
-      await this.firestore.collection('inventory-kk-history').add({
+      await this.addKkHistory({
         inventoryDocId: row.id,
         factory: row.factory,
         materialCode: row.materialCode,
@@ -761,7 +769,7 @@ export class StockCheckComponent {
         kkAt,
         updatedAt: new Date()
       });
-      await this.firestore.collection('inventory-kk-history').add({
+      await this.addKkHistory({
         inventoryDocId: row.id,
         factory: row.factory,
         materialCode: row.materialCode,

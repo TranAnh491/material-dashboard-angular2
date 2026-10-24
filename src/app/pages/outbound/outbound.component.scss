@@ -4307,3 +4307,92 @@
 .ob-m-header__row2 .ob-op-chip {
   margin-left: 8px;
 }
+/* Popup Log LSX (notepad) */
+.lsx-log { width: min(96vw, 1100px); max-height: 88vh; display: flex; flex-direction: column; }
+.lsx-log__bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; flex-wrap: wrap;
+  input { height: 34px; padding: 0 10px; border: 1px solid #C9C9C2; border-radius: 6px; min-width: 240px; font-size: 14px; } }
+.lsx-log__sum { font-size: 13px; color: #555; }
+.lsx-log__err { margin: 0 16px 10px; color: #A92F2F; font-size: 13px; }
+.lsx-log__table { overflow: auto; padding: 0 16px 16px;
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid #E5E5E0; text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #F4F4F2; font-weight: 700; } }
+.lsx-log__num { text-align: right !important; }
+
+/* Popup Log LSX: overlay riêng (không dùng .modal-overlay của tab — class đó là nền trong suốt) */
+.lsx-log-overlay {
+  position: fixed; inset: 0; z-index: 10050;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+.lsx-log { background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.lsx-log__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #E5E5E0;
+  h3 { margin: 0; font-size: 16px; font-weight: 700; } }
+.lsx-log__close { border: 0; background: none; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+
+/* ===== Bảng scan máy tính (17/10/2026) ===== */
+.ob-toolbar__scan--big { height: 48px !important; font-size: 20px !important; min-width: 360px; font-weight: 600; border-width: 2px !important; }
+/* Bảng scan dùng chung với Inbound */
+@import '../../shared/scan-board';
+.ob-temle__row {
+  display: flex; flex-direction: column; gap: 4px; margin: 8px 0;
+  > span { font-size: 13px; color: #444; }
+}
+
+/* Report không cân được */
+.wx-overlay { position: fixed; inset: 0; z-index: 10060; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+.wx-overlay--top { z-index: 10070; }
+.wx { width: min(92vw, 420px); background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.wx__head { display: flex; justify-content: space-between; align-items: center; h3 { margin: 0; font-size: 16px; font-weight: 800; } }
+.wx__x { border: 0; background: none; font-size: 18px; cursor: pointer; }
+.wx__info { margin: 8px 0; font-size: 13px; color: #252823; }
+.wx__opts { display: flex; flex-direction: column; gap: 6px; }
+.wx__opt { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.wx__input { height: 34px; border: 1px solid #C9C9C2; border-radius: 6px; padding: 0 8px; font-size: 14px; }
+.wx__msg { margin: 10px 0 0; font-size: 13px; color: #A92F2F; &--ok { color: #1B6E46; } }
+.wx__foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.wx__btn { height: 34px; padding: 0 14px; border: 1px solid #C9C9C2; border-radius: 6px; background: #fff; font-weight: 600; cursor: pointer;
+  &--primary { background: #252823; color: #fff; border-color: #252823; } &:disabled { opacity: .5; } }
+
+.wx.ow { width: min(96vw, 520px); max-height: 96vh; overflow-y: auto; }
+.ow__warn { color: #A92F2F; font-weight: 700; }
+.ow__cam { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #111; border-radius: 8px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  video, img { width: 100%; height: 100%; object-fit: contain; } }
+.ow__cam-hint { position: absolute; color: #eee; font-size: 13px; padding: 12px; text-align: center; }
+.ow__cam-act { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.ow__file { position: relative; display: inline-flex; align-items: center; overflow: hidden;
+  input { position: absolute; inset: 0; opacity: 0; cursor: pointer; } }
+.ow__fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px;
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; }
+  .wx__input { height: 38px; font-size: 16px; } }
+.ow__muted { margin: 0; font-size: 12px; color: #666; }
+.ow__pct { margin: 0; font-size: 15px; font-weight: 800; color: #1B6E46; &--bad { color: #A92F2F; } }
+.ow__foot { flex-wrap: wrap; }
+.ow__spacer { flex: 1; }
+
+/* Cân bag lẻ — giao diện lớn, dễ bấm (camera trái · nhập phải) */
+.wx.ow { width: min(98vw, 1040px); max-height: 96vh; overflow-y: auto; padding: 18px 20px; }
+.wx.ow .wx__head h3 { font-size: 22px; }
+.wx.ow .wx__x { font-size: 24px; width: 40px; height: 40px; }
+.wx.ow .wx__info { font-size: 16px; line-height: 1.5; }
+.ow__body { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .ow__body { grid-template-columns: 1fr; } }
+.ow__cam-act .wx__btn, .ow__foot .wx__btn { height: 52px; padding: 0 20px; font-size: 17px; font-weight: 700; }
+.ow__fields { margin-top: 0; gap: 14px;
+  label { font-size: 16px; gap: 6px; }
+  .wx__input { height: 60px; font-size: 28px; font-weight: 700; padding: 0 14px; } }
+.ow__muted { font-size: 15px; }
+.ow__pct { font-size: 22px; }
+.wx.ow .wx__msg { font-size: 16px; }
+.ow__foot { margin-top: 14px; gap: 10px; }
+
+.ow__nocam { display: inline-flex; align-items: center; gap: 10px; margin: 6px 0 12px; padding: 8px 14px; border: 1px solid #C9C9C3;
+  border-radius: 8px; background: #F9F9F7; font-size: 16px; font-weight: 700; cursor: pointer;
+  input { width: 20px; height: 20px; cursor: pointer; } }
+.ow__body--nocam { grid-template-columns: 1fr; }
+
+.ow__cam { position: relative; }
+.ow__frame { position: absolute; inset: 12% 10%; border: 3px dashed rgba(255, 213, 79, .95); border-radius: 10px; pointer-events: none;
+  span { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap; padding: 3px 10px; border-radius: 999px;
+    background: rgba(0, 0, 0, .65); color: #fff; font-size: 13px; font-weight: 700; } }

@@ -1,4 +1,8 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, RM_QTY_DECIMALS_4 } from '../../services/rm-scan-qty.util';
+import { PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
+import { WEIGH_EXEMPT_REASONS, WEIGH_EXEMPT_OTHER, buildWeighExemptReason, needsWeigh, temLeMustWeigh, WEIGH_TOLERANCE_PERCENT } from '../../services/weigh-exempt-report';
+import { buildMaterialQrLabelDocument } from '../../services/material-qr-label.util';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ElementRef, ViewChild, HostListener } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -11,6 +15,8 @@ import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import type { Html5Qrcode } from 'html5-qrcode';
 import { FactoryAccessService } from '../../services/factory-access.service';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { TemLeClService } from '../../services/tem-le-cl.service';
+import { OutboundLsxLogService, OutboundLsxLogLine } from '../../services/outbound-lsx-log.service';
 import { OutboundQcRuleService } from '../../services/outbound-qc-rule.service';
 import { WorkOrderOutboundCreatedByService } from '../../services/work-order-outbound-created-by.service';
 import { ReadTrackerService } from '../../services/read-tracker.service';
@@ -18,12 +24,29 @@ import { QRScannerService, QRScanResult } from '../../services/qr-scanner.servic
 import { MatDialog } from '@angular/material/dialog';
 import { QRScannerModalComponent, QRScannerData } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
+import { SxxkSuspectService } from '../../services/sxxk-suspect.service';
 import { TemXuatKhoService } from '../../services/tem-xuat-kho.service';
 import { stripTemThungMarker } from '../../services/tem-thung-qr.util';
 import * as firebase from 'firebase/compat/app';
 import * as XLSX from 'xlsx';
 import { ClientReloadService } from '../../services/client-reload.service';
+import { PxkOddWeighService } from '../../services/pxk-odd-weigh.service';
 
+/** Bag lẻ cần chụp hình + cân khi scan xuất (Check lượng PXK). */
+interface OddWeighCtx {
+  lsx: string;
+  code: string;
+  po: string;
+  maKho: string;
+  exportQty: number;
+  std: number;
+  /** Phần lẻ theo PXK (lượng xuất − bội số Standard) */
+  oddQty: number;
+  /** Lượng bag vừa scan */
+  bagQty: number;
+  /** Trọng lượng chẵn cuộn trong danh mục NVL (0 = chưa có) */
+  catalogWeight: number;
+}
 
 /** Một dòng scan trong phiên xuất BS */
 export interface BsScanLine {
@@ -120,6 +143,26 @@ export interface OutboundMaterial {
   packKind?: 'chan' | 'le' | 'bypass' | 'over' | 'unknown';
 }
 
+/** 1 dòng tiến độ PXK của LSX (lượng + bag theo Standard Packing). */
+type ScanPxkRow = {
+  code: string; po: string; need: number; exported: number; scanned: number; remain: number;
+  std: number; needBags: number; doneBags: number; remainFull: number; remainOddQty: number;
+  /** Lượng cần = needFull bag chẵn × std + needOdd */
+  needFull: number; needOdd: number;
+  /** Tồn kho mã + PO (null = chưa đọc xong) */
+  stock: number | null;
+};
+
+/** 1 dòng tồn kho (theo IMD) của mã + PO — để chọn bịch tách tem lẻ. */
+type PxkInvLot = { imd: string; po: string; stock: number; importMs: number };
+
+/** Bịch được chọn để tách tem lẻ ở Outbound. */
+type TemLeSourcePick = {
+  /** LAST = PO chỉ còn 1 bag lẻ (≤ lượng lẻ cần) → xuất nguyên bag, không tách, không CL. */
+  kind: 'CL' | 'FULL' | 'EXACT' | 'LAST';
+  imd: string; po: string; sourceQty: number; clTag: string; bagFraction: string;
+};
+
 @Component({
   selector: 'app-outbound',
   templateUrl: './outbound.component.html',
@@ -171,7 +214,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   private operatorExpiryTimer: any;
   private readonly onOperatorVisibilityChange = () => this.checkOperatorSessionExpiry();
   /** Mã + PO + SL PXK của LSX đang scan. Scan xuất NL phải khớp mã/PO; SL dư trong 1 lần scan thì từ chối. */
-  private batchPxkPairs: { code: string; po: string; qty: number }[] = [];
+  private batchPxkPairs: { code: string; po: string; qty: number; maKho: string }[] = [];
   private batchPxkCachedLsx = '';
   private batchPxkLoading: Promise<void> | null = null;
   /** Đã xuất (outbound-materials) theo mã|PO của LSX đang scan — để chặn scan dư. */
@@ -309,12 +352,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
     private qrScannerService: QRScannerService,
     private dialog: MatDialog,
     private rmBagHistory: RmBagHistoryService,
+    private temLeCl: TemLeClService,
+    private lsxLog: OutboundLsxLogService,
+    private pxkWeightReports: PxkWeightCheckReportService,
+    private pxkOddWeigh: PxkOddWeighService,
     private outboundQcRule: OutboundQcRuleService,
     private router: Router,
     private route: ActivatedRoute,
     private woOutboundCreatedBy: WorkOrderOutboundCreatedByService,
     private readTracker: ReadTrackerService,
     private nvlCatalog: NvlCatalogFullService,
+    private sxxkSuspect: SxxkSuspectService,
     private authService: FirebaseAuthService,
     private temXuatKho: TemXuatKhoService,
     private clientReload: ClientReloadService
@@ -336,6 +384,39 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.batchPxkCachedLsx = '';
     this.batchPxkLoading = null;
     this.batchPxkExportedByKey = new Map();
+    this.batchPxkInv = null;
+  }
+
+  /** Tồn kho theo mã + PO (từng IMD) của các mã trên PXK — null = chưa đọc. */
+  private batchPxkInv: Map<string, PxkInvLot[]> | null = null;
+
+  private async loadBatchPxkStock(lsx: string): Promise<void> {
+    this.batchPxkInv = null;
+    const codes = [...new Set(this.batchPxkPairs.map((p) => p.code).filter(Boolean))];
+    const inv = new Map<string, PxkInvLot[]>();
+    try {
+      for (let i = 0; i < codes.length; i += 10) {
+        const snap = await this.firestore.firestore.collection('inventory-materials')
+          .where('materialCode', 'in', codes.slice(i, i + 10)).get();
+        snap.forEach((doc) => {
+          const d = doc.data() as any;
+          if (String(d.factory || '') !== this.selectedFactory) return;
+          const stock = (Number(d.openingStock) || 0) + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+          const key = this.pxkScanKey(d.materialCode, d.poNumber);
+          const imp: Date | null = d.importDate?.toDate ? d.importDate.toDate() : (d.importDate ? new Date(d.importDate) : null);
+          const bn = /^(\d{8,})/.exec(String(d.batchNumber ?? '').trim());
+          const imd = bn ? bn[1] : (imp && !isNaN(imp.getTime()) ? imp.toLocaleDateString('en-GB').split('/').join('') : '');
+          const list = inv.get(key) || [];
+          list.push({ imd, po: String(d.poNumber || '').trim(), stock: Math.round(stock * 10000) / 10000, importMs: imp?.getTime() || 0 });
+          inv.set(key, list);
+        });
+      }
+      if (this.batchPxkCachedLsx !== lsx) return;
+      this.batchPxkInv = inv;
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.warn('loadBatchPxkStock:', e);
+    }
   }
 
   /** Sau khi LSX hợp lệ (Kitting): lưu LSX và preload PXK để chặn sai mã / sai PO. */
@@ -344,6 +425,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.batchProductionOrder = lsxTrim;
     this.isProductionOrderScanned = true;
     void this.ensureBatchPxkLoaded();
+    this.weighCodesLoad = null;
+    void this.ensureWeighCodesLoaded().catch(() => undefined);
   }
 
   private async ensureBatchPxkLoaded(): Promise<void> {
@@ -365,9 +448,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
           this.batchPxkPairs = pairs.map(p => ({
             code: String(p.materialCode || '').trim().toUpperCase(),
             po: this.normalizePxImportPo(p.po),
-            qty: Number(p.quantity) || 0
+            qty: Number(p.quantity) || 0,
+            maKho: String(p.maKho || '').trim()
           }));
           this.batchPxkExportedByKey = exported;
+          void this.loadBatchPxkStock(lsx);
         }
       })
       .catch(err => {
@@ -390,14 +475,19 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   /** Tổng đã xuất theo mã+PO của LSX (outbound-materials). */
+  /** Số bag đã xuất theo mã+PO của LSX (đếm cùng lúc với tổng lượng). */
+  private batchPxkExportedBagsByKey = new Map<string, number>();
+
   private async loadBatchPxkExportedTotals(lsx: string): Promise<Map<string, number>> {
     const out = new Map<string, number>();
+    const bags = new Map<string, number>();
     const lsxTrim = String(lsx || '').trim();
     if (!lsxTrim) return out;
     try {
+      const variants = Array.from(new Set([lsxTrim, lsxTrim.toUpperCase(), lsxTrim.replace(/\s+/g, '').toUpperCase()])).slice(0, 10);
       const snap = await this.firestore
         .collection('outbound-materials', ref =>
-          ref.where('factory', '==', this.selectedFactory).where('productionOrder', '==', lsxTrim)
+          ref.where('factory', '==', this.selectedFactory).where('productionOrder', 'in', variants)
         )
         .get()
         .toPromise();
@@ -409,7 +499,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
         if (!(qty > 0)) return;
         const key = this.pxkScanKey(code, d?.poNumber ?? d?.po);
         out.set(key, (out.get(key) || 0) + qty);
+        bags.set(key, (bags.get(key) || 0) + Math.max(1, Number(d?.scanCount) || 1));
       });
+      this.batchPxkExportedBagsByKey = bags;
     } catch (e) {
       console.warn('loadBatchPxkExportedTotals failed:', e);
     }
@@ -420,7 +512,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
     const q = Number(qty) || 0;
     if (!(q > 0)) return;
     const key = this.pxkScanKey(code, po);
-    this.batchPxkExportedByKey.set(key, (this.batchPxkExportedByKey.get(key) || 0) + q);
+    const next = new Map(this.batchPxkExportedByKey);
+    next.set(key, (next.get(key) || 0) + q);
+    this.batchPxkExportedByKey = next;
+    const bags = new Map(this.batchPxkExportedBagsByKey);
+    bags.set(key, (bags.get(key) || 0) + 1);
+    this.batchPxkExportedBagsByKey = bags;
   }
 
   /** Tập mã được phép quét Tem Thùng để xuất kho — load 1 lần từ cache dùng chung (không thêm read). */
@@ -435,6 +532,99 @@ export class OutboundComponent implements OnInit, OnDestroy {
   /** Scan xuất không còn ghi người scan lên work order. */
   private syncWorkOrderCreatedByAfterExport(_lsx?: string, _employeeId?: string): void {
     return;
+  }
+
+  /**
+   * Tem lẻ: scan xuất tem CL (đuôi (CL-0n)) → IMD đó hết bịch CL, từ đó mới cho tách bịch chẵn mới
+   * (xem TemLeClService). Chạy nền sau khi lưu xuất; lỗi chỉ ghi log, không chặn xuất.
+   */
+  /** Ghi log notepad theo LSX (từng bag) — chạy nền, lỗi không ảnh hưởng xuất kho. */
+  private writeLsxLog(items: Array<any>, method: string): void {
+    const rows = (items || []).map((it, i) => {
+      const p = this.rmBagHistory.parseQrPart4(it?.importDate);
+      const t = it?.scanTime instanceof Date ? it.scanTime.getTime() : Date.now();
+      return {
+        lsx: String(it?.productionOrder || this.batchProductionOrder || '').trim(),
+        line: {
+          t: t + i / 1000,
+          by: String(it?.employeeId || this.batchEmployeeId || '').trim().toUpperCase(),
+          code: String(it?.materialCode || '').trim().toUpperCase(),
+          po: String(it?.poNumber || '').trim(),
+          imd: p.imdKey || '',
+          bag: String(it?.bagBatch || p.bagFractionLabel || ''),
+          qty: Number(it?.quantity) || 0,
+          tag: p.splitTag || '',
+          loc: String(it?.location || ''),
+          m: method
+        } as OutboundLsxLogLine
+      };
+    });
+    void this.lsxLog.append(this.selectedFactory, rows).catch((e) => console.warn('[LSX log] ghi lỗi', e));
+  }
+
+  // ===== Popup Log LSX (xem chi tiết từng bag đã scan) =====
+  showLsxLog = false;
+  lsxLogQuery = '';
+  lsxLogLoading = false;
+  lsxLogError = '';
+  lsxLogLines: OutboundLsxLogLine[] = [];
+  lsxLogShownLsx = '';
+
+  openLsxLog(): void {
+    this.showLsxLog = true;
+    this.lsxLogQuery = this.lsxLogQuery || this.batchProductionOrder || this.selectedProductionOrder || '';
+    if (this.lsxLogQuery.trim()) void this.loadLsxLog();
+  }
+
+  async loadLsxLog(): Promise<void> {
+    const lsx = this.lsxLogQuery.trim().toUpperCase();
+    if (!lsx || this.lsxLogLoading) return;
+    this.lsxLogLoading = true;
+    this.lsxLogError = '';
+    this.cdr.detectChanges();
+    try {
+      const { lines, reads } = await this.lsxLog.load(this.selectedFactory, lsx);
+      this.readTracker.track('outbound', 'outbound-lsx-log', reads);
+      this.lsxLogLines = lines;
+      this.lsxLogShownLsx = lsx;
+      if (!lines.length) this.lsxLogError = `Chưa có log cho ${lsx} (log ghi từ 17/10/2026).`;
+    } catch (e) {
+      console.error('loadLsxLog:', e);
+      this.lsxLogError = 'Không đọc được log. Thử lại.';
+    } finally {
+      this.lsxLogLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  get lsxLogTotalQty(): number {
+    return this.lsxLogLines.reduce((n, l) => n + (Number(l.qty) || 0), 0);
+  }
+
+  lsxLogTime(ms: number): string {
+    const d = new Date(Number(ms) || 0);
+    const p = (x: number) => String(x).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  private markTemLeClExported(items: Array<any>): void {
+    for (const it of items || []) {
+      const p = this.rmBagHistory.parseQrPart4(it?.importDate);
+      if (!p.imdKey || (p.splitTag && !p.splitTag.startsWith('CL'))) continue;
+      const code = String(it?.materialCode || '').trim().toUpperCase();
+      const po = String(it?.poNumber || '').trim();
+      if (!code || !po) continue;
+      const by = String(it?.employeeId || this.batchEmployeeId || '').trim();
+      if (p.splitTag) {
+        void this.temLeCl.markClExported(this.selectedFactory, code, po, p.imdKey, p.splitTag, by)
+          .catch((e) => console.warn('[Tem lẻ] markClExported failed', code, p.splitTag, e));
+      } else {
+        // Tem cũ (chưa dán tem CL mới) của bịch đang là CL: xuất hết lượng CL → IMD hết CL
+        const qty = Number(it?.exportQuantity ?? it?.quantity) || 0;
+        void this.temLeCl.markClExportedByOldLabel(this.selectedFactory, code, po, p.imdKey, p.bagFractionLabel, qty, by)
+          .catch((e) => console.warn('[Tem lẻ] markClExportedByOldLabel failed', code, e));
+      }
+    }
   }
 
   private syncWorkOrderCreatedByFromPendingScans(): void {
@@ -453,6 +643,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
   
   ngOnInit(): void {
     console.log('🏭 Outbound component initialized');
+    // Danh sách Kiểm 100% (cùng nguồn tab Inbound, có cache) — để nhận diện mã khi scan
+    void this.sxxkSuspect.load().catch(() => undefined);
 
     const factoryParam = this.route.snapshot.queryParamMap.get('factory');
     if (this.isValidFactory(factoryParam)) {
@@ -553,6 +745,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.allowExportByCartonSet = new Set(
         items.filter((i) => i.allowExportByCarton).map((i) => i.materialCode)
       );
+      this.catalogByCode = new Map(items.map((i) => [i.materialCode, i]));
       const spMap = new Map<string, number>();
       items.forEach((i) => {
         const sp = Number(i.standardPacking) || 0;
@@ -608,9 +801,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
     return this.getPackKind(material.materialCode, qty) === 'le';
   }
 
-  /** Số xuất kho lẻ cần ghi nhận. Giữ tối đa 2 số sau dấu chấm (112.85). Chẵn thì 0. */
+  /** Số xuất kho lẻ cần ghi nhận. ASM1 tối đa 4 số lẻ, nhà máy khác 2 số (112.85). Chẵn thì 0. */
   leExportQty(materialCode: string | null | undefined, qty: number): number {
-    const q = Math.round((Number(qty) || 0) * 100) / 100;
+    const q = isRmQtyDecimalFactory(this.selectedFactory)
+      ? roundRmQty(Number(qty) || 0, RM_QTY_DECIMALS_4)
+      : Math.round((Number(qty) || 0) * 100) / 100;
     if (!(q > 0)) return 0;
     return this.getPackKind(materialCode, q) === 'le' ? q : 0;
   }
@@ -623,9 +818,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
       ? stored
       : (this.isPackLe(material) ? (Number(material.exportQuantity ?? material.quantity) || 0) : 0);
     if (!(qty > 0)) return '';
-    const r = Math.round(qty * 100) / 100;
+    const dec = isRmQtyDecimalFactory(this.selectedFactory) ? RM_QTY_DECIMALS_4 : 2;
+    const r = roundRmQty(qty, dec);
     if (Number.isInteger(r)) return String(r);
-    return r.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return r.toFixed(dec).replace(/0+$/, '').replace(/\.$/, '');
   }
 
   packKindLabel(material: { materialCode?: string; exportQuantity?: number; quantity?: number } | null | undefined): string {
@@ -648,6 +844,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   /** Số lượng trên tem: nhận số lẻ, giữ tối đa 2 chữ số thập phân. */
   private parseScanQty(raw: unknown): number {
+    // ASM1: đọc cả "12,5" / "1,234.5" / "1.234,56", tối đa 2 số lẻ
+    // ASM1: 4 số lẻ (khớp Inbound / Materials)
+    if (isRmQtyDecimalFactory(this.selectedFactory)) return parseRmScanQty(raw, RM_QTY_DECIMALS_4);
     let s = String(raw ?? '').trim().replace(/\s/g, '');
     if (!s) return 0;
     if (/^\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.');
@@ -826,6 +1025,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    this.stopOddWeighCamera(true);
     window.removeEventListener('storage', this.onNvlCatalogStorage);
     this.clientReload.clearHold(OutboundComponent.RELOAD_HOLD_KEY);
     this.destroy$.next();
@@ -1007,9 +1207,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
     // Hoặc có thể PDA có user agent đặc biệt
     const isPDA = /pda|handheld|mobile|android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
     const isSmallScreen = window.innerWidth <= 1024; // Tăng threshold cho PDA
+    // iPad (iPadOS) báo user agent giống Mac — nhận diện qua màn cảm ứng
+    const isIpadOs = /macintosh/i.test(userAgent) && (navigator.maxTouchPoints || 0) > 1;
     
     // Consider it mobile if either user agent, screen size, or PDA-like device
-    this.isMobile = isMobileUserAgent || isMobileScreen || isPDA || isSmallScreen;
+    this.isMobile = isMobileUserAgent || isMobileScreen || isPDA || isSmallScreen || isIpadOs;
     
     // 🔧 SỬA LỖI: Force mobile mode cho PDA nếu có vấn đề detect
     // Nếu user đã chọn scanner và device có vẻ như PDA, force mobile mode
@@ -1123,9 +1325,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
       let match = findMatch(toWoList(snapExact));
 
       // Bước 2: Nếu không tìm thấy (khác hoa/thường hoặc format), thử query theo năm/tháng từ LSX
+      // Lấy năm và tháng từ mã LSX (vd: KZLSX0326/... → tháng 3, năm 2026)
+      const dateMatch = lsxNorm.match(/(\d{2})(\d{2})/);
       if (!match) {
-        // Lấy năm và tháng từ mã LSX (vd: KZLSX0326/... → tháng 3, năm 2026)
-        const dateMatch = lsxNorm.match(/(\d{2})(\d{2})/);
         if (dateMatch) {
           const month = parseInt(dateMatch[1], 10);
           const year = 2000 + parseInt(dateMatch[2], 10);
@@ -1140,24 +1342,24 @@ export class OutboundComponent implements OnInit, OnDestroy {
         }
       }
 
-      // Bước 3: Fallback - query factory không giới hạn (tốn hơn nhưng chắc chắn)
-      if (!match) {
+      // Bước 3: LSX không có năm/tháng để lọc → quét theo factory (chỉ khi bước 2 không chạy được)
+      if (!match && !dateMatch) {
         const snapAll = await this.firestore.collection('work-orders', ref =>
           ref.where('factory', '==', this.selectedFactory)
         ).get().toPromise();
         match = findMatch(toWoList(snapAll));
       }
 
-      // Bước 4: Fallback toàn bộ - bỏ filter factory (để tìm được LSX thuộc factory khác như SAMPLE1)
+      // Bước 4: LSX thuộc factory khác (vd SAMPLE1) — tra đúng mã, không quét cả collection
+      // (trước đây có thêm bước đọc TOÀN BỘ work-orders mỗi lần scan sai LSX).
       if (!match) {
+        const variants = Array.from(new Set([lsxTrim, lsxTrim.toUpperCase(), lsxTrim.replace(/\s+/g, '').toUpperCase()]))
+          .filter(Boolean)
+          .slice(0, 10);
         const snapNoFactory = await this.firestore.collection('work-orders', ref =>
-          ref.where('productionOrder', '==', lsxTrim).limit(10)
+          ref.where('productionOrder', 'in', variants).limit(10)
         ).get().toPromise();
         match = findMatch(toWoList(snapNoFactory));
-      }
-      if (!match) {
-        const snapGlobal = await this.firestore.collection('work-orders').get().toPromise();
-        match = findMatch(toWoList(snapGlobal));
       }
 
       if (!match) {
@@ -1506,9 +1708,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
         });
       });
 
+      // Chỉ tra dòng chưa xong (dòng done đã ẩn) — đỡ đọc cả kho / cả lịch sử xuất
+      const pending = items.filter((it) => !it.done);
       const [exportedKeys, iqcMap] = await Promise.all([
-        this.loadBsExportedKeys(items),
-        this.loadBsIqcMap(items)
+        this.loadBsExportedKeys(pending),
+        this.loadBsIqcMap(pending)
       ]);
 
       for (const it of items) {
@@ -1596,11 +1800,14 @@ export class OutboundComponent implements OnInit, OnDestroy {
       }
 
       // Phiếu BS LSX Chung / không LSX cũ: khớp bản ghi bsExport có productionOrder rỗng hoặc LSX Chung
-      const hasCommon = items.some(it => this.isBsCommonLsx(it.lsx));
-      if (hasCommon) {
+      // — chỉ đọc theo mã của các dòng LSX Chung đang chờ (không quét 3000 bản ghi xuất BS)
+      const commonCodes = [...new Set(items.filter(it => this.isBsCommonLsx(it.lsx))
+        .map(it => String(it.materialCode || '').trim()).filter(Boolean))];
+      for (let i = 0; i < commonCodes.length; i += FIRESTORE_IN_MAX) {
+        const chunk = commonCodes.slice(i, i + FIRESTORE_IN_MAX);
         const snap = await this.firestore
           .collection('outbound-materials', ref =>
-            ref.where('factory', '==', this.selectedFactory).where('bsExport', '==', true).limit(3000)
+            ref.where('factory', '==', this.selectedFactory).where('bsExport', '==', true).where('materialCode', 'in', chunk)
           )
           .get()
           .toPromise();
@@ -1714,14 +1921,18 @@ export class OutboundComponent implements OnInit, OnDestroy {
     if (event.key === 'Enter') {
       const val = (this.bsScanInput || '').trim();
       this.bsScanInput = '';
-      if (val) this.processBsScan(val);
+      if (val) void this.processBsScan(val);
       event.preventDefault();
     }
   }
 
-  processBsScan(raw: string): void {
+  async processBsScan(raw: string): Promise<void> {
     const item = this.bsScanItem;
     if (!item) return;
+    if (this.oddWeigh) {
+      this.bsScanError = `❌ Đang chờ chụp hình + nhập trọng lượng bag lẻ ${this.oddWeigh.code}. Lưu hoặc Hủy trước khi scan tiếp.`;
+      return;
+    }
 
     // QR format: materialCode|PO|qty|IMD-bag/total
     const parts = raw.split('|');
@@ -1782,13 +1993,55 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
 
     this.bsScanError = '';
-    this.bsScanLines.push({
+    const line: BsScanLine = {
       materialCode: scannedCode,
       po: scannedPo,
       imd: scannedImd,
       qty: scannedQty,
       rawQr: raw
-    });
+    };
+    // Bag lẻ (< Standard) của mã phải cân → chụp hình + nhập trọng lượng như Xuất NL
+    let odd: OddWeighCtx | null = null;
+    try {
+      odd = await this.findBsOddWeighNeed(item, scannedCode, scannedPo, scannedQty);
+    } catch (e) {
+      console.warn('findBsOddWeighNeed:', e);
+      this.bsScanError = `❌ Không kiểm tra được Check lượng cho ${scannedCode}. Scan lại.`;
+      return;
+    }
+    if (odd) {
+      this.openOddWeigh(odd, { __bs: true, line });
+      return;
+    }
+    this.bsScanLines.push(line);
+  }
+
+  /** Bag lẻ của Xuất BS cần cân? (mã thuộc Check lượng, lượng < Standard, chưa có số cân của LSX + mã + PO). */
+  private async findBsOddWeighNeed(item: BsPendingItem, code: string, po: string, bagQty: number): Promise<OddWeighCtx | null> {
+    const c = String(code || '').trim().toUpperCase();
+    const std = this.standardPackingByCode.get(c) || 0;
+    if (!(std > 0) || !(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
+    await this.ensureWeighCodesLoaded();
+    if (!needsWeigh(c, this.weighExemptCodes, this.weighIncludeCodes)) return null;
+    const lsx = `BS ${String(item.lsx || BS_COMMON_LSX).trim()}`;
+    const [saved, catalogWeight] = await Promise.all([
+      this.pxkOddWeigh.getSaved(lsx, c, po),
+      this.pxkOddWeigh.catalogUnitWeight(c)
+    ]);
+    if (Number(saved?.weightOdd) > 0) return null;
+    // exportQty = lượng bag → phần lẻ = cả bag (so với dự kiến theo GW bag nguyên ÷ Standard)
+    return { lsx, code: c, po: String(po || '').trim(), maKho: '', exportQty: bagQty, std, oddQty: bagQty, bagQty, catalogWeight };
+  }
+
+  /** Bag đã cân xong / đã báo → đưa vào đúng phiên (Xuất BS hoặc Xuất NL). */
+  private finishOddWeighItem(item: any, flashSuffix: string): void {
+    if (item?.__bs) {
+      this.bsScanLines.push(item.line as BsScanLine);
+      this.bsScanError = '';
+      setTimeout(() => (document.getElementById('bs-scan-input') as HTMLInputElement | null)?.focus(), 60);
+      return;
+    }
+    this.commitScanItem(item, flashSuffix);
   }
 
   removeBsScanLine(idx: number): void {
@@ -1801,17 +2054,45 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.bsSaving = true;
     try {
       const exportDate = new Date();
+      const db = this.firestore.firestore;
+      const code = String(item.materialCode || '').trim().toUpperCase();
+      const po = String(this.bsScanLines[0]?.po || item.po || '').trim();
 
-      // 1. Ghi từng scan vào outbound-materials và trừ tồn kho
+      // 1. Đọc song song: dòng tồn của mã + PO (1 truy vấn cho mọi tem) và phiếu BS
+      const [invSnap, bsSnap] = await Promise.all([
+        db.collection('inventory-materials')
+          .where('materialCode', '==', code)
+          .where('poNumber', '==', po)
+          .where('factory', '==', this.selectedFactory)
+          .get(),
+        db.collection('pxk-bs-data').doc(item.docId).get()
+      ]);
+      const invDocs = invSnap.docs;
+
+      // Chọn dòng tồn cho từng tem: khớp IMD; không khớp → dòng còn tồn đầu tiên (như trước)
+      const pickInvDoc = (imd: string) => {
+        if (!invDocs.length) return null;
+        if (imd) {
+          const { imdKey } = this.parseImdFromQrPart4(imd);
+          const want = imdKey || this.normalizeImportDate(imd);
+          const hit = invDocs.find((d) => this.normalizeImportDate((d.data() as any).importDate) === want);
+          if (hit) return hit;
+        }
+        return invDocs.find((d) => ((Number((d.data() as any).quantity) || 0) - (Number((d.data() as any).exported) || 0)) > 0)
+          || invDocs[0];
+      };
+
+      // 2. Gộp mọi thao tác ghi vào 1 batch (outbound + trừ tồn + đánh dấu done)
+      const batch = db.batch();
+      const incByDoc = new Map<string, { exported: number; le: number }>();
       for (const line of this.bsScanLines) {
-        await this.firestore.collection('outbound-materials').add({
+        const le = this.leExportQty(line.materialCode, line.qty);
+        batch.set(db.collection('outbound-materials').doc(), {
           factory: this.selectedFactory,
           materialCode: line.materialCode,
           poNumber: line.po,
           exportQuantity: line.qty,
-          ...(this.leExportQty(line.materialCode, line.qty) > 0
-            ? { leQty: this.leExportQty(line.materialCode, line.qty) }
-            : {}),
+          ...(le > 0 ? { leQty: le } : {}),
           unit: item.unit,
           productionOrder: String(item.lsx || '').trim(),
           importDate: line.imd,
@@ -1820,19 +2101,30 @@ export class OutboundComponent implements OnInit, OnDestroy {
           bsExport: true,
           employeeId: 'BS'
         });
-        await this.updateInventoryExported(line.materialCode, line.po, line.qty, line.imd);
+        const inv = pickInvDoc(line.imd);
+        if (inv) {
+          const cur = incByDoc.get(inv.id) || { exported: 0, le: 0 };
+          cur.exported += line.qty;
+          cur.le += le > 0 ? le : 0;
+          incByDoc.set(inv.id, cur);
+        }
       }
-
-      // 2. Đánh dấu done trong pxk-bs-data
-      const docSnap = await this.firestore.collection('pxk-bs-data').doc(item.docId).get().toPromise();
-      if (docSnap && docSnap.exists) {
-        const data = docSnap.data() as any;
-        const lines: any[] = [...(data.lines || [])];
+      incByDoc.forEach((inc, id) => {
+        batch.update(db.collection('inventory-materials').doc(id), {
+          exported: firebase.default.firestore.FieldValue.increment(Math.round(inc.exported * 10000) / 10000),
+          ...(inc.le > 0 ? { xtLe: firebase.default.firestore.FieldValue.increment(Math.round(inc.le * 10000) / 10000) } : {}),
+          updatedAt: exportDate
+        });
+      });
+      if (bsSnap.exists) {
+        const lines: any[] = [...(((bsSnap.data() as any)?.lines) || [])];
         if (lines[item.lineIndex]) {
           lines[item.lineIndex] = { ...lines[item.lineIndex], done: true };
+          batch.update(bsSnap.ref, { lines });
         }
-        await this.firestore.collection('pxk-bs-data').doc(item.docId).update({ lines });
       }
+      await batch.commit();
+      if (!invDocs.length) console.warn(`[BS] Không có dòng tồn ${code} - PO ${po}: chỉ ghi outbound`);
 
       // 3. Ẩn khỏi danh sách mặc định (vẫn tìm được khi search)
       this.bsItems = this.bsItems.map(b =>
@@ -2122,8 +2414,14 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
   
   // 🔧 GLOBAL KEYBOARD LISTENER: Lắng nghe tất cả keyboard input khi setup modal mở
+  /** Popup cân bag lẻ / báo không cân đang mở → không kéo phím / focus về ô quét barcode. */
+  private get scannerFocusPaused(): boolean {
+    return !!this.oddWeigh || !!this.weighReport;
+  }
+
   onGlobalKeydown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
+    if (this.scannerFocusPaused) return;
 
     if (!this.hasOperatorSession) {
       if (target?.id === 'ob-op-session-input') return;
@@ -2765,10 +3063,12 @@ export class OutboundComponent implements OnInit, OnDestroy {
       
       console.log('📅 Downloading monthly history for:', monthYear, 'from', startDate, 'to', endDate);
       
-      // 🔧 SỬA LỖI INDEX: Chỉ query factory, filter date ở client để tránh composite index
+      // Lọc tháng ngay trên Firestore (index factory + exportDate đã có) — chỉ đọc dòng của tháng đó
+      const endOfMonth = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
       const querySnapshot = await this.firestore.collection('outbound-materials', ref =>
         ref.where('factory', '==', this.selectedFactory)
-           .limit(10000) // Lấy nhiều data để filter client-side
+           .where('exportDate', '>=', startDate)
+           .where('exportDate', '<=', endOfMonth)
       ).get().toPromise();
       
       if (!querySnapshot || querySnapshot.empty) {
@@ -2781,7 +3081,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         const data = doc.data() as any;
         const exportDate = data.exportDate?.toDate();
         if (!exportDate) return false;
-        return exportDate >= startDate && exportDate <= endDate;
+        return exportDate >= startDate && exportDate <= endOfMonth;
       });
 
       if (filteredDocs.length === 0) {
@@ -3175,6 +3475,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
       await batch.commit();
       console.log(`✅ Successfully saved ${this.pendingScanData.length} items to outbound-materials collection`);
       this.syncWorkOrderCreatedByFromPendingScans();
+      this.markTemLeClExported(this.pendingScanData);
+      this.writeLsxLog(this.pendingScanData, 'CAMERA');
 
       // 🔧 UNIFIED: Cập nhật inventory exported quantity cho từng item (TUẦN TỰ)
       console.log('📦 Updating inventory exported quantities sequentially...');
@@ -3562,6 +3864,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
     console.log('✅ New outbound record created with ID:', docRef.id);
     this.syncWorkOrderCreatedByAfterExport();
+    this.markTemLeClExported([this.lastScannedData]);
+    this.writeLsxLog([{ ...this.lastScannedData, quantity: this.exportQuantity, scanTime: new Date() }], 'SCANNER');
     
     // Verify data was saved correctly
     const savedDoc = await docRef.get();
@@ -3881,6 +4185,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     await batch.commit();
     console.log(`✅ Successfully saved ${consolidatedMap.size} outbound records!`);
     this.syncWorkOrderCreatedByFromPendingScans();
+    this.markTemLeClExported(this.pendingScanData);
+    this.writeLsxLog(this.pendingScanData, 'CAMERA');
 
     // 4. Update inventory - Chạy SONG SONG không chờ để không làm chậm
     console.log(`📦 Updating inventory in background...`);
@@ -4086,7 +4392,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   private showScanError(message: string): void {
     console.error('❌ Scan Error:', message);
-    alert('Lỗi scan: ' + message);
+    this.playScanBeep(false);
+    if (!this.isMobile && this.isBatchScanningMode) {
+      // Máy tính đang scan: báo đỏ to + 2 tiếng bíp, không chặn bằng hộp thoại
+      this.setScanFlash('err', 'Lỗi scan: ' + message);
+    } else {
+      alert('Lỗi scan: ' + message);
+    }
     
     // 🔧 AUTO-FOCUS AFTER ERROR: Tự động focus lại scanner input sau khi bấm OK
     setTimeout(() => {
@@ -4127,6 +4439,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   onScannerInputBlur(): void {
+    if (this.scannerFocusPaused) return;
     if (!this.hasOperatorSession) {
       setTimeout(() => this.focusOperatorSessionInput(), 50);
       return;
@@ -4153,6 +4466,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   private focusScannerInput(): void {
+    if (this.scannerFocusPaused) return;
     try {
       const el = this.resolveScannerInputEl();
       if (!el) return;
@@ -4482,8 +4796,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
       if (!this.pxImportPoMatch(this.normalizePxImportPo(item?.poNumber), poKey)) return s;
       return s + (Number(item?.quantity) || 0);
     }, 0);
-    const remain = pxkQty - exported - pending;
-    if (q > remain + 1e-9) {
+    const decimal = isRmQtyDecimalFactory(this.selectedFactory);
+    const remain = decimal ? roundRmQty(pxkQty - exported - pending, RM_QTY_DECIMALS_4) : pxkQty - exported - pending;
+    if (q > remain + (decimal ? 0.001 : 1e-9)) {
       const fmt = (n: number) => n.toLocaleString('vi-VN');
       const remainShow = Math.max(0, remain);
       return (
@@ -4499,6 +4814,10 @@ export class OutboundComponent implements OnInit, OnDestroy {
   private async processBatchMaterialScanAsync(scannedData: string): Promise<void> {
     if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) {
       this.showScanError('Phải scan LSX và mã nhân viên trước!');
+      return;
+    }
+    if (this.oddWeigh) {
+      this.showScanError(`Đang chờ chụp hình + nhập trọng lượng bag lẻ ${this.oddWeigh.code}. Lưu hoặc Hủy trước khi scan tiếp.`);
       return;
     }
     let materialCode = '';
@@ -4601,9 +4920,818 @@ export class OutboundComponent implements OnInit, OnDestroy {
       scanTime: new Date(),
       scanMethod: 'CAMERA'
     };
+
+    // Bag lẻ của mã Check lượng → bắt chụp hình + nhập trọng lượng rồi mới nhận bag
+    let odd: OddWeighCtx | null = null;
+    try {
+      odd = await this.findOddWeighNeed(materialCode, poNumber, quantity);
+    } catch (e: any) {
+      console.warn('findOddWeighNeed:', e);
+      this.showScanError(`Không kiểm tra được Check lượng cho ${materialCode}. Scan lại.`);
+      return;
+    }
+    if (odd && p.splitTag?.startsWith('TL') && p.imdKey) {
+      const suffix = await this.inheritOddWeighFromSplit(odd, p.imdKey, p.splitTag);
+      if (suffix != null) {
+        this.commitScanItem(scanItem, suffix);
+        return;
+      }
+    }
+    if (odd) {
+      this.openOddWeigh(odd, scanItem);
+      return;
+    }
+    this.commitScanItem(scanItem);
+  }
+
+  /** Tem TL đã cân + chụp lúc tách tem lẻ → ghi Check lượng PXK luôn, không cân lại. null = chưa có kết quả cân. */
+  private async inheritOddWeighFromSplit(ctx: OddWeighCtx, imd: string, tlTag: string): Promise<string | null> {
+    try {
+      const tl = await this.temLeCl.getTlWeigh(this.selectedFactory, ctx.code, ctx.po, imd, tlTag);
+      if (!tl || !tl.photoUrl || !(tl.gwBagFull > 0)) return null;
+      const res = await this.pxkOddWeigh.saveFromSplit({
+        lsx: ctx.lsx, materialCode: ctx.code, po: ctx.po, maKho: ctx.maKho,
+        exportQty: ctx.exportQty, standard: ctx.std, tl
+      });
+      const pct = res.percent == null ? '' : ` ${(Math.round(res.percent * 10) / 10).toFixed(1)}% ${res.ok ? 'OK' : 'KHÔNG ĐẠT (lệch > ±5%)'}`;
+      return ` · đã cân lúc tách ${tlTag}${pct}`;
+    } catch (e) {
+      console.warn('inheritOddWeighFromSplit:', e);
+      return null;
+    }
+  }
+
+  private commitScanItem(scanItem: any, flashSuffix = ''): void {
     this.pendingScanData = [...this.pendingScanData, scanItem];
     this.savePendingToStorage();
+    this.playScanBeep(true);
+    const { materialCode, poNumber, importDate, quantity, bagBatch } = scanItem;
+    this.setScanFlash('ok', `✔ ${materialCode} · PO ${poNumber} · ${bagBatch || importDate || ''} · ${quantity}${flashSuffix}`);
+    this.identifyScannedMaterial(materialCode, poNumber, importDate, quantity);
     this.cdr.markForCheck();
+  }
+
+  // ===== Bag lẻ (Check lượng PXK): chụp hình + nhập trọng lượng khi scan =====
+  private weighExemptCodes = new Set<string>();
+  private weighIncludeCodes = new Set<string>();
+  /** Đầu mã in tem lẻ không cần cân (Danh mục NVL/TP → Check lượng / Cân). */
+  private temLeNoWeighPrefixes: string[] | undefined;
+  private weighCodesLoad: Promise<void> | null = null;
+  oddWeigh: (OddWeighCtx & {
+    scanItem: any;
+    weightFullInput: string;
+    weightOddInput: string;
+    photo: Blob | null;
+    photoPreview: string;
+    cameraOn: boolean;
+    busy: boolean;
+    error: string;
+  }) | null = null;
+  private oddWeighStream: MediaStream | null = null;
+  @ViewChild('oddWeighVideo') oddWeighVideoRef?: ElementRef<HTMLVideoElement>;
+
+  private ensureWeighCodesLoaded(): Promise<void> {
+    if (!this.weighCodesLoad) {
+      this.weighCodesLoad = Promise.all([
+        this.pxkWeightReports.loadExemptCodes(),
+        this.pxkWeightReports.loadIncludeCodes(),
+        this.pxkWeightReports.loadTemLeNoWeighPrefixes().catch(() => undefined)
+      ])
+        .then(([exempt, include, noWeigh]) => {
+          this.temLeNoWeighPrefixes = noWeigh;
+          this.weighExemptCodes = new Set(exempt.map((c) => String(c).trim().toUpperCase()));
+          this.weighIncludeCodes = new Set(include.map((c) => String(c).trim().toUpperCase()));
+        })
+        .catch((e) => {
+          this.weighCodesLoad = null;
+          throw e;
+        });
+    }
+    return this.weighCodesLoad;
+  }
+
+  /** null = không cần cân. Bag lẻ = lượng < Standard Packing, mã thuộc Check lượng, PXK có phần lẻ, chưa có hình đã cân. */
+  private async findOddWeighNeed(code: string, po: string, bagQty: number): Promise<OddWeighCtx | null> {
+    const c = String(code || '').trim().toUpperCase();
+    const std = this.standardPackingByCode.get(c) || 0;
+    if (!(std > 0) || !(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
+    const key = this.pxkScanKey(c, po);
+    const lines = this.batchPxkPairs.filter((p) => this.pxkScanKey(p.code, p.po) === key);
+    if (!lines.length) return null;
+    const exportQty = lines.reduce((s, p) => s + p.qty, 0);
+    const maKho = lines.find((p) => p.maKho)?.maKho || '';
+    await this.ensureWeighCodesLoaded();
+    if (!this.pxkOddWeigh.isCheckLine(c, maKho, this.weighExemptCodes, this.weighIncludeCodes)) return null;
+    const { oddQty } = this.pxkOddWeigh.splitRollQty(exportQty, std);
+    if (!(oddQty > 0)) return null;
+    const lsx = String(this.batchProductionOrder || '').trim();
+    const [saved, catalogWeight] = await Promise.all([
+      this.pxkOddWeigh.getSaved(lsx, c, po),
+      this.pxkOddWeigh.catalogUnitWeight(c)
+    ]);
+    // Đã có số gram (có hoặc không có ảnh) → không bắt cân lại
+    if (Number(saved?.weightOdd) > 0) return null;
+    return { lsx, code: c, po: String(po || '').trim(), maKho, exportQty, std, oddQty, bagQty, catalogWeight };
+  }
+
+  private openOddWeigh(ctx: OddWeighCtx, scanItem: any): void {
+    this.playScanBeep(true);
+    this.setScanFlash('err', `⚖ Bag lẻ ${ctx.code} — chụp hình + nhập trọng lượng để nhận bag`);
+    this.oddWeigh = {
+      ...ctx,
+      scanItem,
+      weightFullInput: '',
+      weightOddInput: '',
+      photo: null,
+      photoPreview: '',
+      cameraOn: false,
+      busy: false,
+      error: ''
+    };
+    this.cdr.markForCheck();
+    if (this.oddWeighNoCamera) {
+      setTimeout(() => (document.getElementById('oddWeighOdd') as HTMLInputElement | null)?.focus(), 50);
+    } else {
+      setTimeout(() => void this.startOddWeighCamera(), 0);
+    }
+  }
+
+  get oddWeighPercent(): number | null {
+    const w = this.oddWeigh;
+    if (!w) return null;
+    const full = w.catalogWeight > 0 ? w.catalogWeight : this.parseWeighInput(w.weightFullInput);
+    return this.pxkOddWeigh.oddPercent(full, this.parseWeighInput(w.weightOddInput), w.std, w.bagQty);
+  }
+
+  oddWeighPercentOk(p: number): boolean {
+    return this.pxkOddWeigh.isOk(p);
+  }
+
+  private parseWeighInput(raw: string): number {
+    const s = String(raw ?? '').trim().replace(/\s/g, '');
+    if (!s) return NaN;
+    const n = Number(s.includes(',') && !s.includes('.') ? s.replace(',', '.') : s.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  /** Máy chọn "Không dùng camera": cân bag lẻ chỉ nhập số gram, không chụp hình (lưu theo từng máy). */
+  oddWeighNoCamera = (() => {
+    try { return localStorage.getItem('ob-oddweigh-no-camera') === '1'; } catch { return false; }
+  })();
+
+  toggleOddWeighNoCamera(): void {
+    this.oddWeighNoCamera = !this.oddWeighNoCamera;
+    try { localStorage.setItem('ob-oddweigh-no-camera', this.oddWeighNoCamera ? '1' : '0'); } catch { /* bỏ qua */ }
+    const w = this.oddWeigh;
+    if (!w) return;
+    w.error = '';
+    if (this.oddWeighNoCamera) {
+      this.stopOddWeighCamera();
+      setTimeout(() => (document.getElementById('oddWeighOdd') as HTMLInputElement | null)?.focus(), 50);
+    } else if (!w.photo) {
+      void this.startOddWeighCamera();
+    }
+    this.cdr.markForCheck();
+  }
+
+  async startOddWeighCamera(): Promise<void> {
+    const w = this.oddWeigh;
+    if (!w) return;
+    this.stopOddWeighCamera();
+    w.error = '';
+    if (!navigator.mediaDevices?.getUserMedia) {
+      w.error = 'Trình duyệt không mở được camera — bấm "Chọn / chụp ảnh".';
+      this.cdr.markForCheck();
+      return;
+    }
+    try {
+      if (this.oddWeighIdleTimer) { clearTimeout(this.oddWeighIdleTimer); this.oddWeighIdleTimer = null; }
+      const live = this.oddWeighStream?.getVideoTracks().some((t) => t.readyState === 'live');
+      if (!live) {
+        this.oddWeighStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        // Tự lấy nét liên tục (webcam hỗ trợ thì áp dụng, không thì bỏ qua)
+        const track = this.oddWeighStream.getVideoTracks()[0];
+        await (track as any)?.applyConstraints?.({ advanced: [{ focusMode: 'continuous' }] }).catch(() => undefined);
+      }
+      const video = this.oddWeighVideoRef?.nativeElement;
+      if (!video || this.oddWeigh !== w) { this.stopOddWeighCamera(); return; }
+      video.srcObject = this.oddWeighStream;
+      await video.play().catch(() => undefined);
+      w.cameraOn = true;
+    } catch (e) {
+      console.warn('odd weigh camera:', e);
+      w.error = 'Không mở được camera — cấp quyền camera hoặc bấm "Chọn / chụp ảnh".';
+    }
+    this.cdr.markForCheck();
+  }
+
+  private oddWeighIdleTimer: any = null;
+
+  /**
+   * Tắt hiển thị camera. Mặc định GIỮ webcam bật 3 phút để bag lẻ kế tiếp mở camera ngay (không chờ 1–2s);
+   * hard = true thì tắt hẳn (rời trang).
+   */
+  private stopOddWeighCamera(hard = false): void {
+    const video = this.oddWeighVideoRef?.nativeElement;
+    if (video) video.srcObject = null;
+    if (this.oddWeigh) this.oddWeigh.cameraOn = false;
+    if (this.oddWeighIdleTimer) { clearTimeout(this.oddWeighIdleTimer); this.oddWeighIdleTimer = null; }
+    const stopAll = () => {
+      this.oddWeighStream?.getTracks().forEach((t) => t.stop());
+      this.oddWeighStream = null;
+      this.oddWeighIdleTimer = null;
+    };
+    if (hard) stopAll();
+    else if (this.oddWeighStream) this.oddWeighIdleTimer = setTimeout(stopAll, 3 * 60 * 1000);
+  }
+
+  /** Phím Space khi popup cân đang mở camera (không gõ trong ô nhập) → chụp. */
+  @HostListener('document:keydown', ['$event'])
+  onOddWeighHotkey(e: KeyboardEvent): void {
+    const w = this.oddWeigh;
+    if (!w || w.photo || !w.cameraOn || this.oddWeighNoCamera || e.code !== 'Space') return;
+    const tag = String((e.target as HTMLElement)?.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    void this.captureOddWeighPhoto();
+  }
+
+  async captureOddWeighPhoto(): Promise<void> {
+    const w = this.oddWeigh;
+    const video = this.oddWeighVideoRef?.nativeElement;
+    if (!w || !video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    this.stopOddWeighCamera();
+    await this.setOddWeighPhoto(await this.pxkOddWeigh.compressPhoto(canvas));
+  }
+
+  async onOddWeighFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !this.oddWeigh) return;
+    try {
+      this.stopOddWeighCamera();
+      await this.setOddWeighPhoto(await this.pxkOddWeigh.compressPhoto(file));
+    } catch (e: any) {
+      this.oddWeigh.error = e?.message || 'Không đọc được ảnh.';
+    }
+    this.cdr.markForCheck();
+  }
+
+  private async setOddWeighPhoto(blob: Blob): Promise<void> {
+    const w = this.oddWeigh;
+    if (!w) return;
+    if (w.photoPreview) URL.revokeObjectURL(w.photoPreview);
+    w.photo = blob;
+    w.photoPreview = URL.createObjectURL(blob);
+    w.error = '';
+    this.cdr.markForCheck();
+    setTimeout(() => (document.getElementById('oddWeighOdd') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  retakeOddWeighPhoto(): void {
+    const w = this.oddWeigh;
+    if (!w) return;
+    if (w.photoPreview) URL.revokeObjectURL(w.photoPreview);
+    w.photo = null;
+    w.photoPreview = '';
+    void this.startOddWeighCamera();
+  }
+
+  async saveOddWeigh(): Promise<void> {
+    const w = this.oddWeigh;
+    if (!w || w.busy) return;
+    const weightFullEntered = !(w.catalogWeight > 0);
+    const weightFull = weightFullEntered ? this.parseWeighInput(w.weightFullInput) : w.catalogWeight;
+    const weightOdd = this.parseWeighInput(w.weightOddInput);
+    if (!w.photo && !this.oddWeighNoCamera) { w.error = 'Chụp hình bag lẻ trên cân trước (hoặc tick "Không dùng camera").'; return; }
+    if (!(weightOdd > 0)) { w.error = 'Nhập trọng lượng bag lẻ (gram).'; return; }
+    if (!(weightFull > 0)) { w.error = 'Nhập trọng lượng chẵn cuộn (gram) — danh mục chưa có.'; return; }
+    // Nhận bag ngay; tải hình + ghi Check lượng chạy nền (không bắt nhân viên chờ upload)
+    const input = {
+      factory: this.selectedFactory,
+      lsx: w.lsx,
+      materialCode: w.code,
+      po: w.po,
+      maKho: w.maKho,
+      exportQty: w.exportQty,
+      standard: w.std,
+      bagQty: w.bagQty,
+      weightFull,
+      weightFullEntered,
+      weightOdd,
+      photo: this.oddWeighNoCamera ? null : w.photo,
+      weighedBy: String(this.batchEmployeeId || (w.scanItem?.__bs ? 'BS' : '')).trim().toUpperCase()
+    };
+    const percent = this.pxkOddWeigh.oddPercent(weightFull, weightOdd, w.std, w.bagQty);
+    const ok = percent == null ? null : this.pxkOddWeigh.isOk(percent);
+    const pct = percent == null ? '' : ` · cân ${(Math.round(percent * 10) / 10).toFixed(1)}% ${ok ? 'OK' : 'KHÔNG ĐẠT (lệch > ±5%)'}`;
+    const item = w.scanItem;
+    this.closeOddWeigh();
+    this.finishOddWeighItem(item, pct);
+    void this.saveOddWeighInBackground(input, 2);
+  }
+
+  /** Ghi kết quả cân bag lẻ (có thử lại); lỗi thì báo đỏ để nhân viên biết. */
+  private async saveOddWeighInBackground(input: any, triesLeft: number): Promise<void> {
+    try {
+      await this.pxkOddWeigh.save(input);
+    } catch (e: any) {
+      console.error('saveOddWeighInBackground:', e);
+      if (triesLeft > 0) {
+        setTimeout(() => void this.saveOddWeighInBackground(input, triesLeft - 1), 3000);
+        return;
+      }
+      this.setScanFlash('err', `⚠ Chưa lưu được kết quả cân bag lẻ ${input.materialCode} (${e?.message || e}) — báo quản lý kho.`);
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Đã báo "không cân được" cho mã này → cho nhận bag không cần cân. */
+  get oddWeighReported(): boolean {
+    const w = this.oddWeigh;
+    const r = this.weighReport;
+    return !!w && !!r && r.ok && r.code === w.code;
+  }
+
+  acceptOddWeighWithoutWeight(): void {
+    const w = this.oddWeigh;
+    if (!w || !this.oddWeighReported) return;
+    const item = w.scanItem;
+    this.closeOddWeigh();
+    this.weighReport = null;
+    this.finishOddWeighItem(item, ' · đã báo không cân được');
+  }
+
+  cancelOddWeigh(): void {
+    const code = this.oddWeigh?.code || '';
+    this.closeOddWeigh();
+    this.setScanFlash('err', `Đã hủy bag lẻ ${code} — bag chưa được nhận.`);
+    setTimeout(() => this.focusScannerInput(), 50);
+  }
+
+  private closeOddWeigh(): void {
+    this.stopOddWeighCamera();
+    if (this.oddWeigh?.photoPreview) URL.revokeObjectURL(this.oddWeigh.photoPreview);
+    this.oddWeigh = null;
+    this.cdr.markForCheck();
+    setTimeout(() => this.focusScannerInput(), 50);
+  }
+
+  // ===== Bảng scan máy tính: báo màu + âm thanh, tiến độ PXK, danh sách vừa scan =====
+  scanFlash: { kind: 'ok' | 'err'; text: string } | null = null;
+  private scanAudioCtx: AudioContext | null = null;
+
+  private setScanFlash(kind: 'ok' | 'err', text: string): void {
+    this.scanFlash = { kind, text };
+    this.cdr.markForCheck();
+  }
+
+  /** Đúng: 1 tiếng bíp cao. Sai: 2 tiếng bíp trầm. */
+  private playScanBeep(ok: boolean): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      this.scanAudioCtx ||= new Ctx();
+      const ctx = this.scanAudioCtx!;
+      const tone = (start: number, freq: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = 'square';
+        gain.gain.value = 0.08;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur);
+      };
+      if (ok) tone(0, 1400, 0.12);
+      else { tone(0, 420, 0.18); tone(0.26, 420, 0.18); }
+    } catch { /* trình duyệt chặn âm thanh — bỏ qua */ }
+  }
+
+  /** Danh mục NVL (đã nạp sẵn ở loadAllowExportByCartonSet) — tên, MSD/ESD cho thẻ nhận diện. */
+  private catalogByCode = new Map<string, any>();
+
+  /** Thẻ nhận diện mã vừa scan: tên + các ghi chú cần chú ý (Kiểm 100%, MSD/ESD, tem lẻ, vượt PXK…). */
+  scanIdentity: { code: string; name: string; po: string; bag: string; qty: number; tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray'; title?: string }> } | null = null;
+
+  private identifyScannedMaterial(code: string, po: string, importDate: string | null, qty: number): void {
+    const c = String(code || '').trim().toUpperCase();
+    const cat = this.catalogByCode.get(c);
+    const p = this.rmBagHistory.parseQrPart4(importDate);
+    const tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray'; title?: string }> = [];
+    const k100 = this.sxxkSuspect.get(c);
+    if (k100) {
+      tags.push({ text: 'KIỂM 100%', tone: 'red', title: k100.source === 'manual' ? `Nhập tay: ${k100.reason}` : `${k100.n} lần xuất bổ sung (SXXK) — ${k100.reason}` });
+    }
+    if (cat?.isMsd) tags.push({ text: 'MSD', tone: 'amber', title: 'Hàng nhạy ẩm' });
+    if (cat?.isEsd) tags.push({ text: 'ESD', tone: 'amber', title: 'Hàng nhạy tĩnh điện' });
+    if (p.splitTag) tags.push({ text: `Tem lẻ ${p.splitTag}`, tone: 'blue' });
+    if (cat?.allowExportByCarton) tags.push({ text: 'Xuất thùng', tone: 'gray' });
+    const row = this.scanPxkProgress.find((r) => r.code === c && r.po === this.normalizePxImportPo(po));
+    if (row && row.remain < -0.0001) tags.push({ text: `Vượt PXK ${Math.abs(row.remain)}`, tone: 'red' });
+    else if (row && row.remain <= 0.0001) tags.push({ text: 'Đủ PXK', tone: 'blue' });
+    if (!cat) tags.push({ text: 'Chưa có trong danh mục NVL', tone: 'gray' });
+    this.scanIdentity = {
+      code: c,
+      name: String(cat?.materialName || ''),
+      po: String(po || ''),
+      bag: p.bagFractionLabel || '',
+      qty: Number(qty) || 0,
+      tags
+    };
+  }
+
+  /** % tiến trình LSX = tổng (đã xuất + vừa scan, tối đa bằng cần) ÷ tổng cần trên PXK. */
+  get scanLsxPercent(): number {
+    const rows = this.scanPxkProgress;
+    const need = rows.reduce((n, r) => n + r.need, 0);
+    if (!(need > 0)) return 0;
+    const done = rows.reduce((n, r) => n + Math.min(r.need, Math.max(0, r.exported + r.scanned)), 0);
+    return Math.min(100, Math.round((done / need) * 1000) / 10);
+  }
+
+  /** Tạm dừng & lưu: lưu các bag đã scan nhưng vẫn giữ phiên (LSX + NV) để scan tiếp. */
+  async pauseSaveBatch(): Promise<void> {
+    if (!this.pendingScanData.length || this.isSavingBatchData) return;
+    const n = this.pendingScanData.length;
+    this.isSavingBatchData = true;
+    this.cdr.detectChanges();
+    try {
+      await this.batchUpdateAllScanData();
+      this.pendingScanData = [];
+      this.savePendingToStorage();
+      const lsx = (this.batchProductionOrder || '').trim();
+      if (lsx) this.batchPxkExportedByKey = await this.loadBatchPxkExportedTotals(lsx);
+      this.setScanFlash('ok', `💾 Đã lưu ${n} bag — tiếp tục scan ${lsx}`);
+    } catch (e: any) {
+      this.playScanBeep(false);
+      this.setScanFlash('err', 'Lỗi lưu: ' + (e?.message || e));
+    } finally {
+      this.isSavingBatchData = false;
+      this.cdr.detectChanges();
+      setTimeout(() => this.focusScannerInput(), 50);
+    }
+  }
+
+  /** Tải Excel log LSX (từng bag đã scan xuất). */
+  async downloadLsxLog(lsxRaw?: string): Promise<void> {
+    const lsx = String(lsxRaw || this.lsxLogShownLsx || this.batchProductionOrder || this.lsxLogQuery || '').trim().toUpperCase();
+    if (!lsx) { alert('Nhập LSX trước.'); return; }
+    try {
+      const lines = lsx === this.lsxLogShownLsx && this.lsxLogLines.length
+        ? this.lsxLogLines
+        : (await this.lsxLog.load(this.selectedFactory, lsx)).lines;
+      if (!lines.length) { alert(`Chưa có log cho ${lsx}.`); return; }
+      // File .txt kiểu notepad — nhẹ, mở được ở mọi máy; cột cách nhau bằng " | "
+      const head = ['STT', 'Thời gian', 'Người', 'Mã hàng', 'PO', 'IMD', 'Bag', 'Tem', 'Lượng', 'Vị trí', 'Cách scan'];
+      const total = lines.reduce((n, l) => n + (Number(l.qty) || 0), 0);
+      const text = [
+        `LOG LSX ${lsx} — ${this.selectedFactory} — ${lines.length} lần scan — tổng ${total}`,
+        `Tải lúc ${new Date().toLocaleString('vi-VN', { hour12: false })}`,
+        '',
+        head.join(' | '),
+        ...lines.map((l, i) => [i + 1, this.lsxLogTime(l.t), l.by, l.code, l.po, l.imd, l.bag, l.tag, l.qty, l.loc, l.m]
+          .map((v) => String(v ?? '')).join(' | '))
+      ].join('\r\n');
+      const blob = new Blob(['\ufeff' + text], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Log_${lsx.replace(/[\\/:*?"<>|]+/g, '_')}_${this.selectedFactory}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) {
+      console.error('downloadLsxLog:', e);
+      alert('❌ Không tải được log.');
+    }
+  }
+
+  // ===== Report "không cân được" (tách lẻ & cân) → danh sách Check lượng PXK chờ duyệt =====
+  readonly weighReasons = WEIGH_EXEMPT_REASONS;
+  readonly weighOther = WEIGH_EXEMPT_OTHER;
+  weighReport: { code: string; po: string; lsx: string; maKho: string; choice: string; other: string; busy: boolean; msg: string; ok: boolean } | null = null;
+
+  openWeighReport(code: string, po: string, lsx: string, maKho = ''): void {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c) return;
+    this.weighReport = { code: c, po: String(po || '').trim(), lsx: String(lsx || '').trim(), maKho, choice: '', other: '', busy: false, msg: '', ok: false };
+  }
+
+  async submitWeighReport(): Promise<void> {
+    const r = this.weighReport;
+    if (!r || r.busy) return;
+    const reason = buildWeighExemptReason(r.choice, r.other, 'Tách lẻ & cân — Outbound');
+    if (!reason) { r.msg = r.choice === WEIGH_EXEMPT_OTHER ? 'Nhập lý do khác.' : 'Chọn lý do.'; return; }
+    r.busy = true;
+    r.msg = '';
+    try {
+      const sent = await this.pxkWeightReports.submit({
+        lsx: r.lsx, materialCode: r.code, maKho: r.maKho, po: r.po, reason,
+        reportedBy: String(this.batchEmployeeId || this.operatorSessionId || '').trim().toUpperCase()
+      });
+      r.ok = true;
+      r.msg = sent.zaloOk
+        ? '✅ Đã gửi — chờ duyệt ở Work Order Status (Danh mục check lượng) hoặc nhóm Quản lý kho rep "duyệt".'
+        : '✅ Đã lưu báo cáo (chờ duyệt). Zalo chưa gửi được tới nhóm Quản lý kho.';
+    } catch (e: any) {
+      r.msg = '❌ Không gửi được: ' + (e?.message || e);
+    } finally {
+      r.busy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  get pendingScanNewestFirst(): any[] {
+    return [...this.pendingScanData].reverse();
+  }
+
+  get pendingScanTotalQty(): number {
+    return this.pendingScanData.reduce((n, it) => n + (Number(it?.quantity) || 0), 0);
+  }
+
+  removePendingScan(item: any): void {
+    if (!confirm(`Xóa dòng scan ${item?.materialCode} · ${item?.importDate || ''} · ${item?.quantity}?`)) return;
+    this.pendingScanData = this.pendingScanData.filter((x) => x !== item);
+    this.savePendingToStorage();
+    this.setScanFlash('ok', `Đã xóa dòng ${item?.materialCode}`);
+    setTimeout(() => this.focusScannerInput(), 50);
+  }
+
+  private scanPxkMemo: { pairs: unknown; exported: unknown; pending: unknown; inv: unknown; rows: Array<ScanPxkRow> } =
+    { pairs: null, exported: null, pending: null, inv: null, rows: [] };
+
+  /** Tiến độ từng mã + PO trên PXK của LSX: cần / đã xuất trước / vừa scan / còn. */
+  get scanPxkProgress(): Array<ScanPxkRow> {
+    const m = this.scanPxkMemo;
+    if (m.pairs === this.batchPxkPairs && m.exported === this.batchPxkExportedByKey && m.pending === this.pendingScanData
+      && m.inv === this.batchPxkInv) return m.rows;
+    const inv = this.batchPxkInv;
+    const need = new Map<string, { code: string; po: string; need: number }>();
+    for (const p of this.batchPxkPairs) {
+      const key = this.pxkScanKey(p.code, p.po);
+      const cur = need.get(key) || { code: p.code, po: p.po, need: 0 };
+      cur.need += p.qty;
+      need.set(key, cur);
+    }
+    const scanned = new Map<string, number>();
+    const scannedBags = new Map<string, number>();
+    for (const it of this.pendingScanData) {
+      const key = this.pxkScanKey(it?.materialCode, it?.poNumber);
+      scanned.set(key, (scanned.get(key) || 0) + (Number(it?.quantity) || 0));
+      scannedBags.set(key, (scannedBags.get(key) || 0) + 1);
+    }
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
+    const rows = Array.from(need.entries()).map(([key, v]) => {
+      const exported = this.batchPxkExportedByKey.get(key) || 0;
+      const sc = scanned.get(key) || 0;
+      const remain = r4(v.need - exported - sc);
+      // Bag theo Standard Packing: cần = làm tròn lên; còn lại = x bag chẵn + 1 bag lẻ (phần dư)
+      const std = this.standardPackingByCode.get(v.code) || 0;
+      const needBags = std > 0 ? Math.ceil(r4(v.need / std)) : 0;
+      const doneBags = (this.batchPxkExportedBagsByKey.get(key) || 0) + (scannedBags.get(key) || 0);
+      const left = Math.max(0, remain);
+      const remainFull = std > 0 ? Math.floor(r4(left / std)) : 0;
+      const remainOddQty = std > 0 ? r4(left - remainFull * std) : 0;
+      const needFull = std > 0 ? Math.floor(r4(v.need / std)) : 0;
+      const needOdd = std > 0 ? r4(v.need - needFull * std) : 0;
+      const stock = inv ? r4((inv.get(key) || []).reduce((s, x) => s + x.stock, 0)) : null;
+      return {
+        code: v.code, po: v.po, need: r4(v.need), exported: r4(exported), scanned: r4(sc), remain,
+        std, needBags, doneBags, remainFull, remainOddQty, needFull, needOdd, stock
+      };
+    }).sort((a, b) => Number(b.scanned > 0) - Number(a.scanned > 0) || a.code.localeCompare(b.code));
+    this.scanPxkMemo = { pairs: this.batchPxkPairs, exported: this.batchPxkExportedByKey, pending: this.pendingScanData, inv, rows };
+    return rows;
+  }
+
+  /** Cần = bag chẵn × Standard + lẻ. */
+  scanNeedBagText(r: ScanPxkRow): string {
+    if (!(r.std > 0)) return '—';
+    const parts: string[] = [];
+    if (r.needFull) parts.push(`${r.needFull}×${this.formatScanNum(r.std)}`);
+    if (r.needOdd > 0) parts.push(`lẻ ${this.formatScanNum(r.needOdd)}`);
+    return parts.join(' + ') || '0';
+  }
+
+  // ===== In tem lẻ ngay trên dòng PXK: tự chọn bịch trong tồn kho, tách TL (phần xuất) + CL (còn lại) =====
+  temLeOb: {
+    code: string; po: string; oddQty: number; std: number;
+    loading: boolean; picks: TemLeSourcePick[]; pickIdx: number;
+    needWeigh: boolean; gwFullKnown: number; gwFullInput: number | null; gwClInput: number | null;
+    busy: boolean; error: string;
+  } | null = null;
+
+  async openTemLeOb(r: ScanPxkRow): Promise<void> {
+    if (!(r.std > 0)) { this.showScanError(`Mã ${r.code} chưa có Standard Packing — không tách tem lẻ được.`); return; }
+    const oddQty = r.remainOddQty > 0 ? r.remainOddQty : r.needOdd;
+    if (!(oddQty > 0)) { this.showScanError(`Mã ${r.code} không có lượng lẻ cần xuất.`); return; }
+    const t = {
+      code: r.code, po: r.po, oddQty, std: r.std, loading: true, picks: [] as TemLeSourcePick[], pickIdx: 0,
+      needWeigh: false, gwFullKnown: 0, gwFullInput: null, gwClInput: null, busy: false, error: ''
+    };
+    this.temLeOb = t;
+    this.cdr.markForCheck();
+    try {
+      await this.ensureWeighCodesLoaded().catch(() => undefined);
+      t.needWeigh = temLeMustWeigh(r.code, this.weighExemptCodes, this.weighIncludeCodes, this.temLeNoWeighPrefixes);
+      const lots = (this.batchPxkInv?.get(this.pxkScanKey(r.code, r.po)) || [])
+        .filter((x) => x.stock > 0.0001 && x.imd)
+        .sort((a, b) => a.importMs - b.importMs);
+      const [picks, gwFull] = await Promise.all([
+        this.pickTemLeSources(r.code, lots, oddQty, r.std),
+        this.pxkOddWeigh.catalogUnitWeight(r.code).catch(() => 0)
+      ]);
+      if (this.temLeOb !== t) return;
+      t.picks = picks;
+      t.gwFullKnown = gwFull;
+      if (!lots.length) t.error = `Mã ${r.code} · PO ${r.po} không còn tồn kho.`;
+      else if (!picks.length) {
+        const lotTxt = (this.temLeObDiag.length ? this.temLeObDiag : lots.map((x) => `IMD ${x.imd}: tồn ${this.formatScanNum(x.stock)}`)).join(' · ');
+        t.error = `Không có bịch phù hợp để tách (cần lẻ ${this.formatScanNum(oddQty)}, Standard ${this.formatScanNum(r.std)}). Tồn PO: ${lotTxt}.`;
+      }
+    } catch (e: any) {
+      t.error = 'Không đọc được tồn kho: ' + (e?.message || e);
+    } finally {
+      t.loading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** IMD cũ trước: bịch CL đang có (lớn hơn lượng lẻ) hoặc đúng bằng lượng lẻ, sau đó bịch chẵn của IMD chưa có CL. */
+  private async pickTemLeSources(code: string, lots: PxkInvLot[], oddQty: number, std: number): Promise<TemLeSourcePick[]> {
+    const picks: TemLeSourcePick[] = [];
+    const seen = new Set<string>();
+    // Ép kiểu số — giá trị chuỗi làm phép so sánh sai dù màn hình hiện đúng
+    const TEMLE_EPS = 0.001;
+    const odd = Number(oddQty) || 0;
+    const sp = Number(std) || 0;
+    this.temLeObDiag = [];
+    for (const lot of lots) {
+      const k = `${lot.imd}|${lot.po}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const stock = Math.round((Number(lot.stock) || 0) * 10000) / 10000;
+      const st = await this.temLeCl.getState(this.selectedFactory, code, lot.po, lot.imd).catch(() => null);
+      this.temLeObDiag.push(`IMD ${lot.imd}: tồn ${this.formatScanNum(stock)}${st?.clActive ? ` · CL ${st.clTag} = ${this.formatScanNum(Number(st.clQty) || 0)}` : ''}`);
+      // Bag lẻ cuối của PO (tồn < Standard và ≤ lượng lẻ cần) → xuất nguyên bag, không tách / không CL
+      if (stock > TEMLE_EPS && stock < sp - TEMLE_EPS && stock <= odd + TEMLE_EPS) {
+        picks.push({ kind: 'LAST', imd: lot.imd, po: lot.po, sourceQty: stock, clTag: st?.clActive ? String(st.clTag || '') : '', bagFraction: st?.bagFraction || '' });
+        continue;
+      }
+      if (st?.clActive) {
+        const clQty = Number(st.clQty) || 0;
+        if (Math.abs(clQty - odd) < TEMLE_EPS) {
+          picks.push({ kind: 'EXACT', imd: lot.imd, po: lot.po, sourceQty: clQty, clTag: st.clTag, bagFraction: st.bagFraction || '' });
+        } else if (clQty > odd) {
+          picks.push({ kind: 'CL', imd: lot.imd, po: lot.po, sourceQty: clQty, clTag: st.clTag, bagFraction: st.bagFraction || '' });
+        }
+      } else if (stock + TEMLE_EPS >= sp && sp > odd) {
+        picks.push({ kind: 'FULL', imd: lot.imd, po: lot.po, sourceQty: sp, clTag: '', bagFraction: '' });
+      }
+    }
+    // Ưu tiên bag lẻ cuối (không phải tách) lên đầu
+    return [...picks.filter((p) => p.kind === 'LAST'), ...picks.filter((p) => p.kind !== 'LAST')];
+  }
+
+  /** Lô đã xét khi chọn bịch tách (hiện trong thông báo khi không tách được). */
+  private temLeObDiag: string[] = [];
+
+  get temLeObPick(): TemLeSourcePick | null {
+    return this.temLeOb?.picks[this.temLeOb.pickIdx] || null;
+  }
+
+  temLeObPickLabel(p: TemLeSourcePick): string {
+    if (p.kind === 'EXACT') return `IMD ${p.imd} · bịch ${p.clTag} = ${this.formatScanNum(p.sourceQty)} (đúng lượng lẻ — không cần tách)`;
+    if (p.kind === 'LAST') return `IMD ${p.imd} · bag lẻ cuối của PO = ${this.formatScanNum(p.sourceQty)} (xuất nguyên bag — không CL)`;
+    if (p.kind === 'CL') return `IMD ${p.imd} · tách từ bịch ${p.clTag} (${this.formatScanNum(p.sourceQty)})`;
+    return `IMD ${p.imd} · tách từ bịch chẵn (${this.formatScanNum(p.sourceQty)})`;
+  }
+
+  get temLeObClQty(): number {
+    const p = this.temLeObPick;
+    return p && this.temLeOb ? Math.round((p.sourceQty - this.temLeOb.oddQty) * 10000) / 10000 : 0;
+  }
+
+  closeTemLeOb(): void {
+    if (this.temLeOb?.busy) return;
+    this.temLeOb = null;
+    setTimeout(() => this.focusScannerInput(), 50);
+  }
+
+  async confirmTemLeOb(): Promise<void> {
+    const t = this.temLeOb;
+    const p = this.temLeObPick;
+    if (!t || !p || t.busy || p.kind === 'EXACT' || p.kind === 'LAST') return;
+    const gwFull = t.gwFullKnown > 0 ? t.gwFullKnown : Math.round(Number(t.gwFullInput) || 0);
+    const gwCl = Math.round(Number(t.gwClInput) || 0);
+    if (t.needWeigh && !(gwCl > 0)) { t.error = 'Cân bịch CL (phần còn lại) và nhập GW (gram).'; return; }
+    if (t.needWeigh && !(gwFull > 0)) { t.error = 'Mã chưa có GW bag nguyên — nhập GW bag nguyên (gram).'; return; }
+    const win = window.open('', '_blank');
+    if (!win) { t.error = 'Không mở được cửa sổ in — cho phép popup cho trang này.'; return; }
+    t.busy = true;
+    t.error = '';
+    this.cdr.markForCheck();
+    const by = String(this.batchEmployeeId || '').trim().toUpperCase();
+    try {
+      const p4 = p.kind === 'CL' ? `${p.imd}${p.bagFraction ? '-' + p.bagFraction : ''}(${p.clTag})` : p.imd;
+      const res = await this.temLeCl.split({
+        factory: this.selectedFactory, materialCode: t.code, po: p.po, quantity: p.sourceQty,
+        p4, imd: p.imd, bagFraction: p.bagFraction
+      }, t.oddQty, by);
+      const QRCode = await import('qrcode') as any;
+      const qr = (data: string) => QRCode.toDataURL(data, { width: 240, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } });
+      const [tlImg, clImg] = await Promise.all([qr(res.tlQrData), qr(res.clQrData)]);
+      win.document.write(buildMaterialQrLabelDocument([
+        { kind: 'bag', qrImage: tlImg, qrData: res.tlQrData, batchNumber: p.imd },
+        { kind: 'bag', qrImage: clImg, qrData: res.clQrData, batchNumber: p.imd }
+      ], `Tem lẻ ${t.code}`));
+      win.document.close();
+      if (t.needWeigh) await this.saveTemLeObGw(t.code, p, res, gwCl, gwFull, t.gwFullKnown <= 0, t.std, by);
+      this.setScanFlash('ok', `🏷 Đã in ${res.tlTag} (${this.formatScanNum(res.tlQty)}) + ${res.clTag} (${this.formatScanNum(res.clQty)}) · ${t.code} — scan ${res.tlTag} để xuất (chụp hình bag lẻ khi scan)`);
+      t.busy = false;
+      this.closeTemLeOb();
+    } catch (e: any) {
+      win.close();
+      t.busy = false;
+      t.error = e?.message || 'Không tách / in được tem lẻ.';
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async saveTemLeObGw(
+    code: string, p: TemLeSourcePick, res: { logId: string; clTag: string; clQty: number },
+    gwCl: number, gwFull: number, gwFullEntered: boolean, std: number, by: string
+  ): Promise<void> {
+    try {
+      if (gwFullEntered && gwFull > 0) await this.nvlCatalog.setGwBag(code, gwFull, by);
+      const expected = gwFull * res.clQty / std;
+      const devPct = expected > 0 ? Math.round(((gwCl - expected) / expected) * 1000) / 10 : null;
+      const ok = devPct != null && Math.abs(devPct) <= WEIGH_TOLERANCE_PERCENT;
+      await this.temLeCl.saveGwCheck(res.logId, {
+        factory: this.selectedFactory, materialCode: code, po: p.po, imd: p.imd, clTag: res.clTag, clQty: res.clQty,
+        fullQty: std, gwBagFull: gwFull, gwCl, gwExpected: expected > 0 ? Math.round(expected) : null, devPct, ok,
+        reason: ok ? '' : (devPct == null ? 'Không tính được GW dự kiến' : `${res.clTag} lệch ${devPct}%`), by
+      });
+      if (!ok) alert(`⚠️ GW bịch ${res.clTag} lệch ${devPct ?? '?'}% (cân ${gwCl} g, dự kiến ${expected > 0 ? Math.round(expected) : '?'} g).\nĐã in tem và ghi vào danh mục nghi ngờ.`);
+    } catch (e: any) {
+      console.error('saveTemLeObGw:', e);
+      alert('Đã in tem nhưng chưa lưu được GW bịch CL: ' + (e?.message || e));
+    }
+  }
+
+  /** % hoàn thành LSX theo bag: bag đã xuất + vừa scan ÷ tổng bag (theo Standard). Mã chưa có Standard thì tính theo lượng. */
+  get scanLsxBagStats(): { done: number; total: number; percent: number } {
+    let done = 0;
+    let total = 0;
+    for (const r of this.scanPxkProgress) {
+      if (!(r.need > 0)) continue;
+      if (r.std > 0) {
+        total += r.needBags;
+        done += Math.min(r.needBags, r.doneBags);
+      }
+    }
+    if (!total) return { done: 0, total: 0, percent: this.scanLsxPercent };
+    return { done, total, percent: Math.min(100, Math.round((done / total) * 1000) / 10) };
+  }
+
+  scanRemainBagText(r: ScanPxkRow): string {
+    if (!(r.std > 0)) return '—';
+    if (r.remain <= 0.0001) return 'Xong';
+    const parts: string[] = [];
+    if (r.remainFull) parts.push(`${r.remainFull} chẵn`);
+    if (r.remainOddQty > 0) parts.push(`1 lẻ (${this.formatScanNum(r.remainOddQty)})`);
+    return parts.join(' + ') || 'Xong';
+  }
+
+  private formatScanNum(n: number): string {
+    return (Math.round(n * 10000) / 10000).toLocaleString('en-US');
+  }
+
+  /** PDA: dòng PXK của mã vừa scan (cần / đã xuất + vừa scan / còn) trong LSX đang xuất. */
+  get mobileScanCurrentRow(): ScanPxkRow | null {
+    const id = this.scanIdentity;
+    if (!id) return null;
+    const po = this.normalizePxImportPo(id.po);
+    return this.scanPxkProgress.find((r) => r.code === id.code && r.po === po)
+      || this.scanPxkProgress.find((r) => r.code === id.code)
+      || null;
+  }
+
+  get scanPxkDoneCount(): number {
+    return this.scanPxkProgress.filter((r) => r.remain <= 0.0001).length;
+  }
+
+  trackScanPxkRow(_: number, r: { code: string; po: string }): string {
+    return `${r.code}|${r.po}`;
   }
 
   /**

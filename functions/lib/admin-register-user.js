@@ -39,21 +39,13 @@ exports.createAspUserAndSendEmail = createAspUserAndSendEmail;
 exports.createAspUserWithoutEmail = createAspUserWithoutEmail;
 exports.registerAspUserWithEmail = registerAspUserWithEmail;
 exports.registerAspUserWithoutEmail = registerAspUserWithoutEmail;
+exports.importAspUsers = importAspUsers;
 exports.publicRegisterAspUserWithEmail = publicRegisterAspUserWithEmail;
 const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
 const params_config_1 = require("./params-config");
 const admin_sync_auth_users_1 = require("./admin-sync-auth-users");
-function isAdminOrManager(role) {
-    const r = (role || '').toString().trim().toLowerCase();
-    const normalized = r
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '');
-    return (normalized === 'admin' ||
-        normalized === 'quan ly' ||
-        r === 'admin' ||
-        r === 'quản lý');
-}
+const authz_1 = require("./authz");
 function normalizeAspEmployeeId(input) {
     const t = (input || '').trim().toUpperCase();
     if (!t)
@@ -76,7 +68,7 @@ function buildInternalAspAuthEmail(employeeId) {
     return `asp${digits}@asp.com`;
 }
 function generateSixDigitPassword() {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    return (0, authz_1.randomSixDigitPassword)();
 }
 function isValidEmail(s) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -105,7 +97,7 @@ async function sendNewRegistrationWarehouseNotify(params) {
     const port = parseInt(params_config_1.emailSmtpPort.value().trim() || '587', 10) || 587;
     const fromRaw = params_config_1.emailFrom.value().trim();
     const from = fromRaw || user;
-    const { employeeId, department, registrantEmail, fullName, password, passwordEmail } = params;
+    const { employeeId, department, registrantEmail, fullName, passwordEmail } = params;
     const to = WAREHOUSE_NOTIFY_NEW_REGISTRATION;
     let mailStatusText;
     let mailStatusHtml;
@@ -122,10 +114,10 @@ async function sendNewRegistrationWarehouseNotify(params) {
         subjectPrefix = '⚠️ CHƯA gửi được mật khẩu — ';
         mailStatusText =
             `Gửi email mật khẩu: THẤT BẠI tới ${passwordEmail.to} — ${passwordEmail.detail}\n` +
-                `=> Cần gửi lại mật khẩu cho nhân viên thủ công (mật khẩu ở dòng trên).`;
+                `=> Admin vào Settings bấm Reset mật khẩu rồi báo lại cho nhân viên.`;
         mailStatusHtml =
             `<span style="color:#c5221f">⚠️ THẤT BẠI</span> tới <strong>${esc(passwordEmail.to)}</strong> — ${esc(passwordEmail.detail)}` +
-                `<br/><strong>Cần gửi lại mật khẩu cho nhân viên thủ công.</strong>`;
+                `<br/><strong>Admin vào Settings bấm Reset mật khẩu rồi báo lại cho nhân viên.</strong>`;
     }
     const subject = `[Warehouse] ${subjectPrefix}Đăng ký tài khoản mới — ${employeeId}`;
     const text = `Có tài khoản mới được đăng ký.\n\n` +
@@ -133,7 +125,6 @@ async function sendNewRegistrationWarehouseNotify(params) {
         `Họ tên: ${fullName || '-'}\n` +
         `Bộ phận: ${department || '-'}\n` +
         `Email nhận mật khẩu: ${registrantEmail}\n` +
-        `Mật khẩu (6 số): ${password || '-'}\n` +
         `${mailStatusText}\n`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
 <p>Có tài khoản mới được đăng ký.</p>
@@ -142,7 +133,6 @@ async function sendNewRegistrationWarehouseNotify(params) {
 <tr><td>Họ tên</td><td>${esc(fullName || '-')}</td></tr>
 <tr><td>Bộ phận</td><td>${esc(department || '-')}</td></tr>
 <tr><td>Email nhận mật khẩu</td><td>${esc(registrantEmail)}</td></tr>
-<tr><td>Mật khẩu (6 số)</td><td><strong>${esc(password || '-')}</strong></td></tr>
 <tr><td>Gửi email mật khẩu</td><td>${mailStatusHtml}</td></tr>
 </table>
 <p style="color:#555;font-size:12px">Gửi tự động từ hệ thống Warehouse. Email nội bộ — không chuyển tiếp ra ngoài.</p>
@@ -234,7 +224,7 @@ ${zaloOpenLineHtml}
 /**
  * Tạo user Auth + Firestore, mật khẩu 6 số, gửi email (dùng chọn cho admin và đăng ký công khai).
  */
-async function createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw) {
+async function createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw, replaceExisting) {
     const employeeId = normalizeAspEmployeeId(employeeIdRaw);
     if (!employeeId) {
         throw new Error('Mã nhân viên không đúng định dạng (ASPxxxx hoặc xxxx).');
@@ -255,7 +245,7 @@ async function createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw,
         throw new Error('Vui lòng chọn bộ phận.');
     }
     const password = generateSixDigitPassword();
-    const uid = await createAspUserCore({ employeeId, fullName, department, email, password });
+    const uid = await createAspUserCore({ employeeId, fullName, department, email, password, replaceExisting });
     // Gửi email mật khẩu cho nhân viên — KHÔNG throw nếu SMTP lỗi (tài khoản đã tạo xong).
     // Trạng thái gửi được báo về email kho + trả về cho client.
     let passwordEmail;
@@ -276,13 +266,13 @@ async function createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw,
             department,
             registrantEmail: email,
             fullName,
-            password,
             passwordEmail
         });
     }
     catch (e) {
         console.error('sendNewRegistrationWarehouseNotify failed', e);
     }
+    await (0, authz_1.sendNewPasswordsToAdminZalo)(passwordEmail.sent ? 'Tài khoản mới (đã gửi email cho nhân viên)' : 'Tài khoản mới — CHƯA gửi được email, cần chuyển', [{ employeeId, fullName, password }]);
     return { uid, email, employeeId, passwordEmailSent: passwordEmail.sent, passwordEmailTo: email };
 }
 /**
@@ -329,7 +319,7 @@ async function releaseEmailForNewRegistration(email, newEmployeeId) {
     }
 }
 async function createAspUserCore(params) {
-    const { employeeId, fullName, department, email, password } = params;
+    const { employeeId, fullName, department, email, password, replaceExisting } = params;
     const dupEmp = await admin
         .firestore()
         .collection('users')
@@ -337,10 +327,25 @@ async function createAspUserCore(params) {
         .limit(1)
         .get();
     if (!dupEmp.empty) {
-        // Cho phép đăng ký lại cùng mã ASP nếu tài khoản cũ chưa xóa sạch.
+        if (!replaceExisting) {
+            throw new Error(`Mã ${employeeId} đã được đăng ký. Quên mật khẩu thì nhờ quản lý reset trong Settings.`);
+        }
+        // Admin đăng ký lại cùng mã ASP: xóa tài khoản cũ chưa xóa sạch.
         await (0, admin_sync_auth_users_1.deleteUserFirestoreAndAuth)(dupEmp.docs[0].id);
     }
-    await releaseEmailForNewRegistration(email, employeeId);
+    if (replaceExisting) {
+        await releaseEmailForNewRegistration(email, employeeId);
+    }
+    else {
+        try {
+            await admin.auth().getUserByEmail(email);
+            throw new Error('Email đã được dùng cho một tài khoản. Nhờ quản lý kiểm tra trong Settings.');
+        }
+        catch (e) {
+            if ((e === null || e === void 0 ? void 0 : e.code) !== 'auth/user-not-found')
+                throw e;
+        }
+    }
     const userRecord = await admin.auth().createUser({
         email,
         password,
@@ -356,7 +361,6 @@ async function createAspUserCore(params) {
         email,
         employeeId,
         displayName: fullName,
-        password,
         department,
         factory: '',
         role: 'User',
@@ -376,7 +380,6 @@ async function createAspUserCore(params) {
         hasDeletePermission: false,
         hasCompletePermission: false,
         hasReadOnlyPermission: true,
-        password,
         createdAt: new Date(),
         updatedAt: new Date()
     }, { merge: true });
@@ -422,55 +425,147 @@ async function createAspUserWithoutEmail(employeeIdRaw, departmentRaw, fullNameR
     }
     const email = buildInternalAspAuthEmail(employeeId);
     const password = generateSixDigitPassword();
-    const uid = await createAspUserCore({ employeeId, fullName, department, email, password });
+    const uid = await createAspUserCore({ employeeId, fullName, department, email, password, replaceExisting: true });
     try {
         await sendNewRegistrationWarehouseNotify({
             employeeId,
             department,
             registrantEmail: '(không có — admin tạo trực tiếp)',
-            fullName,
-            password
+            fullName
         });
     }
     catch (e) {
         console.error('sendNewRegistrationWarehouseNotify failed', e);
     }
+    await (0, authz_1.sendNewPasswordsToAdminZalo)('Tài khoản mới', [{ employeeId, fullName, password }]);
     return { uid, email, employeeId, password };
 }
 /**
  * Admin: đăng ký user (caller phải là Admin/Quản lý).
  */
 async function registerAspUserWithEmail(callerUid, employeeIdRaw, departmentRaw, emailRaw, fullNameRaw) {
-    var _a;
     if (!callerUid) {
         throw new Error('Thiếu callerUid.');
     }
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
-    return createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw);
+    await (0, authz_1.assertAdmin)(callerUid);
+    return createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw, true);
 }
 /**
  * Admin: đăng ký user không cần email (caller phải là Admin/Quản lý).
  */
 async function registerAspUserWithoutEmail(callerUid, employeeIdRaw, departmentRaw, fullNameRaw) {
-    var _a;
     if (!callerUid) {
         throw new Error('Thiếu callerUid.');
     }
-    const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-    const callerRole = (_a = callerDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
-    if (!isAdminOrManager(callerRole)) {
-        throw new Error('permission-denied');
-    }
+    await (0, authz_1.assertAdmin)(callerUid);
     return createAspUserWithoutEmail(employeeIdRaw, departmentRaw, fullNameRaw);
 }
 /**
- * Đăng ký công khai (trang login) — không kiểm tra admin.
+ * Admin import hàng loạt: tạo tài khoản chưa có. Không xóa, không đổi mật khẩu tài khoản đã tồn tại.
+ * Không gửi email/Zalo.
+ */
+async function importAspUsers(callerUid, rows) {
+    if (!callerUid) {
+        throw new Error('Thiếu callerUid.');
+    }
+    await (0, authz_1.assertAdmin)(callerUid);
+    const list = Array.isArray(rows) ? rows.slice(0, 400) : [];
+    const created = [];
+    const skipped = [];
+    const failed = [];
+    const seen = new Set();
+    for (const row of list) {
+        const employeeId = normalizeAspEmployeeId(String((row === null || row === void 0 ? void 0 : row.employeeId) || ''));
+        const fullName = String((row === null || row === void 0 ? void 0 : row.fullName) || '').trim();
+        const department = String((row === null || row === void 0 ? void 0 : row.department) || '').trim();
+        const label = employeeId || String((row === null || row === void 0 ? void 0 : row.employeeId) || '').trim() || '(trống)';
+        if (!employeeId) {
+            failed.push({ employeeId: label, reason: 'Mã nhân viên không đúng dạng ASP + 4 số.' });
+            continue;
+        }
+        if (!fullName || fullName.toUpperCase() === employeeId) {
+            failed.push({ employeeId, reason: 'Thiếu họ tên.' });
+            continue;
+        }
+        if (seen.has(employeeId)) {
+            skipped.push({ employeeId, reason: 'Trùng trong file.' });
+            continue;
+        }
+        seen.add(employeeId);
+        try {
+            const dupEmp = await admin
+                .firestore()
+                .collection('users')
+                .where('employeeId', '==', employeeId)
+                .limit(1)
+                .get();
+            if (!dupEmp.empty) {
+                skipped.push({ employeeId, reason: 'Đã có tài khoản.' });
+                continue;
+            }
+            const email = buildInternalAspAuthEmail(employeeId);
+            try {
+                await admin.auth().getUserByEmail(email);
+                skipped.push({ employeeId, reason: 'Đã có tài khoản đăng nhập.' });
+                continue;
+            }
+            catch (e) {
+                if ((e === null || e === void 0 ? void 0 : e.code) !== 'auth/user-not-found') {
+                    throw e;
+                }
+            }
+            // Mật khẩu ngẫu nhiên, chỉ trả về cho admin một lần trong kết quả import.
+            const password = (0, authz_1.randomSixDigitPassword)();
+            const userRecord = await admin.auth().createUser({
+                email,
+                password,
+                displayName: fullName
+            });
+            const uid = userRecord.uid;
+            await admin.firestore().collection('users').doc(uid).set({
+                uid,
+                email,
+                employeeId,
+                displayName: fullName,
+                department,
+                factory: '',
+                role: 'User',
+                createdAt: new Date(),
+                lastLoginAt: new Date(),
+                updatedAt: new Date()
+            });
+            await admin.firestore().collection('user-permissions').doc(uid).set({
+                uid,
+                email,
+                displayName: fullName,
+                hasDeletePermission: false,
+                hasCompletePermission: false,
+                hasReadOnlyPermission: true,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            await admin.firestore().collection('user-tab-permissions').doc(uid).set({
+                uid,
+                email,
+                displayName: fullName,
+                tabPermissions: { dashboard: true },
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            created.push({ employeeId, fullName, password });
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            failed.push({ employeeId, reason: msg || 'Không tạo được tài khoản.' });
+        }
+    }
+    await (0, authz_1.sendNewPasswordsToAdminZalo)(`Import ${created.length} tài khoản mới`, created);
+    return { created, skipped, failed };
+}
+/**
+ * Đăng ký công khai (trang login) — không kiểm tra admin, nên KHÔNG được xóa/ghi đè tài khoản đã có.
  */
 async function publicRegisterAspUserWithEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw) {
-    return createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw);
+    return createAspUserAndSendEmail(employeeIdRaw, departmentRaw, emailRaw, fullNameRaw, false);
 }
 //# sourceMappingURL=admin-register-user.js.map

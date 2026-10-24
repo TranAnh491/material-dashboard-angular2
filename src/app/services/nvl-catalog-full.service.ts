@@ -10,6 +10,10 @@ export interface NvlCatalogItem {
   unit: string;
   /** Trọng lượng đơn vị (gram) nếu có trong danh mục NVL. */
   unitWeight?: number;
+  /** GW 1 bag nguyên (gram) — nhập ở Inbound / Danh mục NVL; dùng kiểm GW bag CL khi tách tem lẻ. */
+  gwBag?: number;
+  /** Lượng trong 1 thùng — nhập ở Inbound (cột Lượng trong thùng) / Danh mục; dùng tính số tem thùng. */
+  cartonQty?: number;
   standardPacking: number;
   standardPackingLocked: boolean;
   /** Cho phép quét Tem Thùng (tem thùng riêng, không phải QR thường) để xuất kho ở Outbound ASM1/ASM2. */
@@ -306,6 +310,8 @@ export class NvlCatalogFullService {
       materialName: String(d['materialName'] || ''),
       unit: String(d['unit'] || ''),
       unitWeight: Number(d['unitWeight'] ?? d['unit_weight']) || 0,
+      gwBag: Number(d['gwBag']) || 0,
+      cartonQty: Number(d['cartonQty']) || 0,
       standardPacking: Number(d['standardPacking']) || 0,
       standardPackingLocked: d['standardPackingLocked'] === true,
       allowExportByCarton: d['allowExportByCarton'] === true,
@@ -494,7 +500,7 @@ export class NvlCatalogFullService {
 
   async update(
     materialCode: string,
-    changes: { materialName?: string; unit?: string; unitWeight?: number; standardPacking?: number },
+    changes: { materialName?: string; unit?: string; unitWeight?: number; gwBag?: number; cartonQty?: number; standardPacking?: number },
     editedBy?: string
   ): Promise<void> {
     const code = this.normalizeCode(materialCode);
@@ -514,6 +520,16 @@ export class NvlCatalogFullService {
       payload['unitWeight'] = unitWeight;
       patch.unitWeight = unitWeight;
     }
+    if (changes.gwBag !== undefined) {
+      const gw = Math.max(0, Number(changes.gwBag) || 0);
+      payload['gwBag'] = gw;
+      patch.gwBag = gw;
+    }
+    if (changes.cartonQty !== undefined) {
+      const cq = Math.max(0, Math.round((Number(changes.cartonQty) || 0) * 10000) / 10000);
+      payload['cartonQty'] = cq;
+      patch.cartonQty = cq;
+    }
     if (changes.standardPacking !== undefined) {
       const sp = Math.max(0, Number(changes.standardPacking) || 0);
       payload['standardPacking'] = sp;
@@ -526,6 +542,16 @@ export class NvlCatalogFullService {
     await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
     await this.markRemoteChanged();
     this.patchCache(code, patch);
+  }
+
+  /** GW bag nguyên (gram) — ghi được cả khi mã đang Lock (Lock chỉ khóa Standard / tên / ĐVT). */
+  async setGwBag(materialCode: string, gwBag: number, editedBy?: string): Promise<void> {
+    await this.update(materialCode, { gwBag }, editedBy);
+  }
+
+  /** Lượng trong thùng — ghi được cả khi mã đang Lock. */
+  async setCartonQty(materialCode: string, cartonQty: number, editedBy?: string): Promise<void> {
+    await this.update(materialCode, { cartonQty }, editedBy);
   }
 
   async setLocked(materialCode: string, locked: boolean, editedBy?: string): Promise<void> {

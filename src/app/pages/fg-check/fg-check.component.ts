@@ -203,6 +203,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     private location: Location
   ) {}
 
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
+
   ngOnInit(): void {
     this.updateTableColspan();
     this.searchInput$
@@ -295,7 +298,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           // Cập nhật local item
           item.shipment = newShipment;
           successCount++;
-          console.log(`✅ Updated item ${item.checkId}: ${oldShipment} -> ${newShipment}`);
         })
         .catch(error => {
           errorCount++;
@@ -477,12 +479,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         this.shipmentDataMap.clear();
         this.ingestShipmentOrderDocs([...recentSnap.docs, ...nullDateSnap.docs]);
         
-        console.log('✅ Loaded shipment data for', this.shipmentDataMap.size, 'shipments');
         
         this.shipmentDataLoaded = true;
         
         if (this.itemsLoaded) {
-          console.log('🔄 Recalculating check results after shipment data update...');
           this.enrichItemsFactory();
           this.calculateCheckResults();
         }
@@ -526,14 +526,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Force reload shipment data and recalculate
   forceReloadShipmentData(): void {
-    console.log('🔄 Force reloading shipment data...');
     this.shipmentDataLoaded = false;
     this.loadShipmentData();
   }
 
   // Force save shipmentQuantity/shipmentCarton to Firebase for all items (không so sánh đúng/sai)
   forceSaveCheckResults(): void {
-    console.log('💾 Force saving shipmentQuantity/shipmentCarton for all items...');
     let savedCount = 0;
     let errorCount = 0;
     
@@ -545,7 +543,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           updatedAt: new Date()
         }).then(() => {
           savedCount++;
-          console.log(`✅ Saved for ${item.checkId}`);
         }).catch(error => {
           errorCount++;
           console.error(`❌ Error saving ${item.checkId}:`, error);
@@ -556,15 +553,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     Promise.all(savePromises).then(() => {
       alert(`✅ Force Save hoàn tất!\n\n- Đã lưu: ${savedCount} items\n- Lỗi: ${errorCount} items`);
-      console.log(`✅ Force save complete: ${savedCount} saved, ${errorCount} errors`);
     });
   }
 
   // Debug shipment data - hiển thị thông tin chi tiết
   debugShipmentData(): void {
-    console.log('🐛 === DEBUG SHIPMENT DATA ===');
-    console.log('📊 shipmentDataMap size:', this.shipmentDataMap.size);
-    console.log('📊 All shipment codes:', Array.from(this.shipmentDataMap.keys()));
     
     let debugMessage = '🐛 DEBUG SHIPMENT DATA\n\n';
     debugMessage += `📊 Tổng số shipments: ${this.shipmentDataMap.size}\n\n`;
@@ -587,7 +580,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
     
     alert(debugMessage);
-    console.log('🐛 Debug complete');
   }
 
   // Tính shipmentQuantity/shipmentCarton trong bộ nhớ (không ghi Firebase để tránh chậm)
@@ -774,12 +766,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
     if (candidates.length === 0) {
       console.warn(`⚠️ No mapping found for customerCode: "${customerCode}" (normalized: "${normalizedCustomerCode}")`);
-      console.log('📋 Available mappings:', Array.from(this.customerMappings.keys()));
       return '';
     }
 
     if (candidates.length === 1) {
-      console.log(`✅ Found mapping: ${normalizedCustomerCode} -> ${candidates[0]}`);
       return candidates[0];
     }
 
@@ -791,9 +781,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const matched = candidates.find(mc => shipmentMaterialCodes.has(mc.trim().toUpperCase()));
 
     if (matched) {
-      console.log(
-        `✅ Mã KH "${normalizedCustomerCode}" có ${candidates.length} Mã TP trong danh mục (${candidates.join(', ')}) — chọn "${matched}" vì khớp shipment "${shipmentCode}"`
-      );
       return matched;
     }
 
@@ -805,7 +792,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Reload mapping and update material codes for existing items
   reloadMappingAndUpdate(): void {
-    console.log('🔄 Reloading mapping and updating material codes...');
     
     // Reload mapping first
     this.loadCustomerMappings();
@@ -824,7 +810,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           // Update if material code is empty or different
           if (newMaterialCode) {
             if (newMaterialCode !== item.materialCode) {
-              console.log(`🔄 Updating item ${item.checkId}: customerCode="${normalizedCustomerCode}", materialCode: "${item.materialCode || '(empty)'}" -> "${newMaterialCode}"`);
               updatedCount++;
               
               // Update in Firebase
@@ -837,7 +822,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
                 // Update local item
                 item.materialCode = newMaterialCode;
                 item.customerCode = normalizedCustomerCode;
-                console.log(`✅ Updated item ${item.checkId}`);
               })
               .catch(error => {
                 console.error(`❌ Error updating item ${item.checkId}:`, error);
@@ -871,8 +855,13 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   // Apply search filters: dòng đã lock luôn ẩn (muốn thấy thì dùng UNHIDE shipment)
+  /** Chưa tìm kiếm và chưa chọn shipment để check → không tự hiện lô hàng nào. */
+  private get hasActiveQuery(): boolean {
+    return !!String(this.searchTerm || '').trim() || !!String(this.filterByShipment || '').trim();
+  }
+
   applyFilters(): void {
-    this.filteredItems = this.items.filter(item => {
+    this.filteredItems = !this.hasActiveQuery ? [] : this.items.filter(item => {
       const itemShipment = String(item.shipment || '').trim().toUpperCase();
       // Ẩn dòng đã Lock; chỉ hiện nếu Shipment đã được UNHIDE
       if (item.isLocked) {
@@ -1322,11 +1311,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.scannedShipment = String(this.scannedShipment).trim().toUpperCase();
     this.currentPalletNo = String(this.currentPalletNo).trim().toUpperCase();
     
-    console.log('✅ Confirm check info:', {
-      id: this.scannedCheckId,
-      shipment: this.scannedShipment,
-      pallet: this.currentPalletNo
-    });
     
     // Đóng popup
     this.showCheckDialog = false;
@@ -1371,9 +1355,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Select check mode
   selectModeAndContinue(mode: 'pn' | 'pn-qty'): void {
-    console.log('🔵 selectModeAndContinue called with mode:', mode);
-    console.log('🔵 Current checkStep:', this.checkStep);
-    console.log('🔵 Current showCheckDialog:', this.showCheckDialog);
     
     try {
       // Update values immediately
@@ -1381,9 +1362,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.scannedShipment = '0001'; // Default test shipment
       this.checkStep = 1;
       
-      console.log('✅ After update - checkStep:', this.checkStep);
-      console.log('✅ After update - checkMode:', this.checkMode);
-      console.log('✅ After update - scannedShipment:', this.scannedShipment);
       
       // Recalculate check results when mode changes
       this.calculateCheckResults();
@@ -1391,18 +1369,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Force change detection
       this.cdr.detectChanges();
       
-      console.log('✅ Change detection called');
       
       // Focus input after view updates
       setTimeout(() => {
         const input = document.querySelector('.check-shipment-input') as HTMLInputElement;
-        console.log('🔍 Looking for input:', input);
         if (input) {
-          console.log('✅ Input found, focusing...');
           input.focus();
           input.select();
         } else {
-          console.log('❌ Input not found');
         }
       }, 100);
     } catch (error) {
@@ -1414,7 +1388,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const shipmentCode = String(this.scannedShipment || '').trim().toUpperCase();
     if (!shipmentCode) return;
     
-    console.log('🔵 onShipmentEntered called, shipmentCode:', shipmentCode);
     
     // KHÔNG load dữ liệu gì ra nữa - chỉ chuyển sang step scan Pallet
     this.checkStep = 2; // Chuyển sang step scan Pallet
@@ -1431,7 +1404,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Chỉ cho phép chọn Check P/N + QTY (không cho chọn Check P/N)
   selectModeAndContinueNew(mode: 'pn-qty'): void {
-    console.log('🔵 selectModeAndContinueNew called with mode:', mode);
     this.checkMode = mode;
     this.checkStep = 1; // Chuyển sang step nhập shipment
     this.cdr.detectChanges();
@@ -1454,7 +1426,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return;
     }
     
-    console.log('🔵 Pallet scanned:', palletNo);
     
     // Chuyển sang step scan mã hàng + số lượng
     this.checkStep = 3;
@@ -1490,16 +1461,17 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   onMaterialScannedForCarton(): void {
     const customerCode = String(this.currentScanInput.trim()).toUpperCase();
     if (!customerCode) {
-      alert('⚠️ Vui lòng nhập mã hàng!');
+      this.scanAlert('⚠️ Vui lòng nhập mã hàng!');
       return;
     }
     const materialCode = this.getMaterialCodeFromCustomerCode(customerCode);
     if (!materialCode) {
-      alert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}". Vui lòng kiểm tra mapping!`);
+      this.scanAlert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}". Vui lòng kiểm tra mapping!`);
       this.currentScanInput = '';
       return;
     }
     this.scannedItems.push({ materialCode, quantity: 1, customerCode } as any); // quantity 1 = 1 lần scan = 1 thùng
+    this.scanOk(materialCode, customerCode, 1);
     this.saveSingleScannedItem(customerCode, materialCode, 0); // Check Thùng: mỗi lần scan = 1 thùng (quantity không dùng)
     this.currentScanInput = '';
     this.cdr.detectChanges();
@@ -1516,7 +1488,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   // Từ mã hàng sẽ tự động tìm ra mã TP
   onMaterialAndQtyScanned(): void {
     if (!this.currentScanInput.trim()) {
-      alert('⚠️ Vui lòng nhập mã hàng!');
+      this.scanAlert('⚠️ Vui lòng nhập mã hàng!');
       return;
     }
     
@@ -1528,12 +1500,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const quantity = cleanQtyValue ? parseInt(cleanQtyValue, 10) : 0;
     
     if (!customerCode) {
-      alert('⚠️ Vui lòng nhập mã hàng!');
+      this.scanAlert('⚠️ Vui lòng nhập mã hàng!');
       return;
     }
     
     if (quantity <= 0) {
-      alert('⚠️ Số lượng phải lớn hơn 0!');
+      this.scanAlert('⚠️ Số lượng phải lớn hơn 0!');
       return;
     }
     
@@ -1541,7 +1513,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const materialCode = this.getMaterialCodeFromCustomerCode(customerCode);
     
     if (!materialCode) {
-      alert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}".\n\nVui lòng kiểm tra lại mapping trong danh mục!`);
+      this.scanAlert(`⚠️ Không tìm thấy Mã TP cho mã hàng "${customerCode}".\n\nVui lòng kiểm tra lại mapping trong danh mục!`);
       // Reset input để scan lại
       this.currentScanInput = '';
       this.currentQtyInput = '';
@@ -1561,9 +1533,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       quantity: quantity,
       customerCode: customerCode // Thêm customerCode để hiển thị
     } as any);
+    this.scanOk(materialCode, customerCode, quantity);
     
-    console.log(`✅ Đã scan: Mã hàng=${customerCode} -> Mã TP=${materialCode}, Số lượng=${quantity}`);
-    console.log(`📋 Tổng số items đã scan: ${this.scannedItems.length}`);
     
     // Tự động lưu ngay vào Firebase và cập nhật bảng
     this.saveSingleScannedItem(customerCode, materialCode, quantity);
@@ -1588,10 +1559,18 @@ export class FGCheckComponent implements OnInit, OnDestroy {
    * Tem nội bộ Axone: P030089_C|120|20261013M007|C
    * ô 1 = mã TP, ô 2 = số pcs.
    */
+  /** Mã TP trong tem nội bộ: P/T/M/L + 6 số, có thể kèm _suffix. Bỏ phần đứng trước. */
+  private extractAxoneMaterialCode(field: string): string {
+    const text = String(field || '').trim().toUpperCase();
+    const matches = text.match(/[PTML]\d{6}(?:_[A-Z0-9]+)?/g);
+    if (matches && matches.length) return matches[matches.length - 1];
+    return text;
+  }
+
   private parseAxoneInternalQr(raw: string): { materialCode: string; qty: number } | null {
     const parts = String(raw || '').trim().split('|').map((p) => p.trim()).filter(Boolean);
     if (parts.length < 2) return null;
-    const materialCode = parts[0].toUpperCase();
+    const materialCode = this.extractAxoneMaterialCode(parts[0]);
     if (!/^\d+$/.test(parts[1])) return null;
     const qty = parseInt(parts[1], 10);
     if (!materialCode || !Number.isFinite(qty) || qty <= 0) return null;
@@ -1602,60 +1581,38 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   private isAxoneInternalRescan(raw: string): boolean {
     const parts = String(raw || '').trim().split('|').map((p) => p.trim()).filter(Boolean);
     if (parts.length < 3 || !/^\d+$/.test(parts[1])) return false;
-    return /^[PTML]\d{6}/i.test(parts[0]);
+    return /[PTML]\d{6}/i.test(parts[0]);
   }
 
-  private readAxoneQtyToken(token: string): number {
-    const t = String(token || '').trim().toUpperCase().replace(/PCS$/, '');
-    if (!/^\d+$/.test(t)) return 0;
-    const n = parseInt(t, 10);
-    return n > 0 ? n : 0;
-  }
-
-  /** Tem khách: lấy mã KH (khớp danh mục) và lượng (ô số hoặc token số). */
-  private parseAxoneCustomerQr(raw: string): { customerCode: string; qty: number } | null {
+  /**
+   * Tem khách Check Lượng Axone: chỉ lấy mã KH (bỏ phần trong ngoặc) để dò mã TP.
+   * T01134 (H100X75) và T01134 (120X75) đều là mã KH T01134. Tem này không có lượng.
+   */
+  private parseAxoneCustomerCode(raw: string): string {
     const text = String(raw || '').trim().toUpperCase();
-    if (!text) return null;
-    const parts = text.split('|').map((p) => p.trim()).filter(Boolean);
-    const tokens = parts.length ? parts : text.split(/[\s,;]+/).filter(Boolean);
-
-    let qty = 0;
-    if (parts.length >= 2) qty = this.readAxoneQtyToken(parts[1]);
-    if (!qty) {
-      for (const t of tokens) {
-        const n = this.readAxoneQtyToken(t);
-        if (n > 0) {
-          qty = n;
-          break;
-        }
-      }
+    if (!text) return '';
+    const lead = (text.match(/^([A-Z0-9][A-Z0-9._-]*)/)?.[1] || '').trim();
+    if (!lead) return '';
+    for (const key of Array.from(this.customerMappings.keys())) {
+      if (key === lead || key.startsWith(lead + ' ') || key.startsWith(lead + '(')) return lead;
     }
-
-    let customerCode = '';
-    for (const t of tokens) {
-      if (this.customerMappings.has(t)) {
-        customerCode = t;
-        break;
-      }
-    }
-    if (!customerCode) {
-      let best = '';
-      this.customerMappings.forEach((_codes, key) => {
-        if (key.length >= 3 && text.includes(key) && key.length > best.length) best = key;
-      });
-      customerCode = best;
-    }
-    if (!customerCode) {
-      customerCode = tokens.find((t) => this.readAxoneQtyToken(t) <= 0) || '';
-    }
-    if (!customerCode || qty <= 0) return null;
-    return { customerCode, qty };
+    return lead;
   }
 
+  /** Mã KH khớp mã TP khi danh mục có key đúng mã KH, hoặc key bắt đầu bằng mã KH rồi tới kích thước. */
   private customerCodeMatchesMaterial(customerCode: string, materialCode: string): boolean {
-    const candidates = this.customerMappings.get(String(customerCode || '').trim().toUpperCase()) || [];
+    const code = String(customerCode || '').trim().toUpperCase();
     const target = String(materialCode || '').trim().toUpperCase();
-    return candidates.some((c) => String(c || '').trim().toUpperCase() === target);
+    if (!code || !target) return false;
+    const materials: string[] = [];
+    this.customerMappings.forEach((list, key) => {
+      if (key !== code && !key.startsWith(code + ' ') && !key.startsWith(code + '(')) return;
+      for (const m of list) {
+        const mc = String(m || '').trim().toUpperCase();
+        if (mc && !materials.includes(mc)) materials.push(mc);
+      }
+    });
+    return materials.some((c) => c === target || this.extractAxoneMaterialCode(c) === target);
   }
 
   private focusAxoneInput(): void {
@@ -1669,9 +1626,118 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Mỗi thùng: scan tem nội bộ → scan tem khách → đối chiếu mã TP/mã KH và lượng.
-   * Khớp thì ghi 1 thùng, rồi quay lại scan tem nội bộ của thùng mới.
+   * Check Lượng Axone, mỗi thùng:
+   * tem nội bộ = mã TP + lượng; tem khách = mã KH để dò mã TP.
+   * Khớp mã thì ghi lượng của tem nội bộ, rồi quét thùng mới.
    */
+  // ===== Bảng scan máy tính (giống Outbound): báo màu + âm thanh, nhận diện mã, tiến độ shipment =====
+  scanFlash: { kind: 'ok' | 'err'; text: string } | null = null;
+  scanIdentity: { code: string; customer: string; qty: number; pallet: string; tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray' }> } | null = null;
+  private scanAudioCtx: AudioContext | null = null;
+
+  private get isDesktopScan(): boolean {
+    return typeof window !== 'undefined' && window.innerWidth >= 900;
+  }
+
+  /** Lỗi khi scan: máy tính báo đỏ + 2 tiếng bíp (không chặn); điện thoại vẫn hộp thoại như cũ. */
+  private scanAlert(msg: string): void {
+    this.playScanBeep(false);
+    if (this.isDesktopScan) {
+      this.scanFlash = { kind: 'err', text: String(msg || '').replace(/^⚠️\s*/, '') };
+      this.cdr.detectChanges();
+    } else {
+      alert(msg);
+    }
+  }
+
+  private scanOk(materialCode: string, customerCode: string, qty: number): void {
+    this.playScanBeep(true);
+    const code = String(materialCode || '').trim().toUpperCase();
+    const row = this.fgScanProgress.find((r) => r.code === code);
+    const tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray' }> = [];
+    if (this.currentShipmentItems.length && !row) tags.push({ text: 'KHÔNG CÓ TRONG SHIPMENT', tone: 'red' });
+    if (row && row.remain < 0) tags.push({ text: `Vượt shipment ${Math.abs(row.remain)}`, tone: 'red' });
+    else if (row && row.remain === 0) tags.push({ text: 'Đủ shipment', tone: 'blue' });
+    this.scanIdentity = { code, customer: String(customerCode || ''), qty: Number(qty) || 0, pallet: String(this.currentPalletNo || ''), tags };
+    this.scanFlash = { kind: tags.some((t) => t.tone === 'red') ? 'err' : 'ok', text: `✔ ${code} · ${customerCode} · ${qty}` };
+  }
+
+  /** Đúng: 1 tiếng bíp cao. Sai: 2 tiếng bíp trầm. */
+  private playScanBeep(ok: boolean): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      this.scanAudioCtx ||= new Ctx();
+      const ctx = this.scanAudioCtx!;
+      const tone = (start: number, freq: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = 'square';
+        gain.gain.value = 0.08;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur);
+      };
+      if (ok) tone(0, 1400, 0.12);
+      else { tone(0, 420, 0.18); tone(0.26, 420, 0.18); }
+    } catch { /* trình duyệt chặn âm thanh */ }
+  }
+
+  /** Tiến độ theo shipment: lượng xuất trên shipment vs lượng đã check (mọi pallet của shipment). */
+  get fgScanProgress(): Array<{ code: string; need: number; checked: number; carton: number; remain: number }> {
+    const ship = String(this.scannedShipment || '').trim().toUpperCase();
+    const checked = new Map<string, { qty: number; carton: number }>();
+    for (const it of this.items) {
+      if (String(it.shipment || '').trim().toUpperCase() !== ship) continue;
+      const c = String(it.materialCode || '').trim().toUpperCase();
+      const cur = checked.get(c) || { qty: 0, carton: 0 };
+      cur.qty += Number(it.quantity) || 0;
+      cur.carton += Number((it as any).carton) || 0;
+      checked.set(c, cur);
+    }
+    const isCarton = this.checkMode === 'pn';
+    return this.currentShipmentItems.map((s) => {
+      const c = String(s.materialCode || '').trim().toUpperCase();
+      const done = checked.get(c) || { qty: 0, carton: 0 };
+      const need = isCarton ? (Number(s.carton) || 0) : (Number(s.quantity) || 0);
+      const got = isCarton ? done.carton : done.qty;
+      return { code: c, need, checked: got, carton: done.carton, remain: need - got };
+    }).sort((a, b) => Number(a.remain <= 0) - Number(b.remain <= 0) || a.code.localeCompare(b.code));
+  }
+
+  get fgScanPercent(): number {
+    const rows = this.fgScanProgress;
+    const need = rows.reduce((n, r) => n + r.need, 0);
+    if (!(need > 0)) return 0;
+    const done = rows.reduce((n, r) => n + Math.min(r.need, Math.max(0, r.checked)), 0);
+    return Math.min(100, Math.round((done / need) * 1000) / 10);
+  }
+
+  get scannedItemsNewestFirst(): any[] {
+    return [...this.scannedItems].reverse();
+  }
+
+  /** Tải Excel log check của shipment đang scan (mọi pallet). */
+  async downloadFgShipmentLog(): Promise<void> {
+    const ship = String(this.scannedShipment || '').trim().toUpperCase();
+    if (!ship) return;
+    const rows = this.items
+      .filter((it) => String(it.shipment || '').trim().toUpperCase() === ship)
+      .map((it: any, i) => ({
+        'STT': i + 1, 'Shipment': ship, 'Pallet': it.palletNo || '', 'Mã TP': it.materialCode || '',
+        'Mã KH': it.customerCode || '', 'Số lượng': it.quantity || 0, 'Thùng': it.carton || 0,
+        'Khóa': it.isLocked ? 'Có' : '', 'Người check': it.checkedBy || it.employeeId || '',
+        'Thời gian': (it.updatedAt?.toDate ? it.updatedAt.toDate() : it.updatedAt instanceof Date ? it.updatedAt : '')?.toLocaleString?.('vi-VN', { hour12: false }) || ''
+      }));
+    const progress = this.fgScanProgress.map((r) => ({ 'Mã TP': r.code, 'Cần (shipment)': r.need, 'Đã check': r.checked, 'Còn': r.remain }));
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(progress.length ? progress : [{ 'Mã TP': '' }]), 'Tiến độ');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Shipment': ship }]), 'Log check');
+    XLSX.writeFile(wb, `FG_Check_${ship.replace(/[\\/:*?"<>|]+/g, '_')}.xlsx`);
+  }
+
   onAxoneScan(): void {
     const raw = String(this.currentScanInput || '').trim();
     if (!raw) return;
@@ -1682,7 +1748,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       if (!parsed) {
         this.axoneStatusOk = false;
         this.axoneStatus = 'Tem nội bộ không đúng. Cần dạng MãTP|SốPcs|... (vd P030089_C|120|...).';
-        alert(this.axoneStatus);
+        this.scanAlert(this.axoneStatus);
         this.focusAxoneInput();
         return;
       }
@@ -1696,7 +1762,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
 
     const internal = this.axoneInternal;
-    const customer = this.parseAxoneCustomerQr(raw);
+    const customerCode = this.parseAxoneCustomerCode(raw);
     this.currentScanInput = '';
     if (!internal) {
       this.axonePhase = 'internal';
@@ -1705,25 +1771,17 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.focusAxoneInput();
       return;
     }
-    if (!customer) {
+    if (!customerCode) {
       this.axoneStatusOk = false;
-      this.axoneStatus = 'Không đọc được mã KH và lượng trên tem khách. Quét lại tem khách.';
-      alert(this.axoneStatus);
+      this.axoneStatus = 'Không đọc được mã KH trên tem khách. Quét lại tem khách.';
+      this.scanAlert(this.axoneStatus);
       this.focusAxoneInput();
       return;
     }
-    if (customer.qty !== internal.qty) {
+    if (!this.customerCodeMatchesMaterial(customerCode, internal.materialCode)) {
       this.axoneStatusOk = false;
-      this.axoneStatus = `Lượng không khớp: tem khách ${customer.qty} pcs, tem nội bộ ${internal.qty} pcs. Quét lại tem khách.`;
-      alert(this.axoneStatus);
-      this.cdr.detectChanges();
-      this.focusAxoneInput();
-      return;
-    }
-    if (!this.customerCodeMatchesMaterial(customer.customerCode, internal.materialCode)) {
-      this.axoneStatusOk = false;
-      this.axoneStatus = `Mã không khớp: tem khách "${customer.customerCode}" không map tới mã TP ${internal.materialCode}. Quét lại tem khách.`;
-      alert(this.axoneStatus);
+      this.axoneStatus = `Mã không khớp: tem khách "${customerCode}" không map tới mã TP ${internal.materialCode}. Quét lại tem khách.`;
+      this.scanAlert(this.axoneStatus);
       this.cdr.detectChanges();
       this.focusAxoneInput();
       return;
@@ -1732,13 +1790,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.scannedItems.push({
       materialCode: internal.materialCode,
       quantity: internal.qty,
-      customerCode: customer.customerCode
+      customerCode
     });
-    this.saveSingleScannedItem(customer.customerCode, internal.materialCode, internal.qty);
+    this.scanOk(internal.materialCode, customerCode, internal.qty);
+    this.saveSingleScannedItem(customerCode, internal.materialCode, internal.qty);
     this.axoneInternal = null;
     this.axonePhase = 'internal';
     this.axoneStatusOk = true;
-    this.axoneStatus = `OK: ${internal.materialCode} · ${internal.qty} pcs · mã KH ${customer.customerCode}. Scan thùng mới — quét tem nội bộ.`;
+    this.axoneStatus = `OK: ${internal.materialCode} · ${internal.qty} pcs (tem nội bộ) · mã KH ${customerCode}. Scan thùng mới — quét tem nội bộ.`;
     this.cdr.detectChanges();
     this.focusAxoneInput();
   }
@@ -1772,9 +1831,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const newQuantity = isCartonMode ? (existingItem.quantity || 0) : (existingItem.quantity || 0) + quantity;
       const newCarton = (existingItem.carton || 0) + 1; // Cả hai mode: 1 lần scan = 1 thùng
       if (isCartonMode) {
-        console.log(`✅ Check Thùng - Mỗi scan = 1 thùng: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Thùng: ${existingItem.carton || 0} + 1 = ${newCarton}`);
       } else {
-        console.log(`✅ Cộng dồn: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper}, Số lượng: ${existingItem.quantity} + ${quantity} = ${newQuantity}, Thùng: +1 = ${newCarton}`);
       }
       const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id!];
       const mainId = idsToUpdate[0];
@@ -1839,7 +1896,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         .then((docRef) => {
           newItem.id = docRef.id;
           this.items.push(newItem);
-          console.log(`✅ Tạo mới: Mã hàng=${customerCodeUpper} -> Mã TP=${materialCodeUpper} = ${quantity}, factory=${newItem.factory}`);
           
           // Recalculate và cập nhật bảng
           this.calculateCheckResults();
@@ -1880,7 +1936,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
     });
     
-    console.log('📊 Dữ liệu đã nhóm theo mã TP:', Array.from(groupedByMaterial.entries()));
     
     // Lưu từng materialCode vào Firebase (cộng dồn nếu đã có)
     let savedCount = 0;
@@ -1937,7 +1992,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
             newItem.id = docRef.id;
             this.items.push(newItem);
             savedCount++;
-            console.log(`✅ Tạo mới: ${materialCode} = ${totalQuantity}, factory=${itemFactory}`);
           })
           .catch(error => {
             errorCount++;
@@ -1981,7 +2035,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   // Load danh sách materialCode của shipment để hiển thị và tự động tạo items trong bảng
   loadShipmentItems(shipmentCode: string): void {
     const normalizedShipmentCode = String(shipmentCode).trim().toUpperCase();
-    console.log('📦 Loading shipment items for:', normalizedShipmentCode);
     
     // Lấy từ shipmentDataMap đã load
     const shipmentDataList = this.shipmentDataMap.get(normalizedShipmentCode) || [];
@@ -2021,9 +2074,7 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const materialCode = String(item.materialCode || '').trim();
       const isNew = !existingMaterialCodes.has(materialCode);
       if (isNew) {
-        console.log(`➕ Adding new materialCode: ${materialCode}`);
       } else {
-        console.log(`⏭️ Skipping existing materialCode: ${materialCode}`);
       }
       return isNew;
     });
@@ -2038,9 +2089,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return materialA.localeCompare(materialB);
     });
     
-    console.log(`✅ Updated shipment items list: ${this.currentShipmentItems.length} total items (${newItemsToAdd.length} new items added)`);
-    console.log(`📋 Current items:`, 
-      this.currentShipmentItems.map(item => `materialCode=${item.materialCode}, quantity=${item.quantity}`));
     
     // Tự động tạo items trong bảng FG Check từ shipment data (chỉ tạo items mới)
     this.createItemsFromShipment(normalizedShipmentCode, shipmentDataList);
@@ -2048,7 +2096,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
 
   // Tự động tạo items trong bảng FG Check từ shipment data
   createItemsFromShipment(shipmentCode: string, shipmentDataList: ShipmentData[]): void {
-    console.log('📝 Creating FG Check items from shipment data...');
     
     shipmentDataList.forEach((shipmentData, index) => {
       // QUAN TRỌNG: Kiểm tra xem item đã tồn tại chưa (dựa vào shipment + materialCode + poShip)
@@ -2067,7 +2114,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
       
       if (existingItem) {
-        console.log(`⏭️ Item already exists for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, poShip ${shipmentData.poShip} - SKIP creating duplicate`);
         // Cập nhật shipmentCarton và shipmentQuantity nếu chưa có
         if (!existingItem.shipmentCarton || !existingItem.shipmentQuantity) {
           existingItem.shipmentCarton = shipmentData.carton;
@@ -2122,7 +2168,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Lưu vào Firebase
       this.firestore.collection('fg-check').add(newItem)
         .then((docRef) => {
-          console.log(`✅ Created item for shipment ${shipmentCode}, materialCode ${shipmentData.materialCode}, factory ${dataFactory}, poShip ${shipmentData.poShip}`);
           newItem.id = docRef.id;
           this.items.push(newItem);
           this.calculateCheckResults();
@@ -2189,8 +2234,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       } else {
         // Không có dấu +, đây là mã hàng (PN)
         // Chuyển sang chế độ đợi scan số lượng
-        console.log('✅ Đã scan mã hàng:', scanValue);
-        console.log('✅ Chuyển sang bước 2: Scan số lượng');
         this.waitingForQty = true;
         
         // Focus vào ô số lượng
@@ -2199,7 +2242,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
           if (qtyInput) {
             qtyInput.focus();
             qtyInput.select();
-            console.log('✅ Đã focus vào ô số lượng');
           }
         }, 100);
       }
@@ -2210,7 +2252,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     if (!this.currentQtyInput.trim()) return;
     
     const qtyValue = this.currentQtyInput.trim();
-    console.log('🔵 onQuantityScanned - qtyValue:', qtyValue);
     
     // Check if we have customer code from previous scan
     if (this.currentScanInput.trim()) {
@@ -2219,7 +2260,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       // Parse quantity: loại bỏ các ký tự không phải số
       const cleanQtyValue = qtyValue.replace(/[^\d]/g, '');
       const quantity = cleanQtyValue ? parseInt(cleanQtyValue, 10) : 0;
-      console.log('✅ Đã scan xong: Mã hàng:', customerCode, 'Số lượng:', quantity);
       
       if (quantity <= 0) {
         alert('❌ Số lượng không hợp lệ!');
@@ -2233,14 +2273,12 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.currentScanInput = '';
       this.currentQtyInput = '';
       this.waitingForQty = false;
-      console.log('✅ Reset về bước 1: Scan mã hàng');
       
       setTimeout(() => {
         const scanInput = document.querySelector('.scan-customer-input') as HTMLInputElement;
         if (scanInput) {
           scanInput.focus();
           scanInput.select();
-          console.log('✅ Đã focus vào ô mã hàng');
         }
       }, 100);
     } else {
@@ -2298,13 +2336,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const normalizedMaterialCode = String(materialCode || '').trim();
     const normalizedShipmentCode = String(shipmentCode || '').trim().toUpperCase();
     
-    console.log(`🔍 Checking if materialCode "${normalizedMaterialCode}" exists in shipment "${normalizedShipmentCode}"`);
-    console.log(`🔍 shipmentDataMap total size: ${this.shipmentDataMap.size}`);
-    console.log(`🔍 All shipment codes in map:`, Array.from(this.shipmentDataMap.keys()));
     
     // QUAN TRỌNG: Kiểm tra shipmentDataMap TRƯỚC vì đây là nguồn dữ liệu chính xác nhất
     const shipmentDataList = this.shipmentDataMap.get(normalizedShipmentCode) || [];
-    console.log(`🔍 shipmentDataMap for "${normalizedShipmentCode}" has ${shipmentDataList.length} items:`, shipmentDataList.map(item => `${item.materialCode} (qty: ${item.quantity})`));
     
     if (shipmentDataList.length === 0) {
       console.error(`❌ NO DATA FOUND for shipment "${normalizedShipmentCode}" in shipmentDataMap!`);
@@ -2315,18 +2349,14 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const foundInShipmentData = shipmentDataList.find(item => {
       const itemMaterialCode = String(item.materialCode || '').trim();
       const match = itemMaterialCode === normalizedMaterialCode;
-      console.log(`  🔍 Comparing: "${itemMaterialCode}" === "${normalizedMaterialCode}" ? ${match}`);
       if (match) {
-        console.log(`✅ Found match: "${itemMaterialCode}" === "${normalizedMaterialCode}"`);
       }
       return match;
     });
     
     if (foundInShipmentData) {
-      console.log(`✅ MaterialCode ${normalizedMaterialCode} found in shipmentDataMap for shipment ${normalizedShipmentCode}`);
       // Nếu tìm thấy trong shipmentDataMap nhưng không có trong currentShipmentItems, cập nhật lại
       if (this.currentShipmentItems.length === 0) {
-        console.log(`⚠️ currentShipmentItems is empty, reloading...`);
         this.loadShipmentItems(normalizedShipmentCode);
       }
       return true;
@@ -2334,13 +2364,11 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     
     // Kiểm tra trong currentShipmentItems (backup check)
     if (this.currentShipmentItems.length > 0) {
-      console.log(`🔍 Checking currentShipmentItems:`, this.currentShipmentItems.map(item => item.materialCode));
       const found = this.currentShipmentItems.find(item => {
         const itemMaterialCode = String(item.materialCode || '').trim();
         return itemMaterialCode === normalizedMaterialCode;
       });
       if (found) {
-        console.log(`✅ MaterialCode ${normalizedMaterialCode} found in currentShipmentItems`);
         return true;
       }
     }
@@ -2359,11 +2387,9 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   saveCustomerCode(customerCode: string, quantity: number): void {
     // Normalize customerCode
     const normalizedCustomerCode = String(customerCode).trim().toUpperCase();
-    console.log('🔵 saveCustomerCode called - customerCode:', customerCode, 'normalized:', normalizedCustomerCode, 'quantity:', quantity, 'checkMode:', this.checkMode);
     
     // Bước 1: Tra cứu mã TP từ mapping (danh mục mã khách hàng → mã TP)
     const materialCode = this.getMaterialCodeFromCustomerCode(normalizedCustomerCode);
-    console.log('🔵 Bước 1 - Tra cứu mã TP từ mapping:', materialCode);
     
     if (!materialCode) {
       alert(`⚠️ Không tìm thấy Mã TP cho mã khách hàng "${normalizedCustomerCode}".\n\nVui lòng kiểm tra lại mapping trong danh mục!`);
@@ -2374,7 +2400,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     const normalizedShipmentCode = String(this.scannedShipment || '').trim().toUpperCase();
     
     // Bước 2: Kiểm tra mã TP có trong shipment hiện tại không (từ tab shipment)
-    console.log('🔵 Bước 2 - Kiểm tra mã TP có trong shipment không...');
     const isInShipment = this.isMaterialCodeInCurrentShipment(materialCode, normalizedShipmentCode);
     
     if (!isInShipment) {
@@ -2390,7 +2415,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       return;
     }
     
-    console.log('✅ Mã TP khớp với shipment - tiếp tục lưu dữ liệu...');
     
     // Tự động lấy quantity từ shipment nếu chưa có hoặc trong chế độ PN
     if (normalizedShipmentCode && this.currentShipmentItems.length > 0) {
@@ -2399,7 +2423,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         // Nếu là chế độ PN hoặc quantity = 1 (mặc định), dùng quantity từ shipment
         if (this.checkMode === 'pn' || quantity === 1) {
           quantity = shipmentItem.quantity;
-          console.log(`✅ Auto-filled quantity from shipment: ${quantity}`);
         }
       }
     }
@@ -2447,7 +2470,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       const uncheckedUnlockedItem = matchingItems.find(item => !item.isChecked && !item.isLocked);
       if (uncheckedUnlockedItem) {
         // Tất cả items đã đủ nhưng chưa checked - có thể do logic check chưa chạy
-        console.log(`ℹ️ All items for materialCode ${normalizedMaterialCode} are already enough, but not checked yet`);
         existingItem = uncheckedUnlockedItem; // Vẫn cập nhật item này
       } else {
         // Kiểm tra xem có item nào bị lock không
@@ -2467,7 +2489,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     }
     
     if (existingItem && existingItem.id) {
-      console.log('🔵 Found existing record:', existingItem);
       // Update existing record
       let updatedQuantity: number;
       let updatedCarton: number;
@@ -2476,12 +2497,10 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         // Chế độ PN + QTY: Cộng dồn số lượng, 1 lần scan = 1 thùng
         updatedQuantity = (existingItem.quantity || 0) + quantity;
         updatedCarton = (existingItem.carton || 0) + 1;
-        console.log(`📦 PN+QTY mode - Số lượng: ${existingItem.quantity} + ${quantity} = ${updatedQuantity}, Số thùng: +1 = ${updatedCarton}`);
       } else {
         // Chế độ PN: mỗi lần scan = 1 thùng, số lượng KHÔNG cập nhật (để 0)
         updatedQuantity = 0; // Không cập nhật số lượng, để trống
         updatedCarton = (existingItem.carton || 0) + 1; // Tăng số thùng
-        console.log(`📦 PN mode - Số thùng: ${existingItem.carton} + 1 = ${updatedCarton} / ${existingItem.shipmentCarton || '?'} (Shipment), Số lượng: để trống`);
       }
       
       // Xác định trạng thái scan
@@ -2500,7 +2519,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       };
       
-      console.log('🔵 Updating with data:', updateData);
       const idsToUpdate = (existingItem.docIds && existingItem.docIds.length) ? existingItem.docIds : [existingItem.id!];
       const mainId = idsToUpdate[0];
       const restIds = idsToUpdate.slice(1);
@@ -2508,7 +2526,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.firestore.collection('fg-check').doc(mainId).update(updateData)
         .then(deleteRest)
         .then(() => {
-          console.log('✅ Updated existing record:', normalizedCustomerCode, 'materialCode:', materialCode, 'quantity:', updatedQuantity);
           existingItem.quantity = updatedQuantity;
           existingItem.carton = updatedCarton;
           existingItem.shipment = normalizedShipmentCode;
@@ -2529,7 +2546,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         });
     } else {
       // Create new record - Tìm item chưa đủ từ danh sách matchingItems
-      console.log('🔵 Creating new record - checking for available item from matching items...');
       
       // Tìm item chưa đủ từ danh sách đã tìm ở trên
       const availableItem = matchingItems.find(item => {
@@ -2539,7 +2555,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       
       if (availableItem) {
         // Tìm thấy item chưa đủ - cập nhật item này
-        console.log('✅ Found available item to update:', availableItem.checkId);
         existingItem = availableItem;
         
         // Cập nhật item này (giống logic update ở trên)
@@ -2572,7 +2587,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         if (availableItem.id) {
           this.firestore.collection('fg-check').doc(availableItem.id).update(updateData)
             .then(() => {
-              console.log('✅ Updated available item:', normalizedCustomerCode, 'materialCode:', materialCode);
               availableItem.quantity = updatedQuantity;
               availableItem.carton = updatedCarton;
               availableItem.shipment = normalizedShipmentCode;
@@ -2605,7 +2619,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       });
       
       if (finalCheck && finalCheck.id) {
-        console.log('⚠️ Found existing item in final check - cộng dồn thay vì tạo mới');
         const isScanningCustomerCode = !finalCheck.customerCode || finalCheck.customerCode !== normalizedCustomerCode;
         const newQty = this.checkMode === 'pn-qty' ? ((finalCheck.quantity || 0) + quantity) : (finalCheck.quantity || 0);
         const newCarton = (finalCheck.carton || 0) + 1; // Cả hai mode: 1 lần scan = 1 thùng
@@ -2628,7 +2641,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       this.firestore.collection('fg-check').doc(mainId).update(updateData)
         .then(deleteRest)
         .then(() => {
-            console.log('✅ Updated existing item instead of creating duplicate');
             finalCheck.quantity = updateData.quantity;
             finalCheck.carton = updateData.carton;
             finalCheck.customerCode = normalizedCustomerCode;
@@ -2667,10 +2679,8 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       };
       
-      console.log('🔵 New item to save:', newItem);
       this.firestore.collection('fg-check').add(newItem)
         .then((docRef) => {
-          console.log('✅ Customer code saved:', normalizedCustomerCode, 'materialCode:', materialCode, `QTY: ${quantity}`, 'factory:', targetFactory, 'checkMode:', this.checkMode);
           newItem.id = docRef.id;
           this.items.push(newItem);
           this.calculateCheckResults();
@@ -2694,7 +2704,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         updatedAt: new Date()
       })
       .then(() => {
-        console.log('✅ Check status updated');
       })
       .catch(error => {
         console.error('❌ Error updating check status:', error);
@@ -2730,13 +2739,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
       updatedAt: new Date()
     };
 
-    console.log('🔄 Resetting item:', {
-      ids,
-      shipment: item.shipment,
-      materialCode: item.materialCode,
-      currentQuantity: item.quantity,
-      currentCustomerCode: item.customerCode
-    });
 
     Promise.all(ids.map(id => this.firestore.collection('fg-check').doc(id).update(updateData)))
       .then(() => {
@@ -2749,7 +2751,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         item.checkResult = undefined;
         item.updatedAt = new Date();
         
-        console.log('✅ Item reset successfully - all scanned data cleared to 0');
         
         // Recalculate check results và cập nhật bảng
         this.calculateCheckResults();
@@ -2758,7 +2759,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
         // Force change detection để cập nhật UI
         this.cdr.detectChanges();
         
-        console.log('✅ Item reset complete - ready to rescan');
       })
       .catch(error => {
         console.error('❌ Error resetting item:', error);
@@ -2898,7 +2898,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
     this.firestore.collection('fg-check').doc(item.id).update(updateData)
       .then(() => {
         item.updatedAt = new Date();
-        console.log('✅ Item updated successfully');
       })
       .catch(error => {
         console.error('❌ Error updating item:', error);
@@ -3022,7 +3021,6 @@ export class FGCheckComponent implements OnInit, OnDestroy {
   clearShipmentFilter(): void {
     this.filterByShipment = '';
     this.applyFilters();
-    console.log('✅ Cleared shipment filter - showing all items');
   }
 
   // Popup More

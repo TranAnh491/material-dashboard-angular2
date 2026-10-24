@@ -5086,3 +5086,101 @@ iframe {
   color: #6b7280;
   font-size: 0.9rem;
 }
+
+/* Nhãn "KIỂM 100%" cạnh mã hàng: mã nằm trong danh sách nghi ngờ từ SXXK (xuất bổ sung) */
+.sxxk-k100-badge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: 1px solid #A92F2F;
+  border-radius: 4px;
+  background: #FDEAEA;
+  color: #A92F2F;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: help;
+}
+
+// ============================================================
+// Toolbar gọn & đều (17/10/2026): mọi nút cùng cao, cùng viền, không nhảy khi hover.
+// Back / Về Menu đã có ở topbar nên bỏ bản trùng trong toolbar.
+// ============================================================
+.toolbar {
+  padding: 10px 20px 12px;
+
+  .toolbar__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+
+  .toolbar__actions,
+  .toolbar__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn,
+  .date-range__input,
+  .batch-lot-search,
+  .segmented {
+    height: 36px;
+    border-radius: 8px;
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+
+  .btn {
+    padding: 0 12px;
+    gap: 6px;
+    border: 1px solid #D6D6D2;
+    background: #fff;
+    color: #252823;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transform: none !important;
+
+    .material-icons { font-size: 18px; color: inherit; }
+    &:hover:not(:disabled) { background: #F4F4F2; }
+  }
+
+  .btn--primary {
+    background: #252823;
+    border-color: #252823;
+    color: #fff;
+    .material-icons { color: #fff; }
+    &:hover:not(:disabled) { background: #3a3d38; }
+  }
+
+  .segmented__btn { height: 100%; }
+  .date-range__input { min-width: 200px; }
+  .toolbar-tbhd-check-badge { margin-left: 2px; }
+}
+
+.gwbag-cell { min-width: 80px; input { width: 80px; text-align: right; } }
+
+.ldv-mismatch-del { margin-left: 6px; height: 30px; padding: 0 12px; border: 1px solid #E05252; border-radius: 6px; background: #fff;
+  color: #A92F2F; font-weight: 700; cursor: pointer; &:disabled { opacity: .5; cursor: default; } }
+
+.gwbag-cell--missing input { border: 1.5px solid #E05252 !important; background: #FDEAEA !important; }
+.gwbag-exempt { font-size: 11px; color: #747770; white-space: nowrap; }
+
+/* Scan nhập kho — dùng chung giao diện scan với Outbound (src/app/shared/scan-board.scss) */
+@import '../../shared/scan-board';
+.ib-scan-screen { position: fixed; inset: 0; z-index: 1050; background: #fff; overflow: auto; display: flex; flex-direction: column; }
+.ib-scan-screen .ob-scan-board { padding: 0 12px 16px; margin-top: 0; }
+.ib-scan-screen .ob-scan-card__body { max-height: calc(100vh - 360px); min-height: 240px; }
+.ib-scan-screen .ob-scan-flash--err { font-size: 15px; }
+.ib-scan-mode { display: inline-flex; gap: 6px; }
+
+.carton-qr-btn { display: inline-flex; align-items: center; gap: 2px; height: 26px; padding: 0 6px; border: 1px solid #C9C9C3;
+  border-radius: 4px; background: #fff; color: #252823; font-size: 12px; font-weight: 700; cursor: pointer;
+  .material-icons { font-size: 16px; } &:hover:not(:disabled) { background: #F4F4F2; } &:disabled { opacity: .45; cursor: default; } }

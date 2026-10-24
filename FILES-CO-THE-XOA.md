@@ -119,6 +119,18 @@ Toàn bộ được tạo cùng lúc ngày 13/04/2026, nói về các lần sử
 | `tslint.json` | TSLint đã ngừng hỗ trợ. `ng lint` thực tế không chạy được | ⚠️ Phải xóa kèm các khối `"lint"` trong `angular.json` |
 | `src/**/*.spec.ts` (10 file), `karma.conf.js`, `src/test.ts` | Unit test mặc định của template, không dùng | ⚠️ Phải xóa kèm khối `"test"` trong `angular.json`. Lợi rất ít, nên cứ để |
 
+## 9. Thư viện npm không được import (rà ngày 24/10/2026)
+
+Grep `import` / `require` / `import()` trong `src` và `angular.json`, không thấy dùng. Gỡ bằng `npm uninstall <tên>` làm `node_modules` nhẹ hơn và cài đặt nhanh hơn; bundle deploy không đổi (Angular chỉ đóng gói thứ được import).
+
+| Gói | An toàn |
+|---|---|
+| `mermaid`, `openai`, `googleapis`, `express`, `pdfjs-dist`, `lucide-angular`, `papaparse` (+ `@types/papaparse`), `jsqr`, `signature_pad`, `@tweenjs/tween.js` (+ `@types/tween.js`), `jvectormap-content`, `jvectormap-next`, `@fontsource/inter`, `@fontsource/open-sans`, `@angular/elements` | ✅ |
+| `eslint` | ⚠️ Công cụ dev, đang nằm nhầm trong `dependencies` |
+| `ajv`, `@types/xlsx`, `@types/qrcode`, `@angular/localize` | ⚠️ Có thể đang ghim phiên bản cho build, để nguyên |
+
+Ghi chú 24/10/2026: `layout-warehouse` (trừ util) và `layout-warehouse-asm3` **đã xóa** cùng các tab `inbound-fgs`, `outbound-fgs`, `kpi-reports`, `chart`.
+
 ---
 
 ## ❌ KHÔNG được xóa (dễ nhầm)

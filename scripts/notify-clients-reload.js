@@ -102,18 +102,34 @@ async function getCurrentReloadToken(accessToken) {
   }
 }
 
-async function setReloadToken(accessToken, nextToken) {
+/**
+ * Ghi chú chức năng mới của lần deploy này: file release-notes.txt ở thư mục gốc dự án
+ * (mỗi dòng 1 ý). Hiện trong popup "Đã có bản cập nhật mới". Gửi xong đổi tên thành
+ * release-notes.last.txt để lần deploy sau không hiện lại ghi chú cũ.
+ */
+const NOTES_PATH = path.join(__dirname, '..', 'release-notes.txt');
+
+function readReleaseNotes() {
+  try {
+    return fs.readFileSync(NOTES_PATH, 'utf8').replace(/^\uFEFF/, '').trim().slice(0, 3000);
+  } catch {
+    return '';
+  }
+}
+
+async function setReloadToken(accessToken, nextToken, notes) {
   const nowIso = new Date().toISOString();
   const body = JSON.stringify({
     fields: {
       reloadToken: { integerValue: String(nextToken) },
       requestedAt: { timestampValue: nowIso },
       requestedBy: { stringValue: 'AUTO_DEPLOY' },
-      message: { stringValue: 'Tự động sau khi deploy Hosting' }
+      message: { stringValue: 'Tự động sau khi deploy Hosting' },
+      releaseNotes: { stringValue: notes || '' }
     }
   });
 
-  const mask = ['reloadToken', 'requestedAt', 'requestedBy', 'message']
+  const mask = ['reloadToken', 'requestedAt', 'requestedBy', 'message', 'releaseNotes']
     .map(f => `updateMask.fieldPaths=${f}`)
     .join('&');
 
@@ -137,8 +153,15 @@ async function main() {
   const accessToken = await getAccessToken(refreshToken);
   const current = await getCurrentReloadToken(accessToken);
   const next = current + 1;
-  await setReloadToken(accessToken, next);
+  const notes = readReleaseNotes();
+  await setReloadToken(accessToken, next, notes);
   console.log(`✅ Đã gửi lệnh tải lại cho mọi trình duyệt đang mở (token #${next}).`);
+  if (notes) {
+    console.log(`📝 Kèm ghi chú chức năng mới (${notes.split(/\r?\n/).filter(Boolean).length} dòng).`);
+    try {
+      fs.renameSync(NOTES_PATH, path.join(__dirname, '..', 'release-notes.last.txt'));
+    } catch { /* giữ nguyên nếu không đổi tên được */ }
+  }
 }
 
 main().catch(err => {

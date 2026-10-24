@@ -38,7 +38,7 @@ exports.sendQcPriorityResolvedZalo = sendQcPriorityResolvedZalo;
 const admin = __importStar(require("firebase-admin"));
 const nodemailer = __importStar(require("nodemailer"));
 const params_config_1 = require("./params-config");
-const zalo_notify_util_1 = require("./zalo-notify.util");
+const ready_iqc_zalo_1 = require("./ready-iqc-zalo");
 function esc(s) {
     return String(s || '')
         .replace(/&/g, '&amp;')
@@ -109,32 +109,13 @@ async function sendQcPriorityResolvedEmail(p) {
     });
 }
 // ── Zalo: thông báo khi MÃ ƯU TIÊN được PASS ────────────────────────────────
-/** Doc cấu hình danh sách mã NV nhận Zalo (tab QC → More). Trống → dùng mặc định. */
-const QC_PRIORITY_ZALO_RECIPIENTS_DOC = 'qc-settings/priority-zalo-recipients';
-/** Mặc định: đầu mối Zalo cố định của app (giống outbound-dup-notify). */
-const QC_PRIORITY_ZALO_DEFAULT = ['ASP0106'];
 function isQcPassStatus(s) {
     const t = String(s || '').trim().toUpperCase();
     return t === 'PASS' || t === 'ĐẠT' || t.startsWith('PASS');
 }
-async function resolveQcPriorityZaloRecipients() {
-    var _a;
-    try {
-        const snap = await admin.firestore().doc(QC_PRIORITY_ZALO_RECIPIENTS_DOC).get();
-        const raw = snap.exists ? (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.memberIds : null;
-        const list = Array.isArray(raw)
-            ? raw.map((x) => String(x || '').trim().toUpperCase()).filter((x) => /^ASP\d{4}$/.test(x))
-            : [];
-        return list.length ? [...new Set(list)] : QC_PRIORITY_ZALO_DEFAULT;
-    }
-    catch (e) {
-        console.error('[qc-priority] đọc recipients Zalo lỗi, dùng mặc định:', e);
-        return QC_PRIORITY_ZALO_DEFAULT;
-    }
-}
 /**
  * Gửi Zalo khi mã ưu tiên (Chờ kiểm) được **PASS**. Best-effort — không throw.
- * Người nhận: doc `qc-settings/priority-zalo-recipients` (memberIds[]), mặc định ASP0106.
+ * Người nhận: nhóm Zalo PLN (zalo_group_config).
  * Yêu cầu function gọi khai báo secret ZALO_BOT_TOKEN.
  */
 async function sendQcPriorityResolvedZalo(p) {
@@ -151,8 +132,14 @@ async function sendQcPriorityResolvedZalo(p) {
         `Vị trí: ${p.location || '-'}\n` +
         `${p.oldStatus || 'CHỜ KIỂM'} → ${p.newStatus}\n` +
         `Người kiểm: ${p.checkedBy || '-'}`;
-    const recipients = await resolveQcPriorityZaloRecipients();
-    const sent = await Promise.all(recipients.map((m) => (0, zalo_notify_util_1.sendZaloToEmployee)(m, text).catch(() => false)));
-    console.log(`[qc-priority] Zalo PASS ${p.materialCode}: gửi ${sent.filter(Boolean).length}/${recipients.length} (${recipients.join(', ')})`);
+    try {
+        const db = admin.firestore();
+        const chatId = await (0, ready_iqc_zalo_1.resolvePlnChatId)(db);
+        await (0, ready_iqc_zalo_1.sendText)(params_config_1.zaloBotToken.value().trim(), chatId, text);
+        console.log(`[qc-priority] Zalo PASS ${p.materialCode}: đã báo nhóm PLN`);
+    }
+    catch (e) {
+        console.error(`[qc-priority] Zalo PASS ${p.materialCode}: gửi nhóm PLN lỗi:`, e);
+    }
 }
 //# sourceMappingURL=qc-priority-email.js.map

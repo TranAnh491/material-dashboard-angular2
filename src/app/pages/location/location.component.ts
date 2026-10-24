@@ -416,6 +416,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private locationByViTriMap: Record<string, WarehouseType> = {};
   private materialPrefixWarehouseMap: Record<string, WarehouseType> = {};
   private rulesSub?: Subscription;
+  /** Listener danh sách vị trí — hủy trước khi tạo lại (bấm Làm mới không chồng thêm listener đọc cả collection). */
+  private locationsSub?: Subscription;
 
   /**
    * Chuẩn hoá mã nguyên liệu:
@@ -684,6 +686,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return /^BOX-\d/.test(raw);
   }
 
+  /** Vị trí Locker (Locker, Locker1…) / Backup (BACKUP, BACKUP1…): không áp rule — mọi mã đều được cất. */
+  isLockerBackupExemptLocation(location: string): boolean {
+    const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+    return /^LOCKER(?:\+?\d+)?$/.test(raw) || /^BACKUP(?:-?\d+)?$/.test(raw);
+  }
+
   /** Mã pallet F1-xxxx / F2-xxxx — luôn cho phép, không áp rule kệ. */
   private isPalletCodeLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
@@ -716,6 +724,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (useAsm3 || raw.startsWith('ASM3')) return true;
     if (this.isIqcExemptLocation(raw)) return true;
     if (this.isBoxExemptLocation(raw)) return true;
+    if (this.isLockerBackupExemptLocation(raw)) return true;
     if (this.isPalletCodeLocation(raw)) return true;
     return false;
   }
@@ -730,6 +739,34 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
     if (resolved.locations.length === 0) return true;
     return this.locationMatchesForcedRule(targetLocation, resolved.locations, resolved.source);
+  }
+
+  /** Popup khi cất sai rule: nêu đúng rule đang chặn và vị trí được phép. */
+  private locationRuleViolationMessage(materialCode: string, targetLocation: string): string {
+    const code = String(materialCode || '').trim() || '(không rõ mã)';
+    const target = String(targetLocation || '').trim() || '(trống)';
+    const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
+    const allowed = resolved.locations.join(', ') || '(không có vị trí được phép)';
+
+    let ruleLine = 'Rule: không xác định';
+    if (resolved.source === 'catalog') {
+      ruleLine = 'Rule: Danh mục vị trí';
+    } else if (resolved.source === 'legacy') {
+      const matched = this.findMatchedRuleFromList(materialCode);
+      const ruleCode = matched?.materialCode || '';
+      const kind = ruleCode.length >= 7 ? 'mã đầy đủ' : 'đầu mã';
+      ruleLine = ruleCode
+        ? `Rule: Mã → Vị trí (cũ) — ${kind} ${ruleCode}`
+        : 'Rule: Mã → Vị trí (cũ)';
+    }
+
+    return (
+      `⚠️ Sai rule vị trí\n\n` +
+      `Mã hàng: ${code}\n` +
+      `Vị trí scan: ${target}\n\n` +
+      `${ruleLine}\n` +
+      `Chỉ được cất tại: ${allowed}`
+    );
   }
 
   /** Chuẩn hoá prefix vị trí trong rule cũ — giữ nguyên IQC+ (không qua formatViTriInput). */
@@ -969,6 +1006,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     locations: string[];
     source: 'catalog' | 'legacy' | '';
   } {
+    // Rule vị trí chỉ áp dụng ASM1 (layout kho J) — ASM2 không ép / không chặn vị trí (21/10/2026)
+    if (this.selectedFactory !== 'ASM1') return { warehouseType: '', locations: [], source: '' };
     const catalogLocs = this.catalogLocationsForMaterial(materialCode);
     if (catalogLocs.length) {
       return { warehouseType: '', locations: catalogLocs, source: 'catalog' };
@@ -1016,7 +1055,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Vị trí đích có nằm trong vị trí danh mục: cùng dãy (R02, S07-T3 → S07), cùng block (R05-2) hoặc trùng tên khu vực. */
   private locationMatchesCatalogLocations(target: string, allowed: string[]): boolean {
-    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target) || this.isLockerBackupExemptLocation(target)) return true;
     const t = this.normalizeCatalogLocation(target);
     if (!t) return false;
     for (const loc of allowed) {
@@ -1037,7 +1076,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
-    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target) || this.isLockerBackupExemptLocation(target)) return true;
     const targetRaw = String(target || '').replace(/\s/g, '').toUpperCase();
     const formatted = this.formatViTriInput(target || '');
     if (!allowed.length) return false;
@@ -1314,7 +1353,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isDestinationAllowed(location: string): boolean {
-    if (this.isIqcExemptLocation(location) || this.isBoxExemptLocation(location)) return true;
+    if (this.isIqcExemptLocation(location) || this.isBoxExemptLocation(location) || this.isLockerBackupExemptLocation(location)) return true;
     const formatted = this.formatViTriInput(location || '');
     if (!formatted) return false;
     if (!this.isTargetLocationForced) return true;
@@ -1347,8 +1386,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   skipBulkNewPallet = false;
   /** Tick ASM3: ghép ASM3+ + vị trí scan; mọi vị trí ASM3 đều hợp lệ (không check rule). */
   bulkUseAsm3 = false;
-
-  private readonly LOCATION_RULE_ERROR = '⚠️ Sai rule vị trí';
 
   /** OTP thêm vị trí mới — mã gửi Zalo tới ASP0106 */
   showLocationAddOtpModal = false;
@@ -1602,7 +1639,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private async loadLocationData() {
     this.isLoading = true;
     try {
-      this.firestore.collection('locations', ref => ref.orderBy('stt', 'asc'))
+      this.locationsSub?.unsubscribe();
+      this.locationsSub = this.firestore.collection('locations', ref => ref.orderBy('stt', 'asc'))
         .valueChanges({ idField: 'id' })
         .pipe(takeUntil(this.destroy$))
         .subscribe((items: any[]) => {
@@ -3243,7 +3281,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             useAsm3: this.storeMaterialUseAsm3
           })
         ) {
-          alert(this.LOCATION_RULE_ERROR);
+          alert(this.locationRuleViolationMessage(item.materialCode || '', targetFormatted));
           return;
         }
 
@@ -3952,7 +3990,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             useAsm3: this.bulkUseAsm3
           })
         ) {
-          alert(this.LOCATION_RULE_ERROR);
+          alert(this.locationRuleViolationMessage(bulkItem.materialCode || '', newLocationRaw));
           return;
         }
       }

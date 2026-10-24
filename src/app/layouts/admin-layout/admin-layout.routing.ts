@@ -1,9 +1,6 @@
 import { Routes } from '@angular/router';
 
 
-import { KpiReportsComponent } from '../../pages/kpi-reports/kpi-reports.component';
-import { InboundFgsComponent } from '../../pages/inbound-fgs/inbound-fgs.component';
-import { OutboundFgsComponent } from '../../pages/outbound-fgs/outbound-fgs.component';
 
 
 
@@ -39,7 +36,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'lich-lam-viec',        loadChildren: () => import('../../pages/work-schedule/work-schedule.module').then(m => m.WorkScheduleModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fgs-dashboard',          loadChildren: () => import('../../pages/fgs-dashboard/fgs-dashboard-page.module').then(m => m.FgsDashboardPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'materials',            loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
-  { path: 'quan-ly-nguyen-lieu',  loadChildren: () => import('../../pages/materials/materials.module').then(m => m.MaterialsModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
+  { path: 'quan-ly-nguyen-lieu',  loadChildren: () => import('../../pages/quan-ly-nguyen-lieu/quan-ly-nguyen-lieu.module').then(m => m.QuanLyNguyenLieuModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true } },
   { path: 'inventory-overview',   loadChildren: () => import('../../pages/inventory-overview/inventory-overview.module').then(m => m.InventoryOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'inbound',              loadChildren: () => import('../../pages/inbound/inbound.module').then(m => m.InboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'danh-muc-nvl-tp',      loadChildren: () => import('../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp-page.module').then(m => m.DanhMucNvlTpPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
@@ -62,7 +59,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'label',                loadChildren: () => import('../../pages/print-label/print-label.module').then(m => m.PrintLabelModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'index',                component: IndexComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'documents',            loadChildren: () => import('../../pages/documents/documents.module').then(m => m.DocumentsModule), canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'kpi-reports',          component: KpiReportsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'work-order-status',    loadChildren: () => import('../../pages/work-order-status/work-order-status.module').then(m => m.WorkOrderStatusModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'shipment',             loadChildren: () => import('../../pages/shipment/shipment.module').then(m => m.ShipmentModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
@@ -78,8 +74,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'zalo',                 component: ZaloComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   // Xe Tải: ai đăng nhập cũng dùng được (không quản lý tab permission)
   { path: 'xe-tai',               component: TruckScheduleComponent, canActivate: [AuthGuard] },
-  { path: 'inbound-fgs',          component: InboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
-  { path: 'outbound-fgs',         component: OutboundFgsComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'settings',             loadChildren: () => import('../../pages/settings/settings-page.module').then(m => m.SettingsPageModule), canActivate: [AuthGuard, SettingsGuard, TabPermissionGuard] },
   { path: 'nhiet-do',             loadChildren: () => import('../../pages/nhiet-do/nhiet-do-page.module').then(m => m.NhietDoPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'equipment-checklist',  component: EquipmentChecklistComponent, canActivate: [AuthGuard, TabPermissionGuard] }

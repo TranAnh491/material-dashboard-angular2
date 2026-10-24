@@ -19,7 +19,7 @@ import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router'
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subscription } from 'rxjs';
 import { KkCatalogService } from '../../services/kk-catalog.service';
-import { shelfGroupText } from '../materials/shelf-group-catalog';
+import { shelfGroupText, SHELF_SPLITS } from '../materials/shelf-group-catalog';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 export interface JwBlock {
   /** VD: R11 hoặc S01-1 (kho mát) */
@@ -2387,6 +2387,14 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     return this.drawMode === 'kho';
   }
 
+  /** Nhãn nhóm của 1 block kệ chia phần (VD S24-1 → H11) — hiện trên sơ đồ khi bật Lưu trữ. */
+  storageBlockGroup(blockCode: string): string {
+    if (!this.storageOverlay || !this.storagePlanReady) return '';
+    const shelf = String(blockCode || '').replace(/-\d+$/, '');
+    if (!SHELF_SPLITS[shelf]) return '';
+    return this.storageShelfById[blockCode] || '';
+  }
+
   storageTagLines(shelfId: string): string[] | null {
     const label = this.storageShelfById[shelfId];
     if (!label) return null;
@@ -4048,11 +4056,12 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       }
       if (seq !== this.storagePlanSeq || this.drawMode !== 'kho') return;
       const shelves = [
-        ...this.khoMatRows.map((row) => ({
-          shelf: row.id,
+        // Kệ chia phần (VD S24 → S24-1 / S24-2 / S24-3): mỗi phần 1 dòng nhóm riêng
+        ...this.khoMatRows.flatMap((row) => (SHELF_SPLITS[row.id] || [row.id]).map((shelf) => ({
+          shelf,
           family: 'S' as const,
-          groups: shelfGroupText(row.id, savedShelves).text
-        })),
+          groups: shelfGroupText(shelf, savedShelves).text
+        }))),
         ...Array.from({ length: 28 }, (_, index) => {
           const shelf = this.rackRowLabel(index + 1);
           const assigned = shelfGroupText(shelf, savedShelves);

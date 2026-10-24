@@ -2,6 +2,9 @@ import { Component, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { RmBagHistoryService } from '../../services/rm-bag-history.service';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { firstValueFrom } from 'rxjs';
+import { ReportDocumentsService, ReportDocument, REPORT_DOC_MAX_BYTES } from './report-documents.service';
 
 /** Một khối số liệu (Carton + số mã hàng) cho 1 chiều (Nhập hoặc Xuất) của 1 nguồn (FG hoặc RM). */
 export interface DaySection {
@@ -58,7 +61,9 @@ export class ReportComponent implements OnDestroy {
   constructor(
     private firestore: AngularFirestore,
     private rmBagHistory: RmBagHistoryService,
-    private router: Router
+    private router: Router,
+    private reportDocs: ReportDocumentsService,
+    private authService: FirebaseAuthService
   ) {
     const now = new Date();
     this.viewYear = now.getFullYear();
@@ -68,6 +73,111 @@ export class ReportComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {}
+
+  // ===== Lưu tài liệu: import file lên, máy nào cũng tải / in / xóa được =====
+  activeTab: 'stats' | 'docs' = 'stats';
+  docs: ReportDocument[] = [];
+  docsLoading = false;
+  docsLoaded = false;
+  docsError = '';
+  docsQuery = '';
+  docsUploading: Array<{ name: string; pct: number; error?: string }> = [];
+  docsBusyId = '';
+
+  setTab(tab: 'stats' | 'docs'): void {
+    this.activeTab = tab;
+    if (tab === 'docs' && !this.docsLoaded) void this.loadDocs();
+  }
+
+  async loadDocs(): Promise<void> {
+    this.docsLoading = true;
+    this.docsError = '';
+    try {
+      this.docs = await this.reportDocs.list();
+      this.docsLoaded = true;
+    } catch (e: any) {
+      this.docsError = 'Không tải được danh sách tài liệu: ' + (e?.message || e);
+    } finally {
+      this.docsLoading = false;
+    }
+  }
+
+  get docsFiltered(): ReportDocument[] {
+    const q = this.docsQuery.trim().toLowerCase();
+    return q ? this.docs.filter((d) => d.name.toLowerCase().includes(q) || d.uploadedBy.toLowerCase().includes(q)) : this.docs;
+  }
+
+  async onDocsPicked(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = '';
+    if (!files.length) return;
+    const user = await firstValueFrom(this.authService.currentUser).catch(() => null);
+    const by = String((user as any)?.employeeId || (user as any)?.email || '').trim().toUpperCase();
+    for (const f of files) {
+      const item: { name: string; pct: number; error?: string } = { name: f.name, pct: 0 };
+      this.docsUploading.push(item);
+      if (f.size > REPORT_DOC_MAX_BYTES) {
+        item.error = 'File quá 50MB';
+        continue;
+      }
+      try {
+        await this.reportDocs.upload(f, by, (p) => (item.pct = p));
+        this.docsUploading = this.docsUploading.filter((x) => x !== item);
+      } catch (e: any) {
+        item.error = 'Lỗi: ' + (e?.message || e);
+      }
+    }
+    await this.loadDocs();
+  }
+
+  clearUploadErrors(): void {
+    this.docsUploading = this.docsUploading.filter((x) => !x.error);
+  }
+
+  async downloadDoc(d: ReportDocument): Promise<void> {
+    this.docsBusyId = d.id;
+    try {
+      await this.reportDocs.download(d);
+    } catch (e: any) {
+      alert('❌ Không tải được file: ' + (e?.message || e));
+    } finally {
+      this.docsBusyId = '';
+    }
+  }
+
+  /** Mở file ở tab mới để xem / in (PDF, ảnh mở thẳng trong trình duyệt). */
+  openDoc(d: ReportDocument): void {
+    window.open(d.url, '_blank', 'noopener');
+  }
+
+  async deleteDoc(d: ReportDocument): Promise<void> {
+    if (!confirm(`Xóa tài liệu "${d.name}"?\nFile sẽ bị xóa khỏi hệ thống, mọi máy đều không tải được nữa.`)) return;
+    this.docsBusyId = d.id;
+    try {
+      await this.reportDocs.remove(d);
+      this.docs = this.docs.filter((x) => x.id !== d.id);
+    } catch (e: any) {
+      alert('❌ Không xóa được: ' + (e?.message || e));
+    } finally {
+      this.docsBusyId = '';
+    }
+  }
+
+  docSizeText(n: number): string {
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return n + ' B';
+  }
+
+  docIcon(d: ReportDocument): string {
+    const n = d.name.toLowerCase();
+    if (n.endsWith('.pdf')) return 'picture_as_pdf';
+    if (/\.(xlsx?|csv)$/.test(n)) return 'table_chart';
+    if (/\.(docx?|txt)$/.test(n)) return 'description';
+    if (/\.(png|jpe?g|gif|webp)$/.test(n)) return 'image';
+    return 'insert_drive_file';
+  }
 
   goToMenu(): void {
     this.router.navigate(['/menu']);

@@ -35,6 +35,9 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.clientReloadService.startListening();
+    this.clientReloadService.releaseNotes$.subscribe(notes => {
+      this.releaseNotes = notes;
+    });
     this.clientReloadService.showPrompt$.subscribe(available => {
       this.updateAvailable = available;
     });
@@ -51,6 +54,9 @@ export class AppComponent implements OnInit {
       this.needsCompanyEmailUpdate = !isExempt && !isCompanyEmail(email);
     });
   }
+
+  /** Chức năng mới của bản cập nhật (hiện trong popup tải lại) */
+  releaseNotes: string[] = [];
 
   reloadNow(): void {
     this.clientReloadService.reloadNow();

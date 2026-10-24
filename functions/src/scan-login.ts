@@ -1,5 +1,12 @@
 import * as admin from 'firebase-admin';
+import { isAdminAccount } from './authz';
 
+/**
+ * Đăng nhập bằng quét thẻ nhân viên: thẻ chỉ chứa mã ASP, không có mật khẩu,
+ * nên phiên này bị giới hạn:
+ * - Tài khoản admin không được đăng nhập bằng thẻ.
+ * - Token mang claim `scan: true`; Firestore rules không cho phiên quét thẻ làm việc quản trị.
+ */
 export async function signInFromScan(raw: string): Promise<{ token: string }> {
   const text = String(raw || '').trim().toUpperCase();
   const key = text.slice(0, 7);
@@ -19,6 +26,10 @@ export async function signInFromScan(raw: string): Promise<{ token: string }> {
     throw new Error('permission-denied');
   }
 
-  const token = await admin.auth().createCustomToken(uid);
+  if (await isAdminAccount(uid)) {
+    throw new Error('permission-denied');
+  }
+
+  const token = await admin.auth().createCustomToken(uid, { scan: true });
   return { token };
 }

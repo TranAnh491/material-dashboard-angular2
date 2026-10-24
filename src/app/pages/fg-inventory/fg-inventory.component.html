@@ -203,7 +203,7 @@
               </td>
             </tr>
 
-            <tr *ngFor="let material of pagedMaterials; let i = index">
+            <tr *ngFor="let material of pagedMaterials; let i = index; trackBy: trackById">
               <td>{{ pageStartIndex + i }}</td>
               <td>{{ material.factory || 'ASM1' }}</td>
               <td [class.batch-cell-duplicate]="isBatchDuplicate(material)">{{ material.batchNumber }}</td>
@@ -736,6 +736,10 @@
         <button class="more-menu-item" (click)="goToMenu(); showMoreMenu = false">
           <i class="material-icons">home</i>
           <span>Về Menu</span>
+        </button>
+        <button class="more-menu-item" (click)="openNvlOnlineReport(); showMoreMenu = false">
+          <i class="material-icons">precision_manufacturing</i>
+          <span>NVL ngoài line</span>
         </button>
         <button class="more-menu-item" (click)="goToTpStockList(); showMoreMenu = false">
           <i class="material-icons">inventory</i>
@@ -1295,6 +1299,75 @@
           <span>TOTAL (Tất cả)</span>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Report NVL còn ngoài line -->
+<div class="nlr-overlay" *ngIf="showNvlOnline" (click)="showNvlOnline = false">
+  <div class="nlr" (click)="$event.stopPropagation()" role="dialog" aria-label="NVL ngoài line">
+    <div class="nlr__head">
+      <h3>NVL còn ngoài line</h3>
+      <button type="button" class="nlr__close" (click)="showNvlOnline = false">✕</button>
+    </div>
+    <div class="nlr__bar">
+      <input id="nlr-query" type="search" [(ngModel)]="nvlOnlineQuery" (keyup.enter)="runNvlOnlineReport(true)"
+             placeholder="Nhập mã NVL (vd B001235) hoặc LSX (vd KZLSX1026/0307)…" autocomplete="off">
+      <label title="Chỉ áp dụng khi dò theo mã NVL: lấy các lần xuất trong khoảng này">Xuất trong
+        <select [(ngModel)]="nvlOnlineDays">
+          <option [ngValue]="30">30 ngày</option>
+          <option [ngValue]="60">60 ngày</option>
+          <option [ngValue]="90">90 ngày</option>
+          <option [ngValue]="180">180 ngày</option>
+        </select>
+      </label>
+      <button type="button" class="fgi-btn fgi-btn--outline" (click)="runNvlOnlineReport(true)" [disabled]="nvlOnlineBusy || !nvlOnlineQuery.trim()">
+        <i class="material-icons" [class.rotating]="nvlOnlineBusy">{{ nvlOnlineBusy ? 'sync' : 'search' }}</i>
+        {{ nvlOnlineBusy ? 'Đang dò…' : 'Dò' }}
+      </button>
+      <button type="button" class="fgi-btn fgi-btn--outline" (click)="downloadNvlOnlineReport()" [disabled]="!nvlOnline?.rows?.length">
+        <i class="material-icons">file_download</i> Excel
+      </button>
+      <span class="nlr__meta" *ngIf="nvlOnline">
+        {{ nvlOnline.mode === 'lsx' ? 'LSX' : 'Mã' }} {{ nvlOnline.query }} · {{ nvlOnline.lsxOpen }}/{{ nvlOnline.lsxTotal }} LSX chưa nhập đủ TP · {{ nvlOnline.rows.length }} mã NVL
+      </span>
+    </div>
+    <p class="nlr__note">Ngoài line = NVL đã xuất cho LSX × (1 − TP đã nhập ÷ SL sản phẩm), chỉ tính LSX chưa nhập đủ thành phẩm.</p>
+    <p class="nlr__err" *ngIf="nvlOnlineError">{{ nvlOnlineError }}</p>
+    <div class="nlr__table" *ngIf="nvlOnline">
+      <table>
+        <thead><tr><th>#</th><th>Mã NVL</th><th class="n">Ngoài line</th><th class="n">Đã xuất (LSX chưa xong)</th><th class="n">Số LSX</th></tr></thead>
+        <tbody>
+          <ng-container *ngFor="let r of nvlOnlineRows; let i = index">
+            <tr class="nlr__row" (click)="nvlOnlineOpen = nvlOnlineOpen === r.code ? null : r.code">
+              <td>{{ i + 1 }}</td>
+              <td><i class="material-icons nlr__caret">{{ nvlOnlineOpen === r.code ? 'expand_more' : 'chevron_right' }}</i><strong>{{ r.code }}</strong></td>
+              <td class="n"><strong>{{ r.onLine | number:'1.0-2' }}</strong></td>
+              <td class="n">{{ r.exported | number:'1.0-2' }}</td>
+              <td class="n">{{ r.lsx.length }}</td>
+            </tr>
+            <tr *ngIf="nvlOnlineOpen === r.code" class="nlr__detail">
+              <td colspan="5">
+                <table>
+                  <thead><tr><th>LSX</th><th>Mã TP</th><th class="n">SL sản phẩm</th><th class="n">TP đã nhập</th><th class="n">% TP</th><th class="n">NVL đã xuất</th><th class="n">Ngoài line</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let l of r.lsx">
+                      <td>{{ l.lsx }}</td>
+                      <td>{{ l.productCode || '—' }}</td>
+                      <td class="n">{{ l.woQty | number }}</td>
+                      <td class="n">{{ l.fgQty | number }}</td>
+                      <td class="n">{{ l.ratio * 100 | number:'1.0-1' }}%</td>
+                      <td class="n">{{ l.exported | number:'1.0-2' }}</td>
+                      <td class="n"><strong>{{ l.onLine | number:'1.0-2' }}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </ng-container>
+          <tr *ngIf="!nvlOnlineRows.length"><td colspan="5" class="nlr__empty">Không có NVL ngoài line (LSX đã nhập đủ thành phẩm hoặc chưa xuất NVL).</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>

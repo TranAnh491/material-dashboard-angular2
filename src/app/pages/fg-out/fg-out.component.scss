@@ -3156,3 +3156,108 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
   .excel-actions .search-box { flex: 1 1 100%; }
   .excel-actions .toolbar-spacer { display: none; }
 }
+/* Ô chữ thuần (bấm để sửa) — nhẹ như bảng SXXK: không input, không hiệu ứng trong bảng. */
+.excel-table .cell-text {
+  display: block;
+  min-height: 1.5em;
+  padding: 2px 4px;
+  cursor: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.excel-table .cell-text.cell-readonly { cursor: default; color: #555; }
+.excel-table .number-cell .cell-text { text-align: right; }
+.excel-table tbody td,
+.excel-table tbody tr { transition: none; }
+.excel-table tbody tr.detail-row:hover td { background: #eef4ff; }
+
+.fo-row-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 150px;
+  background: #fff;
+  border: 1px solid #c8c8c8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  padding: 4px 0;
+}
+.fo-row-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fo-row-menu button:hover { background: #eef4ff; }
+.drag-handle, .row-header { cursor: context-menu; }
+
+/* ===== Giao diện kiểu Excel: lưới kẻ đủ, cột đủ rộng để đọc, tối giản ===== */
+.excel-table {
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  width: 2196px !important;
+  min-width: 2196px !important;
+  font-size: 13px !important;
+  color: #000;
+}
+.excel-table th,
+.excel-table td {
+  min-width: 0 !important;
+  max-width: none !important;
+  border: 1px solid #d4d4d4 !important;
+  padding: 0 6px !important;
+  height: 28px;
+  background: #fff;
+  color: #000 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.excel-table thead th {
+  background: #f1f1f1 !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0 !important;
+  text-transform: none;
+  text-align: center;
+  padding: 4px 6px !important;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.excel-table thead tr.filter-row th { background: #fafafa !important; top: auto; position: static; }
+.excel-table tbody tr,
+.excel-table tbody tr:nth-child(even),
+.excel-table tbody tr:nth-child(odd) { background: #fff !important; }
+.excel-table tbody tr.detail-row.pallet-odd td { background: #fff !important; }
+.excel-table tbody tr.detail-row.pallet-even td { background: #f7f7f7 !important; }
+.excel-table tbody tr.detail-row:hover td { background: #eaf1fb !important; }
+.excel-table tbody tr.pallet-total-row td { background: #f1f1f1 !important; font-weight: 600; }
+.excel-table td .editable-input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  height: 26px;
+  padding: 0 !important;
+  font-size: 13px;
+  width: 100%;
+}
+.excel-table td .editable-input:focus { outline: 2px solid #1a73e8; outline-offset: -2px; background: #fff !important; }
+.excel-table .cell-text { padding: 0 !important; line-height: 28px; min-height: 28px; }
+.excel-table .carton-warning { background: transparent !important; border: 0 !important; color: #c00; padding: 0 !important; font-size: 12px; }
+.excel-table .row-header { text-align: center; background: #f1f1f1 !important; color: #444 !important; }
+.excel-table td.number-cell { text-align: right; }
+
+/* Dải tổng hợp gọn, phẳng */
+.fo-summary .fo-stat,
+.fo-summary .fo-chip {
+  background: #fff !important;
+  border: 1px solid #d4d4d4 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.fo-summary .fo-stat--bad, .fo-summary .fo-chip--bad { color: #c00 !important; }

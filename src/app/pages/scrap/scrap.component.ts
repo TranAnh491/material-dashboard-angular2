@@ -1,784 +1,481 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  OnDestroy,
-  OnInit,
-  ViewChild,
-  ElementRef,
-  AfterViewChecked
-} from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Location } from '@angular/common';
+import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import firebase from 'firebase/compat/app';
-import { Subject, Subscription } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 import * as QRCode from 'qrcode';
+import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import {
+  buildMaterialQrLabelDocument,
+  parseMaterialQrLabelFields
+} from '../../services/material-qr-label.util';
 
-export interface ScrapSession {
+/** Mỗi lần scan hàng vào box = 1 doc. */
+export interface ScrapItem {
   id?: string;
-  boxCode: string;
-  materials: string[];
-  createdAt: Date | firebase.firestore.Timestamp;
-  note?: string;
+  boxNo: string;
+  materialCode: string;
+  po: string;
+  /** DDMMYYYY như trên tem */
+  imd: string;
+  qty: number;
+  qrData: string;
+  scannedBy?: string;
+  scannedAt?: firebase.firestore.Timestamp | null;
 }
 
-/** Một dòng hiển thị sau khi gộp theo mã thùng (nhiều doc Firestore cùng thùng → 1 dòng). */
-export interface ScrapBoxGroup {
-  boxCode: string;
-  materials: string[];
-  docIds: string[];
-}
-
-/** Một dòng trong bảng NVL chung (Danh sách NVL). */
-export interface ScrapNvlFlatRow {
-  code: string;
-  bags: number;
-  /** Mã thùng — cột Vị trí */
-  boxCode: string;
-}
-
-type ScanStep = 'idle' | 'scan-box' | 'scan-materials';
-
-/** Dòng bảng đã tính sẵn — tránh gọi hàm lặp trong template. */
-export interface ScrapGroupedDisplayRow {
-  group: ScrapBoxGroup;
-  materialRows: { code: string; bags: number }[];
-  codeCount: number;
-  bagTotal: number;
-}
+type ScrapPanel = '' | 'print' | 'scan';
+type ScrapTab = 'detail' | 'box' | 'code';
 
 @Component({
   selector: 'app-scrap',
   templateUrl: './scrap.component.html',
-  styleUrls: ['./scrap.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styleUrls: ['./scrap.component.scss']
 })
-export class ScrapComponent implements OnInit, OnDestroy, AfterViewChecked {
+export class ScrapComponent implements OnInit, OnDestroy {
+  static readonly ITEMS_COL = 'scrap-items';
+  static readonly BOXES_COL = 'scrap-boxes';
+  /** scrap-code-box/{mã} = box đang chứa mã — 1 mã chỉ được nằm ở 1 box. */
+  static readonly CODE_BOX_COL = 'scrap-code-box';
+  static readonly PO_CHUNG = 'PO_Chung';
+  /** Bảng chi tiết cuộn liền — hiện dần theo lô để không nặng máy. */
+  readonly pageSize = 300;
+  readonly tabs: Array<{ key: ScrapTab; label: string; icon: string }> = [
+    { key: 'detail', label: 'Chi tiết scan', icon: 'list_alt' },
+    { key: 'box', label: 'Tổng hợp theo Box', icon: 'inventory_2' },
+    { key: 'code', label: 'Tổng hợp theo Mã', icon: 'qr_code' }
+  ];
+  activeTab: ScrapTab = 'detail';
+  boxFilter = '';
+  private detailLimit = 300;
 
-  /** Giống materials-asm1: orderBy + limit khi subscribe Firestore. */
-  private static readonly LIST_PAGE_SIZE = 1000;
-  /** Bổ sung khi tìm mã NVL (array-contains) — gộp với dữ liệu đã tải. */
-  private static readonly MATERIAL_SEARCH_LIMIT = 500;
+  @ViewChild('boxInput') boxInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild('scanInput') scanInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild('printCodeInput') printCodeInputRef?: ElementRef<HTMLInputElement>;
 
-  @ViewChild('boxInput') boxInputRef!: ElementRef<HTMLInputElement>;
-  @ViewChild('materialInput') materialInputRef!: ElementRef<HTMLInputElement>;
+  panel: ScrapPanel = '';
+  private employeeId = '';
 
-  sessions: ScrapSession[] = [];
-  searchTerm = '';
-  /** Đang tải danh sách từ Firestore (tab mở lần đầu). */
-  listLoading = false;
-  /** Đang lưu phiên quét (không dùng chung listLoading để bảng không “biến mất”). */
-  isSaving = false;
-  loadError: string | null = null;
-  savedMsg = '';
-
-  /** Cache sau khi gộp theo thùng — chỉ rebuild khi sessions đổi. */
-  allGrouped: ScrapBoxGroup[] = [];
-  filteredDisplayRows: ScrapGroupedDisplayRow[] = [];
-  nvlListFlatRows: ScrapNvlFlatRow[] = [];
-  nvlFilteredBoxCount = 0;
-  totalUniqueMaterialCodes = 0;
-
-  private readonly destroy$ = new Subject<void>();
-  private listSub?: Subscription;
-  private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  showPrintModal = false;
-  printBoxCount = 1;
+  // 1. In tem QR
+  printCode = '';
+  printQty: number | null = null;
+  printError = '';
   isPrinting = false;
-  nextPreviewCode = '';
-  printPreviewLabels: string[] = [];
-  private _nextStartSeq = 1;
 
-  scanStep: ScanStep = 'idle';
-  currentBoxCode = '';
-  currentMaterials: string[] = [];
-  materialInputVal = '';
+  // 2. Scan nhập kho
   boxInputVal = '';
+  currentBox = '';
+  isSavingBox = false;
+  scanInputVal = '';
+  scanError = '';
+  scanOk = '';
+  isScanning = false;
+  deletingId = '';
 
-  private needFocusBox = false;
-  private needFocusMaterial = false;
-
-  /** Toàn màn hình: danh sách NVL (bảng chung) */
-  showNvlListView = false;
-  nvlListSearch = '';
-  /** Khóa dòng đang xóa (box + mã) để khóa nút */
-  nvlRowDeletingKey: string | null = null;
+  // 4. Report
+  reportItems: ScrapItem[] = [];
+  reportLoading = false;
+  reportError = '';
+  reportSearch = '';
+  reportPage = 1;
+  private reportUnsub: (() => void) | null = null;
 
   constructor(
     private firestore: AngularFirestore,
-    private cdr: ChangeDetectorRef
+    private authService: FirebaseAuthService,
+    private location: Location,
+    private router: Router
   ) {}
 
-  /** true sau khi user đã bấm tải/tìm kiếm ít nhất 1 lần */
-  hasLoaded = false;
+  goBack(): void {
+    this.location.back();
+  }
+
+  goToMenu(): void {
+    this.router.navigate(['/menu']);
+  }
 
   ngOnInit(): void {
-    this.loadScrapAndSetupSearch();
+    firstValueFrom(this.authService.currentUser)
+      .then((user: any) => (this.employeeId = String(user?.employeeId || '').trim().toUpperCase()))
+      .catch(() => undefined);
+    this.startReport();
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    this.listSub?.unsubscribe();
-    this.listSub = undefined;
-    if (this.filterDebounceTimer) {
-      clearTimeout(this.filterDebounceTimer);
-      this.filterDebounceTimer = null;
-    }
+    this.stopReport();
   }
 
-  /** Giống materials-asm1: tải Firestore ngay khi mở tab + lọc client-side. */
-  private loadScrapAndSetupSearch(): void {
-    this.loadScrapFromFirebase();
+  private get db(): firebase.firestore.Firestore {
+    return this.firestore.firestore;
   }
 
-  ngAfterViewChecked(): void {
-    if (this.needFocusBox && this.boxInputRef) {
-      this.boxInputRef.nativeElement.focus();
-      this.needFocusBox = false;
-    }
-    if (this.needFocusMaterial && this.materialInputRef) {
-      this.materialInputRef.nativeElement.focus();
-      this.needFocusMaterial = false;
-    }
+  closePanel(): void {
+    this.panel = '';
+    this.currentBox = '';
+    this.scanError = '';
+    this.scanOk = '';
+    this.printError = '';
   }
 
-  onSearchTermChange(): void {
-    if (!this.hasLoaded) {
-      return;
-    }
-    if (this.filterDebounceTimer) {
-      clearTimeout(this.filterDebounceTimer);
-    }
-    this.filterDebounceTimer = setTimeout(() => {
-      this.rebuildFilteredDisplay();
-      this.rebuildNvlFlatRows();
-      this.cdr.markForCheck();
-    }, 120);
+  // ── 1. In tem QR ──────────────────────────────────────────────
+
+  openPrint(): void {
+    if (this.panel === 'print') { this.closePanel(); return; }
+    this.closePanel();
+    this.panel = 'print';
+    this.printCode = '';
+    this.printQty = null;
+    this.printError = '';
+    setTimeout(() => this.printCodeInputRef?.nativeElement.focus(), 50);
   }
 
-  /** Làm mới / Enter — tải lại list; nếu là mã NVL thì bổ sung thêm doc khớp array-contains. */
-  async loadData(): Promise<void> {
-    if (this.filterDebounceTimer) {
-      clearTimeout(this.filterDebounceTimer);
-      this.filterDebounceTimer = null;
-    }
-    const q = this.searchTerm.trim();
-    if (this.isMaterialCodeQuery(q)) {
-      await this.supplementSessionsByMaterialCode(q);
-      this.applySessionsToView();
-      return;
-    }
-    this.loadScrapFromFirebase();
-  }
-
-  /**
-   * Đọc scrap-data giống materials-asm1: snapshotChanges + orderBy + limit.
-   * Lọc theo ô tìm kiếm xử lý trên client (debounce).
-   */
-  private loadScrapFromFirebase(): void {
-    this.listSub?.unsubscribe();
-    this.loadError = null;
-    this.listLoading = true;
-    this.hasLoaded = true;
-    this.cdr.markForCheck();
-
-    this.listSub = this.firestore
-      .collection<ScrapSession>('scrap-data', ref =>
-        ref.orderBy('createdAt', 'desc').limit(ScrapComponent.LIST_PAGE_SIZE)
-      )
-      .get()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(
-        snapshot => {
-          this.sessions = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...(doc.data() as ScrapSession)
-          }));
-          this.applySessionsToView();
-        },
-        err => {
-          this.listLoading = false;
-          this.loadError =
-            'Không tải được dữ liệu. Kiểm tra mạng / quyền Firestore hoặc index cho createdAt. ' +
-            (err?.message || err);
-          this.cdr.markForCheck();
-        }
-      );
-  }
-
-  private isMaterialCodeQuery(raw: string): boolean {
-    const code7 = String(raw || '').trim().toUpperCase().slice(0, 7);
-    return /^[ABR]\d{4,6}$/i.test(code7) || /^[AB]\d{6}$/i.test(code7);
-  }
-
-  /** Gộp thêm doc chứa mã NVL (có thể nằm ngoài 1000 bản ghi mới nhất). */
-  private async supplementSessionsByMaterialCode(raw: string): Promise<void> {
-    const code7 = raw.trim().toUpperCase().slice(0, 7);
-    if (!code7) {
-      return;
-    }
-    this.listLoading = true;
-    this.cdr.markForCheck();
-    try {
-      const snap = await this.firestore
-        .collection<ScrapSession>('scrap-data', ref =>
-          ref.where('materials', 'array-contains', code7).limit(ScrapComponent.MATERIAL_SEARCH_LIMIT)
-        )
-        .get()
-        .toPromise();
-      const byId = new Map<string, ScrapSession>();
-      for (const s of this.sessions) {
-        if (s.id) {
-          byId.set(s.id, s);
-        }
-      }
-      for (const doc of snap?.docs || []) {
-        byId.set(doc.id, { id: doc.id, ...(doc.data() as ScrapSession) });
-      }
-      this.sessions = Array.from(byId.values());
-    } catch (err: any) {
-      this.loadError =
-        'Không tải bổ sung theo mã NVL. ' + (err?.message || err);
-    } finally {
-      this.listLoading = false;
-    }
-  }
-
-  private applySessionsToView(): void {
-    this.rebuildAllGrouped();
-    this.rebuildFilteredDisplay();
-    this.rebuildNvlFlatRows();
-    this.updateMaterialCodeStats();
-    this.listLoading = false;
-    this.cdr.markForCheck();
-  }
-
-  private updateMaterialCodeStats(): void {
-    const codes = new Set<string>();
-    for (const g of this.allGrouped) {
-      for (const m of g.materials || []) {
-        const c = String(m || '').slice(0, 7).trim();
-        if (c) {
-          codes.add(c);
-        }
-      }
-    }
-    this.totalUniqueMaterialCodes = codes.size;
-  }
-
-  private rebuildAllGrouped(): void {
-    this.allGrouped = this.groupByBoxCode(this.sessions);
-  }
-
-  private rebuildFilteredDisplay(): void {
-    const q = this.searchTerm.trim().toLowerCase();
-    const groups = !q
-      ? this.allGrouped
-      : this.allGrouped.filter(
-          g =>
-            g.boxCode.toLowerCase().includes(q) ||
-            g.materials.some(m => (m || '').toLowerCase().includes(q))
-        );
-
-    this.filteredDisplayRows = groups.map(g => {
-      const materialRows = q ? this.getMaterialsWithBagsForSearch(g) : [];
-      const codeCount = q ? materialRows.length : this.getMaterialsWithBags(g.materials).length;
-      const bagTotal = q
-        ? materialRows.reduce((s, x) => s + x.bags, 0)
-        : g.materials.length;
-      return { group: g, materialRows, codeCount, bagTotal };
-    });
-  }
-
-  private rebuildNvlFlatRows(): void {
-    const q = this.nvlListSearch.trim().toLowerCase();
-    const base = !q
-      ? this.allGrouped
-      : this.allGrouped.filter(
-          g =>
-            g.boxCode.toLowerCase().includes(q) ||
-            g.materials.some(m => (m || '').toLowerCase().includes(q))
-        );
-
-    const rows: ScrapNvlFlatRow[] = [];
-    for (const g of base) {
-      for (const x of this.getMaterialsWithBags(g.materials)) {
-        rows.push({ code: x.code, bags: x.bags, boxCode: g.boxCode });
-      }
-    }
-    rows.sort(
-      (a, b) =>
-        a.code.localeCompare(b.code, 'vi', { sensitivity: 'base', numeric: true }) ||
-        a.boxCode.localeCompare(b.boxCode, 'vi', { numeric: true })
-    );
-    this.nvlListFlatRows = rows;
-    this.nvlFilteredBoxCount = base.length;
-  }
-
-  onNvlListSearchChange(): void {
-    if (!this.hasLoaded) {
-      return;
-    }
-    if (this.filterDebounceTimer) {
-      clearTimeout(this.filterDebounceTimer);
-    }
-    this.filterDebounceTimer = setTimeout(() => {
-      this.rebuildNvlFlatRows();
-      this.cdr.markForCheck();
-    }, 120);
-  }
-
-  trackGroupedRow(_index: number, row: ScrapGroupedDisplayRow): string {
-    return row.group.boxCode;
-  }
-
-  trackNvlRow(_index: number, row: ScrapNvlFlatRow): string {
-    return this.nvlFlatRowKey(row);
-  }
-
-  startScan(): void {
-    this.scanStep = 'scan-box';
-    this.currentBoxCode = '';
-    this.currentMaterials = [];
-    this.materialInputVal = '';
-    this.boxInputVal = '';
-    this.needFocusBox = true;
-    this.cdr.markForCheck();
-  }
-
-  cancelScan(): void {
-    this.scanStep = 'idle';
-    this.currentBoxCode = '';
-    this.currentMaterials = [];
-    this.materialInputVal = '';
-    this.boxInputVal = '';
-    this.cdr.markForCheck();
-  }
-
-  onBoxKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      this.confirmBoxCode();
-    }
-  }
-
-  confirmBoxCode(): void {
-    const code = this.boxInputVal.trim();
-    if (!code) return;
-    this.currentBoxCode = code;
-    this.scanStep = 'scan-materials';
-    this.materialInputVal = '';
-    this.needFocusMaterial = true;
-  }
-
-  onMaterialKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      this.addMaterial();
-    }
-  }
-
-  private static readonly MAX_BAGS_PER_CODE = 3;
-
-  addMaterial(): void {
-    const raw = this.materialInputVal.trim();
-    if (!raw) return;
-    const code = raw.slice(0, 7);
-
-    // Kiểm tra giới hạn 3 bịch / mã
-    const currentCount = this.currentMaterials.filter(m => m === code).length;
-    if (currentCount >= ScrapComponent.MAX_BAGS_PER_CODE) {
-      alert(`⚠️ Mã "${code}" đã có ${currentCount} bịch (tối đa ${ScrapComponent.MAX_BAGS_PER_CODE}). Bỏ qua!`);
-      this.materialInputVal = '';
-      this.needFocusMaterial = true;
-      return;
-    }
-
-    this.currentMaterials.push(code);
-    this.materialInputVal = '';
-    this.needFocusMaterial = true;
-  }
-
-  undoLastMaterial(): void {
-    this.currentMaterials.pop();
-  }
-
-  async saveSession(): Promise<void> {
-    if (!this.currentBoxCode) return;
-    this.isSaving = true;
-    const box = this.currentBoxCode.trim();
-    const materials7 = this.currentMaterials.map(m => (m || '').slice(0, 7));
-    try {
-      const snap = await this.firestore
-        .collection<ScrapSession>('scrap-data', ref => ref.where('boxCode', '==', box))
-        .get()
-        .toPromise();
-      const docs = (snap?.docs || []).slice().sort(
-        (a, b) => this.docCreatedMs(a.data()) - this.docCreatedMs(b.data())
-      );
-      if (docs.length === 0) {
-        await this.firestore.collection('scrap-data').add({
-          boxCode: box,
-          materials: materials7,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp() as any
-        });
-      } else {
-        const merged: string[] = [];
-        for (const d of docs) {
-          merged.push(...((d.data().materials || []) as string[]));
-        }
-        merged.push(...materials7);
-        await docs[0].ref.update({
-          materials: merged,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp() as any
-        });
-        for (let i = 1; i < docs.length; i++) {
-          await docs[i].ref.delete();
-        }
-      }
-      this.savedMsg = 'Đã lưu!';
-      setTimeout(() => {
-        this.savedMsg = '';
-        this.cdr.markForCheck();
-      }, 2500);
-      this.cancelScan();
-      if (this.hasLoaded) {
-        void this.loadData();
-      }
-    } catch (e) {
-      alert('Lỗi khi lưu: ' + e);
-    } finally {
-      this.isSaving = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  private docCreatedMs(data: ScrapSession): number {
-    const ca = data?.createdAt as any;
-    if (!ca) return 0;
-    if (typeof ca.toMillis === 'function') return ca.toMillis();
-    if (ca instanceof Date) return ca.getTime();
-    return 0;
-  }
-
-  /** Gộp các bản ghi cùng mã thùng (giữ thứ tự xuất hiện trong stream). */
-  groupByBoxCode(sessions: ScrapSession[]): ScrapBoxGroup[] {
-    const map = new Map<string, ScrapBoxGroup>();
-    const order: string[] = [];
-    for (const s of sessions) {
-      const key = (s.boxCode || '').trim();
-      if (!key) continue;
-      let g = map.get(key);
-      if (!g) {
-        g = { boxCode: key, materials: [], docIds: [] };
-        map.set(key, g);
-        order.push(key);
-      }
-      g.materials.push(...(s.materials || []));
-      if (s.id && !g.docIds.includes(s.id)) {
-        g.docIds.push(s.id);
-      }
-    }
-    return order.map(k => map.get(k)!);
-  }
-
-  get searchTrim(): string {
-    return this.searchTerm.trim();
-  }
-
-  readonly listPageSize = ScrapComponent.LIST_PAGE_SIZE;
-
-  get isListLikelyTruncated(): boolean {
-    return this.sessions.length >= ScrapComponent.LIST_PAGE_SIZE;
-  }
-
-  openNvlListView(): void {
-    this.showNvlListView = true;
-    this.nvlListSearch = '';
-    if (!this.hasLoaded) {
-      void this.loadData();
-    } else {
-      this.rebuildNvlFlatRows();
-      this.cdr.markForCheck();
-    }
-  }
-
-  closeNvlListView(): void {
-    this.showNvlListView = false;
-    this.nvlListSearch = '';
-  }
-
-  nvlFlatRowKey(row: ScrapNvlFlatRow): string {
-    return `${row.boxCode}\u0001${row.code}`;
-  }
-
-  /**
-   * Xóa đúng số Bag của mã NVL trong thùng (duyệt doc theo thời gian tạo, bỏ khớp trước).
-   */
-  async deleteNvlFlatRow(row: ScrapNvlFlatRow): Promise<void> {
-    if (this.nvlRowDeletingKey) {
-      return;
-    }
-    if (!confirm(`Xóa ${row.bags} Bag mã ${row.code} khỏi thùng ${row.boxCode}?`)) {
-      return;
-    }
-    const key = this.nvlFlatRowKey(row);
-    this.nvlRowDeletingKey = key;
-    try {
-      const snap = await this.firestore
-        .collection<ScrapSession>('scrap-data', ref => ref.where('boxCode', '==', row.boxCode.trim()))
-        .get()
-        .toPromise();
-      const docs = (snap?.docs || []).slice().sort(
-        (a, b) => this.docCreatedMs(a.data()) - this.docCreatedMs(b.data())
-      );
-      let toRemove = row.bags;
-      for (const d of docs) {
-        if (toRemove <= 0) {
-          break;
-        }
-        const mats = (d.data().materials || []) as string[];
-        const next: string[] = [];
-        for (const m of mats) {
-          const c = (m || '').slice(0, 7);
-          if (toRemove > 0 && c === row.code) {
-            toRemove--;
-          } else {
-            next.push(m);
-          }
-        }
-        if (next.length === mats.length) {
-          continue;
-        }
-        if (next.length === 0) {
-          await d.ref.delete();
-        } else {
-          await d.ref.update({
-            materials: next,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp() as any
-          });
-        }
-      }
-      if (toRemove > 0) {
-        alert('Chưa xóa hết (dữ liệu có thể đã đổi). Hãy làm mới trang.');
-      }
-      if (this.hasLoaded) {
-        await this.loadData();
-      }
-    } catch (e) {
-      alert('Lỗi khi xóa: ' + e);
-    } finally {
-      this.nvlRowDeletingKey = null;
-      this.cdr.markForCheck();
-    }
-  }
-
-  async deleteAggregated(g: ScrapBoxGroup): Promise<void> {
-    if (!g.docIds.length) return;
-    if (!confirm(`Xóa toàn bộ dữ liệu thùng ${g.boxCode}?`)) return;
-    for (const id of g.docIds) {
-      await this.firestore.collection('scrap-data').doc(id).delete();
-    }
-    if (this.hasLoaded) {
-      await this.loadData();
-    }
-  }
-
-  /** Nhóm materials theo mã 7 ký tự, đếm Bag */
-  getMaterialsWithBags(materials: string[]): { code: string; bags: number }[] {
-    const map = new Map<string, number>();
-    for (const m of materials) {
-      const c = (m || '').slice(0, 7);
-      if (!c) continue;
-      map.set(c, (map.get(c) ?? 0) + 1);
-    }
-    return Array.from(map.entries()).map(([code, bags]) => ({ code, bags }));
-  }
-
-  /**
-   * Khi có ô tìm: nếu khớp mã NVL thì chỉ trả về các mã NVL khớp (và Bag tương ứng);
-   * nếu chỉ khớp mã thùng thì trả về toàn bộ NVL của thùng đó.
-   */
-  getMaterialsWithBagsForSearch(g: ScrapBoxGroup): { code: string; bags: number }[] {
-    const q = this.searchTerm.trim().toLowerCase();
-    if (!q) return [];
-    const all = this.getMaterialsWithBags(g.materials);
-    const boxMatch = (g.boxCode || '').toLowerCase().includes(q);
-    const matMatch = all.filter(x => {
-      if ((x.code || '').toLowerCase().includes(q)) return true;
-      return (g.materials || []).some(
-        m => (m || '').slice(0, 7) === x.code && (m || '').toLowerCase().includes(q)
-      );
-    });
-    if (matMatch.length > 0) return matMatch;
-    if (boxMatch) return all;
-    return [];
-  }
-
-  getDateKey(d?: Date): string {
-    const d2 = d || new Date();
-    const day = String(d2.getDate()).padStart(2, '0');
-    const month = String(d2.getMonth() + 1).padStart(2, '0');
-    const year = String(d2.getFullYear()).slice(-2);
-    return `${day}${month}${year}`;
-  }
-
-  formatDateShort(): string {
+  /** Ngày in dạng DDMMYYYY (IMD trên tem). */
+  todayImd(): string {
     const d = new Date();
-    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
   }
 
-  async openPrintModal(): Promise<void> {
-    this.printBoxCount = 1;
-    await this.loadNextSequence();
-    this.updatePrintPreview();
-    this.showPrintModal = true;
-    this.cdr.markForCheck();
+  get printPreviewQr(): string {
+    const code = this.printCode.trim().toUpperCase();
+    const qty = Number(this.printQty);
+    if (!code || !Number.isFinite(qty) || qty <= 0) return '';
+    return `${code}|${ScrapComponent.PO_CHUNG}|${qty}|${this.todayImd()}-1/1`;
   }
 
-  closePrintModal(): void {
-    this.showPrintModal = false;
-    this.cdr.markForCheck();
-  }
-
-  async loadNextSequence(): Promise<void> {
-    const dateKey = this.getDateKey();
-    const doc = await this.firestore.collection('scrap-box-print-seq').doc(dateKey).get().toPromise();
-    const data = doc?.data() as { lastSequence?: number } | undefined;
-    this._nextStartSeq = (data?.lastSequence ?? 0) + 1;
-    this.nextPreviewCode = dateKey + String(this._nextStartSeq).padStart(2, '0');
-  }
-
-  updatePrintPreview(): void {
-    const n = Math.min(99, Math.max(1, Math.floor(this.printBoxCount) || 1));
-    this.printBoxCount = n;
-    this.printPreviewLabels = Array.from({ length: n }, (_, i) =>
-      this.getDateKey() + String(this._nextStartSeq + i).padStart(2, '0')
-    );
-  }
-
-  async doPrintLabels(): Promise<void> {
-    const n = Math.min(99, Math.max(1, Math.floor(this.printBoxCount) || 1));
-    if (n < 1) return;
+  async printLabel(): Promise<void> {
+    if (this.isPrinting) return;
+    const code = this.printCode.trim().toUpperCase();
+    const qty = Number(this.printQty);
+    if (!code) { this.printError = 'Nhập mã hàng.'; return; }
+    if (code.includes('|')) { this.printError = 'Mã hàng không được chứa ký tự |'; return; }
+    if (!Number.isFinite(qty) || qty <= 0) { this.printError = 'Nhập lượng lớn hơn 0.'; return; }
+    this.printError = '';
+    const win = window.open('', '_blank');
+    if (!win) { this.printError = 'Không mở được cửa sổ in. Kiểm tra chặn popup.'; return; }
     this.isPrinting = true;
     try {
-      const dateKey = this.getDateKey();
-      const labels: string[] = Array.from({ length: n }, (_, i) =>
-        dateKey + String(this._nextStartSeq + i).padStart(2, '0')
-      );
-      await this.printLabelWindow(labels);
-      const newLastSeq = this._nextStartSeq + n - 1;
-      await this.firestore.collection('scrap-box-print-seq').doc(dateKey).set(
-        { lastSequence: newLastSeq, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
-      );
-      this._nextStartSeq = newLastSeq + 1;
-      this.closePrintModal();
-    } catch (e) {
-      alert('Lỗi khi in: ' + e);
+      const qrData = this.printPreviewQr;
+      const qrImage = await QRCode.toDataURL(qrData, { width: 240, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } });
+      win.document.write(buildMaterialQrLabelDocument([{ kind: 'bag', qrImage, qrData }]));
+      win.document.close();
+      this.printCode = '';
+      this.printQty = null;
+      setTimeout(() => this.printCodeInputRef?.nativeElement.focus(), 50);
+    } catch (e: any) {
+      win.close();
+      this.printError = 'Lỗi khi in: ' + (e?.message || e);
     } finally {
       this.isPrinting = false;
     }
   }
 
-  private async printLabelWindow(labels: string[]): Promise<void> {
-    const qrImages: string[] = [];
-    for (const code of labels) {
-      try {
-        const dataUrl = await QRCode.toDataURL(code, { width: 140, margin: 1 });
-        qrImages.push(dataUrl);
-      } catch {
-        qrImages.push('');
+  // ── 2. Scan nhập kho ──────────────────────────────────────────
+
+  openScan(): void {
+    if (this.panel === 'scan') { this.closePanel(); return; }
+    this.closePanel();
+    this.panel = 'scan';
+    this.changeBox();
+  }
+
+  changeBox(): void {
+    this.currentBox = '';
+    this.boxInputVal = '';
+    this.scanError = '';
+    this.scanOk = '';
+    setTimeout(() => this.boxInputRef?.nativeElement.focus(), 50);
+  }
+
+  async saveBox(): Promise<void> {
+    const box = this.boxInputVal.trim().toUpperCase();
+    if (!box || this.isSavingBox) return;
+    if (box.includes('/')) { this.scanError = 'Số box không được chứa ký tự /'; return; }
+    this.isSavingBox = true;
+    this.scanError = '';
+    try {
+      const ref = this.db.collection(ScrapComponent.BOXES_COL).doc(box);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          boxNo: box,
+          createdBy: this.employeeId,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
       }
+      this.currentBox = box;
+      setTimeout(() => this.scanInputRef?.nativeElement.focus(), 50);
+    } catch (e: any) {
+      this.scanError = 'Không lưu được số box: ' + (e?.message || e);
+    } finally {
+      this.isSavingBox = false;
     }
-    const html = this.buildPrintHtml(labels, qrImages);
-    const win = window.open('', '_blank');
-    if (!win) {
-      alert('Không mở được cửa sổ in. Kiểm tra chặn popup.');
-      throw new Error('Popup blocked');
-    }
-    win.document.write(html);
-    win.document.close();
   }
 
-  private buildPrintHtml(labels: string[], qrImages: string[]): string {
-    const dateStr = new Date().toLocaleDateString('vi-VN');
-    const items = labels.map((code, i) => {
-      const qrSrc = qrImages[i] || '';
-      return `
-      <div class="label-box">
-        <div class="label-qr"><img src="${qrSrc}" alt="QR" /></div>
-        <div class="label-text">
-          <div class="label-code">${this.escapeHtml(code)}</div>
-          <div class="label-date">${dateStr}</div>
-        </div>
-      </div>`;
-    }).join('');
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title></title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
-.label-box {
-  width: 57mm;
-  height: 32mm;
-  border: 1px solid #000;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  page-break-inside: avoid;
-  page-break-after: always;
-}
-.label-box:last-child { page-break-after: auto; }
-.label-qr {
-  width: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2mm;
-  border-right: 1px solid #000;
-}
-.label-qr img { width: 100%; max-width: 26mm; height: auto; }
-.label-text {
-  width: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2mm;
-}
-.label-code { font-size: 16px; font-weight: 700; letter-spacing: 1px; text-align: center; }
-.label-date { font-size: 9px; margin-top: 2mm; color: #333; text-align: center; }
-.label-grid { display: flex; flex-wrap: wrap; gap: 0; }
-@media print {
-  body { margin: 0; padding: 0; }
-  @page { margin: 0; size: 57mm 32mm; }
-  .label-box { width: 57mm; height: 32mm; }
-  body::before, body::after, header, footer { display: none !important; }
-}
-</style>
-</head>
-<body>
-<div class="label-grid">${items}</div>
-<script>
-window.onload = function() {
-  document.title = '';
-  const s = document.createElement('style');
-  s.textContent = '@media print { body { margin:0 !important; padding:0 !important; } @page { margin:0 !important; size: 57mm 32mm !important; } body::before, body::after, header, footer { display:none !important; } }';
-  document.head.appendChild(s);
-  setTimeout(function() { window.print(); }, 300);
-};
-</script>
-</body>
-</html>`;
+  get boxItemCount(): number {
+    return this.reportItems.filter((x) => x.boxNo === this.currentBox).length;
   }
 
-  private escapeHtml(s: string): string {
-    const d: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return s.replace(/[&<>"']/g, (c) => d[c] ?? c);
+  get boxTotalQty(): number {
+    return this.reportItems
+      .filter((x) => x.boxNo === this.currentBox)
+      .reduce((s, x) => s + (Number(x.qty) || 0), 0);
+  }
+
+  async onScan(): Promise<void> {
+    const raw = this.scanInputVal.trim();
+    this.scanInputVal = '';
+    if (!raw || !this.currentBox || this.isScanning) return;
+    this.scanError = '';
+    this.scanOk = '';
+    const f = parseMaterialQrLabelFields(raw);
+    const code = f.materialCode.trim().toUpperCase();
+    const qty = Number(String(f.quantity).replace(/,/g, ''));
+    if (!code || raw.split('|').length < 4 || !Number.isFinite(qty)) {
+      this.scanError = `Tem không đúng định dạng QR (Mã|PO|Lượng|IMD): ${raw}`;
+      this.focusScan();
+      return;
+    }
+    const box = this.currentBox;
+    this.isScanning = true;
+    try {
+      const mapRef = this.db.collection(ScrapComponent.CODE_BOX_COL).doc(code.replace(/\//g, '_'));
+      const itemRef = this.db.collection(ScrapComponent.ITEMS_COL).doc();
+      await this.db.runTransaction(async (tx) => {
+        const m = await tx.get(mapRef);
+        const other = m.exists ? String(m.data()?.['boxNo'] || '') : '';
+        if (other && other !== box) {
+          throw new Error(`DUP_BOX:${other}`);
+        }
+        if (!m.exists) {
+          tx.set(mapRef, { materialCode: code, boxNo: box, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        }
+        const item: ScrapItem = {
+          boxNo: box,
+          materialCode: code,
+          po: f.po,
+          imd: f.imd,
+          qty,
+          qrData: raw,
+          scannedBy: this.employeeId,
+          scannedAt: firebase.firestore.FieldValue.serverTimestamp() as any
+        };
+        tx.set(itemRef, item);
+      });
+      this.scanOk = `Đã nhập ${code} · ${qty} vào box ${box}`;
+      this.reportPage = 1;
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      this.scanError = msg.startsWith('DUP_BOX:')
+        ? `❌ Mã ${code} đã nằm ở box ${msg.slice(8)} — một mã không được để 2 box.`
+        : 'Lỗi khi lưu: ' + msg;
+    } finally {
+      this.isScanning = false;
+      this.focusScan();
+    }
+  }
+
+  private focusScan(): void {
+    setTimeout(() => this.scanInputRef?.nativeElement.focus(), 30);
+  }
+
+  /** Xóa 1 dòng scan nhầm; nếu box không còn mã đó thì gỡ ràng buộc mã ↔ box. */
+  async deleteItem(item: ScrapItem): Promise<void> {
+    if (!item.id || this.deletingId) return;
+    if (!confirm(`Xóa dòng ${item.materialCode} · PO ${item.po} · ${item.qty} khỏi box ${item.boxNo}?`)) return;
+    this.deletingId = item.id;
+    try {
+      await this.db.collection(ScrapComponent.ITEMS_COL).doc(item.id).delete();
+      const left = await this.db
+        .collection(ScrapComponent.ITEMS_COL)
+        .where('materialCode', '==', item.materialCode)
+        .limit(1)
+        .get();
+      if (left.empty) {
+        await this.db.collection(ScrapComponent.CODE_BOX_COL).doc(item.materialCode.replace(/\//g, '_')).delete();
+      }
+    } catch (e: any) {
+      alert('Lỗi khi xóa: ' + (e?.message || e));
+    } finally {
+      this.deletingId = '';
+      this.focusScan();
+    }
+  }
+
+  // ── 4. Report ─────────────────────────────────────────────────
+
+  private startReport(): void {
+    this.stopReport();
+    this.reportLoading = true;
+    this.reportError = '';
+    this.reportUnsub = this.db
+      .collection(ScrapComponent.ITEMS_COL)
+      .orderBy('scannedAt', 'desc')
+      .onSnapshot(
+        (snap) => {
+          this.reportItems = snap.docs.map((d) => ({ id: d.id, ...(d.data() as ScrapItem) }));
+          this.reportLoading = false;
+          if (this.reportPage > this.reportPageCount) this.reportPage = this.reportPageCount;
+        },
+        (err) => {
+          this.reportLoading = false;
+          this.reportError = 'Không tải được report: ' + err.message;
+        }
+      );
+  }
+
+  private stopReport(): void {
+    this.reportUnsub?.();
+    this.reportUnsub = null;
+  }
+
+  get reportFiltered(): ScrapItem[] {
+    const q = this.reportSearch.trim().toLowerCase();
+    const rows = this.boxFilter ? this.reportItems.filter((x) => x.boxNo === this.boxFilter) : this.reportItems;
+    if (!q) return rows;
+    return rows.filter((x) =>
+      [x.boxNo, x.materialCode, x.po, x.imd, this.formatImd(x.imd), String(x.qty), x.scannedBy || '']
+        .some((v) => String(v || '').toLowerCase().includes(q))
+    );
+  }
+
+  get reportPageCount(): number {
+    return Math.max(1, Math.ceil(this.reportFiltered.length / this.pageSize));
+  }
+
+  get reportPageRows(): ScrapItem[] {
+    const start = (this.reportPage - 1) * this.pageSize;
+    return this.reportFiltered.slice(start, start + this.pageSize);
+  }
+
+  get reportBoxCount(): number {
+    return new Set(this.reportFiltered.map((x) => x.boxNo)).size;
+  }
+
+  onReportSearch(): void {
+    this.reportPage = 1;
+    this.detailLimit = this.pageSize;
+  }
+
+  setTab(tab: ScrapTab): void {
+    this.activeTab = tab;
+  }
+
+  clearFilters(): void {
+    this.reportSearch = '';
+    this.boxFilter = '';
+    this.onReportSearch();
+  }
+
+  filterBox(box: string, tab?: ScrapTab): void {
+    if (!box) return;
+    this.boxFilter = box;
+    this.onReportSearch();
+    if (tab) this.activeTab = tab;
+  }
+
+  showMore(): void {
+    this.detailLimit += this.pageSize;
+  }
+
+  get detailRows(): ScrapItem[] {
+    return this.reportFiltered.slice(0, this.detailLimit);
+  }
+
+  get boxOptions(): string[] {
+    return Array.from(new Set(this.reportItems.map((x) => x.boxNo).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }
+
+  get reportCodeCount(): number {
+    return new Set(this.reportFiltered.map((x) => x.materialCode)).size;
+  }
+
+  get reportTotalQty(): number {
+    return Math.round(this.reportFiltered.reduce((s, x) => s + (Number(x.qty) || 0), 0) * 10000) / 10000;
+  }
+
+  get boxSummary(): Array<{ boxNo: string; codes: number; lines: number; qty: number; last: Date | null }> {
+    const map = new Map<string, { boxNo: string; codes: Set<string>; lines: number; qty: number; last: Date | null }>();
+    for (const x of this.reportFiltered) {
+      const cur = map.get(x.boxNo) || { boxNo: x.boxNo, codes: new Set<string>(), lines: 0, qty: 0, last: null };
+      cur.codes.add(x.materialCode);
+      cur.lines += 1;
+      cur.qty += Number(x.qty) || 0;
+      const d = this.itemDate(x);
+      if (d && (!cur.last || d > cur.last)) cur.last = d;
+      map.set(x.boxNo, cur);
+    }
+    return Array.from(map.values())
+      .map((b) => ({ boxNo: b.boxNo, codes: b.codes.size, lines: b.lines, qty: Math.round(b.qty * 10000) / 10000, last: b.last }))
+      .sort((a, b) => a.boxNo.localeCompare(b.boxNo, undefined, { numeric: true }));
+  }
+
+  get codeSummary(): Array<{ materialCode: string; boxes: string[]; pos: string[]; lines: number; qty: number }> {
+    const map = new Map<string, { materialCode: string; boxes: Set<string>; pos: Set<string>; lines: number; qty: number }>();
+    for (const x of this.reportFiltered) {
+      const cur = map.get(x.materialCode) || { materialCode: x.materialCode, boxes: new Set<string>(), pos: new Set<string>(), lines: 0, qty: 0 };
+      cur.boxes.add(x.boxNo);
+      if (x.po) cur.pos.add(x.po);
+      cur.lines += 1;
+      cur.qty += Number(x.qty) || 0;
+      map.set(x.materialCode, cur);
+    }
+    return Array.from(map.values())
+      .map((c) => ({ materialCode: c.materialCode, boxes: Array.from(c.boxes).sort(), pos: Array.from(c.pos).sort(), lines: c.lines, qty: Math.round(c.qty * 10000) / 10000 }))
+      .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+  }
+
+  /** Xuất Excel đúng tab đang xem (theo bộ lọc hiện tại). */
+  async exportExcel(): Promise<void> {
+    const XLSX = await import('xlsx');
+    let data: Array<Record<string, unknown>>;
+    if (this.activeTab === 'box') {
+      data = this.boxSummary.map((b, i) => ({
+        'STT': i + 1, 'Box': b.boxNo, 'Số mã': b.codes, 'Số dòng': b.lines, 'Tổng lượng': b.qty,
+        'Scan gần nhất': b.last ? b.last.toLocaleString('vi-VN') : ''
+      }));
+    } else if (this.activeTab === 'code') {
+      data = this.codeSummary.map((c, i) => ({
+        'STT': i + 1, 'Mã hàng': c.materialCode, 'Box': c.boxes.join(', '), 'PO': c.pos.join(', '), 'Số dòng': c.lines, 'Tổng lượng': c.qty
+      }));
+    } else {
+      data = this.reportFiltered.map((x, i) => {
+        const d = this.itemDate(x);
+        return {
+          'STT': i + 1, 'Box': x.boxNo, 'Mã hàng': x.materialCode, 'PO': x.po, 'IMD': this.formatImd(x.imd),
+          'Lượng': Number(x.qty) || 0, 'Người scan': x.scannedBy || '', 'Thời gian': d ? d.toLocaleString('vi-VN') : ''
+        };
+      });
+    }
+    if (!data.length) return;
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Scrap');
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    XLSX.writeFile(wb, `Scrap_${this.activeTab}_${stamp}.xlsx`);
+  }
+
+  goReportPage(p: number): void {
+    this.reportPage = Math.min(this.reportPageCount, Math.max(1, p));
+  }
+
+  // ── helpers ───────────────────────────────────────────────────
+
+  itemDate(x: ScrapItem): Date | null {
+    const t: any = x.scannedAt;
+    return t && typeof t.toDate === 'function' ? t.toDate() : null;
+  }
+
+  /** DDMMYYYY → dd/MM/yyyy */
+  formatImd(imd: string): string {
+    const s = String(imd || '').trim();
+    return /^\d{8}$/.test(s) ? `${s.slice(0, 2)}/${s.slice(2, 4)}/${s.slice(4)}` : s;
+  }
+
+  trackItem(_i: number, x: ScrapItem): string {
+    return x.id || '';
   }
 }

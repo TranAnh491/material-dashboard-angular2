@@ -9,6 +9,61 @@
     </button>
   </div>
 
+  <div class="rpt-tabs">
+    <button type="button" class="rpt-tab" [class.rpt-tab--on]="activeTab === 'stats'" (click)="setTab('stats')">
+      <i class="material-icons">calendar_month</i> Thống kê Nhập/Xuất</button>
+    <button type="button" class="rpt-tab" [class.rpt-tab--on]="activeTab === 'docs'" (click)="setTab('docs')">
+      <i class="material-icons">folder</i> Lưu tài liệu</button>
+  </div>
+
+  <!-- ===== Lưu tài liệu ===== -->
+  <div class="rpt-docs" *ngIf="activeTab === 'docs'">
+    <div class="rpt-docs__bar">
+      <label class="rpt-btn rpt-docs__upload">
+        <i class="material-icons">upload_file</i> Import tài liệu
+        <input type="file" multiple (change)="onDocsPicked($event)" hidden>
+      </label>
+      <input type="search" class="rpt-docs__q" [(ngModel)]="docsQuery" placeholder="Tìm tên file / người lưu…" autocomplete="off">
+      <button type="button" class="rpt-btn rpt-btn--outline" (click)="loadDocs()" [disabled]="docsLoading">
+        <i class="material-icons" [class.rpt-spin]="docsLoading">refresh</i> Làm mới</button>
+    </div>
+    <p class="rpt-docs__hint">File lưu trên hệ thống (tối đa 50MB / file) — mở ở bất kỳ máy nào để tải về hoặc in.</p>
+
+    <div class="rpt-docs__up" *ngFor="let u of docsUploading">
+      <span class="rpt-docs__up-name">{{ u.name }}</span>
+      <span *ngIf="!u.error" class="rpt-docs__bar-track"><span class="rpt-docs__bar-fill" [style.width.%]="u.pct"></span></span>
+      <span *ngIf="!u.error">{{ u.pct }}%</span>
+      <span *ngIf="u.error" class="rpt-docs__err">{{ u.error }}</span>
+    </div>
+    <button type="button" class="rpt-btn rpt-btn--outline" *ngIf="docsUploading.length" (click)="clearUploadErrors()">Ẩn lỗi</button>
+
+    <div class="rpt-docs__err" *ngIf="docsError">{{ docsError }}</div>
+    <div class="rpt-docs__empty" *ngIf="docsLoaded && !docsLoading && !docsFiltered.length">Chưa có tài liệu nào.</div>
+
+    <table class="rpt-detail-table rpt-docs__table" *ngIf="docsFiltered.length">
+      <thead>
+        <tr><th>Tên file</th><th class="num">Dung lượng</th><th>Người lưu</th><th>Ngày lưu</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let d of docsFiltered">
+          <td class="rpt-docs__name"><i class="material-icons">{{ docIcon(d) }}</i> {{ d.name }}</td>
+          <td class="num">{{ docSizeText(d.size) }}</td>
+          <td>{{ d.uploadedBy || '—' }}</td>
+          <td>{{ d.uploadedAt ? (d.uploadedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+          <td class="rpt-docs__acts">
+            <button type="button" class="rpt-icon-btn" (click)="downloadDoc(d)" [disabled]="docsBusyId === d.id" title="Tải về máy">
+              <i class="material-icons">download</i></button>
+            <button type="button" class="rpt-icon-btn" (click)="openDoc(d)" title="Mở xem / In">
+              <i class="material-icons">print</i></button>
+            <button type="button" class="rpt-icon-btn rpt-docs__del" (click)="deleteDoc(d)" [disabled]="docsBusyId === d.id" title="Xóa tài liệu">
+              <i class="material-icons">delete</i></button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ng-container *ngIf="activeTab === 'stats'">
   <div class="rpt-note">
     <i class="material-icons">info</i>
     <span>
@@ -87,6 +142,8 @@
       </div>
     </div>
   </div>
+
+  </ng-container>
 
   <!-- Popup chi tiết theo ngày -->
   <div class="rpt-modal-overlay" *ngIf="showDetailFor" (click)="closeDetail()">

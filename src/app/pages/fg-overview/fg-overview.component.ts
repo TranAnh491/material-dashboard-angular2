@@ -99,6 +99,9 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     private router: Router
   ) {}
 
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
+
   ngOnInit(): void {
     this.loadImportCacheFromFirebase();
     this.loadFgInventory();

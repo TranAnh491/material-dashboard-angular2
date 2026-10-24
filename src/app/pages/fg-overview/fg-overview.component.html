@@ -172,7 +172,7 @@
       </thead>
       <tbody>
         <tr
-          *ngFor="let r of filteredRows; let i = index"
+          *ngFor="let r of filteredRows; let i = index; trackBy: trackById"
           [class.negative-row]="r.compare !== 'Khớp'"
         >
           <td class="col-stt">{{ i + 1 }}</td>

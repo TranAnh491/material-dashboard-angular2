@@ -107,10 +107,6 @@ export class AccountComponent implements OnInit, OnDestroy {
       );
       await user.reauthenticateWithCredential(credential);
       await user.updatePassword(this.authService.authPasswordFor(next));
-      await this.firestore.doc(`users/${user.uid}`).update({
-        password: next,
-        updatedAt: new Date()
-      });
       this.currentPassword = '';
       this.newPassword = '';
       this.confirmPassword = '';

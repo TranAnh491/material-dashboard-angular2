@@ -15,7 +15,7 @@ export interface User {
   department?: string;
   factory?: string;
   role?: string;
-  password?: string; // Password (lưu trong Firestore)
+  password?: string; // Dữ liệu cũ — không còn lưu password trong Firestore
   createdAt?: Date;
   lastLoginAt?: Date;
 }
@@ -27,6 +27,19 @@ export class FirebaseAuthService {
   user$: Observable<User | null>;
   /** Hồ sơ users vừa đọc lúc đăng nhập — AuthGuard dùng lại, không đọc Firestore lần hai. */
   private primedUser: User | null = null;
+
+  /**
+   * Custom claims trong token Firebase Auth: `admin` (chỉ ASP0106), `scan` (đăng nhập bằng quét thẻ).
+   * Server gán, client không tự sửa được. Dùng để ẩn/hiện giao diện; quyền thật do rules + functions kiểm.
+   */
+  claims(): Observable<{ admin: boolean; scan: boolean }> {
+    return this.afAuth.idTokenResult.pipe(
+      map(result => ({
+        admin: result?.claims?.['admin'] === true,
+        scan: result?.claims?.['scan'] === true
+      }))
+    );
+  }
 
   constructor(
     private afAuth: AngularFireAuth,

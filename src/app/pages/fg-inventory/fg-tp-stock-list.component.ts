@@ -83,6 +83,9 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
     private customerLabelCodeService: FgCustomerLabelCodeService
   ) {}
 
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
+
   ngOnInit(): void {
     const factory = this.route.snapshot.queryParamMap.get('factory');
     if (factory && this.factoryOptions.includes(factory)) {

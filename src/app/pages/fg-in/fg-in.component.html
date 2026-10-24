@@ -71,7 +71,7 @@
 
         <div class="fg-m-card-list fg-m-card-list--pending">
           <div class="fg-m-card fg-m-card--pending"
-               *ngFor="let material of getMobilePendingMaterials()"
+               *ngFor="let material of getMobilePendingMaterials(); trackBy: trackByMaterial"
                (click)="openConfirmReceiptDialog(material)"
                [title]="material.materialCode + (material.poNumber ? ' · PO: ' + material.poNumber : '')">
             <span class="fg-m-zone-badge" *ngIf="getTempZoneBadge(material.location) as zone">{{ zone }}</span>
@@ -106,7 +106,7 @@
 
         <div class="fg-m-card-list">
           <div class="fg-m-card fg-m-card--locked"
-               *ngFor="let material of getLockedWithoutLocationMaterials()"
+               *ngFor="let material of getLockedWithoutLocationMaterials(); trackBy: trackByMaterial"
                (click)="openConfirmReceiptDialog(material)">
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
             <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
@@ -158,7 +158,7 @@
 
         <div class="fg-m-card-list" *ngIf="mobileTempZone">
           <div class="fg-m-card fg-m-card--temp"
-               *ngFor="let material of getMobileTempMaterials()"
+               *ngFor="let material of getMobileTempMaterials(); trackBy: trackByMaterial"
                (click)="openConfirmReceiptDialog(material)">
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
             <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
@@ -300,7 +300,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let material of filteredMaterials; let i = index" 
+          <tr *ngFor="let material of filteredMaterials; let i = index; trackBy: trackByMaterial" 
               [class.received-row]="material.isReceived"
               [class.pending-row]="!material.isReceived"
               (click)="openConfirmReceiptDialog(material)"

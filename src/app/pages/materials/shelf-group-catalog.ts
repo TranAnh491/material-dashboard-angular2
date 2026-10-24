@@ -20,11 +20,18 @@ export const SHELF_GROUP_DEFAULTS: Record<string, string> = {
   S19: 'B034, B036',
   S20: 'B030, B031, B041, B043, B033',
   S23: 'R029',
-  S24: 'R029',
+  'S24-1': 'H11',
+  'S24-2': 'A12',
+  'S24-3': 'FOC',
   R09: 'Dây cáp B002, B005',
   R10: 'Dây cáp B003, B006',
   R11: 'B036, B042',
   HOACHAT: 'B037'
+};
+
+/** Kệ chia nhiều phần, mỗi phần gán nhóm riêng (thay cho cả dãy). */
+export const SHELF_SPLITS: Record<string, string[]> = {
+  S24: ['S24-1', 'S24-2', 'S24-3']
 };
 
 export function shelfGroupIds(): string[] {
@@ -32,10 +39,18 @@ export function shelfGroupIds(): string[] {
   for (let i = 1; i <= 30; i++) ids.add(`S${String(i).padStart(2, '0')}`);
   for (let i = 1; i <= 28; i++) ids.add(`R${String(i).padStart(2, '0')}`);
   Object.keys(SHELF_GROUP_DEFAULTS).forEach((id) => ids.add(id));
+  for (const [shelf, parts] of Object.entries(SHELF_SPLITS)) {
+    ids.delete(shelf);
+    parts.forEach((id) => ids.add(id));
+  }
   const named = ['HOACHAT'];
+  const num = (id: string) => {
+    const m = /^[A-Z](\d+)(?:-(\d+))?/.exec(id);
+    return m ? Number(m[1]) * 100 + Number(m[2] || 0) : 0;
+  };
   const sorted = [...ids].filter((id) => !named.includes(id)).sort((a, b) => {
     if (a[0] !== b[0]) return a[0] === 'S' ? -1 : 1;
-    return Number(a.slice(1)) - Number(b.slice(1));
+    return num(a) - num(b);
   });
   named.forEach((id) => {
     if (ids.has(id)) sorted.push(id);

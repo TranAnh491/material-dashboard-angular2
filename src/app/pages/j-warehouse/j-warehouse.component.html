@@ -977,7 +977,7 @@
                         meterY(block.yM + block.hM / 2) +
                         ')'
                       ">
-                      {{ block.code }}
+                      {{ block.code }}{{ storageBlockGroup(block.code) ? ' · ' + storageBlockGroup(block.code) : '' }}
                     </text>
                   </g>
                 </g>

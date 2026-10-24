@@ -25,7 +25,7 @@
               {{ axonePhase === 'internal' ? '1. Tem nội bộ' : '2. Tem khách' }}
             </span>
             <input type="text"
-                   class="custom-input scan-axone-input"
+                   class="custom-input scan-axone-input fgc-big-input"
                    [(ngModel)]="currentScanInput"
                    (keyup.enter)="onAxoneScan()"
                    [placeholder]="axonePhase === 'internal' ? 'Scan tem nội bộ (MãTP|SốPcs|...)' : 'Scan tem khách'"
@@ -46,7 +46,7 @@
           </div>
           <div class="scan-inputs-row" *ngIf="checkMode !== 'pn-qty-axone'">
             <input type="text" 
-                   class="custom-input scan-material-input" 
+                   class="custom-input scan-material-input fgc-big-input" 
                    [(ngModel)]="currentScanInput"
                    (keyup.enter)="checkMode === 'pn' ? onMaterialScannedForCarton() : onMaterialCodeEntered()"
                    placeholder="Scan mã hàng..."
@@ -77,6 +77,66 @@
               <i class="material-icons">close</i>
               Hủy
             </button>
+          </div>
+          <!-- Bảng scan (máy tính) — giống Outbound -->
+          <div class="fgc-board">
+            <div class="fgc-flash" [class.fgc-flash--ok]="scanFlash?.kind === 'ok'" [class.fgc-flash--err]="scanFlash?.kind === 'err'">
+              <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+              <span>{{ scanFlash?.text || 'Sẵn sàng — scan tem' }}</span>
+            </div>
+            <div class="fgc-meta">
+              <div class="fgc-progress" *ngIf="fgScanProgress.length">
+                <span>{{ scannedShipment }}</span>
+                <div class="fgc-progress__bar"><div [style.width.%]="fgScanPercent"></div></div>
+                <strong>{{ fgScanPercent }}%</strong>
+              </div>
+              <button type="button" class="fgc-act" (click)="downloadFgShipmentLog()" title="Tải Excel tiến độ + log check của shipment">
+                <i class="material-icons">download</i> Tải log shipment
+              </button>
+            </div>
+            <div class="fgc-id" *ngIf="scanIdentity">
+              <strong>{{ scanIdentity.code }}</strong>
+              <span>Mã KH {{ scanIdentity.customer || '—' }} · Pallet {{ scanIdentity.pallet }} · {{ scanIdentity.qty | number }}</span>
+              <div class="fgc-id__tags">
+                <span *ngFor="let t of scanIdentity.tags" class="fgc-tag fgc-tag--{{ t.tone }}">{{ t.text }}</span>
+              </div>
+            </div>
+            <div class="fgc-cols">
+              <section class="fgc-card">
+                <header><strong>Tiến độ theo shipment</strong><span>{{ checkMode === 'pn' ? 'theo thùng' : 'theo pcs' }}</span></header>
+                <p class="fgc-card__empty" *ngIf="!fgScanProgress.length">Chưa có dữ liệu shipment.</p>
+                <div class="fgc-card__body" *ngIf="fgScanProgress.length">
+                  <table>
+                    <thead><tr><th>Mã TP</th><th class="n">Cần</th><th class="n">Đã check</th><th class="n">Còn</th></tr></thead>
+                    <tbody>
+                      <tr *ngFor="let r of fgScanProgress" [class.is-done]="r.remain === 0" [class.is-over]="r.remain < 0" [class.is-active]="r.checked > 0 && r.remain > 0">
+                        <td><strong>{{ r.code }}</strong></td>
+                        <td class="n">{{ r.need | number }}</td>
+                        <td class="n">{{ r.checked | number }}</td>
+                        <td class="n">{{ r.remain | number }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="fgc-card">
+                <header><strong>Vừa scan</strong><span>{{ scannedItems.length }} lần</span></header>
+                <p class="fgc-card__empty" *ngIf="!scannedItems.length">Chưa scan.</p>
+                <div class="fgc-card__body" *ngIf="scannedItems.length">
+                  <table>
+                    <thead><tr><th>#</th><th>Mã TP</th><th>Mã KH</th><th class="n">Lượng</th></tr></thead>
+                    <tbody>
+                      <tr *ngFor="let it of scannedItemsNewestFirst; let i = index; trackBy: trackById">
+                        <td>{{ scannedItems.length - i }}</td>
+                        <td><strong>{{ it.materialCode }}</strong></td>
+                        <td>{{ it.customerCode || '—' }}</td>
+                        <td class="n">{{ it.quantity | number }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
         
@@ -168,9 +228,8 @@
           <tbody>
             <tr *ngIf="flatTableRows.length === 0">
               <td [attr.colspan]="tableColspan" class="text-center" style="padding: 20px; color: #000000;">
-                <i class="material-icons" style="font-size: 48px; margin-bottom: 10px;">inbox</i>
-                <br>
-                Không có dữ liệu
+                <ng-container *ngIf="searchTerm?.trim() || filterByShipment?.trim(); else needSearch">Không có dữ liệu</ng-container>
+                <ng-template #needSearch>Nhập Shipment, Mã TP, Mã hàng hoặc ID Check vào ô tìm kiếm để hiện dữ liệu.</ng-template>
               </td>
             </tr>
 

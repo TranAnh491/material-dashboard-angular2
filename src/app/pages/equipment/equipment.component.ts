@@ -218,7 +218,34 @@ export class EquipmentComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.restoreFormDraft();
     void this.loadDashboardData();
+  }
+
+  private readonly FORM_DRAFT_KEY = 'warehouse-training-form-draft';
+
+  /** Giữ bản nháp biểu mẫu trên máy để tải lại trang không mất dữ liệu đang nhập. */
+  saveFormDraft(): void {
+    try {
+      localStorage.setItem(this.FORM_DRAFT_KEY, JSON.stringify(this.warehouseTrainingForm));
+    } catch { /* bộ nhớ trình duyệt bị chặn hoặc đầy: bỏ qua */ }
+  }
+
+  private restoreFormDraft(): void {
+    try {
+      const raw = localStorage.getItem(this.FORM_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      const labels = this.warehouseTrainingForm.jobTraining.map(i => i.label);
+      const sameShape = Array.isArray(draft?.jobTraining)
+        && draft.jobTraining.length === labels.length
+        && draft.jobTraining.every((i: { label: string }, n: number) => i.label === labels[n]);
+      if (sameShape && draft.trainingCommitment && draft.workerOpinion) this.warehouseTrainingForm = draft;
+    } catch { /* bản nháp hỏng: bỏ qua */ }
+  }
+
+  private clearFormDraft(): void {
+    try { localStorage.removeItem(this.FORM_DRAFT_KEY); } catch { /* bỏ qua */ }
   }
 
   dashboardSearch = '';
@@ -242,6 +269,29 @@ export class EquipmentComponent implements OnInit {
 
   get dashGreetingName(): string {
     return 'Admin';
+  }
+
+  /** Tài liệu hướng dẫn tải về (file trong src/assets/training). */
+  readonly trainingDocs: Array<{ title: string; desc: string; file: string; type: string; pages: number; updated: string }> = [
+    {
+      title: 'Hướng dẫn Nhập kho (Inbound)',
+      desc: 'Scan nhập kho: chọn lô, quét vị trí, quét tem bag / tem thùng, Lượng trong thùng, GW bag.',
+      file: 'assets/training/Huong-dan-Inbound.pptx', type: 'PPT', pages: 2, updated: '10/2026'
+    },
+    {
+      title: 'Hướng dẫn Xuất kho (Outbound)',
+      desc: 'Scan xuất kho theo LSX / PXK, cân bag lẻ, tem lẻ trên PXK, Xuất BS.',
+      file: 'assets/training/Huong-dan-Outbound.pptx', type: 'PPT', pages: 2, updated: '10/2026'
+    },
+    {
+      title: 'Trọn bộ Inbound + Outbound',
+      desc: 'Gộp 2 tài liệu trên trong 1 file để đào tạo nhân viên mới.',
+      file: 'assets/training/Huong-dan-Inbound-Outbound.pptx', type: 'PPT', pages: 4, updated: '10/2026'
+    }
+  ];
+
+  trainingDocFileName(file: string): string {
+    return file.split('/').pop() || file;
   }
 
   get dashTotalSop(): number {
@@ -332,6 +382,19 @@ export class EquipmentComponent implements OnInit {
   isSectionOpen(section: 'templates' | 'report' | 'matrix' | 'test'): boolean {
     return this.activeSection === section;
   }
+
+  /** Điều hướng từ thanh tab: không bật/tắt như openSection — bấm lại mục đang mở vẫn giữ nguyên. */
+  goSection(section: 'templates' | 'report' | 'matrix' | 'test' | null): void {
+    if (section === null) { this.closeAll(); return; }
+    if (this.activeSection !== section) this.openSection(section);
+  }
+
+  readonly navItems: Array<{ key: 'templates' | 'report' | 'matrix' | 'test'; icon: string; vi: string; en: string }> = [
+    { key: 'templates', icon: 'description', vi: 'SOP / Mẫu đào tạo', en: 'SOP / Templates' },
+    { key: 'report', icon: 'assessment', vi: 'Báo cáo đào tạo', en: 'Training reports' },
+    { key: 'matrix', icon: 'grid_view', vi: 'Training Matrix', en: 'Training Matrix' },
+    { key: 'test', icon: 'quiz', vi: 'Knowledge Test', en: 'Knowledge Test' }
+  ];
 
   toggleLanguage() {
     this.isEnglish = !this.isEnglish;
@@ -652,6 +715,7 @@ export class EquipmentComponent implements OnInit {
         ...this.trainingFormSavedRecords
       ].slice(0, 50);
 
+      this.clearFormDraft();
       alert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
     } catch (e: any) {
       console.error(e);
@@ -720,10 +784,11 @@ export class EquipmentComponent implements OnInit {
     };
     this.workerSignature = '';
     this.clearWorkerSignature();
+    this.clearFormDraft();
     this.cdr.markForCheck();
   }
 
-  private getWorkerSignCtx(): CanvasRenderingContext2D | null {
+private getWorkerSignCtx(): CanvasRenderingContext2D | null {
     const canvas = this.workerSignCanvas?.nativeElement;
     if (!canvas) return null;
     const ctx = canvas.getContext('2d');

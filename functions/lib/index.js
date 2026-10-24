@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.notifyFridgeWrongLocationZalo = exports.notifyFridgeLocationZaloDaily = exports.sendEquipmentChecklistZaloRemindFn = exports.notifyEquipmentChecklistZalo1315 = exports.notifyEquipmentChecklistZalo = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = void 0;
+exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyImportOverdueZalo = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyInventoryStockReportFn = exports.notifyTemLeGwSuspectsDaily = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.notifyFridgeWrongLocationZalo = exports.notifyFridgeLocationZaloDaily = exports.sendEquipmentChecklistZaloRemindFn = exports.notifyEquipmentChecklistZalo1315 = exports.notifyEquipmentChecklistZalo = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgePxkWeightPhotosDaily = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.importAspUsersFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -829,6 +829,46 @@ exports.notifyPxkWeightCheckReportFn = functions
             : 'internal', msg);
     }
 });
+/** Tem lẻ: 8h sáng hằng ngày (VN) — email mã tách bag CL có GW lệch > 5% tới wh1@airspeedmfgvn.com. */
+exports.notifyTemLeGwSuspectsDaily = functions
+    .runWith({ secrets: [params_config_1.emailPass] })
+    .pubsub.schedule('0 8 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runTemLeGwSuspectEmail } = await Promise.resolve().then(() => __importStar(require('./tem-le-gw-email')));
+    await runTemLeGwSuspectEmail(admin.firestore());
+});
+/** Materials (Inventory): báo cáo "Đã hết stock" — Zalo tới nhóm Quản lý kho. */
+exports.notifyInventoryStockReportFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const str = (v) => (typeof v === 'string' || typeof v === 'number' ? String(v) : '');
+    if (!str(data === null || data === void 0 ? void 0 : data.materialCode).trim()) {
+        throw new functions.https.HttpsError('invalid-argument', 'Thiếu mã hàng.');
+    }
+    try {
+        const { notifyInventoryStockReport } = await Promise.resolve().then(() => __importStar(require('./inventory-stock-report')));
+        await notifyInventoryStockReport(admin.firestore(), {
+            factory: str(data === null || data === void 0 ? void 0 : data.factory),
+            materialCode: str(data === null || data === void 0 ? void 0 : data.materialCode),
+            po: str(data === null || data === void 0 ? void 0 : data.po),
+            imd: str(data === null || data === void 0 ? void 0 : data.imd),
+            stock: str(data === null || data === void 0 ? void 0 : data.stock),
+            location: str(data === null || data === void 0 ? void 0 : data.location),
+            status: str(data === null || data === void 0 ? void 0 : data.status),
+            reportedBy: str(data === null || data === void 0 ? void 0 : data.reportedBy),
+            detail: str(data === null || data === void 0 ? void 0 : data.detail)
+        });
+        return { ok: true };
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('Quản lý kho') ? 'failed-precondition' : 'internal', msg);
+    }
+});
 /** FG Inventory: xác nhận mã OTP sửa LOT / LSX. */
 exports.verifyFgLotLsxOtpFn = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
@@ -944,6 +984,20 @@ exports.notifyFgOverviewMissingImportWeekdays = functions
     const { runFgOverviewImportNotify } = await Promise.resolve().then(() => __importStar(require('./fg-overview-import-notify')));
     await runFgOverviewImportNotify(admin.firestore());
 });
+/**
+ * Thứ 3 / 5 / 7 lúc 9h, 12h, 15h, 17h: FG Overview (ASM1/ASM2) và Inventory Overview LinkQ (ASM1/ASM2)
+ * chưa có bản import của thứ 2 / 4 / 6 hôm trước → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
+ */
+exports.notifyImportOverdueZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .pubsub.schedule('0 9,12,15,17 * * 2,4,6')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runImportOverdueZalo } = await Promise.resolve().then(() => __importStar(require('./import-overdue-zalo')));
+    const result = await runImportOverdueZalo(admin.firestore());
+    console.log('import overdue zalo', JSON.stringify({ overdue: result.overdue, sent: result.sent }));
+    return null;
+});
 /** Callable: chạy thủ công cùng logic báo tem trễ kế hoạch (More → Danh sách mail). */
 exports.sendPrintLabelLateNotifyManualFn = functions
     .runWith({ secrets: [params_config_1.emailPass] })
@@ -1025,6 +1079,7 @@ exports.sendQcMonthlyReportManualFn = functions
 });
 /** Admin: đổi password user theo uid (không cần password hiện tại). */
 exports.adminUpdateUserPasswordFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
@@ -1037,15 +1092,15 @@ exports.adminUpdateUserPasswordFn = functions
     }
     try {
         const { adminUpdateUserPassword } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-password')));
-        await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
-        return { ok: true };
+        const zaloSent = await adminUpdateUserPassword(context.auth.uid, uid, newPassword);
+        return { ok: true, zaloSent };
     }
     catch (e) {
         const anyErr = e;
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đổi được password.');
         }
         // Errors từ Firebase Admin Auth
         if (code === 'auth/user-not-found') {
@@ -1062,6 +1117,7 @@ exports.adminUpdateUserPasswordFn = functions
 });
 /** Admin: tạo mật khẩu mới 6 số ngẫu nhiên và đổi theo uid. */
 exports.adminResetUserPasswordFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
     .https.onCall(async (data, context) => {
     var _a, _b;
     if (!context.auth) {
@@ -1087,7 +1143,7 @@ exports.adminResetUserPasswordFn = functions
             msg
         });
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đổi được password.');
         }
         if (code === 'auth/user-not-found') {
             throw new functions.https.HttpsError('not-found', 'Không tìm thấy user trong Firebase Auth.');
@@ -1105,7 +1161,7 @@ exports.adminResetUserPasswordFn = functions
     }
 });
 /** Admin: đặt password theo mã nhân viên (ASPxxxx hoặc xxxx) -> reset về newPassword. */
-exports.adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(async (data, context) => {
+exports.adminSetUserPasswordByEmployeeIdFn = functions.runWith({ secrets: [params_config_1.zaloBotToken] }).https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
@@ -1118,14 +1174,14 @@ exports.adminSetUserPasswordByEmployeeIdFn = functions.https.onCall(async (data,
     try {
         const { adminSetUserPasswordByEmployeeId } = await Promise.resolve().then(() => __importStar(require('./admin-update-user-password')));
         const r = await adminSetUserPasswordByEmployeeId(context.auth.uid, employeeId, newPassword);
-        return { ok: true, uid: r.uid, email: r.email };
+        return { ok: true, uid: r.uid, email: r.email, zaloSent: r.zaloSent };
     }
     catch (e) {
         const anyErr = e;
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đổi được password.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đổi được password.');
         }
         if (msg.includes('Không tìm thấy Firebase Auth user')) {
             throw new functions.https.HttpsError('not-found', msg);
@@ -1154,7 +1210,7 @@ exports.adminDeleteUserByEmployeeIdFn = functions
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới xóa được user.');
         }
         if (msg.includes('Không tìm thấy Firebase Auth user')) {
             throw new functions.https.HttpsError('not-found', msg);
@@ -1185,7 +1241,7 @@ exports.adminDeleteUserByUidFn = functions.https.onCall(async (data, context) =>
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới xóa được user.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới xóa được user.');
         }
         if (msg.includes('Không tìm thấy tài khoản')) {
             throw new functions.https.HttpsError('not-found', msg);
@@ -1215,7 +1271,7 @@ exports.adminReleaseRegistrationEmailFn = functions.https.onCall(async (data, co
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới thực hiện được.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới thực hiện được.');
         }
         if (msg.includes('Email không hợp lệ')) {
             throw new functions.https.HttpsError('invalid-argument', msg);
@@ -1251,7 +1307,7 @@ exports.adminUpdateUserProfileFn = functions.https.onCall(async (data, context) 
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới sửa được hồ sơ.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới sửa được hồ sơ.');
         }
         if (msg.includes('đã được dùng')) {
             throw new functions.https.HttpsError('already-exists', msg);
@@ -1286,7 +1342,7 @@ exports.registerAspUserWithEmailFn = functions
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đăng ký được.');
         }
         if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
             throw new functions.https.HttpsError('already-exists', msg);
@@ -1296,6 +1352,30 @@ exports.registerAspUserWithEmailFn = functions
             msg.includes('Thiếu') ||
             msg.includes('phải có đuôi')) {
             throw new functions.https.HttpsError('invalid-argument', msg);
+        }
+        throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
+    }
+});
+/** Admin: import mã + tên, tạo tài khoản chưa có. Mật khẩu 6 số ngẫu nhiên, gửi về Zalo ASP0106. */
+exports.importAspUsersFn = functions.runWith({ secrets: [params_config_1.zaloBotToken], timeoutSeconds: 300, memory: '512MB' }).https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const users = Array.isArray(data === null || data === void 0 ? void 0 : data.users) ? data.users : [];
+    if (!users.length) {
+        throw new functions.https.HttpsError('invalid-argument', 'File không có dòng hợp lệ.');
+    }
+    try {
+        const { importAspUsers } = await Promise.resolve().then(() => __importStar(require('./admin-register-user')));
+        return await importAspUsers(context.auth.uid, users);
+    }
+    catch (e) {
+        const anyErr = e;
+        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
+        const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
+        if (msg === 'permission-denied' || code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới import được.');
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
@@ -1323,7 +1403,7 @@ exports.registerAspUserWithoutEmailFn = functions
         const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới đăng ký được.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới đăng ký được.');
         }
         if (msg.includes('đã được dùng') || msg.includes('đã được đăng ký')) {
             throw new functions.https.HttpsError('already-exists', msg);
@@ -1386,7 +1466,7 @@ exports.adminDeleteAuthUsersNotInSettingsFn = functions
         const msg = anyErr instanceof Error ? anyErr.message : (_a = anyErr === null || anyErr === void 0 ? void 0 : anyErr.message) !== null && _a !== void 0 ? _a : String(e);
         const code = typeof (anyErr === null || anyErr === void 0 ? void 0 : anyErr.code) === 'string' ? anyErr.code : '';
         if (msg === 'permission-denied' || code === 'permission-denied') {
-            throw new functions.https.HttpsError('permission-denied', 'Chỉ Admin/Quản lý mới được phép xóa.');
+            throw new functions.https.HttpsError('permission-denied', 'Chỉ admin mới được phép xóa.');
         }
         throw new functions.https.HttpsError('internal', msg || code || 'Lỗi không xác định.');
     }
@@ -1509,6 +1589,15 @@ exports.purgeInventoryHiddenDaily = functions
     .onRun(async () => {
     const { runInventoryHiddenPurgeJob } = await Promise.resolve().then(() => __importStar(require('./inventory-hidden-purge')));
     await runInventoryHiddenPurgeJob(admin.firestore());
+});
+/** Hình bag lẻ đã cân — xóa file Storage > 6 tháng, mỗi ngày 02:30 (VN). */
+exports.purgePxkWeightPhotosDaily = functions
+    .runWith({ timeoutSeconds: 300, memory: '256MB' })
+    .pubsub.schedule('30 2 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runPxkWeightPhotoPurgeJob } = await Promise.resolve().then(() => __importStar(require('./pxk-weight-photo-purge')));
+    await runPxkWeightPhotoPurgeJob();
 });
 /**
  * Gọi sau mỗi lần deploy hosting để tự động gửi lệnh "F5 toàn bộ" cho mọi tab đang mở web —

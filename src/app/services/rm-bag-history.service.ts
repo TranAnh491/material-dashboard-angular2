@@ -17,7 +17,19 @@ export type QrPart4Parsed = {
   bagDelta: number;
   bagFractionLabel: string;
   bagNumberDisplay: string;
+  /** Tem lẻ: 'TL-01' (phần tách đem xuất) / 'CL-01' (bịch còn lại). Không phải tem lẻ → ''. */
+  splitTag?: string;
 };
+
+/** Đuôi tem lẻ trong phần 4 QR: (TL-01) / (CL-01), chấp nhận cả TL01, CL1… → 'TL-01' / 'CL-01'. */
+export function parseTemLeSplitTag(raw: string | null | undefined): { kind: 'TL' | 'CL'; seq: number; tag: string } | null {
+  const m = /\(?\s*(TL|CL)\s*-?\s*(\d{1,3})\s*\)?\s*$/i.exec(String(raw ?? '').trim());
+  if (!m) return null;
+  const kind = m[1].toUpperCase() as 'TL' | 'CL';
+  const seq = Number(m[2]) || 0;
+  if (!seq) return null;
+  return { kind, seq, tag: `${kind}-${String(seq).padStart(2, '0')}` };
+}
 
 export interface RmBagHistoryEntry {
   event: RmBagHistoryEventType;
@@ -80,10 +92,17 @@ export class RmBagHistoryService {
     }
 
     let splitSuffix = '';
+    let splitTag = '';
     let head = raw;
-    // Hậu tố bịch tách có thể là "(T123)" hoặc "T123" (một số tem không có ngoặc)
-    const splitM = /^(.+?)(?:\(([Tt]\d+)\)|([Tt]\d+))$/.exec(raw);
-    if (splitM) {
+    // Tem lẻ mới: "(TL-01)" / "(CL-01)" ở cuối phần 4
+    const tl = /^(.+?)\(\s*((?:TL|CL)\s*-?\s*\d{1,3})\s*\)$/i.exec(raw);
+    // Hậu tố bịch tách cũ có thể là "(T123)" hoặc "T123" (một số tem không có ngoặc)
+    const splitM = tl ? null : /^(.+?)(?:\(([Tt]\d+)\)|([Tt]\d+))$/.exec(raw);
+    if (tl) {
+      head = tl[1].trim();
+      splitTag = parseTemLeSplitTag(tl[2])?.tag || '';
+      splitSuffix = splitTag ? `(${splitTag})` : '';
+    } else if (splitM) {
       head = splitM[1].trim();
       const tag = (splitM[2] || splitM[3] || '').trim();
       splitSuffix = tag ? `(${tag.toUpperCase()})` : '';
@@ -101,7 +120,8 @@ export class RmBagHistoryService {
         imdKey: m[1],  // 10 hoặc 8 số
         bagDelta: 1,
         bagFractionLabel,
-        bagNumberDisplay
+        bagNumberDisplay,
+        splitTag
       };
     }
 

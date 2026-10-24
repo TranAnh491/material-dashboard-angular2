@@ -1,4 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
+import { WEIGH_REQUIRED_PREFIXES } from '../../services/weigh-exempt-report';
+import { SxxkSuspectInfo, SxxkSuspectService } from '../../services/sxxk-suspect.service';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import * as XLSX from 'xlsx';
@@ -14,7 +17,7 @@ import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-
 import { KkCatalogService } from '../../services/kk-catalog.service';
 import { STORAGE_ENV_CLIMATE, STORAGE_ENV_LABEL, STORAGE_MATERIAL_GROUPS, StorageMaterialGroup } from './storage-standard';
 
-type CatalogTab = 'nvl' | 'tp' | 'storage';
+type CatalogTab = 'nvl' | 'tp' | 'storage' | 'weigh';
 
 /** Dòng hiển thị NVL — gộp thêm Khách hàng (NVLKH) và DV Lưu trữ (dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
 interface NvlCatalogRow extends NvlCatalogItem {
@@ -50,6 +53,28 @@ interface SpAuditSuggestion {
 export class DanhMucNvlTpComponent implements OnInit {
   /** Chưa bấm chọn tab nào thì không hiển thị gì (và không tải dữ liệu). */
   activeTab: CatalogTab | null = null;
+  /** Menu thả xuống đang mở (Excel / Công cụ) — đóng khi bấm ra ngoài. */
+  openMenu: string | null = null;
+  /** Hiện hàng lọc theo cột (ẩn mặc định cho gọn). */
+  showNvlColumnFilters = false;
+  showTpColumnFilters = false;
+  /** Mục con đang xem trong tab Check lượng / Cân. */
+  weighSection: 'pending' | 'exempt' | 'include' | 'temle' | 'k100' = 'pending';
+
+  toggleMenu(name: string, event: Event): void {
+    event.stopPropagation();
+    this.openMenu = this.openMenu === name ? null : name;
+  }
+
+  @HostListener('document:click')
+  closeMenus(): void {
+    this.openMenu = null;
+  }
+
+  /** Số ô lọc theo cột đang có giá trị (hiện trên nút Lọc). */
+  activeFilterCount(filters: Record<string, string>): number {
+    return Object.values(filters).filter((v) => String(v || '').trim()).length;
+  }
 
   readonly pageSizeOptions = [10, 25, 50, 100];
 
@@ -144,19 +169,23 @@ export class DanhMucNvlTpComponent implements OnInit {
     private cartonPackingQtyAlertService: CartonPackingQtyAlertService,
     private kkCatalog: KkCatalogService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private weighReports: PxkWeightCheckReportService,
+    private sxxkSuspect: SxxkSuspectService
   ) {}
 
   ngOnInit(): void {
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'tp') this.setTab('tp');
     else if (tab === 'storage') this.setTab('storage');
+    else if (tab === 'weigh') this.setTab('weigh');
     else this.setTab('nvl');
   }
 
   /** Chỉ tải dữ liệu của tab được chọn, và chỉ tải lần đầu tiên bấm vào — giảm lượt đọc. */
   setTab(tab: CatalogTab): void {
     this.activeTab = tab;
+    if (tab === 'weigh' && !this.weighLoadedAt) void this.loadWeigh();
     if (tab === 'nvl' && !this.nvlLoadedAt) void this.loadNvl();
     if (tab === 'tp' && !this.tpLoadedAt) void this.loadTp();
   }
@@ -368,6 +397,41 @@ export class DanhMucNvlTpComponent implements OnInit {
       alert(`✅ Đã thêm mã NVL "${code}"`);
     } catch (e: any) {
       alert('❌ ' + (e?.message || e));
+    }
+  }
+
+  /** Trọng lượng 1 đơn vị = GW bag ÷ Standard Packing (chỉ khi cả 2 có số; không thì để trống). */
+  nvlUnitWeightCalc(row: NvlCatalogItem): number | null {
+    const gw = Number(row.gwBag) || 0;
+    const sp = Number(row.standardPacking) || 0;
+    return gw > 0 && sp > 0 ? Math.round((gw / sp) * 10000) / 10000 : null;
+  }
+
+  /** Lượng trong thùng — sửa thẳng trên dòng, không phụ thuộc Lock. */
+  async updateNvlCartonQty(row: NvlCatalogItem, raw: string): Promise<void> {
+    const cq = Math.max(0, Math.round((Number(raw) || 0) * 10000) / 10000);
+    if (cq === (Number(row.cartonQty) || 0)) return;
+    try {
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setCartonQty(row.materialCode, cq, editedBy);
+      row.cartonQty = cq;
+      if (editedBy) row.lastEditedBy = editedBy;
+    } catch (e: any) {
+      alert('❌ Không lưu được Lượng thùng: ' + (e?.message || e));
+    }
+  }
+
+  /** GW bag nguyên (gram) — sửa thẳng trên dòng, không phụ thuộc Lock. */
+  async updateNvlGwBag(row: NvlCatalogItem, raw: string): Promise<void> {
+    const gw = Math.max(0, Math.round(Number(raw) || 0));
+    if (gw === (Number(row.gwBag) || 0)) return;
+    try {
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setGwBag(row.materialCode, gw, editedBy);
+      row.gwBag = gw;
+      if (editedBy) row.lastEditedBy = editedBy;
+    } catch (e: any) {
+      alert('❌ Không lưu được GW bag: ' + (e?.message || e));
     }
   }
 
@@ -652,7 +716,9 @@ export class DanhMucNvlTpComponent implements OnInit {
       'Mã hàng': i.materialCode,
       Tên: i.materialName,
       ĐVT: i.unit,
-      'Trọng lượng (g)': i.unitWeight || 0,
+      'Trọng lượng (g)': this.nvlUnitWeightCalc(i) ?? '',
+      'GW bag (g)': i.gwBag || 0,
+      'Lượng thùng': i.cartonQty || 0,
       'Khách hàng': i.customer,
       'Vị trí yêu cầu': i.requiredLocation,
       'Standard Packing': i.standardPacking
@@ -1220,6 +1286,165 @@ export class DanhMucNvlTpComponent implements OnInit {
     this.showDeleteAllDialog = false;
     this.deleteAllStep = 'confirm';
     this.deleteAllCode = '';
+  }
+
+  // ===== Tab Check lượng / Cân (gộp "Danh mục check lượng" từ Work Order Status về 1 nguồn) =====
+  readonly weighPrefixes = WEIGH_REQUIRED_PREFIXES;
+  weighLoadedAt = 0;
+  weighLoading = false;
+  weighBusy = false;
+  weighPending: PxkWeightCheckReport[] = [];
+  weighExempt: Array<{ code: string; reason: string; lsx: string; approvedBy: string; approvedAt: any }> = [];
+  weighInclude: string[] = [];
+  weighIncludeDraft = '';
+  temLeNoWeigh: string[] = [];
+  temLeNoWeighDraft = '';
+  weighExemptQuery = '';
+
+  async loadWeigh(): Promise<void> {
+    this.weighLoading = true;
+    try {
+      const [pending, exempt, include, noWeigh] = await Promise.all([
+        this.weighReports.loadPending(),
+        this.weighReports.loadExemptRows(),
+        this.weighReports.loadIncludeCodes(),
+        this.weighReports.loadTemLeNoWeighPrefixes(),
+        this.sxxkSuspect.load()
+      ]);
+      this.weighPending = pending;
+      this.weighExempt = exempt;
+      this.weighInclude = include;
+      this.temLeNoWeigh = noWeigh;
+      this.k100Rows = this.sxxkSuspect.list();
+      this.weighLoadedAt = Date.now();
+    } catch (e: any) {
+      alert('❌ Không tải được danh mục check lượng: ' + (e?.message || e));
+    } finally {
+      this.weighLoading = false;
+    }
+  }
+
+  get weighExemptFiltered() {
+    const q = this.weighExemptQuery.trim().toUpperCase();
+    return q ? this.weighExempt.filter((r) => r.code.includes(q) || r.reason.toUpperCase().includes(q)) : this.weighExempt;
+  }
+
+  weighTime(v: any): string {
+    const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : (v?.seconds ? new Date(v.seconds * 1000) : null));
+    return d && !isNaN(d.getTime()) ? d.toLocaleString('vi-VN', { hour12: false }) : '';
+  }
+
+  async approveWeigh(r: PxkWeightCheckReport): Promise<void> {
+    if (this.weighBusy || !confirm(`Duyệt mã ${r.materialCode}? Mã này sẽ KHÔNG cần cân / check lượng nữa.`)) return;
+    this.weighBusy = true;
+    try {
+      await this.weighReports.approve(r, await this.currentEmployeeId());
+      await this.loadWeigh();
+    } catch (e: any) { alert('❌ Không duyệt được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async rejectWeigh(r: PxkWeightCheckReport): Promise<void> {
+    if (this.weighBusy || !confirm(`Từ chối báo cáo mã ${r.materialCode}? Mã vẫn phải cân / check lượng.`)) return;
+    this.weighBusy = true;
+    try {
+      await this.weighReports.reject(r, await this.currentEmployeeId());
+      await this.loadWeigh();
+    } catch (e: any) { alert('❌ Không từ chối được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async removeWeighExempt(code: string): Promise<void> {
+    if (this.weighBusy || !confirm(`Bỏ ${code} khỏi danh sách "không cần cân"? Mã sẽ lại phải cân / check lượng.`)) return;
+    this.weighBusy = true;
+    try {
+      await this.weighReports.removeExempt(code);
+      this.weighExempt = this.weighExempt.filter((r) => r.code !== code);
+    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async addWeighInclude(): Promise<void> {
+    const code = this.weighIncludeDraft.trim().toUpperCase();
+    if (!code || this.weighBusy) return;
+    this.weighBusy = true;
+    try {
+      await this.weighReports.addInclude(code, await this.currentEmployeeId());
+      this.weighIncludeDraft = '';
+      await this.loadWeigh();
+    } catch (e: any) { alert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async addTemLeNoWeigh(): Promise<void> {
+    const prefix = this.temLeNoWeighDraft.trim().toUpperCase();
+    if (!prefix || this.weighBusy) return;
+    if (this.temLeNoWeigh.includes(prefix)) { this.temLeNoWeighDraft = ''; return; }
+    this.weighBusy = true;
+    try {
+      const next = [...this.temLeNoWeigh, prefix];
+      await this.weighReports.saveTemLeNoWeighPrefixes(next, await this.currentEmployeeId());
+      this.temLeNoWeigh = next.sort();
+      this.temLeNoWeighDraft = '';
+    } catch (e: any) { alert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async removeTemLeNoWeigh(prefix: string): Promise<void> {
+    if (this.weighBusy || !confirm(`Bỏ ${prefix} khỏi danh sách "in tem lẻ không cần cân"? Mã sẽ lại theo quy tắc cân bình thường.`)) return;
+    this.weighBusy = true;
+    try {
+      const next = this.temLeNoWeigh.filter((p) => p !== prefix);
+      await this.weighReports.saveTemLeNoWeighPrefixes(next, await this.currentEmployeeId());
+      this.temLeNoWeigh = next;
+    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async removeWeighInclude(code: string): Promise<void> {
+    if (this.weighBusy || !confirm(`Bỏ ${code} khỏi danh sách mã thêm vào check lượng?`)) return;
+    this.weighBusy = true;
+    try {
+      await this.weighReports.removeInclude(code);
+      this.weighInclude = this.weighInclude.filter((c) => c !== code);
+    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  // Kiểm 100% (gộp từ Inbound): tự động từ SXXK (xuất bổ sung) + nhập tay — mã trong danh sách phải có GW bag ở Inbound
+  k100Rows: Array<{ code: string } & SxxkSuspectInfo> = [];
+  k100Query = '';
+  k100NewCode = '';
+  k100NewNote = '';
+  k100Error = '';
+
+  get k100Filtered(): Array<{ code: string } & SxxkSuspectInfo> {
+    const q = this.k100Query.trim().toUpperCase();
+    return q ? this.k100Rows.filter((r) => r.code.includes(q) || String(r.reason || '').toUpperCase().includes(q)) : this.k100Rows;
+  }
+
+  get k100ManualCount(): number {
+    return this.k100Rows.filter((r) => r.source === 'manual').length;
+  }
+
+  async addK100(): Promise<void> {
+    if (this.weighBusy || !this.k100NewCode.trim()) return;
+    this.weighBusy = true;
+    this.k100Error = '';
+    try {
+      const err = await this.sxxkSuspect.addManual(this.k100NewCode, this.k100NewNote, await this.currentEmployeeId());
+      if (err) { this.k100Error = err; return; }
+      this.k100NewCode = '';
+      this.k100NewNote = '';
+      this.k100Rows = this.sxxkSuspect.list();
+    } catch (e: any) {
+      this.k100Error = 'Không lưu được mã: ' + (e?.message || e);
+    } finally { this.weighBusy = false; }
+  }
+
+  async removeK100(code: string): Promise<void> {
+    if (this.weighBusy || !confirm(`Xóa mã ${code} khỏi danh sách Kiểm 100%?`)) return;
+    this.weighBusy = true;
+    this.k100Error = '';
+    try {
+      await this.sxxkSuspect.removeManual(code);
+      this.k100Rows = this.sxxkSuspect.list();
+    } catch (e: any) {
+      this.k100Error = 'Không xóa được mã: ' + (e?.message || e);
+    } finally { this.weighBusy = false; }
   }
 
   private async currentEmployeeId(): Promise<string> {
