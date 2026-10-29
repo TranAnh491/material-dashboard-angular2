@@ -138,6 +138,11 @@ export interface CompareOptions {
   inventoryTo?: string;
 }
 
+/** Mã bắt đầu bằng A (bán thành phẩm) không tính vào Aging Report. */
+export function isExcludedSku(sku: string): boolean {
+  return /^A/i.test(String(sku || '').trim());
+}
+
 export function agingBucket(months: number): string {
   if (months < 4) return AGING_BUCKETS[0];
   if (months < 8) return AGING_BUCKETS[1];
@@ -176,6 +181,9 @@ export function compareFactory(
   opts: CompareOptions = {}
 ): FactoryCompareResult {
   const end = reportTo;
+  agingRows = agingRows.filter(a => !isExcludedSku(a.sku));
+  inventoryRows = inventoryRows ? inventoryRows.filter(r => !isExcludedSku(r.sku)) : null;
+  ledger = { N: ledger.N.filter(r => !isExcludedSku(r.sku)), X: ledger.X.filter(r => !isExcludedSku(r.sku)) };
   type Tx = { r: LedgerRow; sign: 1 | -1 };
   const txs: Tx[] = [];
   for (const r of ledger.N) if (!end || r.d <= end) txs.push({ r, sign: 1 });

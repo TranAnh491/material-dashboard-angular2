@@ -173,6 +173,7 @@
     <div class="rule-notes" *ngIf="factoryCards.length">
       <p class="import-notes-lead">Cách đối chiếu</p>
       <ul>
+        <li><strong>Không tính mã bắt đầu bằng A</strong> (số liệu, giá trị và đối chiếu đều đã bỏ các mã này).</li>
         <li>Đọc theo <strong>Mã TP + Mã lô + Kho</strong>. Tồn bảng kê = Σ nhập − Σ xuất có ngày ≤ ngày cuối kỳ của Aging.</li>
         <li>Phiếu xuất không ghi lô được trừ <strong>FIFO</strong> vào lot nhập trước của cùng mã + kho.</li>
         <li>Lot có phiếu nhập TP / PN trong bảng kê: tồn Aging phải bằng tồn bảng kê, Inbound Date phải bằng ngày phiếu nhập đầu tiên.</li>
