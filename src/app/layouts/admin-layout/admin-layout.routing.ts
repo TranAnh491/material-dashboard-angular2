@@ -51,6 +51,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'fg-check',             loadChildren: () => import('../../pages/fg-check/fg-check.module').then(m => m.FGCheckModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-overview',          loadChildren: () => import('../../pages/fg-overview/fg-overview.module').then(m => m.FgOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'aging-report',         loadChildren: () => import('../../pages/aging-report/aging-report.module').then(m => m.AgingReportModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-location',          loadChildren: () => import('../../pages/fg-location/fg-location.module').then(m => m.FgLocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pallet-id',            loadChildren: () => import('../../pages/pallet-id/pallet-id.module').then(m => m.PalletIdModule), canActivate: [AuthGuard, TabPermissionGuard] },
 

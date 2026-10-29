@@ -282,6 +282,15 @@ export const APP_TABS: AppTab[] = [
     desktopOnly: true,
   },
   {
+    path: '/aging-report', key: 'aging-report', title: 'Aging Report',
+    subtitle: 'Kiểm báo cáo tuổi hàng TP với bảng kê nhập xuất',
+    menu: { category: 'ASM FG', icon: 'hourglass_bottom', iconImage: 'assets/img/fginventory.png' },
+    sidebarIcon: 'hourglass_bottom',
+    dashboard: { category: 'ASM FG', icon: 'hourglass_bottom' },
+    permission: { name: 'Aging Report', group: 'FG' },
+    desktopOnly: true, ownNav: true,
+  },
+  {
     path: '/fg-location', key: 'fg-location', title: 'FG Location',
     subtitle: 'Đổi vị trí và nhà máy thành phẩm',
     menu: { category: 'ASM FG', icon: 'edit_location', iconImage: 'assets/img/fglocation.png' },
@@ -445,7 +454,7 @@ export const SIDEBAR_LAYOUT: Array<string | SidebarGroup> = [
   },
   {
     title: 'ASM FG', icon: 'check_circle_outline', class: 'asm1-fg-parent', childClass: 'material-child-icon',
-    children: ['/fg-in', '/fg-out', '/fg-check', '/fg-inventory', '/fg-overview', '/fg-location', '/pallet-id'],
+    children: ['/fg-in', '/fg-out', '/fg-check', '/fg-inventory', '/fg-overview', '/aging-report', '/fg-location', '/pallet-id'],
   },
   {
     title: 'Tools', icon: 'build', class: 'tools-parent', childClass: 'material-child-icon',

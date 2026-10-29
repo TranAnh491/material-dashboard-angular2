@@ -1,0 +1,398 @@
+<div class="aging-report-page">
+  <div class="top-fixed-area">
+    <div class="header">
+      <h4 class="page-title">Aging Report</h4>
+    </div>
+
+    <div class="status-line" [title]="statusLineText">{{ statusLineText }}</div>
+
+    <!-- Control bar: nhà máy + import + chế độ xem + lọc; nút Menu neo phải -->
+    <div class="control-bar">
+      <div class="factory-toggle">
+        <button type="button" class="toggle-btn" [class.active]="factoryView === 'ALL'" (click)="setFactoryView('ALL')">Tổng</button>
+        <button
+          *ngFor="let f of factories"
+          type="button"
+          class="toggle-btn"
+          [class.active]="factoryView === f"
+          (click)="setFactoryView(f)"
+        >{{ factoryLabel[f] }}</button>
+      </div>
+
+      <div class="action-buttons">
+        <button type="button" class="io-btn io-btn-primary" (click)="openImportDialog()">
+          <i class="material-icons">file_upload</i>
+          Import
+        </button>
+        <button type="button" class="io-btn" (click)="loadAll()" [disabled]="isLoading" title="Tải lại dữ liệu đã lưu">
+          <i class="material-icons">refresh</i>
+          Tải lại
+        </button>
+        <button type="button" class="io-btn" (click)="toggleMoreMenu()">
+          <i class="material-icons">more_vert</i>
+          More
+        </button>
+      </div>
+
+      <div class="factory-toggle">
+        <button type="button" class="toggle-btn" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">Tổng hợp</button>
+        <button type="button" class="toggle-btn" [class.active]="viewMode === 'lot'" (click)="setViewMode('lot')">Theo lot</button>
+        <button type="button" class="toggle-btn" [class.active]="viewMode === 'sku'" (click)="setViewMode('sku')">Theo mã TP</button>
+      </div>
+
+      <ng-container *ngIf="viewMode !== 'summary'">
+        <div class="integrated-filters">
+          <button type="button" class="filter-btn" [class.active]="levelFilter === 'error'" (click)="setLevelFilter('error')">
+            Sai ({{ levelCounts.error }})
+          </button>
+          <button type="button" class="filter-btn" [class.active]="levelFilter === 'ok'" (click)="setLevelFilter('ok')">
+            Khớp ({{ levelCounts.ok }})
+          </button>
+          <button *ngIf="viewMode === 'lot'" type="button" class="filter-btn" [class.active]="levelFilter === 'info'" (click)="setLevelFilter('info')">
+            Lot trước kỳ ({{ levelCounts.info }})
+          </button>
+          <button *ngIf="viewMode === 'lot'" type="button" class="filter-btn" [class.active]="levelFilter === 'scope'" (click)="setLevelFilter('scope')">
+            Kho ngoài bảng kê ({{ levelCounts.scope }})
+          </button>
+          <button type="button" class="filter-btn" [class.active]="levelFilter === 'all'" (click)="setLevelFilter('all')">
+            Tất cả ({{ levelCounts.all }})
+          </button>
+        </div>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Tìm mã TP, lot, kho…"
+          [(ngModel)]="searchText"
+          (ngModelChange)="onSearchChange()"
+          name="agingSearch"
+          autocomplete="off"
+        />
+      </ng-container>
+
+      <button type="button" class="io-btn menu-btn control-bar__back-menu" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">home</i>
+        Menu
+      </button>
+    </div>
+
+    <!-- Kỳ báo cáo của từng nhà máy -->
+    <div class="period-bar" *ngIf="!isLoading">
+      <ng-container *ngFor="let f of factories">
+        <label class="period-item" *ngIf="factoryView === 'ALL' || factoryView === f">
+          <span>{{ factoryLabel[f] }} – Aging ngày</span>
+          <select
+            *ngIf="meta[f]?.reports?.length; else noReport"
+            [ngModel]="selectedReportId[f]"
+            (ngModelChange)="onReportChange(f, $event)"
+            [name]="'report' + f"
+          >
+            <option *ngFor="let r of meta[f]?.reports" [value]="r.id">{{ fmtDate(r.to) }} ({{ r.rowCount }} dòng)</option>
+          </select>
+          <ng-template #noReport><strong>chưa import</strong></ng-template>
+        </label>
+      </ng-container>
+      <label class="period-item" *ngIf="viewMode === 'summary'">
+        <span>Tỷ giá USD</span>
+        <input type="number" class="rate-input" [(ngModel)]="usdRate" (ngModelChange)="onRateChange()" name="usdRate" min="1" />
+      </label>
+    </div>
+  </div>
+
+  <div class="loading-state-text" *ngIf="isLoading">Đang tải dữ liệu Aging Report…</div>
+  <div class="error-banner" *ngIf="loadError">{{ loadError }}</div>
+
+  <!-- ─── Tổng hợp ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'summary'">
+    <p class="empty" *ngIf="!factoryCards.length">
+      Chưa có báo cáo tuổi hàng. Bấm <strong>Import</strong> và chọn cùng lúc bảng kê nhập (TP…), bảng kê xuất (XP…),
+      báo cáo tuổi hàng và báo cáo tồn kho của từng nhà máy.
+    </p>
+
+    <div class="fac-cards" *ngIf="factoryCards.length">
+      <div class="fac-card" *ngFor="let c of factoryCards">
+        <div class="fac-card-title">{{ factoryLabel[c.factory] }}</div>
+        <div class="fac-card-line">Aging ngày <strong>{{ fmtDate(c.reportTo) }}</strong></div>
+        <div class="fac-card-line">Bảng kê <strong>{{ c.ledgerRange }}</strong></div>
+        <div class="fac-card-line">BC tồn kho <strong>{{ c.inventoryTo ? fmtDate(c.inventoryTo) : 'chưa có' }}</strong></div>
+        <div class="fac-card-line">Số lot <strong>{{ c.lots | number }}</strong> · Tồn <strong>{{ c.qty | number : '1.0-0' }}</strong></div>
+        <div class="fac-card-line">Giá trị <strong>{{ c.value | number : '1.0-0' }}</strong> VND</div>
+        <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.lotErrors">Lot sai: <strong>{{ c.lotErrors }}</strong></div>
+        <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.skuErrors">Mã TP sai: <strong>{{ c.skuErrors }}</strong></div>
+      </div>
+    </div>
+
+    <table class="aging-table" *ngIf="factoryCards.length">
+      <thead>
+        <tr>
+          <th>Type of Aging</th>
+          <th *ngFor="let c of factoryCards" class="num-cell">{{ factoryLabel[c.factory] }} (VND)</th>
+          <th class="num-cell">Tổng (VND)</th>
+          <th class="num-cell">Tổng (USD)</th>
+          <th class="num-cell">%</th>
+          <th class="num-cell" title="Nhóm tuổi tính lại từ Inbound Date và ngày cuối kỳ">Tính lại (VND)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of bucketLines" [class.negative-row]="l.total !== l.calcTotal">
+          <td class="material-code-cell">{{ l.label }}</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ l.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ l.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? l.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">{{ l.percent | number : '1.2-2' }}%</td>
+          <td class="num-cell">{{ l.calcTotal | number : '1.0-0' }}</td>
+        </tr>
+        <tr class="total-row" *ngIf="bucketTotal">
+          <td>Grand Total</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ bucketTotal.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ bucketTotal.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? bucketTotal.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">100%</td>
+          <td class="num-cell">{{ bucketTotal.calcTotal | number : '1.0-0' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="aging-table" *ngIf="whLines.length">
+      <thead>
+        <tr>
+          <th>WH</th>
+          <th *ngFor="let c of factoryCards" class="num-cell">{{ factoryLabel[c.factory] }} (VND)</th>
+          <th class="num-cell">Tổng (VND)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of whLines">
+          <td class="material-code-cell">{{ l.wh }}</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ l.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ l.total | number : '1.0-0' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rule-notes" *ngIf="factoryCards.length">
+      <p class="import-notes-lead">Cách đối chiếu</p>
+      <ul>
+        <li>Đọc theo <strong>Mã TP + Mã lô + Kho</strong>. Tồn bảng kê = Σ nhập − Σ xuất có ngày ≤ ngày cuối kỳ của Aging.</li>
+        <li>Phiếu xuất không ghi lô được trừ <strong>FIFO</strong> vào lot nhập trước của cùng mã + kho.</li>
+        <li>Lot có phiếu nhập TP / PN trong bảng kê: tồn Aging phải bằng tồn bảng kê, Inbound Date phải bằng ngày phiếu nhập đầu tiên.</li>
+        <li>Lot nhập trước kỳ bảng kê: chỉ kiểm tồn Aging ≥ phát sinh (tồn đầu suy ra không âm).</li>
+        <li>Số tháng = (ngày cuối kỳ − Inbound Date) / 30, làm tròn 1 số lẻ; nhóm tuổi theo mốc 4 / 8 / 12 / 24 tháng.</li>
+        <li>Theo mã TP: tổng tồn Aging của kho trong bảng kê (TP, DL) so với Báo cáo tồn kho cùng ngày.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── Theo lot ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'lot'">
+    <table class="aging-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th *ngIf="factoryView === 'ALL'">Nhà máy</th>
+          <th>Mã TP</th>
+          <th>Mã lô</th>
+          <th>Kho</th>
+          <th>Ngày nhập Aging</th>
+          <th>Ngày nhập bảng kê</th>
+          <th class="num-cell">Tháng Aging</th>
+          <th class="num-cell">Tháng tính lại</th>
+          <th class="num-cell">Tồn Aging</th>
+          <th class="num-cell">Tồn bảng kê</th>
+          <th class="num-cell">Chênh lệch</th>
+          <th class="num-cell" title="Nhập / xuất trong kỳ bảng kê">Nhập / Xuất</th>
+          <th class="num-cell">Giá trị</th>
+          <th>Kết quả</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let r of filteredLots | slice : 0 : visibleCount; let i = index; trackBy: trackById"
+          [class.negative-row]="r.level === 'error'"
+        >
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
+          <td class="material-code-cell" [title]="r.name">{{ r.sku }}</td>
+          <td>{{ r.lot || '(không lô)' }}</td>
+          <td>{{ r.wh }}</td>
+          <td>{{ fmtDate(r.agingInb) }}</td>
+          <td [class.has-difference]="r.agingInb && r.ledgerInb && r.agingInb !== r.ledgerInb">{{ fmtDate(r.ledgerInb) }}</td>
+          <td class="num-cell">{{ r.agingMonths ?? '' }}</td>
+          <td class="num-cell" [class.has-difference]="r.monthsWrong">{{ r.calcMonths ?? '' }}</td>
+          <td class="num-cell">{{ r.inAging ? (r.agingQty | number : '1.0-3') : '' }}</td>
+          <td class="num-cell">{{ r.ledgerQty === null ? '' : (r.ledgerQty | number : '1.0-3') }}</td>
+          <td class="num-cell" [class.has-difference]="r.diffQty">
+            <ng-container *ngIf="r.diffQty !== null">{{ r.diffQty | number : '1.0-3' }}</ng-container>
+            <span class="sub-note" *ngIf="r.openingQty !== null">đầu kỳ {{ r.openingQty | number : '1.0-3' }}</span>
+          </td>
+          <td class="num-cell">
+            <ng-container *ngIf="r.ledgerQty !== null">{{ r.inQty | number : '1.0-0' }} / {{ r.outQty | number : '1.0-0' }}</ng-container>
+          </td>
+          <td class="num-cell">{{ r.value | number : '1.0-0' }}</td>
+          <td>
+            <span class="compare-badge" [ngClass]="'level-' + r.level">{{ r.statusText }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredLots.length && !loadError">Không có dòng nào.</p>
+    <button *ngIf="filteredLots.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
+      Xem thêm ({{ visibleCount }}/{{ filteredLots.length }})
+    </button>
+  </div>
+
+  <!-- ─── Theo mã TP ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'sku'">
+    <table class="aging-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th *ngIf="factoryView === 'ALL'">Nhà máy</th>
+          <th>Mã TP</th>
+          <th>Tên</th>
+          <th>Khách hàng</th>
+          <th class="num-cell">Tồn BC tồn kho</th>
+          <th class="num-cell" title="Tổng tồn Aging của các kho có trong bảng kê (TP, DL)">Tồn Aging (TP, DL)</th>
+          <th class="num-cell">Chênh lệch</th>
+          <th class="num-cell">Tồn Aging tất cả kho</th>
+          <th class="num-cell">Giá trị Aging</th>
+          <th>Kết quả</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let r of filteredSkus | slice : 0 : visibleCount; let i = index; trackBy: trackById"
+          [class.negative-row]="r.level === 'error'"
+        >
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
+          <td class="material-code-cell">{{ r.sku }}</td>
+          <td class="name-cell" [title]="r.name">{{ r.name }}</td>
+          <td>{{ r.cus }}</td>
+          <td class="num-cell">{{ r.invQty === null ? 'chưa có' : (r.invQty | number : '1.0-3') }}</td>
+          <td class="num-cell">{{ r.agingQtyScope | number : '1.0-3' }}</td>
+          <td class="num-cell" [class.has-difference]="r.diffQty">{{ r.diffQty === null ? '' : (r.diffQty | number : '1.0-3') }}</td>
+          <td class="num-cell">{{ r.agingQtyAll | number : '1.0-3' }}</td>
+          <td class="num-cell">{{ r.agingValue | number : '1.0-0' }}</td>
+          <td><span class="compare-badge" [ngClass]="'level-' + r.level">{{ r.statusText }}</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredSkus.length && !loadError">Không có dòng nào.</p>
+    <button *ngIf="filteredSkus.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
+      Xem thêm ({{ visibleCount }}/{{ filteredSkus.length }})
+    </button>
+  </div>
+
+  <!-- Popup More -->
+  <div class="more-overlay" *ngIf="showMoreMenu" (click)="toggleMoreMenu()">
+    <div class="more-popup" (click)="$event.stopPropagation()">
+      <button type="button" class="more-item-btn" (click)="exportExcel()">
+        <i class="material-icons">file_download</i>
+        Tải về Báo Cáo
+      </button>
+      <button type="button" class="more-item-btn" (click)="openHistory()">
+        <i class="material-icons">history</i>
+        Lịch sử import
+      </button>
+    </div>
+  </div>
+
+  <!-- Popup lịch sử import -->
+  <div class="import-overlay" *ngIf="showHistory" (click)="showHistory = false" role="dialog" aria-modal="true">
+    <div class="import-dialog import-dialog--wide" (click)="$event.stopPropagation()">
+      <h3 class="import-dialog-title">Lịch sử import</h3>
+      <div class="dialog-table-wrap">
+        <table class="aging-table">
+          <thead>
+            <tr><th>Thời gian</th><th>Nhà máy</th><th>Loại</th><th>File</th><th>Kỳ</th><th class="num-cell">Dòng</th><th>Người import</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let h of historyRows">
+              <td>{{ h.at | date : 'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ h.factory }}</td>
+              <td>{{ kindLabel[h.kind] }}</td>
+              <td>{{ h.fileName }}</td>
+              <td>{{ h.from ? fmtDate(h.from) + ' → ' : '' }}{{ fmtDate(h.to) }}</td>
+              <td class="num-cell">{{ h.rowCount | number }}</td>
+              <td>{{ h.by }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="empty" *ngIf="!historyRows.length">Chưa có lần import nào.</p>
+      </div>
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-secondary" (click)="showHistory = false">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup import -->
+  <div class="import-overlay" *ngIf="showImportDialog" (click)="closeImportDialog()" role="dialog" aria-modal="true" aria-labelledby="aging-import-title">
+    <div class="import-dialog import-dialog--wide" (click)="$event.stopPropagation()">
+      <h3 id="aging-import-title" class="import-dialog-title">Import Aging Report</h3>
+      <div class="import-notes">
+        <p class="import-notes-lead">Chọn nhiều file cùng lúc (cả 2 nhà máy). Hệ thống tự nhận diện:</p>
+        <ul>
+          <li><strong>Bảng kê phiếu nhập</strong> (file TP…) và <strong>Bảng kê phiếu xuất</strong> (file XP…): lưu lâu dài theo tháng. Import lại cùng kỳ chỉ thay các dòng trong khoảng "Từ ngày … đến ngày …" của file, không bị trùng.</li>
+          <li><strong>Báo cáo tuổi hàng</strong>: đọc sheet có cột SKU, Mã lô, Inbound Date; lưu theo ngày cuối kỳ.</li>
+          <li><strong>Báo cáo tồn kho</strong> (kho 21): dùng để đối chiếu tổng tồn theo mã TP.</li>
+          <li>Nhà máy lấy theo tên file (<strong>KZ</strong> = ASM1, <strong>LH</strong> = ASM2) hoặc số chứng từ; nếu không nhận ra thì chọn tay.</li>
+        </ul>
+      </div>
+      <input
+        #agingFileInput
+        type="file"
+        multiple
+        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        (change)="onFilesSelected($event)"
+        hidden
+      />
+
+      <div class="dialog-table-wrap" *ngIf="pendingFiles.length">
+        <table class="aging-table">
+          <thead>
+            <tr><th>File</th><th>Loại</th><th>Nhà máy</th><th>Kỳ</th><th class="num-cell">Dòng</th><th>Trạng thái</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of pendingFiles" [class.negative-row]="p.status === 'loi'">
+              <td>{{ p.fileName }}</td>
+              <td>{{ p.kindLabel }}</td>
+              <td>
+                <select [(ngModel)]="p.factory" [name]="'fac' + p.fileName" [disabled]="p.status !== 'cho'">
+                  <option [ngValue]="null">— chọn —</option>
+                  <option *ngFor="let f of factories" [ngValue]="f">{{ factoryLabel[f] }}</option>
+                </select>
+              </td>
+              <td>{{ p.from ? fmtDate(p.from) + ' → ' : '' }}{{ fmtDate(p.to) }}</td>
+              <td class="num-cell">{{ p.rowCount | number }}</td>
+              <td>
+                <span *ngIf="p.status === 'cho'">Chờ lưu</span>
+                <span *ngIf="p.status === 'dang'">Đang lưu…</span>
+                <span *ngIf="p.status === 'xong'">Đã lưu</span>
+                <span *ngIf="p.status === 'loi'" class="error-text">{{ p.error }}</span>
+              </td>
+              <td>
+                <button *ngIf="p.status !== 'dang' && !isImporting" type="button" class="icon-btn" (click)="removePending(p)" title="Bỏ file">
+                  <i class="material-icons">close</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="import-message" *ngIf="importMessage">{{ importMessage }}</p>
+
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-secondary" (click)="agingFileInput.click()" [disabled]="isImporting">
+          Chọn file
+        </button>
+        <button type="button" class="btn-import-dialog-primary" (click)="saveImport()" [disabled]="!canSaveImport">
+          Lưu lên hệ thống
+        </button>
+        <button type="button" class="btn-import-dialog-secondary" (click)="closeImportDialog()" [disabled]="isImporting">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
