@@ -66,6 +66,8 @@ export class AgingReportComponent implements OnInit {
   factoryCards: {
     factory: AgingFactory; reportTo: string; ledgerRange: string; inventoryTo: string;
     lots: number; lotErrors: number; skuErrors: number; value: number; qty: number;
+    /** Aging chốt sau ngày cuối bảng kê: ghi chú số mã chưa kiểm được */
+    gapNote: string;
   }[] = [];
 
   showImportDialog = false;
@@ -124,7 +126,10 @@ export class AgingReportComponent implements OnInit {
       inventory ? this.agingService.loadInventoryRows(inventory) : Promise.resolve(null),
     ]);
     const ledgerFrom = [meta.ledgerRange.N?.from, meta.ledgerRange.X?.from].filter(Boolean).sort()[0] || '';
-    this.results[f] = compareFactory(f, ledger, ledgerFrom, report.to, agingRows, inventoryRows);
+    const ledgerTo = [meta.ledgerRange.N?.to, meta.ledgerRange.X?.to].filter(Boolean).sort()[0] || '';
+    this.results[f] = compareFactory(f, ledger, ledgerFrom, report.to, agingRows, inventoryRows, {
+      ledgerTo, inventoryTo: inventory?.to || '',
+    });
   }
 
   /** BC tồn kho cùng ngày với Aging; không có thì lấy bản gần nhất trước đó. */
@@ -264,6 +269,9 @@ export class AgingReportComponent implements OnInit {
         lots: r.lots.filter(l => l.inAging).length,
         lotErrors: r.lots.filter(l => l.level === 'error').length,
         skuErrors: r.skus.filter(s => s.level === 'error').length,
+        gapNote: r.ledgerTo && r.ledgerTo < r.reportTo
+          ? `Bảng kê chỉ đến ${this.fmtDate(r.ledgerTo)}, Aging chốt ${this.fmtDate(r.reportTo)}: ${r.gapSkuCount} mã có phát sinh sau ngày bảng kê, chưa kiểm được tồn lot`
+          : '',
         value: r.totalValue,
         qty: r.totalQty,
       };

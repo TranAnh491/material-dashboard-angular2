@@ -82,6 +82,10 @@ export interface FactoryCompareResult {
   factory: AgingFactory;
   reportTo: string;
   ledgerFrom: string;
+  ledgerTo: string;
+  inventoryTo: string;
+  /** Số mã có phát sinh sau ngày cuối bảng kê (chưa kiểm được tồn lot) */
+  gapSkuCount: number;
   scopeWh: string[];
   lots: LotCompareRow[];
   skus: SkuCompareRow[];
@@ -110,7 +114,29 @@ export const ISSUE = {
   overExport: 'Xuất vượt nhập',
   invDiff: 'Lệch BC tồn kho',
   lotErr: 'Có lot sai',
+  zeroValue: 'Giá trị = 0',
+  /** Aging chốt sau ngày cuối bảng kê và mã có phát sinh sau ngày đó → chưa kiểm được tồn */
+  afterLedger: 'Phát sinh sau ngày bảng kê',
+  /** BC tồn kho khác ngày Aging → chênh lệch chỉ để tham khảo */
+  invOtherDay: 'Lệch BC tồn kho khác ngày',
 } as const;
+
+/** Vấn đề chỉ để lưu ý (không tính là sai). */
+const INFO_ISSUES = new Set<string>([ISSUE.afterLedger, ISSUE.invOtherDay]);
+/** Vấn đề về tồn lot — bỏ qua khi mã có phát sinh sau ngày bảng kê. */
+const QTY_ISSUES = new Set<string>([ISSUE.qty, ISSUE.missingInAging, ISSUE.overExport, ISSUE.belowMovement, ISSUE.noReceipt]);
+
+function levelOf(issues: string[], fallback: AgingLevel): AgingLevel {
+  if (issues.some(i => !INFO_ISSUES.has(i))) return 'error';
+  return issues.length ? 'info' : fallback;
+}
+
+export interface CompareOptions {
+  /** Ngày cuối của bảng kê đã lưu (nhập / xuất, lấy ngày nhỏ hơn) */
+  ledgerTo?: string;
+  /** Ngày của BC tồn kho dùng để đối chiếu */
+  inventoryTo?: string;
+}
 
 export function agingBucket(months: number): string {
   if (months < 4) return AGING_BUCKETS[0];
@@ -146,7 +172,8 @@ export function compareFactory(
   ledgerFrom: string,
   reportTo: string,
   agingRows: AgingRow[],
-  inventoryRows: InventoryRow[] | null
+  inventoryRows: InventoryRow[] | null,
+  opts: CompareOptions = {}
 ): FactoryCompareResult {
   const end = reportTo;
   type Tx = { r: LedgerRow; sign: 1 | -1 };
@@ -224,6 +251,7 @@ export function compareFactory(
     if (calcMonths != null && (a.aging == null || Math.abs(a.aging - calcMonths) > 0.15)) issues.push(ISSUE.months);
     if (calcType && a.type !== calcType) issues.push(ISSUE.type);
     if (a.price && Math.abs(a.qty * a.price - a.value) > Math.max(1, Math.abs(a.value) * 0.0005)) issues.push(ISSUE.value);
+    if (a.qty > 0 && !(a.value > 0)) issues.push(ISSUE.zeroValue);
 
     bucketFile[a.type || '(trống)'] = (bucketFile[a.type || '(trống)'] || 0) + a.value;
     bucketCalc[calcType || '(trống)'] = (bucketCalc[calcType || '(trống)'] || 0) + a.value;
@@ -293,17 +321,40 @@ export function compareFactory(
       price: 0, value: 0, issues: [issue], level: 'error',
     }));
   });
+  // Aging chốt sau ngày cuối bảng kê → mã có phiếu sau ngày đó chưa kiểm được tồn lot.
+  // Có BC tồn kho cùng thời điểm bảng kê: mã có tổng Aging (kho trong bảng kê) ≠ BC tồn kho là mã có phát sinh sau.
+  // Không có: coi mọi mã đang lệch tồn lot là chưa kiểm được.
+  const gapSkus = new Set<string>();
+  if (opts.ledgerTo && end && opts.ledgerTo < end) {
+    if (inventoryRows && opts.inventoryTo && opts.inventoryTo < end) {
+      const diff = new Map<string, number>();
+      agingRows.forEach(a => { if (scopeWh.has(a.wh)) diff.set(a.sku, (diff.get(a.sku) || 0) + a.qty); });
+      inventoryRows.forEach(r => diff.set(r.sku, (diff.get(r.sku) || 0) - r.qty));
+      diff.forEach((d, sku) => { if (Math.abs(d) > EPS) gapSkus.add(sku); });
+    } else {
+      out.forEach(r => { if (r.issues.some(i => QTY_ISSUES.has(i))) gapSkus.add(r.sku); });
+    }
+    for (let i = 0; i < out.length; i++) {
+      const r = out[i];
+      if (!gapSkus.has(r.sku) || r.level === 'scope') continue;
+      const issues = r.issues.filter(x => !QTY_ISSUES.has(x)).concat(ISSUE.afterLedger);
+      const { id, statusText, searchText, monthsWrong, ...rest } = r;
+      out[i] = makeLotRow({ ...rest, issues, level: levelOf(issues, r.level) });
+    }
+  }
   out.sort((x, y) => x.sku.localeCompare(y.sku) || x.lot.localeCompare(y.lot) || x.wh.localeCompare(y.wh));
 
   return {
-    factory, reportTo: end, ledgerFrom, scopeWh: Array.from(scopeWh).sort(), lots: out,
-    skus: buildSkuRows(factory, out, scopeWh, inventoryRows),
+    factory, reportTo: end, ledgerFrom, ledgerTo: opts.ledgerTo || '', inventoryTo: opts.inventoryTo || '',
+    gapSkuCount: gapSkus.size, scopeWh: Array.from(scopeWh).sort(), lots: out,
+    skus: buildSkuRows(factory, out, scopeWh, inventoryRows, !!opts.inventoryTo && opts.inventoryTo !== end, gapSkus),
     bucketFile, bucketCalc, valueByWh, totalValue, totalQty, unallocatedOut,
   };
 }
 
 function buildSkuRows(
-  factory: AgingFactory, lots: LotCompareRow[], scopeWh: Set<string>, inventoryRows: InventoryRow[] | null
+  factory: AgingFactory, lots: LotCompareRow[], scopeWh: Set<string>, inventoryRows: InventoryRow[] | null,
+  inventoryOtherDay: boolean, gapSkus: Set<string>
 ): SkuCompareRow[] {
   type Acc = { name: string; cus: string; scope: number; all: number; value: number; lotErrors: number; inv: number | null };
   const map = new Map<string, Acc>();
@@ -332,9 +383,10 @@ function buildSkuRows(
   map.forEach((a, sku) => {
     const issues: string[] = [];
     const diffQty = a.inv == null ? null : round(a.scope - a.inv);
-    if (diffQty != null && Math.abs(diffQty) > EPS) issues.push(ISSUE.invDiff);
+    if (diffQty != null && Math.abs(diffQty) > EPS) issues.push(inventoryOtherDay ? ISSUE.invOtherDay : ISSUE.invDiff);
+    if (gapSkus.has(sku)) issues.push(ISSUE.afterLedger);
     if (a.lotErrors) issues.push(`${ISSUE.lotErr} (${a.lotErrors})`);
-    const level: AgingLevel = issues.length ? 'error' : 'ok';
+    const level = levelOf(issues, 'ok');
     rows.push({
       id: `${factory}|${sku}`, factory, sku, name: a.name, cus: a.cus, invQty: a.inv, agingQtyScope: round(a.scope),
       agingQtyAll: round(a.all), agingValue: a.value, diffQty, lotErrors: a.lotErrors, issues, level,

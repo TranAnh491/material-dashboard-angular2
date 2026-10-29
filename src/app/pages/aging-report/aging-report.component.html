@@ -118,6 +118,7 @@
         <div class="fac-card-line">Giá trị <strong>{{ c.value | number : '1.0-0' }}</strong> VND</div>
         <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.lotErrors">Lot sai: <strong>{{ c.lotErrors }}</strong></div>
         <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.skuErrors">Mã TP sai: <strong>{{ c.skuErrors }}</strong></div>
+        <div class="fac-card-line fac-card-warn" *ngIf="c.gapNote">{{ c.gapNote }}</div>
       </div>
     </div>
 
