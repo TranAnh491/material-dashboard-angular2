@@ -3,7 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { firstValueFrom } from 'rxjs';
 import {
-  AgingFactory, AgingFactoryMeta, AgingRow, FactoryLedger, InventoryRow, LedgerKind, LedgerRow,
+  AgingCorrection, AgingFactory, AgingFactoryMeta, AgingRow, FactoryLedger, InventoryRow, LedgerKind, LedgerRow,
   ParsedAgingFile, StoredReportInfo,
 } from './aging-report.parse';
 
@@ -28,6 +28,8 @@ const COL_LEDGER = 'aging-ledger';
 const COL_REPORTS = 'aging-reports';
 const COL_INVENTORY = 'aging-inventory';
 const COL_META = 'aging-meta';
+/** `aging-corrections/{reportId}`: { items: { [key]: AgingCorrection } } — chỉnh sửa trên từng báo cáo tuổi hàng */
+const COL_CORRECTIONS = 'aging-corrections';
 const LEDGER_PART_SIZE = 1500;
 const REPORT_PART_SIZE = 1500;
 const MAX_IMPORT_LOG = 100;
@@ -74,6 +76,30 @@ export class AgingReportService {
 
   async loadInventoryRows(info: StoredReportInfo): Promise<InventoryRow[]> {
     return this.loadParts<InventoryRow>(COL_INVENTORY, info);
+  }
+
+  async loadCorrections(reportId: string): Promise<Record<string, AgingCorrection>> {
+    const snap = await firstValueFrom(this.firestore.collection(COL_CORRECTIONS).doc(reportId).get());
+    return snap.exists ? (((snap.data() as { items?: Record<string, AgingCorrection> }).items) || {}) : {};
+  }
+
+  /**
+   * Lưu (correction) hoặc xóa (null) chỉnh sửa của 1 dòng. Đọc lại bản mới nhất trước khi ghi
+   * để không đè chỉnh sửa người khác vừa lưu ở dòng khác. Trả về toàn bộ chỉnh sửa sau khi ghi.
+   */
+  async saveCorrection(
+    reportId: string, key: string, correction: Omit<AgingCorrection, 'by' | 'at' | 'key'> | null
+  ): Promise<Record<string, AgingCorrection>> {
+    const items = await this.loadCorrections(reportId);
+    if (correction) {
+      items[key] = { ...correction, key, by: await this.currentUserLabel(), at: new Date().toISOString() };
+    } else {
+      delete items[key];
+    }
+    // Firestore không nhận undefined
+    const clean = JSON.parse(JSON.stringify(items));
+    await this.firestore.collection(COL_CORRECTIONS).doc(reportId).set({ reportId, items: clean });
+    return clean;
   }
 
   private async loadParts<T>(col: string, info: StoredReportInfo): Promise<T[]> {

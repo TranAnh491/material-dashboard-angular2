@@ -1,4 +1,4 @@
-import { AgingFactory, AgingRow, InventoryRow, LedgerRow } from '../../services/aging-report.parse';
+import { AgingCorrection, AgingFactory, AgingRow, InventoryRow, LedgerRow } from '../../services/aging-report.parse';
 
 /**
  * Đối chiếu Báo cáo tuổi hàng TP với bảng kê nhập / xuất (theo Mã TP + Mã lô + Kho).
@@ -56,6 +56,23 @@ export interface LotCompareRow {
   level: AgingLevel;
   statusText: string;
   searchText: string;
+  /** Khóa chỉnh sửa của dòng (xem AgingCorrection.key) */
+  key: string;
+  /** Trạng thái chỉnh sửa: chưa sửa / đã sửa dòng / đã thêm lot / bỏ qua lỗi */
+  fix: FixState;
+  /** Giá trị gốc trong file Aging trước khi sửa (null nếu chưa sửa hoặc lot thêm mới) */
+  orig: AgingRow | null;
+  fixNote: string;
+}
+
+export type FixState = 'none' | 'edited' | 'added' | 'ignored';
+
+/** Dòng Aging sau khi áp chỉnh sửa. */
+export interface WorkAgingRow extends AgingRow {
+  key: string;
+  fix: 'none' | 'edited' | 'added';
+  orig: AgingRow | null;
+  fixNote: string;
 }
 
 export interface SkuCompareRow {
@@ -136,6 +153,104 @@ export interface CompareOptions {
   ledgerTo?: string;
   /** Ngày của BC tồn kho dùng để đối chiếu */
   inventoryTo?: string;
+  /** Dòng được đánh dấu bỏ qua: key → ghi chú */
+  ignored?: Record<string, string>;
+}
+
+/** Khóa dòng Aging theo nội dung (SKU + lô + kho + lần xuất hiện) — không đổi khi import lại cùng báo cáo. */
+export function agingRowKeys(rows: AgingRow[]): string[] {
+  const seen = new Map<string, number>();
+  return rows.map(r => {
+    const base = `${r.sku}|${r.lot}|${r.wh}`;
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    return `r:${base}|${n}`;
+  });
+}
+
+export function addedLotKey(sku: string, lot: string, wh: string): string {
+  return `n:${sku}|${lot}|${wh}`;
+}
+
+/**
+ * Áp chỉnh sửa vào báo cáo tuổi hàng. Dòng đã sửa / thêm: số tháng, nhóm tuổi, giá trị tính lại
+ * từ ngày nhập, tồn, đơn giá mới (theo ngày cuối kỳ `end`).
+ */
+export function applyCorrections(rows: AgingRow[], items: Record<string, AgingCorrection>, end: string): WorkAgingRow[] {
+  const keys = agingRowKeys(rows);
+  const recalc = (r: AgingRow): AgingRow => {
+    const months = agingMonths(r.inb, end);
+    return { ...r, aging: months, type: months == null ? '' : agingBucket(months), value: Math.round(r.qty * r.price * 100) / 100 };
+  };
+  const out: WorkAgingRow[] = rows.map((r, i) => {
+    const c = items[keys[i]];
+    if (!c || c.action !== 'edit') return { ...r, key: keys[i], fix: 'none', orig: null, fixNote: '' };
+    const next = recalc({
+      ...r,
+      lot: c.lot ?? r.lot,
+      inb: c.inb ?? r.inb,
+      qty: c.qty ?? r.qty,
+      price: c.price ?? r.price,
+    });
+    return { ...next, key: keys[i], fix: 'edited', orig: r, fixNote: c.note || '' };
+  });
+  Object.values(items).forEach(c => {
+    if (c.action !== 'add' || !c.sku) return;
+    const r = recalc({
+      sku: c.sku, name: c.name || '', unit: c.unit || 'PCS', lot: c.lot || '', wh: c.wh || '', inb: c.inb || '',
+      aging: null, qty: c.qty || 0, price: c.price || 0, value: 0, type: '', cus: c.cus || '',
+    });
+    out.push({ ...r, key: c.key, fix: 'added', orig: null, fixNote: c.note || '' });
+  });
+  return out;
+}
+
+/** Đề xuất sửa cho 1 lot sai: giá trị mới + mô tả. null = không tự đề xuất được (cần sửa tay / kiểm tra phiếu). */
+export interface FixSuggestion {
+  action: 'edit' | 'add';
+  lot?: string;
+  inb?: string;
+  qty?: number;
+  price?: number;
+  text: string;
+}
+
+export function suggestFix(l: LotCompareRow, end: string, priceBySku: Map<string, number>): FixSuggestion | null {
+  if (l.fix !== 'none') return null;
+  if (!l.inAging) {
+    if (!l.issues.includes(ISSUE.missingInAging) || l.ledgerQty == null || l.ledgerQty <= 0) return null;
+    const price = priceBySku.get(`${l.factory}|${l.sku}`) || 0;
+    const m = agingMonths(l.ledgerInb, end);
+    return {
+      action: 'add', qty: l.ledgerQty, inb: l.ledgerInb, price,
+      text: `Thêm lot vào Aging: tồn ${l.ledgerQty}, nhập ${fmtIso(l.ledgerInb)} (${m ?? ''} tháng)`,
+    };
+  }
+  const s: FixSuggestion = { action: 'edit', text: '' };
+  const parts: string[] = [];
+  let inb = l.agingInb;
+  if (l.issues.includes(ISSUE.inb) && l.ledgerInb) {
+    s.inb = l.ledgerInb;
+    inb = l.ledgerInb;
+    parts.push(`ngày nhập ${fmtIso(l.agingInb)} → ${fmtIso(l.ledgerInb)}`);
+  }
+  if (l.issues.includes(ISSUE.qty) && l.ledgerQty != null && l.ledgerQty >= 0) {
+    s.qty = l.ledgerQty;
+    parts.push(`tồn ${l.agingQty} → ${l.ledgerQty}`);
+  }
+  const months = agingMonths(inb, end);
+  if (months != null && (parts.length || l.issues.includes(ISSUE.months) || l.issues.includes(ISSUE.type))) {
+    parts.push(`số tháng ${l.agingMonths ?? '(trống)'} → ${months}, nhóm ${agingBucket(months)}`);
+  }
+  if (!parts.length) return null;
+  s.text = 'Sửa ' + parts.join('; ');
+  return s;
+}
+
+function fmtIso(iso: string): string {
+  if (!iso) return '(trống)';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 /** Mã bắt đầu bằng A (bán thành phẩm) không tính vào Aging Report. */
@@ -176,12 +291,15 @@ export function compareFactory(
   ledger: { N: LedgerRow[]; X: LedgerRow[] },
   ledgerFrom: string,
   reportTo: string,
-  agingRows: AgingRow[],
+  agingRowsIn: (AgingRow | WorkAgingRow)[],
   inventoryRows: InventoryRow[] | null,
   opts: CompareOptions = {}
 ): FactoryCompareResult {
   const end = reportTo;
-  agingRows = agingRows.filter(a => !isExcludedSku(a.sku));
+  const plainKeys = agingRowKeys(agingRowsIn);
+  const agingRows: WorkAgingRow[] = agingRowsIn
+    .map((a, i) => ('key' in a ? a : { ...a, key: plainKeys[i], fix: 'none' as const, orig: null, fixNote: '' }))
+    .filter(a => !isExcludedSku(a.sku));
   inventoryRows = inventoryRows ? inventoryRows.filter(r => !isExcludedSku(r.sku)) : null;
   ledger = { N: ledger.N.filter(r => !isExcludedSku(r.sku)), X: ledger.X.filter(r => !isExcludedSku(r.sku)) };
   type Tx = { r: LedgerRow; sign: 1 | -1 };
@@ -302,6 +420,7 @@ export function compareFactory(
     }
     if (issues.length) level = 'error';
     out.push(makeLotRow({
+      key: a.key, fix: a.fix, orig: a.orig, fixNote: a.fixNote,
       factory, sku: a.sku, name: a.name, cus: a.cus, lot: a.lot, wh: a.wh, inAging: true,
       agingInb: a.inb, ledgerInb, agingMonths: a.aging, calcMonths, agingType: a.type, calcType,
       agingQty: a.qty, ledgerQty, diffQty, openingQty, inQty, outQty, price: a.price, value: a.value, issues, level,
@@ -322,6 +441,7 @@ export function compareFactory(
     if (!issue) return;
     const nm = nameBySku.get(acc.sku);
     out.push(makeLotRow({
+      key: addedLotKey(acc.sku, acc.lot, acc.wh), fix: 'none', orig: null, fixNote: '',
       factory, sku: acc.sku, name: nm?.name || '', cus: nm?.cus || '', lot: acc.lot, wh: acc.wh, inAging: false,
       agingInb: '', ledgerInb: acc.firstReceipt || acc.firstIn, agingMonths: null,
       calcMonths: agingMonths(acc.firstReceipt || acc.firstIn, end), agingType: '', calcType: '',
@@ -349,6 +469,14 @@ export function compareFactory(
       const { id, statusText, searchText, monthsWrong, ...rest } = r;
       out[i] = makeLotRow({ ...rest, issues, level: levelOf(issues, r.level) });
     }
+  }
+  // Lỗi được đánh dấu bỏ qua → chỉ còn là lưu ý
+  const ignored = opts.ignored || {};
+  for (let i = 0; i < out.length; i++) {
+    const r = out[i];
+    if (!(r.key in ignored) || r.level !== 'error') continue;
+    const { id, statusText, searchText, monthsWrong, ...rest } = r;
+    out[i] = makeLotRow({ ...rest, fix: 'ignored', fixNote: ignored[r.key] || '', level: 'info' });
   }
   out.sort((x, y) => x.sku.localeCompare(y.sku) || x.lot.localeCompare(y.lot) || x.wh.localeCompare(y.wh));
 
@@ -408,10 +536,15 @@ function buildSkuRows(
 let lotRowSeq = 0;
 
 function makeLotRow(r: Omit<LotCompareRow, 'id' | 'statusText' | 'searchText' | 'monthsWrong'>): LotCompareRow {
-  const statusText = r.issues.length
+  const base = r.issues.length
     ? r.issues.join(', ')
     : r.level === 'scope' ? 'Kho ngoài bảng kê'
     : r.level === 'info' ? 'Lot trước kỳ' : 'Khớp';
+  const rest = r.issues.length ? ' — còn: ' + base : '';
+  const statusText = r.fix === 'ignored' ? `Bỏ qua: ${base}`
+    : r.fix === 'edited' ? `Đã sửa${rest}`
+    : r.fix === 'added' ? `Đã thêm lot${rest}`
+    : base;
   return {
     ...r,
     id: `${r.factory}|${r.sku}|${r.lot}|${r.wh}|${r.inAging ? 'a' : 'l'}|${++lotRowSeq}`,

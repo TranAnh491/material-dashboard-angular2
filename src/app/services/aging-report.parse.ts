@@ -93,6 +93,29 @@ export interface StoredReportInfo {
   importedBy: string;
 }
 
+/**
+ * Một chỉnh sửa trên báo cáo tuổi hàng (lưu riêng, file gốc giữ nguyên).
+ * key: 'r:<SKU>|<lô>|<kho>|<lần xuất hiện>' cho dòng có trong Aging, 'n:<SKU>|<lô>|<kho>' cho lot thêm mới.
+ */
+export interface AgingCorrection {
+  key: string;
+  /** edit = sửa dòng, add = thêm lot thiếu trong Aging, ignore = bỏ qua lỗi (không sửa) */
+  action: 'edit' | 'add' | 'ignore';
+  lot?: string;
+  inb?: string;
+  qty?: number;
+  price?: number;
+  /** Chỉ dùng cho action = add */
+  sku?: string;
+  name?: string;
+  unit?: string;
+  wh?: string;
+  cus?: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
 export interface ImportLogEntry {
   kind: AgingFileKind;
   fileName: string;

@@ -2,12 +2,30 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import * as XLSX from 'xlsx';
 import {
-  AGING_FACTORIES, AGING_FACTORY_LABEL, AGING_FILE_KIND_LABEL, AgingFactory, AgingFactoryMeta, AgingReportService,
-  FactoryLedger, ImportLogEntry, ParsedAgingFile, StoredReportInfo, parseAgingWorkbook,
+  AGING_FACTORIES, AGING_FACTORY_LABEL, AGING_FILE_KIND_LABEL, AgingCorrection, AgingFactory, AgingFactoryMeta,
+  AgingReportService, AgingRow, FactoryLedger, ImportLogEntry, InventoryRow, ParsedAgingFile, StoredReportInfo,
+  parseAgingWorkbook,
 } from '../../services/aging-report.service';
 import {
-  AGING_BUCKETS, AgingLevel, FactoryCompareResult, ISSUE, LotCompareRow, SkuCompareRow, compareFactory,
+  AGING_BUCKETS, AgingLevel, FactoryCompareResult, FixSuggestion, ISSUE, LotCompareRow, SkuCompareRow, WorkAgingRow,
+  agingBucket, agingMonths, applyCorrections, compareFactory, isExcludedSku, suggestFix,
 } from './aging-report.logic';
+
+/** Một dòng của tab Cần sửa: lot + sai ở đâu + đề xuất. */
+interface FixRow {
+  id: string;
+  lot: LotCompareRow;
+  reasons: string[];
+  suggestion: FixSuggestion | null;
+  /** Đề xuất (tự động) hoặc gợi ý sửa tay */
+  suggestText: string;
+  state: FixFilter;
+  colText: Record<string, string>;
+}
+
+type FixFilter = 'todo' | 'done' | 'ignored' | 'note';
+
+const FIX_STATE_LABEL: Record<FixFilter, string> = { todo: 'Chưa sửa', done: 'Đã sửa', ignored: 'Bỏ qua', note: 'Lưu ý' };
 
 /** Một lot trong phần mở rộng của bảng Theo mã TP, kèm câu giải thích sai ở đâu. */
 interface SkuLotDetail {
@@ -16,7 +34,7 @@ interface SkuLotDetail {
 }
 
 type FactoryView = 'ALL' | AgingFactory;
-type ViewMode = 'summary' | 'lot' | 'sku';
+type ViewMode = 'fix' | 'summary' | 'lot' | 'sku';
 type LevelFilter = 'all' | AgingLevel;
 
 interface PendingFile extends ParsedAgingFile {
@@ -48,7 +66,7 @@ export class AgingReportComponent implements OnInit {
   readonly kindLabel = AGING_FILE_KIND_LABEL;
 
   factoryView: FactoryView = 'ALL';
-  viewMode: ViewMode = 'summary';
+  viewMode: ViewMode = 'fix';
   levelFilter: LevelFilter = 'error';
   searchText = '';
   /** Ô tìm kiếm dưới tiêu đề từng cột (key = tên cột) */
@@ -73,6 +91,28 @@ export class AgingReportComponent implements OnInit {
   private ledgers: Partial<Record<AgingFactory, FactoryLedger>> = {};
   selectedReportId: Partial<Record<AgingFactory, string>> = {};
   results: Partial<Record<AgingFactory, FactoryCompareResult>> = {};
+  /** Dữ liệu đã tải của báo cáo đang chọn (để tính lại ngay khi sửa, không tải lại) */
+  private loaded: Partial<Record<AgingFactory, {
+    reportId: string; reportTo: string; agingRows: AgingRow[]; inventoryRows: InventoryRow[] | null;
+    inventoryTo: string; corrections: Record<string, AgingCorrection>;
+  }>> = {};
+  /** Báo cáo tuổi hàng sau khi áp chỉnh sửa (đã bỏ mã A) — dùng xuất file đã hiệu chỉnh */
+  private workRows: Partial<Record<AgingFactory, WorkAgingRow[]>> = {};
+
+  // ── Tab Cần sửa ──
+  fixFilter: FixFilter | 'all' = 'todo';
+  fixRowsAll: FixRow[] = [];
+  filteredFixRows: FixRow[] = [];
+  fixCounts: Record<FixFilter | 'all', number> = { todo: 0, done: 0, ignored: 0, note: 0, all: 0 };
+  fixColFilter: Record<string, string> = {};
+  readonly fixFilterKeys = ['sku', 'lot', 'wh', 'where', 'suggest', 'status'];
+
+  // ── Form sửa 1 dòng ──
+  editRow: LotCompareRow | null = null;
+  editForm = { lot: '', inb: '', qty: 0, price: 0, note: '' };
+  editPreview = { months: '' as string | number, type: '', value: 0 };
+  isSaving = false;
+  actionMessage = '';
 
   filteredLots: LotCompareRow[] = [];
   filteredSkus: SkuCompareRow[] = [];
@@ -84,6 +124,7 @@ export class AgingReportComponent implements OnInit {
   factoryCards: {
     factory: AgingFactory; reportTo: string; ledgerRange: string; inventoryTo: string;
     lots: number; lotErrors: number; skuErrors: number; value: number; qty: number;
+    fixed: number; ignored: number;
     /** Aging chốt sau ngày cuối bảng kê: ghi chú số mã chưa kiểm được */
     gapNote: string;
   }[] = [];
@@ -130,23 +171,39 @@ export class AgingReportComponent implements OnInit {
     }
   }
 
+  /** Tải báo cáo tuổi hàng, BC tồn kho và chỉnh sửa của báo cáo đang chọn, rồi đối chiếu. */
   private async computeFactory(f: AgingFactory): Promise<void> {
     const meta = this.meta[f];
-    const ledger = this.ledgers[f];
     const report = meta?.reports.find(r => r.id === this.selectedReportId[f]);
-    if (!meta || !ledger || !report) {
+    if (!meta || !this.ledgers[f] || !report) {
       delete this.results[f];
+      delete this.loaded[f];
       return;
     }
     const inventory = this.pickInventory(meta.inventories, report.to);
-    const [agingRows, inventoryRows] = await Promise.all([
+    const [agingRows, inventoryRows, corrections] = await Promise.all([
       this.agingService.loadAgingRows(report),
       inventory ? this.agingService.loadInventoryRows(inventory) : Promise.resolve(null),
+      this.agingService.loadCorrections(report.id),
     ]);
+    this.loaded[f] = { reportId: report.id, reportTo: report.to, agingRows, inventoryRows, inventoryTo: inventory?.to || '', corrections };
+    this.recompute(f);
+  }
+
+  /** Đối chiếu lại từ dữ liệu đã tải (sau khi sửa / bỏ qua một dòng). */
+  private recompute(f: AgingFactory): void {
+    const meta = this.meta[f];
+    const ledger = this.ledgers[f];
+    const d = this.loaded[f];
+    if (!meta || !ledger || !d) return;
     const ledgerFrom = [meta.ledgerRange.N?.from, meta.ledgerRange.X?.from].filter(Boolean).sort()[0] || '';
     const ledgerTo = [meta.ledgerRange.N?.to, meta.ledgerRange.X?.to].filter(Boolean).sort()[0] || '';
-    this.results[f] = compareFactory(f, ledger, ledgerFrom, report.to, agingRows, inventoryRows, {
-      ledgerTo, inventoryTo: inventory?.to || '',
+    const work = applyCorrections(d.agingRows, d.corrections, d.reportTo);
+    const ignored: Record<string, string> = {};
+    Object.values(d.corrections).forEach(c => { if (c.action === 'ignore') ignored[c.key] = c.note || ''; });
+    this.workRows[f] = work.filter(r => !isExcludedSku(r.sku));
+    this.results[f] = compareFactory(f, ledger, ledgerFrom, d.reportTo, work, d.inventoryRows, {
+      ledgerTo, inventoryTo: d.inventoryTo, ignored,
     });
   }
 
@@ -204,6 +261,7 @@ export class AgingReportComponent implements OnInit {
 
   private rebuild(): void {
     this.buildSummary();
+    this.buildFixRows();
     this.applyFilters();
     this.statusLineText = this.factories.map(f => {
       const r = this.results[f];
@@ -261,10 +319,81 @@ export class AgingReportComponent implements OnInit {
   clearColFilters(): void {
     this.lotColFilter = {};
     this.skuColFilter = {};
+    this.fixColFilter = {};
     this.onSearchChange();
   }
 
+  setFixFilter(v: FixFilter | 'all'): void {
+    this.fixFilter = v;
+    this.visibleCount = PAGE_SIZE;
+    this.applyFilters();
+  }
+
+  /** Danh sách tab Cần sửa: lot sai, lot đã sửa / bỏ qua, và lot chỉ cần lưu ý (phát sinh sau ngày bảng kê). */
+  private buildFixRows(): void {
+    const priceBySku = this.priceBySku();
+    const rows: FixRow[] = [];
+    for (const f of this.viewFactories) {
+      const r = this.results[f];
+      if (!r) continue;
+      for (const l of r.lots) {
+        const relevant = l.level === 'error' || l.fix !== 'none' || (l.level === 'info' && l.issues.includes(ISSUE.afterLedger));
+        if (!relevant) continue;
+        const state: FixFilter = l.level === 'error' ? 'todo'
+          : l.fix === 'ignored' ? 'ignored'
+          : l.fix !== 'none' ? 'done' : 'note';
+        const reasons = this.explainLot(l);
+        const suggestion = suggestFix(l, r.reportTo, priceBySku);
+        const suggestText = suggestion?.text || (state === 'todo' ? this.manualHint(l) : '');
+        rows.push({
+          id: l.id, lot: l, reasons, suggestion, state, suggestText,
+          colText: {
+            factory: l.factory, sku: `${l.sku} ${l.name}`, lot: l.lot || '(không lô)', wh: l.wh,
+            where: reasons.join(' '), suggest: suggestText, status: FIX_STATE_LABEL[state],
+          },
+        });
+      }
+    }
+    const order: Record<FixFilter, number> = { todo: 0, done: 1, ignored: 2, note: 3 };
+    rows.sort((a, b) => order[a.state] - order[b.state] || a.lot.sku.localeCompare(b.lot.sku) || a.lot.lot.localeCompare(b.lot.lot));
+    this.fixRowsAll = rows;
+  }
+
+  /** Gợi ý khi không tự sửa được. */
+  private manualHint(l: LotCompareRow): string {
+    if (l.issues.includes(ISSUE.overExport) || l.issues.includes(ISSUE.belowMovement)) return 'Kiểm tra mã lô trên phiếu xuất, rồi Sửa tay hoặc Bỏ qua';
+    if (l.issues.includes(ISSUE.noReceipt)) return 'Kiểm tra phiếu nhập của lô, rồi Sửa tay ngày nhập';
+    if (l.issues.includes(ISSUE.noInb)) return 'Sửa tay: nhập ngày nhập';
+    if (l.issues.includes(ISSUE.zeroValue)) return 'Sửa tay: nhập đơn giá khi có giá vốn';
+    return 'Sửa tay';
+  }
+
+  /** Đơn giá theo mã (lấy dòng Aging đầu tiên có giá) — gợi ý giá cho lot thêm mới. */
+  private priceBySku(): Map<string, number> {
+    const m = new Map<string, number>();
+    this.factories.forEach(f => (this.workRows[f] || []).forEach(r => {
+      const k = `${f}|${r.sku}`;
+      if (r.price > 0 && !m.has(k)) m.set(k, r.price);
+    }));
+    return m;
+  }
+
   private applyFilters(): void {
+    if (this.viewMode === 'fix') {
+      const q = this.searchText.trim().toLowerCase();
+      const cols = this.activeColFilters(this.fixColFilter);
+      const counts: Record<FixFilter | 'all', number> = { todo: 0, done: 0, ignored: 0, note: 0, all: 0 };
+      this.filteredFixRows = this.fixRowsAll.filter(r => {
+        if (q && !r.lot.searchText.includes(q)) return false;
+        if (cols.length && !cols.every(([k, v]) => this.normFilter(r.colText[k]).includes(v))) return false;
+        counts.all++;
+        counts[r.state]++;
+        return this.fixFilter === 'all' || r.state === this.fixFilter;
+      });
+      this.fixCounts = counts;
+      this.hasColFilter = cols.length > 0;
+      return;
+    }
     const q = this.searchText.trim().toLowerCase();
     const counts: Record<LevelFilter, number> = { all: 0, error: 0, ok: 0, info: 0, scope: 0 };
     const lotCols = this.activeColFilters(this.lotColFilter);
@@ -335,6 +464,8 @@ export class AgingReportComponent implements OnInit {
         lots: r.lots.filter(l => l.inAging).length,
         lotErrors: r.lots.filter(l => l.level === 'error').length,
         skuErrors: r.skus.filter(s => s.level === 'error').length,
+        fixed: r.lots.filter(l => (l.fix === 'edited' || l.fix === 'added') && l.level !== 'error').length,
+        ignored: r.lots.filter(l => l.fix === 'ignored').length,
         gapNote: r.ledgerTo && r.ledgerTo < r.reportTo
           ? `Bảng kê chỉ đến ${this.fmtDate(r.ledgerTo)}, Aging chốt ${this.fmtDate(r.reportTo)}: ${r.gapSkuCount} mã có phát sinh sau ngày bảng kê, chưa kiểm được tồn lot`
           : '',
@@ -399,6 +530,157 @@ export class AgingReportComponent implements OnInit {
         default: return issue;
       }
     });
+  }
+
+  // ───────────────────────── Sửa / bỏ qua / hoàn tác ─────────────────────────
+
+  /** 1 bấm: áp đề xuất (theo bảng kê) cho lot sai. */
+  async applySuggestion(row: FixRow): Promise<void> {
+    const s = row.suggestion;
+    if (!s) return;
+    const l = row.lot;
+    await this.saveCorrection(l, s.action === 'add'
+      ? { action: 'add', sku: l.sku, name: l.name, unit: 'PCS', wh: l.wh, cus: l.cus, lot: l.lot, inb: s.inb, qty: s.qty, price: s.price ?? 0, note: 'Áp đề xuất theo bảng kê' }
+      : { action: 'edit', lot: l.lot, inb: s.inb ?? l.agingInb, qty: s.qty ?? l.agingQty, price: l.price, note: 'Áp đề xuất theo bảng kê' },
+      `Đã sửa ${l.sku} lô ${l.lot || '(không lô)'}: ${s.text}`);
+  }
+
+  async ignoreRow(l: LotCompareRow): Promise<void> {
+    await this.saveCorrection(l, { action: 'ignore', note: '' }, `Đã bỏ qua lỗi của ${l.sku} lô ${l.lot || '(không lô)'}`);
+  }
+
+  async revertRow(l: LotCompareRow): Promise<void> {
+    await this.saveCorrection(l, null, `Đã hoàn tác ${l.sku} lô ${l.lot || '(không lô)'} về số liệu gốc`);
+  }
+
+  /** Mở form sửa tay cho 1 lot (từ tab Cần sửa hoặc phần mở rộng Theo mã TP). */
+  openEdit(l: LotCompareRow): void {
+    const isAdd = !l.inAging || l.fix === 'added';
+    this.editRow = l;
+    this.editForm = {
+      lot: l.lot,
+      inb: isAdd && !l.inAging ? l.ledgerInb : l.agingInb,
+      qty: isAdd && !l.inAging ? (l.ledgerQty ?? 0) : l.agingQty,
+      price: isAdd && !l.inAging ? (this.priceBySku().get(`${l.factory}|${l.sku}`) || 0) : l.price,
+      note: l.fixNote || '',
+    };
+    this.onEditChange();
+  }
+
+  closeEdit(): void {
+    if (this.isSaving) return;
+    this.editRow = null;
+  }
+
+  /** Lấy giá trị theo bảng kê vào ô đang sửa. */
+  useLedger(field: 'inb' | 'qty'): void {
+    if (!this.editRow) return;
+    if (field === 'inb' && this.editRow.ledgerInb) this.editForm.inb = this.editRow.ledgerInb;
+    if (field === 'qty' && this.editRow.ledgerQty != null) this.editForm.qty = this.editRow.ledgerQty;
+    this.onEditChange();
+  }
+
+  onEditChange(): void {
+    const end = this.editRow ? this.results[this.editRow.factory]?.reportTo || '' : '';
+    const months = agingMonths(this.editForm.inb, end);
+    this.editPreview = {
+      months: months ?? '',
+      type: months == null ? '' : agingBucket(months),
+      value: Math.round((Number(this.editForm.qty) || 0) * (Number(this.editForm.price) || 0)),
+    };
+  }
+
+  async saveEdit(): Promise<void> {
+    const l = this.editRow;
+    if (!l) return;
+    const v = this.editForm;
+    const isAdd = !l.inAging || l.fix === 'added';
+    const base = { lot: String(v.lot || '').trim(), inb: v.inb, qty: Number(v.qty) || 0, price: Number(v.price) || 0, note: v.note || '' };
+    const ok = await this.saveCorrection(l, isAdd
+      ? { action: 'add', sku: l.sku, name: l.name, unit: 'PCS', wh: l.wh, cus: l.cus, ...base }
+      : { action: 'edit', ...base },
+      `Đã lưu chỉnh sửa ${l.sku} lô ${base.lot || '(không lô)'}`);
+    if (ok) this.editRow = null;
+  }
+
+  private async saveCorrection(
+    l: LotCompareRow, c: Omit<AgingCorrection, 'by' | 'at' | 'key'> | null, message: string
+  ): Promise<boolean> {
+    const d = this.loaded[l.factory];
+    if (!d || this.isSaving) return false;
+    this.isSaving = true;
+    try {
+      d.corrections = await this.agingService.saveCorrection(d.reportId, l.key, c);
+      this.recompute(l.factory);
+      this.rebuild();
+      this.refreshExpandedSku();
+      this.actionMessage = message;
+      return true;
+    } catch (e) {
+      console.error('[Aging Report] save correction error', e);
+      this.actionMessage = 'Lưu thất bại: ' + ((e as Error)?.message || e);
+      return false;
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  private refreshExpandedSku(): void {
+    const id = this.expandedSkuId;
+    if (!id) return;
+    const sku = this.filteredSkus.find(s => s.id === id) || this.results[id.split('|')[0] as AgingFactory]?.skus.find(s => s.id === id);
+    this.expandedSkuId = null;
+    if (sku) this.toggleSkuDetail(sku);
+  }
+
+  /** Xuất báo cáo tuổi hàng đã hiệu chỉnh (cùng mẫu cột ERP, bỏ mã A) + cột ghi chú hiệu chỉnh. */
+  exportCorrected(): void {
+    this.showMoreMenu = false;
+    const facs = this.viewFactories.filter(f => this.workRows[f]);
+    if (!facs.length) return;
+    const wb = XLSX.utils.book_new();
+    const header = ['SKU', 'Name', 'Unit', 'Mã lô', 'Hạn sử dụng', 'Shelf life (month)', 'WH', 'Inbound Date', 'Aging',
+      'ERP inventory', 'Unit Price', 'Value', 'Type of Aging', 'Cus', 'Hiệu chỉnh', 'Ghi chú'];
+    for (const f of facs) {
+      const d = this.loaded[f]!;
+      const ignored = new Set(Object.values(d.corrections).filter(c => c.action === 'ignore').map(c => c.key));
+      const rows = this.workRows[f]!.map(r => {
+        let change = '';
+        if (r.fix === 'added') change = 'Thêm lot';
+        else if (r.fix === 'edited' && r.orig) {
+          const o = r.orig;
+          const parts: string[] = [];
+          if (o.lot !== r.lot) parts.push(`lô ${o.lot} → ${r.lot}`);
+          if (o.inb !== r.inb) parts.push(`ngày nhập ${this.fmtDate(o.inb)} → ${this.fmtDate(r.inb)}`);
+          if (o.qty !== r.qty) parts.push(`tồn ${o.qty} → ${r.qty}`);
+          if (o.price !== r.price) parts.push(`đơn giá ${o.price} → ${r.price}`);
+          if (o.aging !== r.aging) parts.push(`số tháng ${o.aging ?? ''} → ${r.aging ?? ''}`);
+          change = parts.join('; ') || 'Tính lại';
+        } else if (ignored.has(r.key)) change = 'Bỏ qua lỗi';
+        return [r.sku, r.name, r.unit, r.lot, '', '', r.wh, this.fmtDate(r.inb), r.aging ?? '', r.qty, r.price,
+          Math.round(r.value), r.type, r.cus, change, r.fixNote];
+      });
+      const title = [
+        [`Báo cáo tuổi hàng thành phẩm ${AGING_FACTORY_LABEL[f]} – đã hiệu chỉnh`],
+        [`Đến ngày ${this.fmtDate(d.reportTo)} · không tính mã bắt đầu bằng A`],
+        [],
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([...title, header, ...rows]), `Aging ${f}`);
+    }
+    const summary: (string | number)[][] = [
+      ['FGs Aging Report – đã hiệu chỉnh'],
+      ['Tỷ giá', this.usdRate],
+      [],
+      ['Type of Aging', ...facs.map(f => AGING_FACTORY_LABEL[f] + ' (VND)'), 'Tổng (VND)', 'Tổng (USD)', '%'],
+      ...this.bucketLines.concat(this.bucketTotal ? [this.bucketTotal] : []).map(l => [
+        l.label, ...facs.map(f => Math.round(l.values[f])), Math.round(l.total),
+        this.usdRate ? Math.round((l.total / this.usdRate) * 100) / 100 : 0, Math.round(l.percent * 100) / 100,
+      ]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Tổng hợp');
+    const tag = this.factoryView === 'ALL' ? 'Tong' : this.factoryView;
+    const date = facs.map(f => this.loaded[f]!.reportTo).sort().reverse()[0] || '';
+    XLSX.writeFile(wb, `Aging_Report_hieu_chinh_${tag}_${date}.xlsx`);
   }
 
   goToMenu(): void {

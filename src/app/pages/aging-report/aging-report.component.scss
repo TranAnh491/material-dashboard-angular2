@@ -693,3 +693,177 @@
     color: #fff;
   }
 }
+
+// --- Tab Cần sửa ---
+.action-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #000;
+  font-size: 13px;
+  font-weight: 600;
+  background: #FFFFFF;
+  flex: 0 0 auto;
+}
+
+.aging-table {
+  .reason-cell div + div {
+    margin-top: 3px;
+  }
+
+  .orig-note {
+    color: #555;
+    font-size: 12px;
+  }
+
+  .suggest-cell {
+    color: #1e40af;
+    max-width: 320px;
+  }
+
+  .action-cell {
+    white-space: nowrap;
+  }
+
+  .compare-badge {
+    &.fix-todo {
+      color: #c62828;
+      border-color: #c62828;
+      background: transparent;
+    }
+
+    &.fix-done {
+      color: #065f46;
+      border-color: #065f46;
+      background: transparent;
+    }
+
+    &.fix-ignored,
+    &.fix-note {
+      color: #404040;
+      border-color: #a3a3a3;
+      background: transparent;
+    }
+  }
+}
+
+.act-btn {
+  padding: 5px 10px;
+  margin: 2px;
+  border: 1px solid #000;
+  background: #FFFFFF;
+  color: #000;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #000;
+    color: #fff;
+  }
+
+  &.act-primary {
+    background: #000;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background: #333;
+    }
+  }
+
+  &.act-mini {
+    padding: 2px 6px;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+// --- Popup sửa lot ---
+.edit-dialog {
+  max-width: 760px;
+
+  .edit-sub {
+    margin: -6px 0 10px;
+    font-size: 13px;
+    color: #333;
+  }
+
+  .edit-reasons {
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #c62828;
+  }
+
+  .edit-table {
+    margin-bottom: 12px;
+
+    th {
+      position: static;
+      height: auto;
+    }
+
+    td {
+      white-space: normal;
+    }
+  }
+
+  .edit-label {
+    font-weight: bold;
+    text-align: left;
+  }
+
+  .edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #000;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .edit-result td {
+    background: #f7f7f7;
+  }
+
+  .edit-note {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+
+    textarea {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 4px;
+      padding: 6px 8px;
+      border: 1px solid #000;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+    }
+  }
+
+  .edit-hint {
+    font-size: 12px;
+    color: #555;
+    margin: 0 0 12px;
+  }
+}
+
+.aging-table .suggest-cell.suggest-manual {
+  color: #555;
+  font-style: italic;
+}
+
+.aging-table .fixed-note {
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 600;
+}
