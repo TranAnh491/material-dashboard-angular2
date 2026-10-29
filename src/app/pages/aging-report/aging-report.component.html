@@ -287,22 +287,74 @@
         </tr>
       </thead>
       <tbody>
-        <tr
-          *ngFor="let r of filteredSkus | slice : 0 : visibleCount; let i = index; trackBy: trackById"
-          [class.negative-row]="r.level === 'error'"
-        >
-          <td class="col-stt">{{ i + 1 }}</td>
-          <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
-          <td class="material-code-cell">{{ r.sku }}</td>
-          <td class="name-cell" [title]="r.name">{{ r.name }}</td>
-          <td>{{ r.cus }}</td>
-          <td class="num-cell">{{ r.invQty === null ? 'chưa có' : (r.invQty | number : '1.0-3') }}</td>
-          <td class="num-cell">{{ r.agingQtyScope | number : '1.0-3' }}</td>
-          <td class="num-cell" [class.has-difference]="r.diffQty">{{ r.diffQty === null ? '' : (r.diffQty | number : '1.0-3') }}</td>
-          <td class="num-cell">{{ r.agingQtyAll | number : '1.0-3' }}</td>
-          <td class="num-cell">{{ r.agingValue | number : '1.0-0' }}</td>
-          <td><span class="compare-badge" [ngClass]="'level-' + r.level">{{ r.statusText }}</span></td>
-        </tr>
+        <ng-container *ngFor="let r of filteredSkus | slice : 0 : visibleCount; let i = index; trackBy: trackById">
+          <tr
+            class="sku-row"
+            [class.negative-row]="r.level === 'error'"
+            [class.sku-row--open]="expandedSkuId === r.id"
+            (click)="toggleSkuDetail(r)"
+            title="Bấm để xem các lot của mã này"
+          >
+            <td class="col-stt">
+              <i class="material-icons expand-icon">{{ expandedSkuId === r.id ? 'expand_less' : 'expand_more' }}</i>{{ i + 1 }}
+            </td>
+            <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
+            <td class="material-code-cell">{{ r.sku }}</td>
+            <td class="name-cell" [title]="r.name">{{ r.name }}</td>
+            <td>{{ r.cus }}</td>
+            <td class="num-cell">{{ r.invQty === null ? 'chưa có' : (r.invQty | number : '1.0-3') }}</td>
+            <td class="num-cell">{{ r.agingQtyScope | number : '1.0-3' }}</td>
+            <td class="num-cell" [class.has-difference]="r.diffQty">{{ r.diffQty === null ? '' : (r.diffQty | number : '1.0-3') }}</td>
+            <td class="num-cell">{{ r.agingQtyAll | number : '1.0-3' }}</td>
+            <td class="num-cell">{{ r.agingValue | number : '1.0-0' }}</td>
+            <td><span class="compare-badge badge-link" [ngClass]="'level-' + r.level">{{ r.statusText }}</span></td>
+          </tr>
+          <tr *ngIf="expandedSkuId === r.id" class="sku-detail-row">
+            <td [attr.colspan]="factoryView === 'ALL' ? 11 : 10">
+              <div class="sku-detail">
+                <div class="sku-detail-title">
+                  Các lot của {{ r.sku }} ({{ expandedLots.length }})
+                  <span *ngIf="expandedSkuNote" class="sku-detail-note">— {{ expandedSkuNote }}</span>
+                </div>
+                <table class="aging-table sku-detail-table">
+                  <thead>
+                    <tr>
+                      <th>Mã lô</th>
+                      <th>Kho</th>
+                      <th>Ngày nhập Aging</th>
+                      <th>Ngày nhập bảng kê</th>
+                      <th>Tháng Aging</th>
+                      <th>Tháng tính lại</th>
+                      <th>Tồn Aging</th>
+                      <th>Tồn bảng kê</th>
+                      <th>Chênh lệch</th>
+                      <th>Giá trị</th>
+                      <th>Sai ở đâu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let d of expandedLots" [class.negative-row]="d.lot.level === 'error'">
+                      <td>{{ d.lot.lot || '(không lô)' }}</td>
+                      <td>{{ d.lot.wh }}</td>
+                      <td>{{ fmtDate(d.lot.agingInb) }}</td>
+                      <td [class.has-difference]="d.lot.agingInb && d.lot.ledgerInb && d.lot.agingInb !== d.lot.ledgerInb">{{ fmtDate(d.lot.ledgerInb) }}</td>
+                      <td>{{ d.lot.agingMonths ?? '' }}</td>
+                      <td [class.has-difference]="d.lot.monthsWrong">{{ d.lot.calcMonths ?? '' }}</td>
+                      <td>{{ d.lot.inAging ? (d.lot.agingQty | number : '1.0-3') : 'không có' }}</td>
+                      <td>{{ d.lot.ledgerQty === null ? '' : (d.lot.ledgerQty | number : '1.0-3') }}</td>
+                      <td [class.has-difference]="d.lot.diffQty">{{ d.lot.diffQty === null ? '' : (d.lot.diffQty | number : '1.0-3') }}</td>
+                      <td>{{ d.lot.value | number : '1.0-0' }}</td>
+                      <td class="reason-cell">
+                        <div *ngFor="let reason of d.reasons">{{ reason }}</div>
+                        <span *ngIf="!d.reasons.length" class="compare-badge" [ngClass]="'level-' + d.lot.level">{{ d.lot.statusText }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
       </tbody>
     </table>
     <p class="empty" *ngIf="!filteredSkus.length && !loadError">Không có dòng nào.</p>

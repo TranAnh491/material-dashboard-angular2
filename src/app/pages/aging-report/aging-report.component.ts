@@ -6,8 +6,14 @@ import {
   FactoryLedger, ImportLogEntry, ParsedAgingFile, StoredReportInfo, parseAgingWorkbook,
 } from '../../services/aging-report.service';
 import {
-  AGING_BUCKETS, AgingLevel, FactoryCompareResult, LotCompareRow, SkuCompareRow, compareFactory,
+  AGING_BUCKETS, AgingLevel, FactoryCompareResult, ISSUE, LotCompareRow, SkuCompareRow, compareFactory,
 } from './aging-report.logic';
+
+/** Một lot trong phần mở rộng của bảng Theo mã TP, kèm câu giải thích sai ở đâu. */
+interface SkuLotDetail {
+  lot: LotCompareRow;
+  reasons: string[];
+}
 
 type FactoryView = 'ALL' | AgingFactory;
 type ViewMode = 'summary' | 'lot' | 'sku';
@@ -49,6 +55,10 @@ export class AgingReportComponent implements OnInit {
   lotColFilter: Record<string, string> = {};
   skuColFilter: Record<string, string> = {};
   hasColFilter = false;
+  /** Dòng mã TP đang mở chi tiết lot */
+  expandedSkuId: string | null = null;
+  expandedLots: SkuLotDetail[] = [];
+  expandedSkuNote = '';
   /** Thứ tự cột (sau cột Nhà máy) của bảng Theo lot / Theo mã TP — khớp với template */
   readonly lotFilterKeys = ['sku', 'lot', 'wh', 'agingInb', 'ledgerInb', 'agingMonths', 'calcMonths', 'agingQty',
     'ledgerQty', 'diffQty', 'inOut', 'value', 'status'];
@@ -342,6 +352,53 @@ export class AgingReportComponent implements OnInit {
 
   trackById(_: number, r: { id: string }): string {
     return r.id;
+  }
+
+  // ───────────────────────── Theo mã TP: mở các lot của mã ─────────────────────────
+
+  /** Bấm 1 dòng mã TP → hiện các lot của mã đó (lot sai lên đầu) và lý do sai. */
+  toggleSkuDetail(r: SkuCompareRow): void {
+    if (this.expandedSkuId === r.id) {
+      this.expandedSkuId = null;
+      this.expandedLots = [];
+      this.expandedSkuNote = '';
+      return;
+    }
+    const order: Record<AgingLevel, number> = { error: 0, info: 1, ok: 2, scope: 3 };
+    const lots = (this.results[r.factory]?.lots || [])
+      .filter(l => l.sku === r.sku)
+      .sort((a, b) => order[a.level] - order[b.level] || a.lot.localeCompare(b.lot));
+    this.expandedSkuId = r.id;
+    this.expandedLots = lots.map(lot => ({ lot, reasons: this.explainLot(lot) }));
+    this.expandedSkuNote = r.diffQty
+      ? `BC tồn kho ${this.fmtNum(r.invQty)} · Aging (TP, DL) ${this.fmtNum(r.agingQtyScope)} · lệch ${this.fmtNum(r.diffQty)}`
+      : '';
+  }
+
+  private fmtNum(n: number | null | undefined): string {
+    return n == null ? '' : n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+  }
+
+  /** Câu giải thích cho từng lỗi của lot (cùng dữ liệu đang hiển thị ở bảng Theo lot). */
+  private explainLot(l: LotCompareRow): string[] {
+    const d = (s: string) => this.fmtDate(s) || '(trống)';
+    return l.issues.map(issue => {
+      switch (issue) {
+        case ISSUE.qty: return `Sai tồn: Aging ${this.fmtNum(l.agingQty)}, bảng kê ${this.fmtNum(l.ledgerQty)} (lệch ${this.fmtNum(l.diffQty)})`;
+        case ISSUE.inb: return `Sai ngày nhập: Aging ${d(l.agingInb)}, phiếu nhập ${d(l.ledgerInb)}`;
+        case ISSUE.months: return `Sai số tháng: Aging ${l.agingMonths ?? '(trống)'}, tính lại ${l.calcMonths ?? ''}`;
+        case ISSUE.type: return `Sai nhóm tuổi: Aging "${l.agingType || '(trống)'}", đúng là "${l.calcType}"`;
+        case ISSUE.value: return `Sai giá trị: ${this.fmtNum(l.agingQty)} × ${this.fmtNum(l.price)} ≠ ${this.fmtNum(Math.round(l.value))}`;
+        case ISSUE.zeroValue: return `Giá trị = 0: tồn ${this.fmtNum(l.agingQty)} nhưng đơn giá 0 (chưa có giá vốn)`;
+        case ISSUE.noInb: return 'Thiếu ngày nhập trong Aging';
+        case ISSUE.noReceipt: return `Không có phiếu nhập: Aging ghi nhập ${d(l.agingInb)} nhưng bảng kê không có phiếu nhập lot này`;
+        case ISSUE.belowMovement: return `Tồn Aging < phát sinh: Aging ${this.fmtNum(l.agingQty)}, bảng kê nhập − xuất ${this.fmtNum(l.ledgerQty)}`;
+        case ISSUE.missingInAging: return `Thiếu trong Aging: bảng kê còn ${this.fmtNum(l.ledgerQty)} (nhập ${this.fmtNum(l.inQty)}, xuất ${this.fmtNum(l.outQty)}) nhưng Aging không có lot này`;
+        case ISSUE.overExport: return `Xuất vượt nhập: nhập ${this.fmtNum(l.inQty)}, xuất ${this.fmtNum(l.outQty)}`;
+        case ISSUE.afterLedger: return 'Có phiếu sau ngày cuối bảng kê, chưa kiểm được tồn lot';
+        default: return issue;
+      }
+    });
   }
 
   goToMenu(): void {

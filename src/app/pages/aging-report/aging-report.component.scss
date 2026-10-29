@@ -397,6 +397,68 @@
     color: #c62828;
   }
 
+  // Theo mã TP: bấm dòng để mở các lot
+  tr.sku-row {
+    cursor: pointer;
+
+    &:hover td {
+      background: #f7f7f7;
+    }
+  }
+
+  tr.sku-row--open td {
+    background: #f0f0f0;
+    font-weight: bold;
+  }
+
+  .expand-icon {
+    font-size: 16px;
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+
+  .badge-link {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  tr.sku-detail-row > td {
+    padding: 0;
+    background: #fafafa;
+    white-space: normal;
+  }
+
+  .sku-detail {
+    padding: 10px 14px 14px 48px;
+    text-align: left;
+  }
+
+  .sku-detail-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .sku-detail-note {
+    color: #c62828;
+    font-weight: normal;
+  }
+
+  .sku-detail-table {
+    margin: 0;
+
+    th {
+      position: static;
+      height: auto;
+      font-size: 12px;
+    }
+  }
+
+  .reason-cell {
+    text-align: left;
+    white-space: normal;
+    min-width: 280px;
+  }
+
   tr.total-row td {
     font-weight: 800;
     background: #f0f0f0;
