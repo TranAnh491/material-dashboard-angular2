@@ -45,6 +45,14 @@ export class AgingReportComponent implements OnInit {
   viewMode: ViewMode = 'summary';
   levelFilter: LevelFilter = 'error';
   searchText = '';
+  /** Ô tìm kiếm dưới tiêu đề từng cột (key = tên cột) */
+  lotColFilter: Record<string, string> = {};
+  skuColFilter: Record<string, string> = {};
+  hasColFilter = false;
+  /** Thứ tự cột (sau cột Nhà máy) của bảng Theo lot / Theo mã TP — khớp với template */
+  readonly lotFilterKeys = ['sku', 'lot', 'wh', 'agingInb', 'ledgerInb', 'agingMonths', 'calcMonths', 'agingQty',
+    'ledgerQty', 'diffQty', 'inOut', 'value', 'status'];
+  readonly skuFilterKeys = ['sku', 'name', 'cus', 'invQty', 'agingQtyScope', 'diffQty', 'agingQtyAll', 'agingValue', 'status'];
   usdRate = 25660;
 
   isLoading = false;
@@ -206,9 +214,53 @@ export class AgingReportComponent implements OnInit {
     return `${this.fmtDate(from)} → ${this.fmtDate(to)}`;
   }
 
+  /** Chữ của từng cột (giống nội dung hiển thị) để lọc theo ô tìm kiếm dưới tiêu đề cột. */
+  private lotColText(r: LotCompareRow): Record<string, string> {
+    return {
+      factory: r.factory, sku: `${r.sku} ${r.name}`, lot: r.lot || '(không lô)', wh: r.wh,
+      agingInb: this.fmtDate(r.agingInb), ledgerInb: this.fmtDate(r.ledgerInb),
+      agingMonths: r.agingMonths == null ? '' : String(r.agingMonths),
+      calcMonths: r.calcMonths == null ? '' : String(r.calcMonths),
+      agingQty: r.inAging ? String(r.agingQty) : '', ledgerQty: r.ledgerQty == null ? '' : String(r.ledgerQty),
+      diffQty: `${r.diffQty ?? ''} ${r.openingQty != null ? 'đầu kỳ ' + r.openingQty : ''}`,
+      inOut: r.ledgerQty == null ? '' : `${r.inQty} / ${r.outQty}`, value: String(Math.round(r.value)),
+      status: r.statusText,
+    };
+  }
+
+  private skuColText(r: SkuCompareRow): Record<string, string> {
+    return {
+      factory: r.factory, sku: r.sku, name: r.name, cus: r.cus,
+      invQty: r.invQty == null ? 'chưa có' : String(r.invQty), agingQtyScope: String(r.agingQtyScope),
+      diffQty: r.diffQty == null ? '' : String(r.diffQty), agingQtyAll: String(r.agingQtyAll),
+      agingValue: String(Math.round(r.agingValue)), status: r.statusText,
+    };
+  }
+
+  /** Ô lọc cột: chứa chuỗi, không phân biệt hoa thường, bỏ dấu phẩy / chấm ngăn cách số. */
+  private activeColFilters(f: Record<string, string>): [string, string][] {
+    return Object.keys(f)
+      .map(k => [k, this.normFilter(f[k])] as [string, string])
+      .filter(([, v]) => !!v);
+  }
+
+  private normFilter(s: string): string {
+    return String(s ?? '').trim().toLowerCase().replace(/(\d)[,.](?=\d{3}\b)/g, '$1');
+  }
+
+  clearColFilters(): void {
+    this.lotColFilter = {};
+    this.skuColFilter = {};
+    this.onSearchChange();
+  }
+
   private applyFilters(): void {
     const q = this.searchText.trim().toLowerCase();
     const counts: Record<LevelFilter, number> = { all: 0, error: 0, ok: 0, info: 0, scope: 0 };
+    const lotCols = this.activeColFilters(this.lotColFilter);
+    const skuCols = this.activeColFilters(this.skuColFilter);
+    const colsMatch = (text: Record<string, string>, cols: [string, string][]) =>
+      cols.every(([k, v]) => this.normFilter(text[k]).includes(v));
     const pass = (r: { level: AgingLevel; searchText: string }) => {
       if (q && !r.searchText.includes(q)) return false;
       counts.all++;
@@ -220,9 +272,13 @@ export class AgingReportComponent implements OnInit {
     for (const f of this.viewFactories) {
       const r = this.results[f];
       if (!r) continue;
-      if (this.viewMode === 'sku') skus.push(...r.skus.filter(pass));
-      else lots.push(...r.lots.filter(pass));
+      if (this.viewMode === 'sku') {
+        skus.push(...r.skus.filter(x => (!skuCols.length || colsMatch(this.skuColText(x), skuCols)) && pass(x)));
+      } else {
+        lots.push(...r.lots.filter(x => (!lotCols.length || colsMatch(this.lotColText(x), lotCols)) && pass(x)));
+      }
     }
+    this.hasColFilter = (this.viewMode === 'sku' ? skuCols : lotCols).length > 0;
     this.filteredLots = lots;
     this.filteredSkus = skus;
     this.levelCounts = counts;

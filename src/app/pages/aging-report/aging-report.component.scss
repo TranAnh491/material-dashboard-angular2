@@ -345,6 +345,33 @@
     text-align: center;
   }
 
+  // Hàng ô tìm kiếm dưới tiêu đề cột
+  .col-filter-row th {
+    background: #FFFFFF;
+    padding: 4px;
+    height: auto;
+    top: var(--row-h);
+    z-index: 4;
+    text-transform: none;
+    font-weight: normal;
+  }
+
+  .col-filter-input {
+    width: 100%;
+    min-width: 60px;
+    box-sizing: border-box;
+    padding: 5px 6px;
+    border: 1px solid #000;
+    font-size: 10px;
+    color: #000;
+    background: #FFFFFF;
+
+    &:focus {
+      outline: none;
+      background: #fffbea;
+    }
+  }
+
   .num-cell {
     text-align: right;
   }

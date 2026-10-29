@@ -204,6 +204,19 @@
           <th class="num-cell">Giá trị</th>
           <th>Kết quả</th>
         </tr>
+        <tr class="col-filter-row">
+          <th class="col-stt">
+            <button *ngIf="hasColFilter" type="button" class="icon-btn" (click)="clearColFilters()" title="Xóa các ô tìm kiếm cột">
+              <i class="material-icons">close</i>
+            </button>
+          </th>
+          <th *ngIf="factoryView === 'ALL'">
+            <input type="text" class="col-filter-input" [(ngModel)]="lotColFilter['factory']" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th *ngFor="let k of lotFilterKeys">
+            <input type="text" class="col-filter-input" [(ngModel)]="lotColFilter[k]" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+        </tr>
       </thead>
       <tbody>
         <tr
@@ -257,6 +270,19 @@
           <th class="num-cell">Tồn Aging tất cả kho</th>
           <th class="num-cell">Giá trị Aging</th>
           <th>Kết quả</th>
+        </tr>
+        <tr class="col-filter-row">
+          <th class="col-stt">
+            <button *ngIf="hasColFilter" type="button" class="icon-btn" (click)="clearColFilters()" title="Xóa các ô tìm kiếm cột">
+              <i class="material-icons">close</i>
+            </button>
+          </th>
+          <th *ngIf="factoryView === 'ALL'">
+            <input type="text" class="col-filter-input" [(ngModel)]="skuColFilter['factory']" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th *ngFor="let k of skuFilterKeys">
+            <input type="text" class="col-filter-input" [(ngModel)]="skuColFilter[k]" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
         </tr>
       </thead>
       <tbody>
