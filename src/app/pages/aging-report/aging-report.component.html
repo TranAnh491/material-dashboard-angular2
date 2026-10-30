@@ -1,135 +1,115 @@
 <div class="aging-report-page">
   <div class="top-fixed-area">
-    <div class="header">
-      <h4 class="page-title">Aging Report</h4>
-    </div>
+    <!-- ── TOOLBAR (cùng kiểu SXXK 2026) ── -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="page-title"><i class="material-icons">hourglass_bottom</i> Aging Report</span>
 
-    <div class="status-line" [title]="statusLineText">{{ statusLineText }}</div>
+        <select class="sel" [ngModel]="factoryView" (ngModelChange)="setFactoryView($any($event))" name="factoryView" title="Nhà máy">
+          <option value="ALL">Tổng</option>
+          <option *ngFor="let f of factories" [value]="f">{{ factoryLabel[f] }}</option>
+        </select>
 
-    <!-- Control bar: nhà máy + import + chế độ xem + lọc; nút Menu neo phải -->
-    <div class="control-bar">
-      <div class="factory-toggle">
-        <button type="button" class="toggle-btn" [class.active]="factoryView === 'ALL'" (click)="setFactoryView('ALL')">Tổng</button>
-        <button
-          *ngFor="let f of factories"
-          type="button"
-          class="toggle-btn"
-          [class.active]="factoryView === f"
-          (click)="setFactoryView(f)"
-        >{{ factoryLabel[f] }}</button>
-      </div>
+        <ng-container *ngFor="let f of factories">
+          <ng-container *ngIf="!isLoading && (factoryView === 'ALL' || factoryView === f)">
+            <select
+              *ngIf="meta[f]?.reports?.length; else noReport"
+              class="sel"
+              [ngModel]="selectedReportId[f]"
+              (ngModelChange)="onReportChange(f, $event)"
+              [name]="'report' + f"
+              [title]="factoryLabel[f] + ' – Aging ngày'"
+            >
+              <option *ngFor="let r of meta[f]?.reports" [value]="r.id">{{ factoryLabel[f] }} · Aging {{ fmtDate(r.to) }}</option>
+            </select>
+            <ng-template #noReport><span class="row-count">{{ factoryLabel[f] }}: chưa import</span></ng-template>
+          </ng-container>
+        </ng-container>
 
-      <div class="action-buttons">
-        <button type="button" class="io-btn io-btn-primary" (click)="openImportDialog()">
-          <i class="material-icons">file_upload</i>
-          Import
-        </button>
-        <button type="button" class="io-btn" (click)="loadAll()" [disabled]="isLoading" title="Tải lại dữ liệu đã lưu">
-          <i class="material-icons">refresh</i>
-          Tải lại
-        </button>
-        <button type="button" class="io-btn" (click)="toggleMoreMenu()">
-          <i class="material-icons">more_vert</i>
-          More
-        </button>
-      </div>
-
-      <div class="factory-toggle">
-        <button type="button" class="toggle-btn" [class.active]="viewMode === 'fix'" (click)="setViewMode('fix')">Cần sửa</button>
-        <button type="button" class="toggle-btn" [class.active]="viewMode === 'sku'" (click)="setViewMode('sku')">Theo mã TP</button>
-        <button type="button" class="toggle-btn" [class.active]="viewMode === 'lot'" (click)="setViewMode('lot')">Theo lot</button>
-        <button type="button" class="toggle-btn" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">Tổng hợp</button>
-      </div>
-
-      <ng-container *ngIf="viewMode === 'fix'">
-        <div class="integrated-filters">
-          <button type="button" class="filter-btn" [class.active]="fixFilter === 'todo'" (click)="setFixFilter('todo')">
-            Chưa sửa ({{ fixCounts.todo }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="fixFilter === 'done'" (click)="setFixFilter('done')">
-            Đã sửa ({{ fixCounts.done }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="fixFilter === 'ignored'" (click)="setFixFilter('ignored')">
-            Bỏ qua ({{ fixCounts.ignored }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="fixFilter === 'note'" (click)="setFixFilter('note')"
-                  title="Mã có phiếu sau ngày cuối bảng kê — chưa kiểm được tồn lot">
-            Lưu ý ({{ fixCounts.note }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="fixFilter === 'all'" (click)="setFixFilter('all')">
-            Tất cả ({{ fixCounts.all }})
-          </button>
-        </div>
         <input
+          *ngIf="viewMode !== 'summary'"
           type="text"
           class="search-input"
-          placeholder="Tìm mã TP, lot, kho…"
-          [(ngModel)]="searchText"
-          (ngModelChange)="onSearchChange()"
-          name="agingSearchFix"
-          autocomplete="off"
-        />
-      </ng-container>
-
-      <ng-container *ngIf="viewMode === 'lot' || viewMode === 'sku'">
-        <div class="integrated-filters">
-          <button type="button" class="filter-btn" [class.active]="levelFilter === 'error'" (click)="setLevelFilter('error')">
-            Sai ({{ levelCounts.error }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="levelFilter === 'ok'" (click)="setLevelFilter('ok')">
-            Khớp ({{ levelCounts.ok }})
-          </button>
-          <button *ngIf="viewMode === 'lot'" type="button" class="filter-btn" [class.active]="levelFilter === 'info'" (click)="setLevelFilter('info')">
-            Lot trước kỳ ({{ levelCounts.info }})
-          </button>
-          <button *ngIf="viewMode === 'lot'" type="button" class="filter-btn" [class.active]="levelFilter === 'scope'" (click)="setLevelFilter('scope')">
-            Kho ngoài bảng kê ({{ levelCounts.scope }})
-          </button>
-          <button type="button" class="filter-btn" [class.active]="levelFilter === 'all'" (click)="setLevelFilter('all')">
-            Tất cả ({{ levelCounts.all }})
-          </button>
-        </div>
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Tìm mã TP, lot, kho…"
+          placeholder="🔍 Tìm mã TP, lot, kho…"
           [(ngModel)]="searchText"
           (ngModelChange)="onSearchChange()"
           name="agingSearch"
           autocomplete="off"
         />
-      </ng-container>
 
-      <button type="button" class="io-btn menu-btn control-bar__back-menu" (click)="goToMenu()" title="Về Menu">
-        <i class="material-icons">home</i>
-        Menu
+        <label class="opt-item" title="Bỏ tick: không tính các lỗi về tiền (Sai giá trị, Giá trị = 0)">
+          <input type="checkbox" [(ngModel)]="moneyIssues" (ngModelChange)="onMoneyIssuesChange()" name="moneyIssues" />
+          Lỗi tiền
+        </label>
+
+        <label class="opt-item" *ngIf="viewMode === 'summary'">
+          Tỷ giá USD
+          <input type="number" class="rate-input" [(ngModel)]="usdRate" (ngModelChange)="onRateChange()" name="usdRate" min="1" />
+        </label>
+      </div>
+
+      <div class="toolbar-right">
+        <span class="saved-msg" *ngIf="isSaving">Đang lưu…</span>
+        <button type="button" class="btn btn-import" (click)="openImportDialog()" title="Import bảng kê nhập / xuất, Aging, BC tồn kho">
+          <i class="material-icons">upload_file</i> Import
+        </button>
+        <button type="button" class="btn btn-read" (click)="loadAll()" [disabled]="isLoading" title="Tải lại dữ liệu đã lưu">
+          <i class="material-icons">refresh</i> Tải lại
+        </button>
+        <button type="button" class="btn btn-recalc" (click)="exportCorrected()" title="Tải file Aging đã hiệu chỉnh (theo mẫu ERP)">
+          <i class="material-icons">task</i> Aging đã hiệu chỉnh
+        </button>
+        <button type="button" class="btn btn-export" (click)="exportExcel()" title="Tải báo cáo đối chiếu">
+          <i class="material-icons">download</i> Xuất Excel
+        </button>
+        <button type="button" class="btn btn-tpl" (click)="openHistory()" title="Lịch sử import">
+          <i class="material-icons">history</i> Lịch sử
+        </button>
+        <button type="button" class="btn btn-home" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i> Menu
+        </button>
+      </div>
+    </div>
+
+    <!-- ── TABS ── -->
+    <div class="tab-bar">
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'fix'" (click)="setViewMode('fix')">
+        <i class="material-icons">build</i><span>Cần sửa</span>
+        <span class="tab-count" *ngIf="fixCounts.todo">{{ fixCounts.todo }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'sku'" (click)="setViewMode('sku')">
+        <i class="material-icons">inventory_2</i><span>Theo mã TP</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'lot'" (click)="setViewMode('lot')">
+        <i class="material-icons">view_list</i><span>Theo lot</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">
+        <i class="material-icons">summarize</i><span>Tổng hợp</span>
       </button>
     </div>
 
-    <!-- Kỳ báo cáo của từng nhà máy -->
-    <div class="period-bar" *ngIf="!isLoading">
-      <ng-container *ngFor="let f of factories">
-        <label class="period-item" *ngIf="factoryView === 'ALL' || factoryView === f">
-          <span>{{ factoryLabel[f] }} – Aging ngày</span>
-          <select
-            *ngIf="meta[f]?.reports?.length; else noReport"
-            [ngModel]="selectedReportId[f]"
-            (ngModelChange)="onReportChange(f, $event)"
-            [name]="'report' + f"
-          >
-            <option *ngFor="let r of meta[f]?.reports" [value]="r.id">{{ fmtDate(r.to) }} ({{ r.rowCount }} dòng)</option>
-          </select>
-          <ng-template #noReport><strong>chưa import</strong></ng-template>
-        </label>
-      </ng-container>
-      <label class="period-item" *ngIf="viewMode === 'summary'">
-        <span>Tỷ giá USD</span>
-        <input type="number" class="rate-input" [(ngModel)]="usdRate" (ngModelChange)="onRateChange()" name="usdRate" min="1" />
-      </label>
+    <!-- ── Lọc + nguồn dữ liệu ── -->
+    <div class="hint-bar">
+      <div class="chips" *ngIf="viewMode === 'fix'">
+        <button type="button" class="chip" [class.active]="fixFilter === 'todo'" (click)="setFixFilter('todo')">Chưa sửa ({{ fixCounts.todo }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'done'" (click)="setFixFilter('done')">Đã sửa ({{ fixCounts.done }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'ignored'" (click)="setFixFilter('ignored')">Bỏ qua ({{ fixCounts.ignored }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'note'" (click)="setFixFilter('note')"
+                title="Mã có phiếu sau ngày cuối bảng kê — chưa kiểm được tồn lot">Lưu ý ({{ fixCounts.note }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'all'" (click)="setFixFilter('all')">Tất cả ({{ fixCounts.all }})</button>
+      </div>
+      <div class="chips" *ngIf="viewMode === 'lot' || viewMode === 'sku'">
+        <button type="button" class="chip" [class.active]="levelFilter === 'error'" (click)="setLevelFilter('error')">Sai ({{ levelCounts.error }})</button>
+        <button type="button" class="chip" [class.active]="levelFilter === 'ok'" (click)="setLevelFilter('ok')">Khớp ({{ levelCounts.ok }})</button>
+        <button *ngIf="viewMode === 'lot'" type="button" class="chip" [class.active]="levelFilter === 'info'" (click)="setLevelFilter('info')">Lot trước kỳ ({{ levelCounts.info }})</button>
+        <button *ngIf="viewMode === 'lot'" type="button" class="chip" [class.active]="levelFilter === 'scope'" (click)="setLevelFilter('scope')">Kho ngoài bảng kê ({{ levelCounts.scope }})</button>
+        <button type="button" class="chip" [class.active]="levelFilter === 'all'" (click)="setLevelFilter('all')">Tất cả ({{ levelCounts.all }})</button>
+      </div>
+      <span class="hint-formula" [title]="statusLineText">{{ statusLineText }}</span>
     </div>
   </div>
 
-  <div class="loading-state-text" *ngIf="isLoading">Đang tải dữ liệu Aging Report…</div>
+  <div class="loading" *ngIf="isLoading"><div class="spinner"></div> Đang tải dữ liệu Aging Report…</div>
   <div class="error-banner" *ngIf="loadError">{{ loadError }}</div>
   <div class="action-message" *ngIf="actionMessage && !isLoading">
     {{ actionMessage }}
@@ -472,24 +452,6 @@
     <button *ngIf="filteredSkus.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
       Xem thêm ({{ visibleCount }}/{{ filteredSkus.length }})
     </button>
-  </div>
-
-  <!-- Popup More -->
-  <div class="more-overlay" *ngIf="showMoreMenu" (click)="toggleMoreMenu()">
-    <div class="more-popup" (click)="$event.stopPropagation()">
-      <button type="button" class="more-item-btn" (click)="exportCorrected()">
-        <i class="material-icons">task</i>
-        Tải Aging đã hiệu chỉnh
-      </button>
-      <button type="button" class="more-item-btn" (click)="exportExcel()">
-        <i class="material-icons">file_download</i>
-        Tải về Báo Cáo đối chiếu
-      </button>
-      <button type="button" class="more-item-btn" (click)="openHistory()">
-        <i class="material-icons">history</i>
-        Lịch sử import
-      </button>
-    </div>
   </div>
 
   <!-- Popup sửa 1 lot -->

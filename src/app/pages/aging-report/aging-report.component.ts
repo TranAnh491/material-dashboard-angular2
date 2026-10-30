@@ -54,6 +54,7 @@ interface BucketLine {
 
 const PAGE_SIZE = 300;
 const RATE_STORAGE_KEY = 'aging-report-usd-rate';
+const MONEY_STORAGE_KEY = 'aging-report-money-issues';
 
 @Component({
   selector: 'app-aging-report',
@@ -82,6 +83,8 @@ export class AgingReportComponent implements OnInit {
     'ledgerQty', 'diffQty', 'inOut', 'value', 'status'];
   readonly skuFilterKeys = ['sku', 'name', 'cus', 'invQty', 'agingQtyScope', 'diffQty', 'agingQtyAll', 'agingValue', 'status'];
   usdRate = 25660;
+  /** Tính lỗi về tiền (Sai giá trị, Giá trị = 0) */
+  moneyIssues = true;
 
   isLoading = false;
   loadError = '';
@@ -134,7 +137,6 @@ export class AgingReportComponent implements OnInit {
   isImporting = false;
   importMessage = '';
 
-  showMoreMenu = false;
   showHistory = false;
   historyRows: (ImportLogEntry & { factory: AgingFactory })[] = [];
 
@@ -144,6 +146,7 @@ export class AgingReportComponent implements OnInit {
     try {
       const saved = Number(localStorage.getItem(RATE_STORAGE_KEY));
       if (saved > 0) this.usdRate = saved;
+      this.moneyIssues = localStorage.getItem(MONEY_STORAGE_KEY) !== '0';
     } catch { /* bỏ qua */ }
     this.loadAll();
   }
@@ -203,7 +206,7 @@ export class AgingReportComponent implements OnInit {
     Object.values(d.corrections).forEach(c => { if (c.action === 'ignore') ignored[c.key] = c.note || ''; });
     this.workRows[f] = work.filter(r => !isExcludedSku(r.sku));
     this.results[f] = compareFactory(f, ledger, ledgerFrom, d.reportTo, work, d.inventoryRows, {
-      ledgerTo, inventoryTo: d.inventoryTo, ignored,
+      ledgerTo, inventoryTo: d.inventoryTo, ignored, moneyIssues: this.moneyIssues,
     });
   }
 
@@ -249,6 +252,13 @@ export class AgingReportComponent implements OnInit {
 
   showMore(): void {
     this.visibleCount += PAGE_SIZE;
+  }
+
+  onMoneyIssuesChange(): void {
+    try { localStorage.setItem(MONEY_STORAGE_KEY, this.moneyIssues ? '1' : '0'); } catch { /* bỏ qua */ }
+    this.factories.forEach(f => this.recompute(f));
+    this.rebuild();
+    this.refreshExpandedSku();
   }
 
   onRateChange(): void {
@@ -635,7 +645,6 @@ export class AgingReportComponent implements OnInit {
 
   /** Xuất báo cáo tuổi hàng đã hiệu chỉnh (cùng mẫu cột ERP, bỏ mã A) + cột ghi chú hiệu chỉnh. */
   exportCorrected(): void {
-    this.showMoreMenu = false;
     const facs = this.viewFactories.filter(f => this.workRows[f]);
     if (!facs.length) return;
     const wb = XLSX.utils.book_new();
@@ -766,14 +775,9 @@ export class AgingReportComponent implements OnInit {
     this.isImporting = false;
   }
 
-  // ───────────────────────── More: lịch sử, xuất Excel ─────────────────────────
-
-  toggleMoreMenu(): void {
-    this.showMoreMenu = !this.showMoreMenu;
-  }
+  // ───────────────────────── Lịch sử, xuất Excel ─────────────────────────
 
   openHistory(): void {
-    this.showMoreMenu = false;
     this.historyRows = this.factories
       .flatMap(f => (this.meta[f]?.imports || []).map(i => ({ ...i, factory: f })))
       .sort((a, b) => b.at.localeCompare(a.at));
@@ -781,7 +785,6 @@ export class AgingReportComponent implements OnInit {
   }
 
   exportExcel(): void {
-    this.showMoreMenu = false;
     const facs = this.viewFactories.filter(f => this.results[f]);
     if (!facs.length) return;
     const wb = XLSX.utils.book_new();

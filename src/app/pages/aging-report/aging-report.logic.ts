@@ -155,6 +155,8 @@ export interface CompareOptions {
   inventoryTo?: string;
   /** Dòng được đánh dấu bỏ qua: key → ghi chú */
   ignored?: Record<string, string>;
+  /** false → không tính lỗi về tiền (Sai giá trị, Giá trị = 0) */
+  moneyIssues?: boolean;
 }
 
 /** Khóa dòng Aging theo nội dung (SKU + lô + kho + lần xuất hiện) — không đổi khi import lại cùng báo cáo. */
@@ -376,8 +378,10 @@ export function compareFactory(
     if (!a.inb) issues.push(ISSUE.noInb);
     if (calcMonths != null && (a.aging == null || Math.abs(a.aging - calcMonths) > 0.15)) issues.push(ISSUE.months);
     if (calcType && a.type !== calcType) issues.push(ISSUE.type);
-    if (a.price && Math.abs(a.qty * a.price - a.value) > Math.max(1, Math.abs(a.value) * 0.0005)) issues.push(ISSUE.value);
-    if (a.qty > 0 && !(a.value > 0)) issues.push(ISSUE.zeroValue);
+    if (opts.moneyIssues !== false) {
+      if (a.price && Math.abs(a.qty * a.price - a.value) > Math.max(1, Math.abs(a.value) * 0.0005)) issues.push(ISSUE.value);
+      if (a.qty > 0 && !(a.value > 0)) issues.push(ISSUE.zeroValue);
+    }
 
     bucketFile[a.type || '(trống)'] = (bucketFile[a.type || '(trống)'] || 0) + a.value;
     bucketCalc[calcType || '(trống)'] = (bucketCalc[calcType || '(trống)'] || 0) + a.value;
