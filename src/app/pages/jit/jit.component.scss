@@ -161,7 +161,7 @@ $jk: (
   kitting:    (#d9730d, #fff4e8, #fde3c4),
   ready:      (#15803d, #edf9f0, #cdeed6),
   delivering: (#1d4ed8, #edf3ff, #cfdffd),
-  completed:  (#6d28d9, #f4effe, #e2d6fb)
+  jit:        (#6d28d9, #f4effe, #e2d6fb)
 );
 
 /* Header */
@@ -312,6 +312,8 @@ $jk: (
 
 /* List trong bố cục mới */
 .jit .jit__wrap { background: #fff; margin-top: 0; }
+
+.jk-sel--month { font-weight: 600; }
 
 @media (max-width: 1400px) {
   .jk-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }

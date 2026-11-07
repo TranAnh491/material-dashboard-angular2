@@ -23,9 +23,10 @@
 
     <!-- Ô số liệu (bấm để lọc theo cột) -->
     <div class="jk-stats">
-      <button type="button" class="jk-stat jk-stat--total" [class.is-on]="!statusSel" (click)="statusSel = ''" title="Tất cả LSX">
+      <button type="button" class="jk-stat jk-stat--total" [class.is-on]="!statusSel" (click)="statusSel = ''"
+              [title]="'Tổng LSX ' + monthLabel + ' (cả Done) — chưa Done: ' + stats.open">
         <span class="jk-stat__ic"><i class="material-icons">lan</i></span>
-        <span class="jk-stat__txt"><span class="jk-stat__lbl">Total LSX</span><b>{{ stats.total | number }}</b></span>
+        <span class="jk-stat__txt"><span class="jk-stat__lbl">Total LSX · {{ monthLabel }}</span><b>{{ stats.total | number }}</b></span>
       </button>
       <button type="button" *ngFor="let c of cols" class="jk-stat jk-stat--{{ c.key }}" [class.is-on]="statusSel === c.key"
               (click)="toggleStatusSel(c.key)" [title]="'Lọc cột ' + c.label + ' (' + c.statuses + ')'">
@@ -50,6 +51,10 @@
         <i class="material-icons">search</i>
         <input type="search" [(ngModel)]="search" placeholder="Search LSX, Mã TP, Khách…">
       </div>
+      <select class="jk-sel jk-sel--month" [(ngModel)]="monthSel" title="Tháng LSX (cột Năm / Tháng ở Work Order)">
+        <option value="">Tất cả tháng</option>
+        <option *ngFor="let m of months" [value]="m.key">{{ m.label }}</option>
+      </select>
       <select class="jk-sel" [(ngModel)]="factorySel" title="Nhà máy">
         <option value="ALL">Nhà máy (All)</option>
         <option value="ASM1">ASM1</option>
@@ -121,7 +126,7 @@
               <i class="material-icons">calendar_today</i>
               <span>{{ r.deliveryDate ? (r.deliveryDate | date:'dd/MM/yyyy') : '—' }}</span>
               <span class="jk-status jk-status--{{ b.col.key }}" [class.jk-status--delay]="r.status === 'delay'">
-                <i class="material-icons" *ngIf="b.col.key === 'delivering' || b.col.key === 'completed'">{{ b.col.key === 'delivering' ? 'local_shipping' : 'check' }}</i>{{ b.col.key === 'waiting' ? statusText(r.status || 'waiting') : (r.status === 'ready-iqc' || r.status === 'jit' ? statusText(r.status) : b.col.label) }}
+                <i class="material-icons" *ngIf="b.col.key === 'delivering' || b.col.key === 'jit'">{{ b.col.icon }}</i>{{ b.col.key === 'waiting' ? statusText(r.status || 'waiting') : (r.status === 'ready-iqc' ? statusText(r.status) : b.col.label) }}
               </span>
             </div>
             <div class="jk-card__next" *ngIf="nextCallText(r) as n"><i class="material-icons">schedule</i>Gọi lần sau {{ n }}</div>
@@ -231,6 +236,7 @@
           </tbody>
         </table>
         <p class="jk-dialog__hint">Tình trạng đổi ở tab Work Order. Bấm số LSX để mở trang sắp xếp NVL; nút ⋮ trên thẻ để Gọi kho, tick Đã lấy, Ẩn LSX.
+          LSX Done không hiện trên Kanban (xem ở chế độ List, bỏ tick Ẩn Done). Total LSX đếm theo tháng đang chọn, gồm cả Done.
           OTD = LSX Done trước hết ngày nhận / tổng LSX Done.</p>
       </div>
     </div>

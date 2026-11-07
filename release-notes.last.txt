@@ -1,5 +1,3 @@
-Work Order: bấm tiêu đề cột Tình trạng (có chữ i) để xem ý nghĩa và điều kiện chọn từng tình trạng
-JIT: giao diện Kanban mới — 5 cột Waiting / Kitting / Ready / Delivering / Completed, nút List để về bảng cũ
-JIT: ô số liệu từng cột + tỉ lệ giao đúng hạn OTD, bấm ô để lọc
-JIT: lọc theo khoảng ngày nhận, khách hàng, Line, tình trạng; nút Tạo Lệnh Gọi nhập/quét LSX để gọi kho
-JIT: nút ⋮ trên thẻ để Gọi lấy, tick Đã lấy, Ẩn LSX
+JIT: Kanban không hiện LSX đã Done; cột cuối đổi thành JIT (LSX chia nhiều lần giao, chưa giao hết)
+JIT: cột Delivering chỉ còn LSX Transfer
+JIT: thêm ô chọn tháng (mặc định tháng hiện tại) — Total LSX, OTD và bảng đếm theo tháng; chọn "Tất cả tháng" để xem hết

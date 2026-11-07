@@ -74,6 +74,11 @@ interface JitRow {
   line: string;
   status: string;
   deliveryDate: Date | null;
+  /** Năm / tháng của LSX (cột Năm, Tháng ở Work Order) */
+  woYear: number;
+  woMonth: number;
+  /** Done hoặc đã hoàn tất — không hiện trên Kanban */
+  isDone: boolean;
   /** Giờ chuyển Done (Work Order) — tính OTD */
   doneAt?: Date | null;
   createdMs: number;
@@ -112,14 +117,14 @@ export const JIT_ROUNDS = 3;
 const BODY_CLASS = 'ws-fullscreen-layout';
 
 /** Cột Kanban — gom tình trạng Work Order thành 5 bước. */
-export type JitColKey = 'waiting' | 'kitting' | 'ready' | 'delivering' | 'completed';
+export type JitColKey = 'waiting' | 'kitting' | 'ready' | 'delivering' | 'jit';
 interface JitCol { key: JitColKey; label: string; icon: string; statuses: string }
 const JIT_COLS: JitCol[] = [
   { key: 'waiting', label: 'Waiting', icon: 'hourglass_empty', statuses: 'Waiting, Delay, chưa chọn' },
   { key: 'kitting', label: 'Kitting', icon: 'build', statuses: 'Kitting' },
   { key: 'ready', label: 'Ready', icon: 'check', statuses: 'Ready, Ready-IQC' },
-  { key: 'delivering', label: 'Delivering', icon: 'local_shipping', statuses: 'Transfer, JIT (đang giao các lần)' },
-  { key: 'completed', label: 'Completed', icon: 'done_all', statuses: 'Done' },
+  { key: 'delivering', label: 'Delivering', icon: 'local_shipping', statuses: 'Transfer' },
+  { key: 'jit', label: 'JIT', icon: 'call_split', statuses: 'JIT (chia nhiều lần giao, chưa giao hết)' },
 ];
 /** Số thẻ hiện mỗi cột trước khi bấm "+ N more" */
 const COL_PAGE = 20;
@@ -150,6 +155,8 @@ export class JitComponent implements OnInit, OnDestroy {
   /** Khoảng ngày nhận (yyyy-mm-dd, '' = không lọc) */
   dateFrom = '';
   dateTo = '';
+  /** Tháng LSX 'YYYY-MM' (mặc định tháng hiện tại, '' = tất cả) */
+  monthSel = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
   showMoreFilters = false;
   showHelp = false;
   showCreate = false;
@@ -281,7 +288,8 @@ export class JitComponent implements OnInit, OnDestroy {
           rows.push({
             woId: doc.id, lsx, productCode, factory: this.jitFactoryOf(w),
             quantity: Number(w.quantity) || 0, customer: String(w.customer || ''), line: String(w.productionLine || ''),
-            status, deliveryDate: this.toDate(w.deliveryDate), doneAt: this.toDate(w.doneAt), createdMs, state, stdSnapshot: w.stdSnapshot || undefined,
+            status, deliveryDate: this.toDate(w.deliveryDate), woYear: Number(w.year) || 0, woMonth: Number(w.month) || 0,
+            isDone: done, doneAt: this.toDate(w.doneAt), createdMs, state, stdSnapshot: w.stdSnapshot || undefined,
             pattern: this.patterns.get(productCode) || null,
             nextInput: this.toInput(this.toDate(state.nextCallAt)), busy: false
           });
@@ -304,7 +312,8 @@ export class JitComponent implements OnInit, OnDestroy {
     const t = r.deliveryDate?.getTime();
     const from = this.dateFrom ? new Date(this.dateFrom + 'T00:00:00').getTime() : null;
     const to = this.dateTo ? new Date(this.dateTo + 'T23:59:59').getTime() : null;
-    return (this.factorySel === 'ALL' || r.factory.toUpperCase() === this.factorySel)
+    return (!this.monthSel || this.monthKey(r) === this.monthSel)
+      && (this.factorySel === 'ALL' || r.factory.toUpperCase() === this.factorySel)
       && (!this.lineSel || r.line === this.lineSel)
       && (!this.customerSel || r.customer === this.customerSel)
       && (from == null || (t != null && t >= from))
@@ -313,13 +322,32 @@ export class JitComponent implements OnInit, OnDestroy {
       && (!q || r.lsx.toUpperCase().includes(q) || r.productCode.includes(q) || r.customer.toUpperCase().includes(q));
   }
 
-  /** Tình trạng Work Order → cột Kanban. */
-  colOf(r: JitRow): JitColKey {
+  /** 'YYYY-MM' theo cột Năm / Tháng của LSX; thiếu thì lấy theo ngày nhận. */
+  monthKey(r: JitRow): string {
+    let y = r.woYear, m = r.woMonth;
+    if (!(y > 0 && m >= 1 && m <= 12) && r.deliveryDate) { y = r.deliveryDate.getFullYear(); m = r.deliveryDate.getMonth() + 1; }
+    return y > 0 && m > 0 ? `${y}-${String(m).padStart(2, '0')}` : '';
+  }
+
+  /** Các tháng có LSX (mới nhất trước) cho ô chọn tháng. */
+  get months(): { key: string; label: string }[] {
+    const keys = [...new Set(this.rows.map((r) => this.monthKey(r)).filter(Boolean))];
+    if (this.monthSel && !keys.includes(this.monthSel)) keys.push(this.monthSel);
+    return keys.sort().reverse().map((k) => ({ key: k, label: `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}` }));
+  }
+
+  get monthLabel(): string {
+    return this.monthSel ? `T${Number(this.monthSel.slice(5))}/${this.monthSel.slice(0, 4)}` : 'tất cả tháng';
+  }
+
+  /** Tình trạng Work Order → cột Kanban (null = Done, không hiện). */
+  colOf(r: JitRow): JitColKey | null {
+    if (r.isDone) return null;
     switch (r.status) {
       case 'kitting': return 'kitting';
       case 'ready': case 'ready-iqc': return 'ready';
-      case 'transfer': case 'jit': return 'delivering';
-      case 'done': return 'completed';
+      case 'transfer': return 'delivering';
+      case 'jit': return 'jit';
       default: return 'waiting';
     }
   }
@@ -328,12 +356,12 @@ export class JitComponent implements OnInit, OnDestroy {
   private boardRev = 0;
   private boardKey = '';
   private boardCache: { col: JitCol; rows: JitRow[] }[] = [];
-  private statsCache = { total: 0, otd: null as number | null, otdBase: 0 };
+  private statsCache = { total: 0, open: 0, otd: null as number | null, otdBase: 0 };
 
   /** Dữ liệu Kanban — chỉ tính lại khi bộ lọc / dữ liệu đổi (không tính lại mỗi lần vẽ). */
   get board(): { col: JitCol; rows: JitRow[] }[] {
     const key = [this.rows.length, this.lastUpdate?.getTime(), this.boardRev, this.factorySel, this.lineSel, this.customerSel,
-      this.dateFrom, this.dateTo, this.search, this.showHidden, this.statusSel, this.sortAsc].join('|');
+      this.dateFrom, this.dateTo, this.monthSel, this.search, this.showHidden, this.statusSel, this.sortAsc].join('|');
     if (key === this.boardKey) return this.boardCache;
     this.boardKey = key;
     const base = this.rows.filter((r) => this.baseFilter(r));
@@ -342,9 +370,6 @@ export class JitComponent implements OnInit, OnDestroy {
       dir * ((a.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)) - (b.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)))
       || a.lsx.localeCompare(b.lsx);
     const all = JIT_COLS.map((col) => ({ col, rows: base.filter((r) => this.colOf(r) === col.key).sort(by) }));
-    // Completed: mới xong lên đầu
-    const done = all.find((b) => b.col.key === 'completed');
-    if (done) done.rows.sort((a, b) => (b.doneAt?.getTime() || 0) - (a.doneAt?.getTime() || 0));
     this.boardCache = all.filter((b) => !this.statusSel || b.col.key === this.statusSel);
     this.colCounts = new Map(all.map((b) => [b.col.key, b.rows.length]));
     // OTD: LSX Done có ngày nhận + giờ Done, xong trước hết ngày nhận
@@ -356,6 +381,7 @@ export class JitComponent implements OnInit, OnDestroy {
     }).length;
     this.statsCache = {
       total: base.length,
+      open: base.filter((r) => !r.isDone).length,
       otd: doneRows.length ? Math.round((onTime / doneRows.length) * 100) : null,
       otdBase: doneRows.length,
     };
