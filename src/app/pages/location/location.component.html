@@ -372,30 +372,36 @@
 
     <div class="loc-m-body loc-x-body">
       <section class="loc-m-panel" *ngIf="mobileBottomTab === 'location'">
-        <!-- 3 thao tác chính -->
+        <!-- 4 thao tác chính -->
+        <div class="loc-x-cards-head">
+          <span>Thao tác</span>
+          <button type="button" class="loc-x-info" (click)="showLocHelp = true" title="Giải thích các chức năng">
+            <i class="material-icons">info_outline</i>Giải thích
+          </button>
+        </div>
         <div class="loc-x-cards">
           <button type="button" class="loc-x-card loc-x-card--green" (click)="openStoreMaterialModal()">
             <span class="loc-x-card__top"><i class="material-icons">qr_code_scanner</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
-            <strong>Theo mã hàng</strong>
+            <strong>Đổi vị trí đơn lẻ</strong>
             <small>Scan mã, đổi vị trí từng mã</small>
             <i class="material-icons loc-x-card__bg" aria-hidden="true">inventory</i>
           </button>
           <button type="button" class="loc-x-card loc-x-card--blue" (click)="openBulkChangeLocationModal()">
             <span class="loc-x-card__top"><i class="material-icons">location_on</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
-            <strong>Theo vị trí</strong>
+            <strong>Dời kệ</strong>
             <small>Chuyển cả vị trí sang chỗ mới</small>
             <i class="material-icons loc-x-card__bg" aria-hidden="true">apartment</i>
           </button>
-          <button type="button" class="loc-x-card loc-x-card--orange" (click)="openBulkChangeByPalletModal()">
-            <span class="loc-x-card__top"><i class="material-icons">inventory_2</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
-            <strong>Theo Pallet</strong>
-            <small>Đổi vị trí theo pallet</small>
-            <i class="material-icons loc-x-card__bg" aria-hidden="true">layers</i>
+          <button type="button" class="loc-x-card loc-x-card--orange" (click)="openKkSingleModal()">
+            <span class="loc-x-card__top"><i class="material-icons">rule</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
+            <strong>Kiểm kê đơn lẻ</strong>
+            <small>Scan mã kiểm kê → scan vị trí</small>
+            <i class="material-icons loc-x-card__bg" aria-hidden="true">inventory</i>
           </button>
         </div>
         <button type="button" class="loc-x-card loc-x-card--purple loc-x-card--wide" (click)="openLocUpdModal()">
           <span class="loc-x-card__top"><i class="material-icons">fact_check</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
-          <strong>Cập nhật vị trí</strong>
+          <strong>Kiểm kê cập nhật vị trí</strong>
           <small>Scan vị trí → scan hết mã ở đó → DONE (đủ lượng tự tick KK)</small>
           <i class="material-icons loc-x-card__bg" aria-hidden="true">fact_check</i>
         </button>
@@ -473,7 +479,7 @@
       <section class="loc-m-panel" *ngIf="mobileBottomTab === 'history'">
         <div class="loc-m-empty" *ngIf="!hasScannedMaterialForMobile">
           <i class="material-icons">history</i>
-          <p>Scan mã hàng ở <strong>Theo mã hàng</strong> trước, sau đó xem lịch sử đổi vị trí tại đây.</p>
+          <p>Scan mã hàng ở <strong>Đổi vị trí đơn lẻ</strong> trước, sau đó xem lịch sử đổi vị trí tại đây.</p>
         </div>
         <ng-container *ngIf="hasScannedMaterialForMobile">
           <div class="loc-m-material-card">
@@ -519,12 +525,54 @@
 
   <!-- Cập nhật vị trí: màn hình scan dùng chung (cùng chức năng nút Kiểm kê ở Quản lý NVL) -->
   <app-loc-upd-scan *ngIf="showLocUpdModal"
-                    title="Cập nhật vị trí"
+                    title="Kiểm kê cập nhật vị trí"
                     source="location"
                     [factory]="selectedFactory"
                     [operatorId]="activeEmployeeId"
                     (done)="onLocUpdDone($event)"
                     (closed)="showLocUpdModal = false"></app-loc-upd-scan>
+
+  <!-- Kiểm kê đơn lẻ: scan tem 1 mã → scan vị trí → lưu (đủ lượng tick KK) -->
+  <app-loc-upd-scan *ngIf="showKkSingleModal"
+                    title="Kiểm kê đơn lẻ"
+                    source="kiem-ke-don-le"
+                    mode="single-item"
+                    [factory]="selectedFactory"
+                    [operatorId]="activeEmployeeId"
+                    (done)="onLocUpdDone($event)"
+                    (closed)="showKkSingleModal = false"></app-loc-upd-scan>
+
+  <!-- Giải thích 4 chức năng (nút ⓘ) -->
+  <div class="loc-help-overlay" *ngIf="showLocHelp" (click)="showLocHelp = false">
+    <div class="loc-help" (click)="$event.stopPropagation()" role="dialog" aria-label="Giải thích chức năng">
+      <div class="loc-help__head">
+        <strong><i class="material-icons">info_outline</i>Các chức năng Quản lý vị trí</strong>
+        <button type="button" class="loc-help__x" (click)="showLocHelp = false" aria-label="Đóng"><i class="material-icons">close</i></button>
+      </div>
+      <div class="loc-help__body">
+        <div class="loc-help__item loc-help__item--green">
+          <b><i class="material-icons">qr_code_scanner</i>Đổi vị trí đơn lẻ</b>
+          <p>Scan tem 1 mã hàng → chọn / scan vị trí mới → xác nhận. Đổi vị trí từng mã, <u>không</u> tick kiểm kê.</p>
+        </div>
+        <div class="loc-help__item loc-help__item--blue">
+          <b><i class="material-icons">location_on</i>Dời kệ</b>
+          <p>Scan vị trí cũ → chọn các mã ở đó (hoặc tất cả) → scan vị trí mới. Dùng khi dời cả kệ / cả ô sang chỗ khác.</p>
+        </div>
+        <div class="loc-help__item loc-help__item--orange">
+          <b><i class="material-icons">rule</i>Kiểm kê đơn lẻ</b>
+          <p>Scan tem của 1 mã hàng (nhiều tem cùng mã được) → bấm <b>Scan vị trí</b> → scan vị trí đang để mã đó → lưu luôn.
+            Đủ lượng tồn thì tự tick KK; thiếu thì ghi lượng đã quét; thừa thì báo in lại tem. Xong tự quay lại scan mã kế tiếp.</p>
+        </div>
+        <div class="loc-help__item loc-help__item--purple">
+          <b><i class="material-icons">fact_check</i>Kiểm kê cập nhật vị trí</b>
+          <p>Scan vị trí → scan hết tem các mã đang ở vị trí đó → DONE. Lưu vị trí + lượng quét cho từng mã; đủ lượng tự tick KK.</p>
+        </div>
+        <p class="loc-help__note">Kiểm kê đơn lẻ = đi theo từng mã hàng. Kiểm kê cập nhật vị trí = đi theo từng kệ / vị trí.
+          Cả hai ghi chung lịch sử kiểm kê và Report cập nhật vị trí.</p>
+      </div>
+    </div>
+  </div>
+
 
 
   <!-- Excel-like Container (desktop) -->
@@ -542,16 +590,22 @@
           <div class="loc-tb__group">
             <span class="loc-tb__label">Đổi vị trí</span>
             <button class="loc-tb__btn loc-tb__btn--green" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
-              <i class="material-icons">qr_code_scanner</i>Theo mã hàng
+              <i class="material-icons">qr_code_scanner</i>Đổi vị trí đơn lẻ
             </button>
-            <button class="loc-tb__btn loc-tb__btn--blue" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
-              <i class="material-icons">location_on</i>Theo vị trí
+            <button class="loc-tb__btn loc-tb__btn--blue" (click)="openBulkChangeLocationModal()" [title]="'Dời cả kệ / vị trí sang chỗ mới — Location (' + (selectedFactory || '...') + ')'">
+              <i class="material-icons">location_on</i>Dời kệ
             </button>
-            <button class="loc-tb__btn loc-tb__btn--orange" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
               <i class="material-icons">inventory_2</i>Theo Pallet
             </button>
+            <button class="loc-tb__btn loc-tb__btn--orange" (click)="openKkSingleModal()" title="Scan tem 1 mã hàng → scan vị trí → lưu (đủ lượng tự tick KK)">
+              <i class="material-icons">rule</i>Kiểm kê đơn lẻ
+            </button>
             <button class="loc-tb__btn loc-tb__btn--purple" (click)="openLocUpdModal()" title="Scan vị trí → scan hết tem mã ở vị trí đó → DONE (đủ lượng tự tick KK)">
-              <i class="material-icons">fact_check</i>Cập nhật vị trí
+              <i class="material-icons">fact_check</i>Kiểm kê cập nhật vị trí
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="showLocHelp = true" title="Giải thích các chức năng">
+              <i class="material-icons">info_outline</i>
             </button>
             <button class="loc-tb__btn loc-tb__btn--teal" (click)="openLockerFinder()" title="Tìm tủ Locker còn trống để cất (mỗi tủ tối đa 5 mã)">
               <i class="material-icons">lock_open</i>Locker
@@ -639,12 +693,12 @@
           <!-- Store Material Button -->
           <button class="store-material-btn mobile" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
             <i class="material-icons">qr_code_scanner</i>
-            Theo mã hàng
+            Đổi vị trí đơn lẻ
           </button>
           <!-- Bulk Change Location Button -->
           <button class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
             <i class="material-icons">location_on</i>
-            Theo vị trí
+            Dời kệ
           </button>
           <button class="bulk-change-pallet-btn mobile" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
             <i class="material-icons">inventory_2</i>

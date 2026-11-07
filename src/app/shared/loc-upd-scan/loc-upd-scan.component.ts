@@ -38,6 +38,9 @@ export const LOC_UPD_SESSIONS = 'location-update-sessions';
  * - tab Location: "Cập nhật vị trí"
  * - tab Quản lý NVL: "Kiểm kê"
  * Bước 1 scan vị trí → bước 2 scan hết tem mã ở vị trí đó → DONE: lưu vị trí mới + lượng quét; đủ lượng tự tick KK.
+ *
+ * mode = 'single-item' (tab Location: "Kiểm kê đơn lẻ"): làm ngược lại —
+ * Bước 1 scan tem của 1 mã hàng → Bước 2 scan vị trí → lưu luôn (đủ lượng tự tick KK), rồi quay lại scan mã kế tiếp.
  */
 @Component({
   selector: 'app-loc-upd-scan',
@@ -50,7 +53,9 @@ export class LocUpdScanComponent implements OnInit {
   @Input() operatorId = '';
   @Input() title = 'Cập nhật vị trí';
   /** Ghi vào nhật ký để biết phiên đến từ tab nào. */
-  @Input() source: 'location' | 'kiem-ke' = 'location';
+  @Input() source: 'location' | 'kiem-ke' | 'kiem-ke-don-le' = 'location';
+  /** 'by-location' = scan vị trí trước; 'single-item' = scan tem 1 mã trước, vị trí sau. */
+  @Input() mode: 'by-location' | 'single-item' = 'by-location';
   @Output() closed = new EventEmitter<void>();
   @Output() done = new EventEmitter<LocUpdDoneEvent>();
 
@@ -78,13 +83,36 @@ export class LocUpdScanComponent implements OnInit {
   ngOnInit(): void {
     void this.rules.load();
     this.operatorId = String(this.operatorId || '').trim().toUpperCase();
-    this.step = this.operatorId ? 'loc' : 'operator';
-    this.focus(this.step === 'operator' ? 'locUpdOperatorInput' : 'locUpdLocInput');
+    this.step = this.operatorId ? this.firstStep : 'operator';
+    this.focus(this.step === 'operator' ? 'locUpdOperatorInput' : this.inputIdOf(this.step));
   }
+
+  get single(): boolean { return this.mode === 'single-item'; }
+
+  private get firstStep(): 'loc' | 'items' { return this.single ? 'items' : 'loc'; }
+
+  private inputIdOf(step: 'loc' | 'items'): string { return step === 'loc' ? 'locUpdLocInput' : 'locUpdItemInput'; }
 
   get stepText(): string {
     if (this.step === 'operator') return 'Bước 0 · Scan / nhập mã nhân viên';
+    if (this.single) return this.step === 'items' ? 'Bước 1 · Scan tem mã hàng (1 mã)' : 'Bước 2 · Scan vị trí để lưu';
     return this.step === 'loc' ? 'Bước 1 · Scan vị trí' : 'Bước 2 · Scan tất cả mã ở vị trí';
+  }
+
+  /** Kiểm kê đơn lẻ: đã scan xong tem mã → sang scan vị trí. */
+  goToLocation(): void {
+    if (!this.lines.length || this.saving) return;
+    this.step = 'loc';
+    this.cdr.detectChanges();
+    this.focus('locUpdLocInput');
+  }
+
+  /** Kiểm kê đơn lẻ: từ bước vị trí quay lại scan thêm tem mã. */
+  backToItems(): void {
+    if (this.saving) return;
+    this.step = 'items';
+    this.cdr.detectChanges();
+    this.focus('locUpdItemInput');
   }
 
   private focus(id: string): void {
@@ -108,13 +136,13 @@ export class LocUpdScanComponent implements OnInit {
       return;
     }
     this.operatorId = m[0];
-    this.step = 'loc';
+    this.step = this.firstStep;
     this.cdr.detectChanges();
-    this.focus('locUpdLocInput');
+    this.focus(this.inputIdOf(this.firstStep));
   }
 
-  /** Bước 1: scan vị trí. */
-  onLocScan(): void {
+  /** Scan vị trí (bước 1; Kiểm kê đơn lẻ: bước 2 → lưu luôn). */
+  async onLocScan(): Promise<void> {
     let raw = String(this.locInput || '').trim();
     if (raw.includes('|')) raw = raw.split('|')[0].trim();
     this.locInput = '';
@@ -124,6 +152,20 @@ export class LocUpdScanComponent implements OnInit {
     if (!loc || (!this.rules.isExempt(loc, useAsm3) && !this.rules.validate(loc))) {
       appAlert(`⚠️ Vị trí không hợp lệ: ${raw}`);
       this.focus('locUpdLocInput');
+      return;
+    }
+    if (this.single) {
+      const bad = [...new Set(this.lines.map((l) => l.materialCode))]
+        .filter((code) => !this.rules.passes(code, loc, this.factory, useAsm3));
+      if (bad.length) {
+        appAlert(this.rules.violationMessage(bad[0], loc, this.factory));
+        this.focus('locUpdLocInput');
+        return;
+      }
+      this.location = loc;
+      this.useAsm3 = useAsm3;
+      await this.finish();
+      if (this.step === 'loc') this.focus('locUpdLocInput');
       return;
     }
     this.location = loc;
@@ -287,6 +329,12 @@ export class LocUpdScanComponent implements OnInit {
       this.focus('locUpdItemInput');
       return;
     }
+    // Kiểm kê đơn lẻ: mỗi lần 1 mã hàng
+    if (this.single && this.lines.length && this.lines[0].materialCode !== code) {
+      this.pushLog(false, `${code} — đang kiểm kê mã ${this.lines[0].materialCode}. Bấm "Scan vị trí" để lưu mã này trước`);
+      this.focus('locUpdItemInput');
+      return;
+    }
     this.busy = true;
     try {
       const rows = await this.loadStock(code);
@@ -295,7 +343,7 @@ export class LocUpdScanComponent implements OnInit {
         this.pushLog(false, `${code} / ${po || '—'}${imd ? ' / ' + imd : ''} — không có dòng tồn khớp Mã + PO + IMD`);
         return;
       }
-      if (!this.rules.passes(code, this.location, this.factory, this.useAsm3)) {
+      if (!this.single && !this.rules.passes(code, this.location, this.factory, this.useAsm3)) {
         appAlert(this.rules.violationMessage(code, this.location, this.factory));
         this.pushLog(false, `${code} — sai rule vị trí, không nhận`);
         return;
@@ -434,7 +482,7 @@ export class LocUpdScanComponent implements OnInit {
               fromLocation: line.fromLocation,
               toLocation: target,
               changedBy: operator,
-              changeType: this.source === 'kiem-ke' ? 'kiem-ke-scan' : 'location-update-scan',
+              changeType: this.changeType,
               changedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
           }
@@ -454,7 +502,7 @@ export class LocUpdScanComponent implements OnInit {
               checkedAt: at,
               checkedDateKey: dateKey,
               createdAt: new Date(),
-              source: this.source === 'kiem-ke' ? 'kiem-ke-scan' : 'location-update-scan'
+              source: this.changeType
             };
             batch.set(db.collection('inventory-kk-history').doc(), log);
             this.kkLog.enqueue(log);
@@ -468,7 +516,7 @@ export class LocUpdScanComponent implements OnInit {
         console.warn('[LocUpdScan] save session', logErr);
       }
       appAlert(
-        `✅ Đã ${this.source === 'kiem-ke' ? 'kiểm kê' : 'cập nhật vị trí'} ${target}\n\n` +
+        `✅ Đã ${this.source === 'location' ? 'cập nhật vị trí' : 'kiểm kê'} ${target}\n\n` +
         `• ${lines.length} dòng (mã + PO + IMD)\n` +
         `• Tick KK (đủ lượng): ${enough.length}\n` +
         `• Chưa tick (thiếu lượng): ${short}` +
@@ -479,7 +527,15 @@ export class LocUpdScanComponent implements OnInit {
       );
       this.scans = [];
       this.done.emit({ location: target, operator, lines });
-      this.closed.emit();
+      if (this.single) {
+        // Kiểm kê đơn lẻ: xong 1 mã → quay lại scan mã kế tiếp, không đóng màn hình
+        this.resetScans();
+        this.location = '';
+        this.step = 'items';
+        this.focus('locUpdItemInput');
+      } else {
+        this.closed.emit();
+      }
     } catch (e) {
       console.error('[LocUpdScan] finish', e);
       appAlert(`❌ Lỗi khi lưu: ${(e as any)?.message || e}`);
@@ -487,6 +543,11 @@ export class LocUpdScanComponent implements OnInit {
       this.saving = false;
       this.cdr.detectChanges();
     }
+  }
+
+  private get changeType(): string {
+    if (this.source === 'kiem-ke-don-le') return 'kiem-ke-don-le-scan';
+    return this.source === 'kiem-ke' ? 'kiem-ke-scan' : 'location-update-scan';
   }
 
   /** Ghi 1 phiên DONE: kệ nào, ai quét, mã gì, mấy thùng — để xem Report. */

@@ -1,3 +1,4 @@
-JIT: Kanban không hiện LSX đã Done; cột cuối đổi thành JIT (LSX chia nhiều lần giao, chưa giao hết)
-JIT: cột Delivering chỉ còn LSX Transfer
-JIT: thêm ô chọn tháng (mặc định tháng hiện tại) — Total LSX, OTD và bảng đếm theo tháng; chọn "Tất cả tháng" để xem hết
+Quản lý vị trí: đổi tên nút — Đổi vị trí đơn lẻ, Dời kệ, Kiểm kê cập nhật vị trí
+Quản lý vị trí: thêm Kiểm kê đơn lẻ — scan tem 1 mã hàng rồi scan vị trí, đủ lượng tự tick KK, xong tự quay lại scan mã kế tiếp
+Quản lý vị trí: nút ⓘ Giải thích để đọc cách dùng từng chức năng
+Điện thoại: thẻ Theo Pallet thay bằng Kiểm kê đơn lẻ (máy tính vẫn còn nút Theo Pallet)

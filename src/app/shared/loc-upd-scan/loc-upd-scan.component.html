@@ -1,4 +1,4 @@
-<!-- Dùng chung: "Cập nhật vị trí" (Location) / "Kiểm kê" (Quản lý NVL) -->
+<!-- Dùng chung: "Kiểm kê cập nhật vị trí" / "Kiểm kê đơn lẻ" (Location) / "Kiểm kê" (Quản lý NVL) -->
 <div class="loc-up">
   <header class="loc-up__head">
     <button type="button" class="loc-up__icon-btn" (click)="close()" [disabled]="saving" aria-label="Đóng">
@@ -23,15 +23,32 @@
 
     <ng-container *ngIf="step === 'loc'">
       <div class="loc-up__step-ico"><i class="material-icons">place</i></div>
-      <p class="loc-up__hint">Scan tem <strong>vị trí</strong> cần {{ source === 'kiem-ke' ? 'kiểm kê' : 'cập nhật' }}</p>
+      <p class="loc-up__hint" *ngIf="!single">Scan tem <strong>vị trí</strong> cần {{ source === 'kiem-ke' ? 'kiểm kê' : 'cập nhật' }}</p>
+      <ng-container *ngIf="single">
+        <div class="loc-up__loc">
+          <span>Mã</span>
+          <strong>{{ lines[0]?.materialCode }}</strong>
+          <button type="button" class="loc-up__link" (click)="backToItems()" [disabled]="saving">Scan thêm tem</button>
+        </div>
+        <div class="loc-up__stats">
+          <span><b>{{ lines.length }}</b> dòng</span>
+          <span class="is-ok"><b>{{ enoughCount }}</b> đủ</span>
+          <span class="is-low"><b>{{ lines.length - enoughCount - overCount }}</b> thiếu</span>
+          <span class="is-over"><b>{{ overCount }}</b> thừa</span>
+        </div>
+        <p class="loc-up__hint">Scan tem <strong>vị trí</strong> đang để mã này — lưu luôn</p>
+      </ng-container>
       <input id="locUpdLocInput" class="loc-up__input" type="text" appScanBurst
-             [(ngModel)]="locInput" (keyup.enter)="onLocScan()"
+             [(ngModel)]="locInput" (keyup.enter)="onLocScan()" [disabled]="saving"
              placeholder="Scan / nhập vị trí rồi Enter" autocomplete="off" autocapitalize="characters">
-      <button type="button" class="loc-up__primary" (click)="onLocScan()" [disabled]="!locInput.trim()">Tiếp tục</button>
+      <button type="button" class="loc-up__primary" (click)="onLocScan()" [disabled]="!locInput.trim() || saving">
+        {{ saving ? 'Đang lưu…' : (single ? 'Lưu' : 'Tiếp tục') }}
+      </button>
     </ng-container>
 
     <ng-container *ngIf="step === 'items'">
-      <div class="loc-up__loc">
+      <p class="loc-up__hint" *ngIf="single && !lines.length">Scan <strong>tem mã hàng</strong> cần kiểm kê (có thể nhiều tem của cùng 1 mã)</p>
+      <div class="loc-up__loc" *ngIf="!single">
         <span>Vị trí</span>
         <strong>{{ location }}</strong>
         <button type="button" class="loc-up__link" (click)="changeLocation()" [disabled]="saving">Đổi</button>
@@ -58,8 +75,11 @@
     <button type="button" class="loc-up__ghost" (click)="undoLast()" [disabled]="saving || !lines.length">
       <i class="material-icons">undo</i> Hoàn tác
     </button>
-    <button type="button" class="loc-up__done" (click)="finish()" [disabled]="saving || !lines.length">
+    <button type="button" class="loc-up__done" *ngIf="!single" (click)="finish()" [disabled]="saving || !lines.length">
       <i class="material-icons">done_all</i> {{ saving ? 'Đang lưu…' : 'DONE' }}
+    </button>
+    <button type="button" class="loc-up__done" *ngIf="single" (click)="goToLocation()" [disabled]="saving || !lines.length">
+      <i class="material-icons">place</i> Scan vị trí
     </button>
   </footer>
 </div>

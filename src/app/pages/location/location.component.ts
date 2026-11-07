@@ -2939,6 +2939,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Cùng 1 chức năng với nút "Kiểm kê" ở tab Quản lý NVL.
 
   showLocUpdModal = false;
+  /** Kiểm kê đơn lẻ: scan tem 1 mã → scan vị trí */
+  showKkSingleModal = false;
+  /** Popup giải thích 4 chức năng (nút ⓘ) */
+  showLocHelp = false;
 
   // ===== Tìm tủ Locker còn trống (mỗi tủ tối đa 5 mã) =====
   static readonly LOCKER_MAX_CODES = 5;
@@ -3036,6 +3040,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     this.showLocUpdModal = true;
+  }
+
+  openKkSingleModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      return;
+    }
+    this.showKkSingleModal = true;
   }
 
   onLocUpdDone(e: LocUpdDoneEvent): void {
