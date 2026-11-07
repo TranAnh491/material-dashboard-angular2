@@ -1,0 +1,38 @@
+<div class="week-pop-overlay" (click)="cancel()">
+  <div class="week-pop" (click)="$event.stopPropagation()">
+    <div class="week-pop__head">
+      <strong>{{ title }}</strong>
+      <small *ngIf="subtitle">{{ subtitle }}</small>
+    </div>
+    <p class="week-pop__note" *ngIf="note">{{ note }}</p>
+    <div class="week-pop__fmt">
+      <button type="button" [class.on]="format === 'YYWW'" (click)="setFormat('YYWW')">
+        <b>YYWW</b><small>Năm + Tuần</small>
+      </button>
+      <button type="button" [class.on]="format === 'MMYY'" (click)="setFormat('MMYY')">
+        <b>MMYY</b><small>Tháng + Năm</small>
+      </button>
+    </div>
+    <div class="week-pop__inputs">
+      <label>
+        <span>{{ format === 'YYWW' ? 'Năm (YY)' : 'Tháng (MM)' }}</span>
+        <input id="weekInPopA" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="a" (ngModelChange)="onA($event)"
+               [placeholder]="format === 'YYWW' ? '26' : '10'" autocomplete="off">
+      </label>
+      <label>
+        <span>{{ format === 'YYWW' ? 'Tuần (WW)' : 'Năm (YY)' }}</span>
+        <input id="weekInPopB" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="b" (ngModelChange)="onB($event)"
+               (keydown.enter)="save()"
+               [placeholder]="format === 'YYWW' ? '42' : '26'" autocomplete="off">
+      </label>
+    </div>
+    <p class="week-pop__preview" [class.bad]="code && !valid">{{ preview || 'Nhập 2 ô để xem diễn giải' }}</p>
+    <div class="week-pop__foot">
+      <span class="sp"></span>
+      <button type="button" class="ghost" (click)="cancel()" [disabled]="busy">Hủy</button>
+      <button type="button" class="primary" [disabled]="!valid || busy" (click)="save()">{{ busy ? 'Đang lưu…' : saveLabel }}</button>
+    </div>
+  </div>
+</div>

@@ -33,8 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyImportOverdueZalo = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyInventoryStockReportFn = exports.notifyTemLeGwSuspectsDaily = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.notifyFridgeWrongLocationZalo = exports.notifyFridgeLocationZaloDaily = exports.sendEquipmentChecklistZaloRemindFn = exports.notifyEquipmentChecklistZalo1315 = exports.notifyEquipmentChecklistZalo = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
-exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgePxkWeightPhotosDaily = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.importAspUsersFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = void 0;
+exports.sendWarehouseTrainingQuizPdfEmailFn = exports.saveWarehouseTrainingQuizImageFn = exports.verifyFgLotLsxOtpFn = exports.notifyInventoryStockReportFn = exports.notifyTemLeGwSuspectsDaily = exports.notifyPxkWeightCheckReportFn = exports.notifyReadyPhotoRequiredFn = exports.notifyReadyIqcWaitingFn = exports.verifyWoPxkBypassOtpFn = exports.requestWoPxkBypassOtpFn = exports.sendInboundLdvMismatchEmailFn = exports.verifyInboundLdvOtpFn = exports.requestInboundLdvOtpFn = exports.verifyMaterialsInventoryOtpFn = exports.requestMaterialsInventoryOtpFn = exports.requestFgLotLsxOtpFn = exports.verifyCatalogDeleteOtpFn = exports.requestCatalogDeleteOtpFn = exports.verifyLocationAddOtpFn = exports.requestLocationAddOtpFn = exports.verifyLocationUnlockOtpFn = exports.requestLocationUnlockOtpFn = exports.sendTpCatalogPackingMismatchEmailFn = exports.sendCartonPackingQtyAlertEmailFn = exports.sendQcPriorityResolvedEmailFn = exports.sendControlBatchReportEmail = exports.sendKkScanGuideToKhoGroupFn = exports.runJitScheduledCallsJob = exports.notifyJitCallZalo = exports.enforceJitStatusOnWo = exports.notifyNegativeStockZalo = exports.notifyFridgeWrongLocationZalo = exports.notifyReadGuardIncidentZalo = exports.notifyFridgeLocationZaloDaily = exports.sendEquipmentChecklistZaloRemindFn = exports.notifyEquipmentChecklistZalo1315 = exports.notifyEquipmentChecklistZalo = exports.sendNhietDoZaloRemindTestFn = exports.notifyNhietDoZaloRemindAfternoon = exports.notifyNhietDoZaloRemindMorning = exports.forceLogoutDaily = exports.recomputeRackWarningsFn = exports.computeRackWarningsDaily = exports.sendDashboardKpiReportManualFn = exports.notifyDashboardKpiReportAfternoon = exports.notifyDashboardKpiReportMorning = exports.notifyOutboundDuplicatesAt17 = exports.notifyOutboundDuplicatesAt12 = exports.sendTruckDeliveryDecisionEmailFn = exports.selfUpdateCompanyEmailFn = void 0;
+exports.oneOffRecoverFgInventory = exports.notifyClientsReload = exports.purgePxkWeightPhotosDaily = exports.purgeStaleBsDaily = exports.purgeInventoryHiddenDaily = exports.runRmBackupNow = exports.backupRmCollectionsWeekly = exports.backupFgCollectionsDaily = exports.truckDriverSignInFn = exports.scanLoginFn = exports.lookupAuthLoginEmailByEmployeeIdFn = exports.adminDeleteAuthUsersNotInSettingsFn = exports.publicRegisterAspUserFn = exports.registerAspUserWithoutEmailFn = exports.importAspUsersFn = exports.registerAspUserWithEmailFn = exports.adminUpdateUserProfileFn = exports.adminReleaseRegistrationEmailFn = exports.adminDeleteUserByUidFn = exports.adminDeleteUserByEmployeeIdFn = exports.adminSetUserPasswordByEmployeeIdFn = exports.adminResetUserPasswordFn = exports.adminUpdateUserPasswordFn = exports.sendQcMonthlyReportManualFn = exports.sendPutawayHoldWeeklyEmailManualFn = exports.notifyPutawayHoldWeekly = exports.sendPrintLabelLateNotifyManualFn = exports.notifyImportOverdueZalo = exports.notifyFgOverviewMissingImportWeekdays = exports.notifyPrintLabelLateItemsDaily = exports.sendQcMonthlyReportAtMonthStart = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const params_config_1 = require("./params-config");
@@ -275,6 +275,14 @@ exports.notifyFridgeLocationZaloDaily = functions
     console.log('fridge location zalo', result);
     return result;
 });
+/** Phanh đọc bất thường: trình duyệt ghi read-guard-incidents → báo Zalo ASP0106 (tối đa 1 tin / 10 phút / trang). */
+exports.notifyReadGuardIncidentZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .firestore.document('read-guard-incidents/{incidentId}')
+    .onCreate(async (snap, context) => {
+    const { notifyReadGuardIncident } = await Promise.resolve().then(() => __importStar(require('./read-guard-zalo')));
+    return notifyReadGuardIncident(admin.firestore(), context.params.incidentId, snap.data() || {});
+});
 /** B037: báo ngay khi vị trí tồn kho đổi khỏi HOACHAT. */
 exports.notifyFridgeWrongLocationZalo = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
@@ -284,6 +292,44 @@ exports.notifyFridgeWrongLocationZalo = functions
     const before = change.before.exists ? change.before.data() : null;
     const after = change.after.exists ? change.after.data() : null;
     return notifyFridgeLocationOnWrite(admin.firestore(), before, after);
+});
+/** Tồn NVL âm (≤ -1): báo nhóm Zalo Kho kèm LSX + người scan các lần xuất gần nhất. */
+exports.notifyNegativeStockZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .firestore.document('inventory-materials/{docId}')
+    .onWrite(async (change, context) => {
+    const { notifyNegativeStockOnWrite } = await Promise.resolve().then(() => __importStar(require('./negative-stock-zalo')));
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    return notifyNegativeStockOnWrite(admin.firestore(), context.params.docId, before, after);
+});
+/** JIT: LSX đã chia nhiều lần giao mà chưa giao hết → mọi lần chuyển Done (scan giao hàng, tab…) đổi thành JIT. */
+exports.enforceJitStatusOnWo = functions
+    .firestore.document('work-orders/{id}')
+    .onUpdate(async (change) => {
+    const after = change.after.data() || {};
+    const before = change.before.data() || {};
+    if (after['status'] !== 'done' || before['status'] === 'done')
+        return;
+    if (!after['jitActive'] || after['jitDelivered'])
+        return;
+    await change.after.ref.update({ status: 'jit', jitBlockedDoneAt: admin.firestore.FieldValue.serverTimestamp() });
+});
+/** JIT (Production): nút Gọi / hẹn giờ → Zalo bot nhắn nhóm Kho lấy hàng cho LSX. */
+exports.notifyJitCallZalo = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .firestore.document('jit-call-log/{id}')
+    .onCreate(async (snap) => {
+    const { onJitCallLogCreated } = await Promise.resolve().then(() => __importStar(require('./jit-call-zalo')));
+    return onJitCallLogCreated(admin.firestore(), snap.ref, snap.data());
+});
+/** JIT: mỗi 5 phút — LSX tới giờ hẹn gọi lần sau → tự gọi kho. */
+exports.runJitScheduledCallsJob = functions
+    .pubsub.schedule('*/5 * * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runJitScheduledCalls } = await Promise.resolve().then(() => __importStar(require('./jit-call-zalo')));
+    await runJitScheduledCalls(admin.firestore());
 });
 /** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */
 exports.sendKkScanGuideToKhoGroupFn = functions
@@ -707,7 +753,8 @@ exports.sendInboundLdvMismatchEmailFn = functions
             factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory.trim().slice(0, 10) : '',
             rollsOrBags,
             standardPacking,
-            reportedBy: typeof (data === null || data === void 0 ? void 0 : data.reportedBy) === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+            reportedBy: typeof (data === null || data === void 0 ? void 0 : data.reportedBy) === 'string' ? data.reportedBy.trim().slice(0, 80) : '',
+            autoUpdated: (data === null || data === void 0 ? void 0 : data.autoUpdated) === true
         });
         return { ok: true };
     }
@@ -729,7 +776,9 @@ exports.requestWoPxkBypassOtpFn = functions
             lsx: typeof (data === null || data === void 0 ? void 0 : data.lsx) === 'string' ? data.lsx : '',
             requestedBy: typeof (data === null || data === void 0 ? void 0 : data.requestedBy) === 'string' ? data.requestedBy : '',
             nextStatus: typeof (data === null || data === void 0 ? void 0 : data.nextStatus) === 'string' ? data.nextStatus : '',
-            factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory : ''
+            factory: typeof (data === null || data === void 0 ? void 0 : data.factory) === 'string' ? data.factory : '',
+            reason: typeof (data === null || data === void 0 ? void 0 : data.reason) === 'string' ? data.reason : '',
+            purpose: typeof (data === null || data === void 0 ? void 0 : data.purpose) === 'string' ? data.purpose : ''
         });
         return { ok: true };
     }
@@ -757,7 +806,7 @@ exports.verifyWoPxkBypassOtpFn = functions
     }
     try {
         const { verifyWoPxkBypassOtp } = await Promise.resolve().then(() => __importStar(require('./wo-pxk-bypass-otp')));
-        return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx);
+        return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx, typeof (data === null || data === void 0 ? void 0 : data.purpose) === 'string' ? data.purpose : '');
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -801,6 +850,33 @@ exports.notifyReadyIqcWaitingFn = functions
         throw new functions.https.HttpsError(msg.includes('Thiếu') || msg.includes('Chưa gắn') || msg.includes('ZALO_BOT_TOKEN')
             ? 'failed-precondition'
             : 'internal', msg);
+    }
+});
+/** Work Order: LSX Ready ở Line cần chụp hình (WHA/WHB/WHG/WHH, USB C) — Zalo riêng cho team soạn. */
+exports.notifyReadyPhotoRequiredFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const str = (v) => (typeof v === 'string' ? v : '');
+    const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+    try {
+        const { notifyReadyPhotoRequired } = await Promise.resolve().then(() => __importStar(require('./ready-photo-zalo')));
+        const result = await notifyReadyPhotoRequired(admin.firestore(), {
+            lsx: str(data === null || data === void 0 ? void 0 : data.lsx),
+            line: str(data === null || data === void 0 ? void 0 : data.line),
+            factory: str(data === null || data === void 0 ? void 0 : data.factory),
+            productCode: str(data === null || data === void 0 ? void 0 : data.productCode),
+            team: str(data === null || data === void 0 ? void 0 : data.team),
+            names: list(data === null || data === void 0 ? void 0 : data.names),
+            memberIds: list(data === null || data === void 0 ? void 0 : data.memberIds)
+        });
+        return Object.assign({ ok: true }, result);
+    }
+    catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
     }
 });
 /** Work Order: báo cáo mã không hợp lý để Check lượng — Zalo tới nhóm Quản lý kho. */
@@ -973,24 +1049,26 @@ exports.notifyPrintLabelLateItemsDaily = functions
     await runPrintLabelLateNotify(admin.firestore());
 });
 /**
- * FG Overview: T2–T6 (Asia/Ho_Chi_Minh) — nếu quá 1 ngày chưa import tồn kho thì gửi email WH.
+ * FG Overview: import 1 tuần 1 lần vào thứ 5 — sáng thứ 6 (Asia/Ho_Chi_Minh) nếu chưa có bản import
+ * của thứ 5 (quá 1 ngày) thì gửi email WH.
  * Nguồn: `fg-overview-import-cache/current-asm1` và `current-asm2` (field `updatedAt`).
  */
 exports.notifyFgOverviewMissingImportWeekdays = functions
     .runWith({ secrets: [params_config_1.emailPass] })
-    .pubsub.schedule('0 8 * * 1-5')
+    .pubsub.schedule('0 8 * * 5')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
     const { runFgOverviewImportNotify } = await Promise.resolve().then(() => __importStar(require('./fg-overview-import-notify')));
     await runFgOverviewImportNotify(admin.firestore());
 });
 /**
- * Thứ 3 / 5 / 7 lúc 9h, 12h, 15h, 17h: FG Overview (ASM1/ASM2) và Inventory Overview LinkQ (ASM1/ASM2)
- * chưa có bản import của thứ 2 / 4 / 6 hôm trước → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
+ * 9h, 12h, 15h, 17h: Inventory Overview LinkQ (ASM1/ASM2) chưa có bản import của thứ 2 / 4 / 6 hôm trước
+ * (nhắc thứ 3 / 5 / 7); FG Overview (ASM1/ASM2) chưa có bản import của thứ 5 (nhắc thứ 6)
+ * → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
  */
 exports.notifyImportOverdueZalo = functions
     .runWith({ secrets: [params_config_1.zaloBotToken] })
-    .pubsub.schedule('0 9,12,15,17 * * 2,4,6')
+    .pubsub.schedule('0 9,12,15,17 * * 2,4,5,6')
     .timeZone('Asia/Ho_Chi_Minh')
     .onRun(async () => {
     const { runImportOverdueZalo } = await Promise.resolve().then(() => __importStar(require('./import-overdue-zalo')));
@@ -1589,6 +1667,18 @@ exports.purgeInventoryHiddenDaily = functions
     .onRun(async () => {
     const { runInventoryHiddenPurgeJob } = await Promise.resolve().then(() => __importStar(require('./inventory-hidden-purge')));
     await runInventoryHiddenPurgeJob(admin.firestore());
+});
+/**
+ * Xuất BS — mỗi ngày 07:00 (VN): dòng chưa xuất xong của phiếu import quá 30 ngày → tự xóa
+ * (done + deletedAt), gửi mail tổng hợp tới wh1–wh4.
+ */
+exports.purgeStaleBsDaily = functions
+    .runWith({ secrets: [params_config_1.emailPass], timeoutSeconds: 300, memory: '512MB' })
+    .pubsub.schedule('0 7 * * *')
+    .timeZone('Asia/Ho_Chi_Minh')
+    .onRun(async () => {
+    const { runBsStalePurgeJob } = await Promise.resolve().then(() => __importStar(require('./bs-stale-purge')));
+    await runBsStalePurgeJob(admin.firestore());
 });
 /** Hình bag lẻ đã cân — xóa file Storage > 6 tháng, mỗi ngày 02:30 (VN). */
 exports.purgePxkWeightPhotosDaily = functions

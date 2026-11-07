@@ -21,21 +21,17 @@
             <i class="material-icons rotating">sync</i> Đang cập nhật…
           </span>
           <span class="lqs-updated" *ngIf="!linkQCompareRefreshing && linkQCompareUpdatedText">Cập nhật {{ linkQCompareUpdatedText }}</span>
-          <input #lqsCheckFile type="file" accept=".xlsx,.xls,.csv" hidden (change)="onLinkQCheckFileSelected($event)" />
-          <button type="button" class="lqs-btn" (click)="lqsCheckFile.click()" [disabled]="linkQCheckImporting"
-                  title="File Excel: cột A từ dòng 2 là danh sách mã cần check">
-            <i class="material-icons" [class.rotating]="linkQCheckImporting">{{ linkQCheckImporting ? 'sync' : 'upload_file' }}</i>
-            Import Check
-          </button>
-          <div class="lqs-check" *ngIf="linkQCheckCodes.length">
-            <button type="button" class="lqs-btn lqs-check__toggle" [class.lqs-check__toggle--on]="linkQCheckOnly"
-                    (click)="toggleLinkQCheckOnly()" [title]="linkQCheckFileName">
-              <i class="material-icons">{{ linkQCheckOnly ? 'check_box' : 'check_box_outline_blank' }}</i>
-              Check ({{ linkQCheckCodes.length }} mã)
-            </button>
-            <button type="button" class="lqs-check__clear" (click)="clearLinkQCheck()" title="Bỏ file Check">
-              <i class="material-icons">close</i>
-            </button>
+          <div class="lqs-check" *ngIf="dsCheckLists.willUse.length">
+            <label class="lqs-btn lqs-check__toggle" [class.lqs-check__toggle--on]="!!dsCheckMode" [title]="linkQCheckFileName">
+              <i class="material-icons">{{ dsCheckMode ? 'check_box' : 'check_box_outline_blank' }}</i>
+              Check
+              <select [ngModel]="dsCheckMode" (ngModelChange)="setDsCheckMode($event)">
+                <option value="">Tắt</option>
+                <option *ngFor="let o of dsCheckOptions" [value]="o.mode" [disabled]="!dsCheckLists[o.mode].length">
+                  {{ o.label }} ({{ dsCheckLists[o.mode].length }})
+                </option>
+              </select>
+            </label>
           </div>
           <div class="lqs-search">
             <i class="material-icons">search</i>
@@ -49,6 +45,11 @@
                   [title]="selectedFactory !== 'ASM1' ? 'Chỉ tính cho ASM1' : 'Tính lượng trên PXK (Work Order chưa Done) mà web chưa scan xuất — chỉ chạy khi bấm'">
             <i class="material-icons" [class.rotating]="linkQPendingPxkLoading">{{ linkQPendingPxkLoading ? 'sync' : 'local_shipping' }}</i>
             {{ linkQPendingPxkLoading ? 'Đang tính PXK…' : 'Tính PXK chưa xuất' }}
+          </button>
+          <button type="button" class="lqs-btn" (click)="openLinkQAdjustList()"
+                  title="Quản lý duyệt / xóa các đề nghị thiếu / dư đã nhập (cần mật khẩu)">
+            <i class="material-icons">fact_check</i>
+            Danh mục điều chỉnh<ng-container *ngIf="linkQAdjPendingCount"> ({{ linkQAdjPendingCount }})</ng-container>
           </button>
           <button type="button" class="lqs-btn" (click)="loadLinkQCompare(true)" [disabled]="linkQCompareLoading || linkQCompareRefreshing">
             <i class="material-icons" [class.rotating]="linkQCompareLoading || linkQCompareRefreshing">refresh</i>
@@ -109,7 +110,7 @@
       </div>
 
       <div class="lqs-msg lqs-msg--check" *ngIf="linkQCheckOnly && linkQCheckCodes.length && !linkQCompareError">
-        Đang kiểm kê theo file Check <strong>{{ linkQCheckFileName }}</strong> · {{ linkQCheckCodes.length }} mã
+        Đang kiểm kê theo DS Check — <strong>{{ dsCheckLabel }}</strong> ({{ linkQCheckFileName }}) · {{ linkQCheckCodes.length }} mã
         <ng-container *ngIf="!linkQCompareLoading && linkQCheckMissing.length">
           · <span class="lqs-check-missing" [title]="linkQCheckMissing.join(', ')">{{ linkQCheckMissing.length }} mã không có tồn ở LinkQ lẫn web: {{ linkQCheckMissing.slice(0, 15).join(', ') }}{{ linkQCheckMissing.length > 15 ? '…' : '' }}</span>
         </ng-container>
@@ -150,6 +151,7 @@
               </th>
               <th>Trạng thái</th>
               <th class="lqs-num">Số PO</th>
+              <th title="LinkQ làm gốc: hết stock / cần giảm / cần tăng tồn web (đã tính PXK chưa xuất nếu đã bấm Tính PXK)">Cảnh báo</th>
             </tr>
           </thead>
           <tbody>
@@ -172,13 +174,105 @@
                     [class.lqs-diff-pxk--bad]="!linkQDiffAfterPxkOk(r)">{{ linkQDiffAfterPxkText(r) }}</td>
                 <td><span class="lqs-badge lqs-badge--{{ r.statusCls }}">{{ r.statusLabel }}</span></td>
                 <td class="lqs-num">{{ r.pos.length }}</td>
+                <td>
+                  <span class="lqs-warn lqs-warn--{{ w.cls }}" *ngIf="linkQWarn(r) as w">{{ w.label }} {{ formatNumber(w.qty) }}</span>
+                </td>
               </tr>
               <tr class="lqs-po-row" *ngIf="linkQCompareExpanded.has(r.code)">
                 <td class="lqs-col-idx"></td>
-                <td [attr.colspan]="linkQPendingPxk ? 8 : 7">
+                <td [attr.colspan]="linkQPendingPxk ? 9 : 8">
+                  <!-- Tổng quan mã + chọn chức năng: Dòng tồn web / Check PO -->
+                  <div class="lqs-fn" (click)="$event.stopPropagation()">
+                    <div class="lqs-fn__sum">
+                      <strong>{{ r.code }}</strong>
+                      <span *ngIf="linkQCatalogName(r.code) as n">{{ n }}</span>
+                      <span *ngIf="linkQCatalogUnit(r.code) as u">ĐVT {{ u }}</span>
+                      <span>Standard {{ getStandardPacking(r.code) ? formatNumber(getStandardPacking(r.code)) : '—' }}</span>
+                      <span>LinkQ <b>{{ r.linkQText }}</b></span>
+                      <span>Web <b>{{ r.webText }}</b></span>
+                      <span>Lệch <b>{{ r.diffText }}</b></span>
+                      <span class="lqs-warn lqs-warn--{{ w.cls }}" *ngIf="linkQWarn(r) as w">{{ w.label }} {{ formatNumber(w.qty) }}</span>
+                    </div>
+                    <div class="lqs-fn__seg" role="tablist">
+                      <button type="button" [class.lqs-fn__btn--on]="linkQFnOf(r.code) === 'lines'" (click)="setLinkQRowFn(r.code, 'lines')">
+                        <i class="material-icons">list</i> Dòng tồn web
+                      </button>
+                      <button type="button" [class.lqs-fn__btn--on]="linkQFnOf(r.code) === 'po'" (click)="setLinkQRowFn(r.code, 'po')">
+                        <i class="material-icons">compare_arrows</i> Check PO
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Check PO: LinkQ làm gốc, so tồn web theo PO → web dư / thiếu PO nào; bấm PO xem chi tiết -->
+                  <ng-container *ngIf="linkQFnOf(r.code) === 'po'">
+                    <p class="lqs-fn__note" *ngIf="!linkQHasPoData">
+                      Chưa có dữ liệu PO LinkQ (file tồn LinkQ không có cột PO, chưa import file tuổi hàng ở So sánh PO) — đang hiện tồn web theo PO.
+                      Import lại file LinkQ có cột <b>Mã hàng · PO · Tồn kho</b> ở Inventory Overview.
+                    </p>
+                    <p class="lqs-fn__note" *ngIf="linkQHasPoData">
+                      <b class="lqs-po-st--short">Web thiếu {{ linkQPoCount(r.code, 'short') }} PO</b> ·
+                      <b class="lqs-po-st--over">Web dư {{ linkQPoCount(r.code, 'over') }} PO</b> ·
+                      Khớp {{ linkQPoCount(r.code, 'ok') }} PO · bấm PO để xem chi tiết và nhập lượng thiếu / dư
+                    </p>
+                    <table class="lqs-po-table lqs-pocheck" (click)="$event.stopPropagation()">
+                      <thead>
+                        <tr>
+                          <th>PO</th>
+                          <th class="lqs-num">LinkQ</th>
+                          <th class="lqs-num">Web</th>
+                          <th class="lqs-num">Lệch (web − LinkQ)</th>
+                          <th>Kết quả</th>
+                          <th class="lqs-num">Số dòng web</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <ng-container *ngFor="let p of linkQPoRows(r.code)">
+                          <tr class="lqs-pocheck__row" [class.lqs-pocheck__row--open]="linkQPoOpen.has(r.code + '|' + p.po)"
+                              (click)="toggleLinkQPo(r.code, p.po)">
+                            <td>
+                              <i class="material-icons lqs-caret">{{ linkQPoOpen.has(r.code + '|' + p.po) ? 'expand_less' : 'expand_more' }}</i>
+                              {{ p.po }}
+                            </td>
+                            <td class="lqs-num">{{ p.linkQ == null ? '—' : formatNumber(p.linkQ) }}</td>
+                            <td class="lqs-num">{{ formatNumber(p.web) }}</td>
+                            <td class="lqs-num">{{ p.status === 'nodata' ? '—' : formatSignedNumber(p.diff) }}</td>
+                            <td><span class="lqs-po-st lqs-po-st--{{ p.status }}">{{ linkQPoStatusLabel(p) }}</span></td>
+                            <td class="lqs-num">{{ p.lines.length }}</td>
+                          </tr>
+                          <tr class="lqs-pocheck__detail" *ngIf="linkQPoOpen.has(r.code + '|' + p.po)">
+                            <td colspan="6">
+                              <ng-container *ngTemplateOutlet="lqsLines; context: { $implicit: p.lines, code: r.code, ctx: 'PO ' + p.po, suggest: p }"></ng-container>
+                              <span class="lqs-nopo" *ngIf="!p.lines.length">Web chưa có dòng tồn của PO này — cần nhập kho (Inbound) nếu hàng thực tế có.</span>
+                            </td>
+                          </tr>
+                        </ng-container>
+                        <tr *ngIf="!linkQPoRows(r.code).length"><td colspan="6" class="lqs-nopo">Không có PO nào.</td></tr>
+                      </tbody>
+                    </table>
+                  </ng-container>
+
                   <!-- Từng dòng tồn web của mã: tick KK, sửa vị trí, Standard Packing (dùng chung hàm với bảng KK) -->
-                  <ng-container *ngIf="linkQCodeLines(r.code) as lines">
-                    <table class="lqs-po-table lqs-line-table" *ngIf="lines.length; else lqsNoPo">
+                  <ng-container *ngIf="linkQFnOf(r.code) === 'lines'">
+                    <ng-container *ngTemplateOutlet="lqsLines; context: { $implicit: linkQCodeLines(r.code), code: r.code, ctx: 'mã', suggest: null }"></ng-container>
+                    <span class="lqs-nopo" *ngIf="!linkQCodeLines(r.code).length">Web không có PO nào còn tồn.</span>
+                  </ng-container>
+                </td>
+              </tr>
+            </ng-container>
+            <tr *ngIf="!linkQCompareVisibleRows.length">
+              <td colspan="9" class="lqs-empty">{{ linkQCompareQuery ? 'Không khớp “' + linkQCompareQuery + '”.' : 'Không có mã nào.' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="lqs-more" *ngIf="linkQCompareShownRows.length < linkQCompareVisibleRows.length">
+          Đang hiện {{ linkQCompareShownRows.length }} / {{ linkQCompareVisibleRows.length }} mã · cuộn xuống để xem tiếp
+        </div>
+      </div>
+    </div>
+
+    <!-- Bảng dòng tồn web dùng chung cho "Dòng tồn web" và chi tiết PO trong "Check PO" -->
+    <ng-template #lqsLines let-lines let-code="code" let-ctx="ctx" let-suggest="suggest">
+                    <table class="lqs-po-table lqs-line-table" *ngIf="lines.length" (click)="$event.stopPropagation()">
                       <thead>
                         <tr>
                           <th>PO</th>
@@ -188,6 +282,9 @@
                           <th class="lqs-num" title="Standard Packing — sửa 1 ô thì cả mã đổi, đồng bộ Danh mục NVL">Standard</th>
                           <th class="lqs-kk-col">KK</th>
                           <th title="Ngày giờ tick KK và mã nhân viên đã tick">Thời gian</th>
+                          <th class="lqs-num" title="Thực tế thiếu so với web → đề nghị TĂNG tồn cuối, chờ quản lý duyệt">Thiếu</th>
+                          <th class="lqs-num" title="Thực tế dư so với web → đề nghị GIẢM tồn cuối, chờ quản lý duyệt">Dư</th>
+                          <th title="Gửi đề nghị điều chỉnh — quản lý mở More → Danh mục điều chỉnh để duyệt / sửa số">Điều chỉnh</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -229,24 +326,30 @@
                               <span class="kk-time-cell__by">{{ kkTickByText(line) || '—' }}</span>
                             </ng-container>
                           </td>
+                          <td class="lqs-num">
+                            <input type="number" class="lqs-adj-input lqs-adj-input--short" min="0" step="any"
+                                   [(ngModel)]="linkQAdjDraft(line).short"
+                                   [placeholder]="suggest?.status === 'short' ? formatNumber(-suggest.diff) : ''"
+                                   [disabled]="!canEdit"
+                                   (keydown.enter)="sendLinkQAdjust(line, code, ctx)">
+                          </td>
+                          <td class="lqs-num">
+                            <input type="number" class="lqs-adj-input lqs-adj-input--over" min="0" step="any"
+                                   [(ngModel)]="linkQAdjDraft(line).over"
+                                   [placeholder]="suggest?.status === 'over' ? formatNumber(suggest.diff) : ''"
+                                   [disabled]="!canEdit"
+                                   (keydown.enter)="sendLinkQAdjust(line, code, ctx)">
+                          </td>
+                          <td class="lqs-adj-cell">
+                            <button type="button" class="lqs-adj-btn"
+                                    [disabled]="!canEdit || !(linkQAdjDraft(line).short || linkQAdjDraft(line).over)"
+                                    (click)="sendLinkQAdjust(line, code, ctx)">Gửi</button>
+                            <span class="lqs-adj-pending" *ngIf="linkQAdjPendingText(line) as pend" title="Đề nghị đang chờ quản lý duyệt">Chờ duyệt {{ pend }}</span>
+                          </td>
                         </tr>
                       </tbody>
                     </table>
-                  </ng-container>
-                  <ng-template #lqsNoPo><span class="lqs-nopo">Web không có PO nào còn tồn.</span></ng-template>
-                </td>
-              </tr>
-            </ng-container>
-            <tr *ngIf="!linkQCompareVisibleRows.length">
-              <td colspan="8" class="lqs-empty">{{ linkQCompareQuery ? 'Không khớp “' + linkQCompareQuery + '”.' : 'Không có mã nào.' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="lqs-more" *ngIf="linkQCompareShownRows.length < linkQCompareVisibleRows.length">
-          Đang hiện {{ linkQCompareShownRows.length }} / {{ linkQCompareVisibleRows.length }} mã · cuộn xuống để xem tiếp
-        </div>
-      </div>
-    </div>
+    </ng-template>
 
     <!-- Đang mở LinkQ: gỡ hẳn phần KK khỏi trang (display:none vẫn bị Angular tính lại mỗi lần cuộn/gõ → chậm) -->
     <div class="excel-header kk-page__head" *ngIf="!showLinkQCompare">
@@ -311,9 +414,8 @@
             </div>
             <div class="kk-loc-map__modes" *ngIf="kkLocMapView && !kkActiveProductType">
               <button type="button"
-                      [class.kk-loc-map__mode--on]="kkLocMapView === 'location'"
-                      (click)="setKkLocMapView('location')"
-                      [disabled]="kkLocMapLoading">Vị trí</button>
+                      (click)="openKkViTriTab()"
+                      title="Mở tab mới: toàn bộ vị trí — bấm Run để xem % kiểm kê từng vị trí">Vị trí <i class="material-icons" style="font-size:14px;vertical-align:-2px">open_in_new</i></button>
               <button type="button"
                       [class.kk-loc-map__mode--on]="kkLocMapView === 'material'"
                       (click)="setKkLocMapView('material')"
@@ -333,11 +435,11 @@
               <button type="button"
                       class="more-btn more-btn--primary"
                       *ngIf="kkLocMapView === 'type'"
-                      (click)="openKkTypeScanModal(undefined, 'location')"
+                      (click)="openKiemKeScan()"
                       [disabled]="!canEdit || kkLocMapBusy"
-                      title="Scan vị trí: nhập NV → scan kệ S/R → scan mã — chỉ cập nhật vị trí">
-                <i class="material-icons">qr_code_scanner</i>
-                <span class="btn-label">Scan vị trí</span>
+                      title="Kiểm kê: scan vị trí → scan hết tem mã ở vị trí đó → DONE (đủ lượng tự tick KK) — cùng chức năng Cập nhật vị trí ở tab Location">
+                <i class="material-icons">fact_check</i>
+                <span class="btn-label">Kiểm kê</span>
               </button>
               <button type="button"
                       class="more-btn"
@@ -369,6 +471,10 @@
               <button type="button" class="more-btn" (click)="openKkThView()" title="Bảng chi tiết như Xem toàn bộ tất cả các mục — chỉ mã trong danh sách tiêu hủy, thêm cột TH">
                 <i class="material-icons">delete_sweep</i>
                 <span class="btn-label">TH</span>
+              </button>
+              <button type="button" class="more-btn" (click)="openKkWeekView()" title="Bảng Week — các mã còn tồn kho và đã có Week: hạn dùng theo khách">
+                <i class="material-icons">date_range</i>
+                <span class="btn-label">Week</span>
               </button>
               <button type="button" class="more-btn" [class.kk-log-btn--due]="kkLogArchiveDue" (click)="openKkLog()"
                       [title]="kkLogArchiveDue ? 'Có log KK quá 1 năm — mở để tải file về máy' : 'Lịch sử kiểm kê mọi mã (lưu 1 năm)'">
@@ -445,6 +551,14 @@
                   <i class="material-icons kk-menu__caret">expand_more</i>
                 </button>
                 <div class="kk-menu__pop" role="menu" *ngIf="kkToolMenu === 'tools'" (click)="kkToolMenu = null">
+                  <button type="button" role="menuitem" (click)="kkPoCompareFromMenu()" [disabled]="kkPoCmpBusy || kkLocMapBusy">
+                    <i class="material-icons" [class.rotating]="kkPoCmpBusy">{{ kkPoCmpBusy ? 'sync' : 'rule' }}</i>
+                    <span>{{ kkPoCmpOn ? 'Tắt so sánh PO' : 'So sánh PO' }}<small>Xem toàn bộ: dòng có PO không khớp file tuổi hàng</small></span>
+                  </button>
+                  <button type="button" role="menuitem" (click)="importKkPoCompare()" [disabled]="kkPoCmpBusy">
+                    <i class="material-icons">upload_file</i>
+                    <span>Import tuổi hàng<small>Mã + PO, từ dòng 7, bỏ kho NVL_KS</small></span>
+                  </button>
                   <button type="button" role="menuitem" (click)="openThCheck(true)">
                     <i class="material-icons">delete_sweep</i>
                     <span>Tiêu hủy<small>Import danh sách Mã + Lượng tiêu hủy</small></span>
@@ -481,23 +595,18 @@
                 </div>
               </div>
               <div class="kk-menu__backdrop" *ngIf="kkToolMenu" (click)="kkToolMenu = null"></div>
-              <input #kkCheckFile type="file" accept=".xlsx,.xls,.csv" hidden (change)="onLinkQCheckFileSelected($event)" />
-              <button type="button" class="more-btn" (click)="kkCheckFile.click()" [disabled]="linkQCheckImporting"
-                      title="Import danh sách mã cần check — Excel, cột A từ dòng 2 (dùng chung với so sánh LinkQ)">
-                <i class="material-icons" [class.rotating]="linkQCheckImporting">{{ linkQCheckImporting ? 'sync' : 'upload_file' }}</i>
-                <span class="btn-label">Import Check</span>
-              </button>
-              <button type="button" class="more-btn kk-dscheck-btn"
-                      [class.kk-dscheck-btn--on]="linkQCheckOnly && linkQCheckCodes.length"
-                      [disabled]="!linkQCheckCodes.length"
-                      (click)="toggleLinkQCheckOnly()"
-                      [title]="linkQCheckCodes.length ? ((linkQCheckFileName || 'DS Check') + ' — bật: chỉ hiện mã trong danh sách check') : 'Chưa có danh sách — bấm Import Check'">
-                <i class="material-icons">{{ linkQCheckOnly ? 'toggle_on' : 'toggle_off' }}</i>
-                <span class="btn-label">DS Check {{ linkQCheckCodes.length ? ((linkQCheckOnly ? 'On' : 'Off') + ' (' + linkQCheckCodes.length + ')') : '(chưa có)' }}</span>
-              </button>
-              <button type="button" class="more-btn" *ngIf="linkQCheckCodes.length" (click)="clearLinkQCheck()" title="Bỏ danh sách Check">
-                <i class="material-icons">close</i>
-              </button>
+              <label class="more-btn kk-dscheck-btn kk-dscheck-select"
+                     [class.kk-dscheck-btn--on]="!!dsCheckMode"
+                     [title]="linkQCheckFileName ? (linkQCheckFileName + ' — chọn mục: chỉ hiện mã trong mục đó') : 'Chưa có Kế hoạch NVL — import ở tab Report → Kế hoạch NVL'">
+                <i class="material-icons">{{ dsCheckMode ? 'toggle_on' : 'toggle_off' }}</i>
+                <span class="btn-label">DS Check</span>
+                <select [ngModel]="dsCheckMode" (ngModelChange)="setDsCheckMode($event)" [disabled]="!dsCheckLists.willUse.length">
+                  <option value="">Tắt</option>
+                  <option *ngFor="let o of dsCheckOptions" [value]="o.mode" [disabled]="!dsCheckLists[o.mode].length">
+                    {{ o.label }} ({{ dsCheckLists[o.mode].length }})
+                  </option>
+                </select>
+              </label>
               <label class="kk-loc-map__opt kk-toolbar__opt"
                      *ngIf="kkLocMapView === 'type' || kkLocMapView === 'material'"
                      title="Chỉ hiện loại / dòng chưa tick KK">
@@ -785,6 +894,10 @@
                     (click)="selectKkMuc(muc)">
               <strong>{{ muc.title }}</strong>
               <span>{{ isKkMucStockLoaded(muc) ? (kkMucUniqueCodes(muc) + ' mã · ' + kkMucCodeTotal(muc) + ' PO') : (muc.boxes.length + ' loại') }}</span>
+              <em class="kk-nav-pct" *ngIf="isKkMucStockLoaded(muc) && kkMucCodeTotal(muc) > 0"
+                  [class.kk-nav-pct--full]="kkMucLinePct(muc) >= 100"
+                  [style.--pct]="kkMucLinePct(muc) + '%'"
+                  [title]="'Đã KK ' + kkMucCheckedTotal(muc) + '/' + kkMucCodeTotal(muc) + ' dòng (PO)'">{{ kkMucLinePct(muc) }}%</em>
             </button>
           </nav>
           <div class="kk-type-pane">
@@ -823,6 +936,15 @@
                 Chi tiết
               </button>
               <button type="button"
+                      class="kk-scan-reset-btn kk-muc-pct-btn"
+                      [class.kk-muc-pct-btn--on]="kkMucPctOn"
+                      (click)="showKkMucPct($event)"
+                      [disabled]="kkMucPctLoading"
+                      title="Đọc toàn kho (nếu chưa) rồi hiện % dòng đã tick KK / tổng dòng của từng mục — bấm lại để ẩn">
+                <i class="material-icons" [class.rotating]="kkMucPctLoading">{{ kkMucPctLoading ? 'sync' : 'percent' }}</i>
+                %
+              </button>
+              <button type="button"
                       class="kk-scan-reset-btn"
                       (click)="openKkMucAll(muc, $event)"
                       [disabled]="kkLocMapBusy"
@@ -847,6 +969,14 @@
                 <span>mã</span>
                 <strong>{{ isKkMucStockLoaded(muc) ? kkMucCodeTotal(muc) : "—" }}</strong>
                 <span title="Số dòng tồn mã + PO (1 mã có thể nhiều PO)">PO</span>
+              </div>
+              <div class="kk-muc-pct" *ngIf="kkMucPctOn">
+                <ng-container *ngIf="!kkMucPctLoading && isKkMucStockLoaded(muc); else kkMucPctWait">
+                  <strong [class.kk-muc-pct--full]="kkMucLinePct(muc) >= 100">{{ kkMucLinePct(muc) }}%</strong>
+                  <span>{{ kkMucCheckedTotal(muc) }}/{{ kkMucCodeTotal(muc) }} dòng</span>
+                  <i class="kk-muc-pct__bar"><b [style.width.%]="kkMucLinePct(muc)"></b></i>
+                </ng-container>
+                <ng-template #kkMucPctWait><span>Đang đọc toàn kho…</span></ng-template>
               </div>
               <div class="kk-muc-summary__kk">
                 <span>Đã KK</span>
@@ -1017,6 +1147,7 @@
                       [class.kk-tf2__sel--on]="kkTypeKkFilter">
                 <option value="">KK: tất cả</option>
                 <option value="done">Đã KK</option>
+                <option value="done-short" title="Đã tick KK nhưng lượng quét nhỏ hơn tồn (gồm tick tay chưa quét)">Đã KK – quét chưa đủ</option>
                 <option value="todo">Chưa KK</option>
               </select>
               <select class="kk-tf2__sel" [(ngModel)]="kkTypeLinkQFilter" (ngModelChange)="onKkTypeWarnFilterChange()" title="Lọc theo LinkQ"
@@ -1045,6 +1176,10 @@
                 <option value="">Cuộn: tất cả</option>
                 <option *ngFor="let r of kkTypeRollsOptions" [ngValue]="r">{{ r }}</option>
               </select>
+              <button type="button" class="kk-tf2__btn kk-lastbag-btn" [class.kk-tf2__btn--on]="kkLastBagOnly" (click)="toggleKkLastBagOnly()"
+                      [title]="'Mã vừa xuất kho trong ' + kkRecentExportDays + ' ngày và chỉ còn 1 bag (dòng tô vàng) — có cột GW bag'">
+                <i class="material-icons">{{ kkRecentExportLoading ? 'hourglass_top' : 'filter_1' }}</i>Còn 1 bag
+              </button>
               <select class="kk-tf2__sel" *ngIf="kkPendingPxk" [(ngModel)]="kkTypeDiffFilter" (ngModelChange)="onKkTypeWarnFilterChange()"
                       [class.kk-tf2__sel--on]="kkTypeDiffFilter"
                       title="Lọc theo cột chênh lệch: tồn web − (tồn LinkQ + PXK chưa xuất). Có lệch khi |chênh lệch| &gt; 1">
@@ -1060,6 +1195,28 @@
                 <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkLocScanDay === 'yesterday'" [disabled]="kkLocScanLoading"
                         (click)="setKkLocScanDay('yesterday')" title="Chỉ mã vừa scan vị trí hôm qua">Hôm qua</button>
               </ng-container>
+              <ng-container *ngIf="(kkAllStockDetail || kkMucAllDetail) && kkPoCmpActive && kkPoCmp as cmp">
+                <span class="kk-po-cmp-meta" [title]="'So với file tuổi hàng: ' + cmp.fileName + ' · ' + cmp.byCode.size + ' mã — theo mã + PO, không tính IMD'">
+                  So sánh PO — PO sai: <b>{{ kkTypeDetailFiltered.length }}</b> dòng
+                  <ng-container *ngIf="kkPoCmpPending === null"> · đang đọc PXK chưa Done…</ng-container>
+                  <ng-container *ngIf="kkPoCmpPxkHidden"> · ẩn {{ kkPoCmpPxkHidden }} dòng do PXK chưa Done</ng-container>
+                  <ng-container *ngIf="selectedFactory !== 'ASM1'"> · (chưa trừ PXK chưa Done — chỉ ASM1)</ng-container>
+                  · {{ cmp.fileName }}{{ cmp.importedAt ? ' (' + (cmp.importedAt | date:'dd/MM HH:mm') + ')' : '' }}
+                </span>
+                <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkPoCmpSurplusOnly" (click)="toggleKkPoCmpSurplus()"
+                        [disabled]="kkPoCmpPending === null && selectedFactory === 'ASM1'"
+                        title="PO web có mà LinkQ không có, không có PXK chưa xuất, và tồn của PO = đúng phần lệch tổng (web − LinkQ) của mã → dư sai, có thể xóa. Không tính kho NG.">
+                  🗑 Dư sai ({{ kkPoCmpSurplusCount }})</button>
+                <ng-container *ngIf="kkPoCmpSurplusOnly && kkPoCmpSurplusCount">
+                  <button type="button" class="kk-tf2__btn" (click)="exportKkPoCmpSurplus()" title="Tải Excel các dòng dư sai để xem trước">
+                    <i class="material-icons">download</i> Excel</button>
+                  <button type="button" class="kk-tf2__btn kk-tf2__btn--danger" (click)="hideKkPoCmpSurplus()" [disabled]="!canDelete || kkPoCmpSurplusBusy"
+                          [title]="canDelete ? 'Ẩn các dòng dư sai — vào Danh mục Ẩn 30 ngày, khôi phục được' : 'Cần quyền Xóa'">
+                    <i class="material-icons" [class.rotating]="kkPoCmpSurplusBusy">{{ kkPoCmpSurplusBusy ? 'sync' : 'visibility_off' }}</i> Ẩn {{ kkPoCmpSurplusCount }} dòng</button>
+                </ng-container>
+                <button type="button" class="kk-tf2__btn kk-tf2__btn--on" (click)="toggleKkPoCompare()" title="Tắt So sánh PO">
+                  <i class="material-icons">close</i></button>
+              </ng-container>
               <button type="button" class="kk-tf2__btn" *ngIf="kkTypeActiveFilterCount || kkTypeDetailQuery"
                       (click)="clearKkTypeFilters(); kkTypeWarnFilter = ''; kkTypeLinkQFilter = ''; kkTypeKkFilter = ''; kkTypeDiffFilter = ''" title="Xóa hết lọc">
                 <i class="material-icons">filter_alt_off</i>
@@ -1071,15 +1228,29 @@
               <span class="kk-tf2__lab">Sắp</span>
               <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortQtyDesc" (click)="toggleKkTypeSortQty()" title="Số lượng cao → thấp">
                 <i class="material-icons">arrow_downward</i> SL</button>
+              <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortRollsDesc" (click)="toggleKkTypeSortRolls()" title="Nhiều cuộn nhất lên đầu (cột Cuộn)">
+                <i class="material-icons">arrow_downward</i> Cuộn</button>
               <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortKkTimeDesc" (click)="toggleKkTypeSortKkTime()" title="Mã vừa KK mới nhất lên đầu">
                 <i class="material-icons">schedule</i> Mới KK</button>
               <button type="button" class="kk-tf2__btn" *ngIf="!kkAllStockDetail" [class.kk-tf2__btn--on]="kkTypeByCodeView" [disabled]="kkTypeLinkQLoading"
                       (click)="toggleKkTypeByCodeView()" title="Gộp theo mã (cộng mọi PO) và so với tồn LinkQ">
                 <i class="material-icons" [class.rotating]="kkTypeLinkQLoading">{{ kkTypeLinkQLoading ? 'sync' : 'compare_arrows' }}</i> Theo mã LinkQ</button>
+              <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkPoCheckView" [disabled]="kkPoCheckLoading"
+                      (click)="toggleKkPoCheck()" title="Lấy toàn bộ Mã + PO của LinkQ (file tuổi hàng) thuộc mục này, so với tồn web theo từng PO">
+                <i class="material-icons" [class.rotating]="kkPoCheckLoading">{{ kkPoCheckLoading ? 'sync' : 'fact_check' }}</i> Check PO</button>
+              <button type="button" class="kk-tf2__btn kk-tf2__btn--fix" *ngIf="kkPoCheckCols" [disabled]="kkFixLoading || !canEdit"
+                      (click)="openKkAutoFix()" title="Tính phương án sửa toàn bộ mục theo PO LinkQ (xóa dòng trùng, giảm/tăng, đổi PO) → xem trước → gửi quản lý duyệt">
+                <i class="material-icons" [class.rotating]="kkFixLoading">{{ kkFixLoading ? 'sync' : 'auto_fix_high' }}</i> Tự sửa</button>
               <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="!!kkPendingPxk" [disabled]="kkPendingPxkLoading"
                       (click)="toggleKkPendingPxk()" title="Tính lượng trên PXK (Work Order chưa Done, ASM1) mà web chưa scan xuất — bấm lại để ẩn">
                 <i class="material-icons" [class.rotating]="kkPendingPxkLoading">{{ kkPendingPxkLoading ? 'sync' : 'local_shipping' }}</i>
                 {{ kkPendingPxkLoading ? 'Đang tính…' : 'PXK chưa xuất' }}</button>
+            </div>
+
+            <!-- Rule Week (mục Week) -->
+            <div class="kk-tf2__grp" *ngIf="kkWeekMode">
+              <button type="button" class="kk-tf2__btn" (click)="openWeekRules()" title="Hạn dùng tem theo Week của từng khách — áp cho mục Week và chặn xuất ở Outbound">
+                <i class="material-icons">event_note</i> Rule Week</button>
             </div>
 
             <!-- Thao tác (popup) -->
@@ -1104,6 +1275,104 @@
                            (keydown.enter)="onKkTypeLocationEnter(row, $event)" (blur)="saveKkTypeLocation(row)" autocomplete="off" spellcheck="false"
                            title="Gán vị trí mới cho mọi dòng — nhập rồi Enter">
                     <button type="button" class="kk-tf2__btn kk-tf2__btn--danger" (click)="clearKkTypeLocations(row)" [disabled]="!canEdit || kkLocMapBusy || !row.totalLines" title="Xóa vị trí mọi dòng">Xóa vị trí</button>
+                    <button type="button" class="kk-tf2__btn" (click)="openWeekRules()" title="Hạn dùng tem theo Week của từng khách — áp cho mục Week và chặn xuất ở Outbound">
+                      <i class="material-icons">event_note</i> Rule Week</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rule Week -->
+            <div class="wx-overlay" *ngIf="weekRuleOpen" (click)="!weekRuleBusy && (weekRuleOpen = false)">
+              <div class="wx week-rule" (click)="$event.stopPropagation()" role="dialog" aria-label="Rule Week">
+                <div class="wx__head">
+                  <h3>Rule Week — hạn dùng tem theo khách</h3>
+                  <button type="button" class="wx__x" [disabled]="weekRuleBusy" (click)="weekRuleOpen = false">✕</button>
+                </div>
+                <p class="week-rule__hint">
+                  Tem Week <b>YYWW</b>: được dùng từ (đầu tuần trên tem − <i>sớm</i> tuần) tới (cuối tuần trên tem + <i>trễ</i> tuần), theo khách của LSX.
+                  Ngoài khoảng này Outbound không cho xuất. Khách khớp theo <b>đầu tên khách</b> (VD GIL = Gilbarco).
+                </p>
+                <table class="week-rule__table">
+                  <thead><tr><th>Khách bắt đầu bằng</th><th>Tên</th><th>Sớm (tuần)</th><th>Trễ (tuần)</th><th></th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let c of weekRuleForm.customers; let i = index">
+                      <td><input type="text" [(ngModel)]="c.prefix" placeholder="VD GIL" [disabled]="!canEdit"></td>
+                      <td><input type="text" [(ngModel)]="c.name" placeholder="VD Gilbarco" [disabled]="!canEdit"></td>
+                      <td><input type="number" min="0" [(ngModel)]="c.early" [disabled]="!canEdit"></td>
+                      <td><input type="number" min="0" [(ngModel)]="c.late" [disabled]="!canEdit"></td>
+                      <td><button type="button" class="kk-tf2__btn kk-tf2__btn--danger" (click)="removeWeekRuleRow(i)" [disabled]="!canEdit">Xóa</button></td>
+                    </tr>
+                    <tr class="week-rule__def">
+                      <td colspan="2"><b>Khách khác</b> (không khớp dòng nào)</td>
+                      <td><input type="number" min="0" [(ngModel)]="weekRuleForm.defaultEarly" [disabled]="!canEdit"></td>
+                      <td><input type="number" min="0" [(ngModel)]="weekRuleForm.defaultLate" [disabled]="!canEdit"></td>
+                      <td></td>
+                    </tr>
+                    <tr class="week-rule__def">
+                      <td colspan="2"><b>Tem MMYY</b> (mọi khách) — tính theo <b>tháng</b></td>
+                      <td><input type="number" min="0" [(ngModel)]="weekRuleForm.mmyyEarly" [disabled]="!canEdit"></td>
+                      <td><input type="number" min="0" [(ngModel)]="weekRuleForm.mmyyLate" [disabled]="!canEdit"></td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="week-rule__foot">
+                  <button type="button" class="kk-tf2__btn" (click)="addWeekRuleRow()" [disabled]="!canEdit || weekRuleBusy"><i class="material-icons">add</i> Thêm khách</button>
+                  <span class="week-rule__msg">{{ weekRuleBusy ? 'Đang xử lý…' : weekRuleMsg }}</span>
+                  <button type="button" class="wx__btn" [disabled]="weekRuleBusy" (click)="weekRuleOpen = false">Đóng</button>
+                  <button type="button" class="wx__btn wx__btn--primary" *ngIf="canEdit" [disabled]="weekRuleBusy" (click)="saveWeekRules()">Lưu</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tự sửa (Check PO) — xem trước rồi gửi đề nghị -->
+            <div class="wx-overlay" *ngIf="kkFix" (click)="!kkFix.busy && (kkFix = null)">
+              <div class="wx kk-fix" (click)="$event.stopPropagation()" role="dialog" aria-label="Tự sửa theo PO LinkQ">
+                <div class="wx__head">
+                  <h3>Tự sửa theo PO LinkQ — {{ row.productType }}</h3>
+                  <button type="button" class="wx__x" [disabled]="kkFix.busy" (click)="kkFix = null">✕</button>
+                </div>
+                <div class="kk-fix__sum">
+                  Tổng lệch theo PO: <b>{{ formatNumber(kkFix.before) }}</b> → sau khi duyệt còn <b>{{ formatNumber(kkFix.after) }}</b>
+                  · {{ kkFix.items.length }} đề nghị · {{ kkFix.manual.length }} mục làm tay
+                  <span class="kk-fix__hint">Không sửa thẳng tồn — gửi vào Danh mục điều chỉnh, quản lý duyệt. Dòng đang chờ duyệt được bỏ qua.</span>
+                </div>
+                <div class="kk-fix__body">
+                  <table class="kk-fix__table" *ngIf="kkFix.items.length">
+                    <thead>
+                      <tr>
+                        <th><input type="checkbox" [checked]="kkFixSelected().length === kkFix.items.length"
+                                   (change)="kkFixToggleAll($any($event.target).checked)" [disabled]="kkFix.ok"></th>
+                        <th>Mã</th><th>PO</th><th>IMD</th><th>Vị trí</th><th>Tồn</th><th>Đề nghị</th><th>Lý do</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let it of kkFix.items" [class.kk-fix__off]="!it.on">
+                        <td><input type="checkbox" [(ngModel)]="it.on" [disabled]="kkFix.ok"></td>
+                        <td><strong>{{ it.m.materialCode }}</strong></td>
+                        <td>{{ it.m.poNumber || '—' }}</td>
+                        <td>{{ getDisplayIMD(it.m) }}</td>
+                        <td>{{ primaryLocationDisplay(it.m.location) || '—' }}</td>
+                        <td class="kk-fix__num">{{ formatNumber(calculateCurrentStock(it.m)) }}</td>
+                        <td class="kk-fix__act" [class.kk-fix__act--del]="it.kind === 'delete' || it.kind === 'dec'">
+                          {{ kkFixKindLabel(it) }} {{ it.kind === 'po' ? '→ ' + it.newPo : formatNumber(it.qty) }}
+                        </td>
+                        <td class="kk-fix__why">{{ it.reason }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p class="kk-fix__empty" *ngIf="!kkFix.items.length && !kkFix.manual.length">✅ Mục này đã khớp PO LinkQ — không có gì để sửa.</p>
+                  <div class="kk-fix__manual" *ngIf="kkFix.manual.length">
+                    <b>Làm tay ({{ kkFix.manual.length }})</b>
+                    <div *ngFor="let x of kkFix.manual"><strong>{{ x.code }}</strong> · {{ x.text }}</div>
+                  </div>
+                </div>
+                <div class="kk-fix__foot">
+                  <span class="kk-fix__msg" *ngIf="kkFix.msg">{{ kkFix.msg }}</span>
+                  <button type="button" class="wx__btn" [disabled]="kkFix.busy" (click)="kkFix = null">{{ kkFix.ok ? 'Đóng' : 'Hủy' }}</button>
+                  <button type="button" class="wx__btn wx__btn--primary" *ngIf="!kkFix.ok && kkFix.items.length"
+                          [disabled]="kkFix.busy || !kkFixSelected().length" (click)="submitKkAutoFix()">
+                    {{ kkFix.busy ? 'Đang gửi…' : 'Gửi duyệt (' + kkFixSelected().length + ')' }}</button>
                 </div>
               </div>
             </div>
@@ -1113,6 +1382,9 @@
               <span class="kk-tf2__lab">Xuất</span>
               <button type="button" class="kk-tf2__btn" (click)="downloadKkTypeDetail()" [disabled]="kkTypeDetailExportBusy" title="Tải Excel các dòng đang lọc">
                 <i class="material-icons">download</i> Excel</button>
+              <button type="button" class="kk-tf2__btn" (click)="downloadKkAccounting()" [disabled]="kkAccountingExportBusy"
+                      title="Tải file Excel Kế toán KK để in: Tồn sổ, cột Thực tế KK để trống điền tay, Chênh lệch tự tính, ký tên cuối trang">
+                <i class="material-icons" [class.rotating]="kkAccountingExportBusy">{{ kkAccountingExportBusy ? 'sync' : 'request_quote' }}</i> Kế toán KK</button>
               <button type="button" class="kk-tf2__btn" (click)="kkPrintChoice = true" title="In A4 ngang các dòng đang lọc">
                 <i class="material-icons">print</i> In</button>
             </div>
@@ -1143,90 +1415,54 @@
                     <th>STT</th>
                     <th>MÃ HÀNG</th>
                     <th>TÊN HÀNG</th>
-                    <th title="Số dòng tồn (PO / IMD) của mã">SỐ DÒNG</th>
-                    <th title="Aging (tháng) của PO cũ nhất — tính theo PO">AGING</th>
-                    <th title="Tổng tồn web — cộng mọi PO">TỒN WEB</th>
-                    <th title="Tồn trên file LinkQ mới nhất">TỒN LINKQ</th>
-                    <th title="Web − LinkQ">LỆCH</th>
-                    <th>ĐÃ KK</th>
+                    <th>PO</th>
+                    <th>IMD</th>
+                    <th title="Aging (tháng) — tính theo PO">AGING</th>
+                    <th title="Tồn web của dòng (PO / IMD)">TỒN WEB</th>
+                    <th title="Tổng tồn web của mã — cộng mọi PO">TỔNG WEB</th>
+                    <th title="Tồn trên file LinkQ mới nhất (theo mã)">TỒN LINKQ</th>
+                    <th *ngIf="kkByCodePxk" title="PXK chưa xuất của mã (Work Order Waiting / Kitting / Delay)">PXK CHƯA XUẤT</th>
+                    <th title="Tổng web − (Tồn LinkQ + PXK chưa xuất) — theo tổng mã, không so PO">LỆCH</th>
+                    <th>KK</th>
                     <th>VỊ TRÍ</th>
                   </tr>
                 </thead>
                 <tbody>
                   <ng-container *ngFor="let r of kkTypeByCodeRows; let i = index; trackBy: trackKkByCode">
-                  <tr class="kk-bycode-row"
+                  <tr *ngFor="let line of r.items; let first = first; trackBy: trackByFn"
+                      class="kk-bycode-row"
                       [class.kk-bycode-row--warn]="r.warn"
-                      [class.kk-bycode-row--open]="kkByCodeOpen === r.code"
-                      (click)="toggleKkByCodeOpen(r.code)"
-                      title="Bấm để xem PO / IMD của mã này">
-                    <td class="row-header">{{ i + 1 }}</td>
-                    <td class="code-cell material-code-cell"><i class="material-icons kk-loc-map__caret">{{ kkByCodeOpen === r.code ? 'expand_more' : 'chevron_right' }}</i><i class="k100-mark" *ngIf="isK100(r.code)" [title]="k100Title(r.code)">!</i>{{ r.code }}</td>
-                    <td class="kk-type-name-cell" [title]="r.name">{{ r.name }}</td>
-                    <td class="number-cell">{{ r.lines }}</td>
-                    <td class="number-cell">{{ r.aging == null ? '—' : r.aging }}</td>
-                    <td class="number-cell">{{ formatNumber(r.web) }}</td>
-                    <td class="number-cell">{{ r.linkQ == null ? '—' : formatNumber(r.linkQ) }}</td>
-                    <td class="number-cell kk-bycode-diff">{{ r.diff == null ? '—' : ((r.diff > 0 ? '+' : '') + formatNumber(r.diff)) }}</td>
-                    <td class="number-cell">{{ r.checked }}/{{ r.kkLines }}</td>
-                    <td class="kk-type-note-cell" [title]="r.locs">{{ r.locs || '—' }}</td>
-                  </tr>
-                  <tr *ngIf="kkByCodeOpen === r.code" class="kk-bycode-detail-row">
-                    <td colspan="10">
-                      <table class="kk-loc-map__detail">
-                        <thead>
-                          <tr>
-                            <th>PO</th>
-                            <th>IMD</th>
-                            <th>AGING</th>
-                            <th class="kk-loc-map__num">TỒN</th>
-                            <th>VỊ TRÍ</th>
-                            <th>PALLET</th>
-                            <th class="kk-loc-map__tick-col">KK</th>
-                            <th>THỜI GIAN</th>
-                            <th>LƯỢNG THIẾU</th>
-                            <th>% THIẾU</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr *ngFor="let line of kkByCodeOpenLines; trackBy: trackByFn">
-                            <td>{{ line.poNumber || '—' }}</td>
-                            <td>{{ getDisplayIMD(line) }}</td>
-                            <td [title]="kkAgingTitle(line)">{{ kkAgingText(line) }}</td>
-                            <td class="kk-loc-map__num">{{ formatNumber(calculateCurrentStock(line)) }}</td>
-                            <td>{{ primaryLocationDisplay(line.location) || '—' }}</td>
-                            <td>{{ line.palletId || '—' }}</td>
-                            <td class="kk-loc-map__tick-col" (click)="$event.stopPropagation()">
-                              <input type="checkbox" class="kk-loc-map__tick" [checked]="!!line.kkChecked"
-                                     [disabled]="!canEdit || kkLocMapBusy"
-                                     (change)="onKkDetailTick(line, $any($event.target).checked)">
-                            </td>
-                            <td class="kk-time-cell">
-                              <ng-container *ngIf="kkTickTimeText(line) as t">
-                                <span class="kk-time-cell__at">{{ t }}</span>
-                                <span class="kk-time-cell__by">{{ kkTickByText(line) || '—' }}</span>
-                              </ng-container>
-                            </td>
-                            <td class="kk-short-cell" [class.kk-short-cell--on]="!!kkShortQtyOf(line)" (click)="$event.stopPropagation()">
-                              <input type="number" class="editable-cell" min="0" step="any" placeholder="—"
-                                     [value]="kkShortQtyOf(line) ?? ''"
-                                     [disabled]="!canEdit"
-                                     (keydown.enter)="$any($event.target).blur()"
-                                     (blur)="saveKkShortQty(line, $any($event.target).value)">
-                            </td>
-                            <td class="kk-short-pct" [class.kk-short-cell--on]="!!kkShortQtyOf(line)">{{ kkShortPctText(line) }}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                      [class.kk-bycode-row--first]="first">
+                    <ng-container *ngIf="first">
+                      <td class="row-header" [attr.rowspan]="r.items?.length">{{ i + 1 }}</td>
+                      <td class="code-cell material-code-cell" [attr.rowspan]="r.items?.length"><i class="k100-mark" *ngIf="isK100(r.code)" [title]="k100Title(r.code)">!</i>{{ r.code }}</td>
+                      <td class="kk-type-name-cell" [attr.rowspan]="r.items?.length" [title]="r.name">{{ r.name }}</td>
+                    </ng-container>
+                    <td>{{ line.poNumber || '—' }}</td>
+                    <td>{{ getDisplayIMD(line) }}</td>
+                    <td [title]="kkAgingTitle(line)">{{ kkAgingText(line) }}</td>
+                    <td class="number-cell">{{ formatNumber(calculateCurrentStock(line)) }}</td>
+                    <ng-container *ngIf="first">
+                      <td class="number-cell kk-bycode-merge" [attr.rowspan]="r.items?.length">{{ formatNumber(r.web) }}</td>
+                      <td class="number-cell kk-bycode-merge" [attr.rowspan]="r.items?.length">{{ r.linkQ == null ? '—' : formatNumber(r.linkQ) }}</td>
+                      <td class="number-cell kk-bycode-merge" *ngIf="kkByCodePxk" [attr.rowspan]="r.items?.length">{{ r.pxk ? formatNumber(r.pxk) : '—' }}</td>
+                      <td class="number-cell kk-bycode-diff kk-bycode-merge" [attr.rowspan]="r.items?.length">{{ r.diff == null ? '—' : ((r.diff > 0 ? '+' : '') + formatNumber(r.diff)) }}</td>
+                    </ng-container>
+                    <td class="kk-loc-map__tick-col">
+                      <input type="checkbox" class="kk-loc-map__tick" [checked]="!!line.kkChecked"
+                             [disabled]="!canEdit || kkLocMapBusy"
+                             (change)="onKkDetailTick(line, $any($event.target).checked)">
                     </td>
+                    <td>{{ primaryLocationDisplay(line.location) || '—' }}</td>
                   </tr>
                   </ng-container>
                   <tr *ngIf="!kkTypeByCodeRows.length">
-                    <td colspan="10" class="hidden-empty">Không có mã nào.</td>
+                    <td [attr.colspan]="kkByCodePxk ? 13 : 12" class="hidden-empty">Không có mã nào có trong LinkQ.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p class="kk-bycode-meta" *ngIf="kkTypeByCodeView">LinkQ: {{ kkTypeLinkQLabel || '—' }} · lệch khi |Web − LinkQ| &gt; 1</p>
+            <p class="kk-bycode-meta" *ngIf="kkTypeByCodeView">LinkQ: {{ kkTypeLinkQLabel || '—' }} · chỉ hiện mã có trong LinkQ{{ kkByCodeHiddenCount ? ' (ẩn ' + kkByCodeHiddenCount + ' mã không có)' : '' }} · lệch khi |Web − LinkQ| &gt; 1</p>
             <div class="table-container kk-type-detail__table" *ngIf="!kkTypeByCodeView">
               <table class="excel-table">
                 <thead>
@@ -1236,14 +1472,24 @@
                     <th>TÊN HÀNG</th>
                     <th title="Mã có trong file LinkQ mới nhất">CÓ LINKQ</th>
                     <th [title]="'Tồn LinkQ là TỔNG của mã (không cộng theo từng dòng PO) — ' + (kkTypeLinkQLabel || 'file LinkQ mới nhất')">TỒN LINKQ (TỔNG MÃ)</th>
-                    <th *ngIf="kkPendingPxk" title="Lượng trên PXK chưa xuất của mã (tổng mã, Work Order chưa Done)">PXK CHƯA XUẤT</th>
-                    <th *ngIf="kkPendingPxk" title="Tồn web − (Tồn LinkQ + PXK chưa xuất), tổng mã">CHÊNH LỆCH<br><small>(Web-LinkQ)</small></th>
-                    <th>PO</th>
+                    <th *ngIf="kkPendingPxk" title="Lượng trên PXK chưa xuất theo Mã + PO của dòng (Work Order Waiting / Kitting / Delay) — rê chuột xem LSX">PXK CHƯA XUẤT<br><small>(theo PO)</small></th>
+                    <th *ngIf="kkPendingPxk" title="Chênh lệch từng dòng: LinkQ + PXK chưa xuất của PO trừ dần vào các dòng của PO (dòng đã KK / tạo trước được trừ trước). Mã không có file tuổi hàng → theo tổng mã">CHÊNH LỆCH<br><small>(theo dòng)</small></th>
+                    <th>{{ kkPoCmpActive ? 'PO HIỆN HỮU' : 'PO' }}</th>
+                    <th *ngIf="kkPoCmpActive" title="Các PO của mã này trong file tuổi hàng (LinkQ), đã bỏ kho NVL_KS">PO LINKQ</th>
+                    <th class="kk-pocheck-th" *ngIf="kkPoCheckCols" title="PO trên LinkQ (file tuổi hàng). LinkQ không có PO của dòng này → hiện các PO LinkQ của mã, chữ đỏ">PO LINKQ</th>
+                    <th class="kk-pocheck-th" *ngIf="kkPoCheckCols" title="Lượng của PO trên LinkQ (Tồn cuối kỳ file tuổi hàng)">LƯỢNG PO LINKQ</th>
                     <th>IMD</th>
-                    <th title="Aging (tháng): IMD từ 01/01/2026 tính theo IMD (có số lẻ); IMD cũ hơn tính theo PO (8 số cuối, 4 số đầu = tháng + năm). Dưới 1 tháng: không cần kiểm.">AGING</th>
+                    <th title="Aging (tháng): IMD từ 01/01/2026 tính theo IMD (có số lẻ); IMD cũ hơn tính theo PO (8 số cuối, 4 số đầu = tháng + năm). Mọi dòng đều phải kiểm kê.">AGING</th>
                     <th title="Tình trạng QC / IQC của dòng (Pass, Chờ kiểm, NG, Đặc cách…)">QC</th>
                     <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT">TỒN KHO</th>
+                    <th title="Số bộ phận của mã (2 / 3 / 4) — chọn 1 lần áp cho cả mã, hiện khi scan xuất ở Outbound">BỘ PHẬN</th>
                     <th>VỊ TRÍ</th>
+                    <ng-container *ngIf="kkWeekMode">
+                      <th title="Week trên tem (nhập ở Inbound)">WEEK</th>
+                      <th title="Khách theo Danh mục NVLKH — hạn dùng theo Rule Week (nút Rule Week để xem / chỉnh)">KHÁCH</th>
+                      <th class="kk-week-range">ĐƯỢC DÙNG</th>
+                      <th>HẠN DÙNG</th>
+                    </ng-container>
                     <ng-container *ngIf="kkThMode">
                       <th class="th-col" title="Lượng tiêu hủy theo danh sách import (tổng mã)">TH</th>
                       <th class="th-col">TÙY CHỌN</th>
@@ -1253,7 +1499,8 @@
                     <th>PALLET</th>
                     <th title="Standard Packing — nhập 1 ô thì cả mã đổi, đồng bộ danh mục">STANDARD</th>
                     <th title="Số cuộn = tồn ÷ Standard; phần lẻ +1">CUỘN</th>
-                    <th title="Mỗi lần quét = 1 Box — so với số cuộn/thùng">LẦN QUÉT (BOX)</th>
+                    <th title="GW (gram) bag còn lại — chỉ dòng vừa xuất còn 1 bag. cân = số cân lúc tách tem lẻ · nguyên = GW bag danh mục · ước = GW bag × tồn ÷ Standard">GW BAG</th>
+                    <th title="Lượng quét (cộng lượng trên từng tem) / Tồn kho — đủ thì tự tick KK">LƯỢNG QUÉT</th>
                     <th title="Đã kiểm kê">KK</th>
                     <th title="Ngày giờ tick KK và mã nhân viên đã tick">THỜI GIAN</th>
                     <th title="Cùng mã + PO + IMD ở nhiều pallet — số cuộn từng pallet">GHI CHÚ</th>
@@ -1265,24 +1512,51 @@
                 </thead>
                 <tbody>
                   <tr *ngFor="let material of kkTypeDetailPaged; trackBy: trackByFn; let i = index"
-                      [class.iqc-row]="isIQCLocation(material.location)">
+                      [class.iqc-row]="isIQCLocation(material.location)"
+                      [class.kk-lastbag-row]="isKkRecentLastBag(material)">
                     <td class="row-header">{{ kkTypeRowIndex(i) }}</td>
-                    <td class="code-cell material-code-cell"><i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i>{{ material.materialCode }}</td>
+                    <td class="code-cell material-code-cell"><i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i><button type="button" class="kk-po-cmp-code" *ngIf="kkPoCmpActive; else kkPlainCode" (click)="openKkPoCmpDetail(material)" title="So sánh toàn bộ PO của mã ở web và LinkQ">{{ material.materialCode }}</button><ng-template #kkPlainCode>{{ material.materialCode }}</ng-template></td>
                     <td class="kk-type-name-cell" [title]="getKkMaterialName(material)">{{ getKkMaterialName(material) }}</td>
                     <td class="kk-haslq-cell" [class.kk-haslq-cell--no]="kkHasLinkQText(material.materialCode) === 'No'">{{ kkHasLinkQText(material.materialCode) }}</td>
                     <td class="number-cell" title="Tồn LinkQ là tổng của mã — không cộng các dòng PO lại">{{ kkLinkQQtyText(material.materialCode) }}</td>
-                    <td class="number-cell" *ngIf="kkPendingPxk" [title]="kkPendingPxkTitle(material.materialCode)">{{ kkPendingPxkText(material.materialCode) }}</td>
+                    <td class="number-cell" *ngIf="kkPendingPxk" [title]="kkPendingPxkPoTitle(material)">{{ kkPendingPxkPoText(material) }}</td>
                     <td class="number-cell kk-pxk-diff" *ngIf="kkPendingPxk"
-                        [class.kk-pxk-diff--bad]="isLinkqDiffBad(kkPxkDiff(material.materialCode))"
-                        [title]="kkPxkDiffTitle(material.materialCode)">{{ kkPxkDiffText(material.materialCode) }}</td>
-                    <td class="po-cell">{{ material.poNumber || '—' }}</td>
+                        [class.kk-pxk-diff--bad]="isLinkqDiffBad(kkPxkDiffOf(material))"
+                        [title]="kkLineDiffTitle(material)">{{ kkLineDiffText(material) }}</td>
+                    <td class="po-cell" [class.kk-po-cmp-bad]="kkPoCmpActive && isKkPoMismatch(material)"
+                        [title]="kkPoCmpActive ? 'PO đang có trên web — không có trong file tuổi hàng' : ''">{{ material.poNumber || '—' }}</td>
+                    <td class="po-cell kk-po-linkq-cell" *ngIf="kkPoCmpActive">{{ kkPoCmpFilePos(material) || '—' }}</td>
+                    <ng-container *ngIf="kkPoCheckCols">
+                      <ng-container *ngIf="kkPoCheckLinkQ(material) as lq">
+                        <td class="po-cell kk-pocheck-td" [class.kk-pocheck-td--miss]="!lq.match && lq.items.length">
+                          <ng-container *ngIf="lq.items.length; else kkPoChkNone">
+                            <span class="kk-pocheck-stack" *ngFor="let x of lq.items">{{ x.po }}</span>
+                          </ng-container>
+                        </td>
+                        <td class="number-cell kk-pocheck-td" [class.kk-pocheck-td--miss]="!lq.match && lq.items.length">
+                          <ng-container *ngIf="lq.items.length; else kkPoChkNone">
+                            <span class="kk-pocheck-stack" *ngFor="let x of lq.items">{{ formatNumber(x.qty) }}</span>
+                          </ng-container>
+                        </td>
+                      </ng-container>
+                      <ng-template #kkPoChkNone><span class="kk-pocheck-none" title="File tuổi hàng LinkQ không có Mã + PO này"></span></ng-template>
+                    </ng-container>
                     <td class="date-cell">{{ getDisplayIMD(material) }}</td>
                     <td class="number-cell kk-aging-cell" [title]="kkAgingTitle(material)">{{ kkAgingText(material) }}</td>
                     <td class="kk-qc-cell">
                       <span class="badge" *ngIf="material.iqcStatus; else kkQcNone" [class]="getIQCStatusClass(material)">{{ material.iqcStatus }}</span>
                       <ng-template #kkQcNone>—</ng-template>
                     </td>
-                    <td class="number-cell">{{ formatNumber(calculateCurrentStock(material)) }}</td>
+                    <td class="number-cell kk-stock-propose-cell" [class.kk-pocheck-suspect]="kkPoCheckCols && !!kkPoCheckSuspect(material)"
+                        [title]="(kkPoCheckCols && kkPoCheckSuspect(material) ? kkPoCheckSuspect(material) + ' · ' : '') + 'Bấm để đề nghị số tồn mới'"
+                        (click)="openKkStockPropose(material)">{{ formatNumber(calculateCurrentStock(material)) }}</td>
+                    <td class="kk-bophan-cell" [class.kk-bophan-cell--on]="kkBoPhanOf(material.materialCode) > 0">
+                      <select [ngModel]="kkBoPhanOf(material.materialCode) || ''" (ngModelChange)="setKkBoPhan(material.materialCode, $event)"
+                              [disabled]="!canEdit" title="Số bộ phận của mã">
+                        <option value="">—</option>
+                        <option *ngFor="let n of boPhanOptions" [ngValue]="n">{{ n }}</option>
+                      </select>
+                    </td>
                     <td class="location-cell"
                         [class.iqc-location]="isIQCLocation(material.location)"
                         title="Bấm để nhập mã hoặc chọn vị trí Kho J">
@@ -1297,6 +1571,40 @@
                         </span>
                       </button>
                     </td>
+                    <ng-container *ngIf="kkWeekMode">
+                      <ng-container *ngIf="material.week; else kkWeekMissingCells">
+                        <ng-container *ngIf="kkWeekInfo(material) as wk">
+                          <td class="kk-week-cell">
+                            <button type="button" class="kk-week-btn" (click)="openKkWeekEdit(material)" [disabled]="!canEdit"
+                                    [title]="(material.weekFormat || 'YYWW') + ' ' + material.week + ' — bấm để sửa'">
+                              <small>{{ material.weekFormat || 'YYWW' }}</small> {{ wk.label }}
+                            </button>
+                          </td>
+                          <td class="kk-week-cell" [title]="wk.win?.rule || ''">{{ wk.customer || '—' }}</td>
+                          <td class="kk-week-cell kk-week-range" [title]="wk.win ? kkWeekRangeText(wk.win) : ''">
+                            <ng-container *ngIf="wk.win; else kkWeekNoWin">{{ kkWeekDdMm(wk.win.from) }} → {{ kkWeekDdMm(wk.win.to) }}</ng-container>
+                            <ng-template #kkWeekNoWin>—</ng-template>
+                          </td>
+                          <td class="kk-week-cell kk-week-status"
+                              [class.kk-week-status--ok]="wk.win?.status === 'ok'"
+                              [class.kk-week-status--early]="wk.win?.status === 'early'"
+                              [class.kk-week-status--late]="!wk.win || wk.win.status === 'late'"
+                              [title]="(wk.win?.rule || '') + (wk.win ? ' · ' + kkWeekStatusText(wk.win) : '')">
+                            <b>{{ kkWeekStatusShort(wk.win) }}</b>
+                            <small *ngIf="wk.win">tới {{ kkWeekDate(wk.win.to) }}</small>
+                          </td>
+                        </ng-container>
+                      </ng-container>
+                      <ng-template #kkWeekMissingCells>
+                        <td class="kk-week-cell">
+                          <button type="button" class="kk-week-btn kk-week-btn--missing" (click)="openKkWeekEdit(material)" [disabled]="!canEdit"
+                                  title="PO này chưa có Week — bấm để nhập theo tem">Nhập Week</button>
+                        </td>
+                        <td class="kk-week-cell">{{ getCustomerForMaterial(material) || '—' }}</td>
+                        <td class="kk-week-cell">—</td>
+                        <td class="kk-week-cell kk-week-status kk-week-status--early">Chưa có Week</td>
+                      </ng-template>
+                    </ng-container>
                     <ng-container *ngIf="kkThMode">
                       <ng-container *ngIf="thItemOf(material.materialCode) as th">
                         <td class="number-cell th-col"><b>{{ formatNumber(th.qty) }}</b></td>
@@ -1339,15 +1647,21 @@
                              title="Nhập Standard — áp dụng mọi dòng cùng mã và danh mục NVL">
                     </td>
                     <td class="number-cell kk-type-roll-cell" [title]="getKkRollsTitle(material)">{{ getKkRollsText(material) }}</td>
+                    <td class="number-cell kk-gw-cell">
+                      <ng-container *ngIf="isKkRecentLastBag(material)">
+                        <ng-container *ngIf="kkLastBagGw(material) as g; else kkNoGw"><b>{{ g.gw | number:'1.0-0' }}</b> g<small> {{ g.how }}</small></ng-container>
+                        <ng-template #kkNoGw><span title="Danh mục NVL chưa có GW bag">—</span></ng-template>
+                      </ng-container>
+                    </td>
                     <td class="number-cell kk-type-scan-count-cell"
                         [class.kk-type-scan-count-cell--ok]="kkScanStockTone(material) === 'ok'"
                         [class.kk-type-scan-count-cell--low]="kkScanStockTone(material) === 'low'"
                         [class.kk-type-scan-count-cell--over]="kkScanStockTone(material) === 'over'"
                         [title]="getKkScanCompareTitle(material)">
-                      {{ formatNumber(getKkScanCount(material)) }}
-                      <span class="kk-type-scan-count-cell__vs">/ {{ getKkRollsCount(material) || '—' }} Box</span>
+                      {{ formatNumber(getKkScanQty(material)) }}
+                      <span class="kk-type-scan-count-cell__vs">/ {{ formatNumber(calculateCurrentStock(material)) }}</span>
                     </td>
-                    <td class="kk-cell">
+                    <td class="kk-cell" [class.kk-cell--today]="isKkTickedToday(material)">
                       <input type="checkbox"
                              [checked]="!!material.kkChecked || isKkAgingExempt(material)"
                              [disabled]="!canEdit || kkLocMapBusy || isKkAgingExempt(material)"
@@ -1395,13 +1709,13 @@
                     </td>
                   </tr>
                   <tr *ngIf="kkAllStockWaitingSearch()">
-                    <td colspan="23" class="hidden-empty">Nhập mã hoặc vị trí để xem.</td>
+                    <td colspan="40" class="hidden-empty">Nhập mã hoặc vị trí để xem.</td>
                   </tr>
                   <tr *ngIf="!kkAllStockDetail && !kkTypeDetailAll.length">
-                    <td colspan="23" class="hidden-empty">{{ 'Không có dòng tồn loại hàng này' + (kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '') }}.</td>
+                    <td colspan="40" class="hidden-empty">{{ 'Không có dòng tồn loại hàng này' + (kkLocMapWarehouseFilter ? ' trong Zone đã chọn' : '') }}.</td>
                   </tr>
                   <tr *ngIf="!kkAllStockWaitingSearch() && ((kkTypeDetailAll.length && !kkTypeDetailFiltered.length) || (kkAllStockDetail && !kkTypeDetailFiltered.length))">
-                    <td colspan="23" class="hidden-empty">{{ kkLocScanLoading ? 'Đang lấy mã scan vị trí…' : 'Không có dòng nào khớp bộ lọc.' }}</td>
+                    <td colspan="40" class="hidden-empty">{{ kkLocScanLoading ? 'Đang lấy mã scan vị trí…' : 'Không có dòng nào khớp bộ lọc.' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1592,15 +1906,7 @@
               Đổi vị trí
             </button>
           </div>
-          <div class="mat-m-nl-field">
-            <span>Kho</span>
-            <select class="mat-m-nl-wh-select"
-                    [ngModel]="kkLineWhValue(material)"
-                    (ngModelChange)="saveKkDetailWarehouse(material, $event)"
-                    [disabled]="!canEdit || kkLocMapBusy">
-              <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
-            </select>
-          </div>
+          <!-- Ô chọn Kho (D1 / 00 / ASM3) đã bỏ 05/11/2026: mọi hàng thuộc Kho J, chọn kho cũ làm thêm tiền tố 00- / ASM3- sai vị trí -->
         </div>
       </article>
 
@@ -2153,11 +2459,12 @@
                     (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                     (click)="printQRCode(material)"
                     [class.qr-btn--disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
-                    [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
+                      [class.qr-btn--fix]="isQrFixAvailable(material)"
+                    [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : (isQrFixAvailable(material) ? 'Đã khóa — còn ' + qrFixLeft(material) + ' lần in để fix, hết lượt sẽ khóa luôn' : 'Tạo QR code'))">
               <i class="material-icons">qr_code</i>
             </button>
             <ng-template #qrLockedMobile>
-              <button class="qr-btn qr-btn--disabled" type="button" disabled [title]="qrLockTitle()">
+              <button class="qr-btn qr-btn--disabled" type="button" disabled [title]="qrLockTitle(material)">
                 <i class="material-icons">lock</i>
               </button>
             </ng-template>
@@ -2355,10 +2662,10 @@
             <th>PO</th>
                             <th>IMD</th>
             <th title="Số bịch — bấm để xem bag còn tồn / đã xuất">BAG</th>
-            <th>Tồn đầu</th>
+            <th *ngIf="showExtraCols">Tồn đầu</th>
             <th>NK</th>
             <th title="Số lượng đã xuất từ RM1 outbound (tự động cập nhật)">Đã xuất</th>
-            <th title="Bấm để chọn bag cần xuất và lượng từng bag">XT</th>
+            <th *ngIf="showExtraCols" title="Bấm để chọn bag cần xuất và lượng từng bag">XT</th>
             <th title="Tổng xuất lẻ">Xuất lẻ</th>
             <th title="Tồn kho = Tồn đầu + NK - Đã xuất - XT (XT gồm xuất lẻ)">Tồn kho</th>
             <th *ngIf="invLinkQOn" class="inv-linkq-col" [title]="'Tồn LinkQ — TỔNG của mã · ' + (invLinkQLabel || 'file LinkQ mới nhất')">LinkQ</th>
@@ -2374,17 +2681,18 @@
                 </button>
               </span>
             </th>
-            <th title="Bấm ô pallet để sửa số pallet">Pallet</th>
-            <th title="Chọn ASM3 hoặc J">WH</th>
-            <th>Change</th>
+            <th *ngIf="showExtraCols" title="Bấm ô pallet để sửa số pallet">Pallet</th>
+            <th *ngIf="showExtraCols" title="Chọn ASM3 hoặc J">WH</th>
+            <th *ngIf="showExtraCols">Change</th>
             <th>Loại Hình</th>
-            <th title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
+            <th title="Week trên tem — bấm ô để nhập (YYWW năm + tuần / MMYY tháng + năm)">Week</th>
+            <th *ngIf="showExtraCols" title="Bấm để in Tem Thùng (Mã/PO/IMD/Lượng) — số tem tự tính từ tồn kho ÷ lượng tem thùng">Tem Thùng</th>
             <th *ngIf="showKhColumn">KH</th>
 
-            <th>Lưu ý</th>
+            <th *ngIf="showExtraCols">Lưu ý</th>
             <th title="Chọn Đã hết stock → bot Zalo báo nhóm Quản lý kho">Báo cáo</th>
             <th title="Chỉ đọc từ Danh mục NVL — sửa ở Danh mục thì cột này cập nhật khi mở lại tab">Standard Packing</th>
-            <th title="Mã thuộc danh sách MSD/ESD — gán ở Inbound/Danh mục">MSD/ESD</th>
+            <th *ngIf="showExtraCols" title="Mã thuộc danh sách MSD/ESD — gán ở Inbound/Danh mục">MSD/ESD</th>
             <th title="Đã kiểm kê (đếm tồn kho)">KK</th>
             <th>Trạng thái</th>
             <th>IQC Status</th>
@@ -2406,11 +2714,12 @@
                       (mousedown)="updateRollsOrBags(material); updateTotalBags(material)"
                       (click)="printQRCode(material)"
                       [class.qr-btn--disabled]="!isRollsOrBagsValid(material) || !isTotalBagsValid(material)"
-                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : 'Tạo QR code')">
+                      [class.qr-btn--fix]="isQrFixAvailable(material)"
+                      [title]="!isRollsOrBagsValid(material) ? 'Không thể in QR - thiếu Rolls/Bags' : (!isTotalBagsValid(material) ? 'Không thể in QR - thiếu BAG (Số bịch)' : (isQrFixAvailable(material) ? 'Đã khóa — còn ' + qrFixLeft(material) + ' lần in để fix, hết lượt sẽ khóa luôn' : 'Tạo QR code'))">
                 <i class="material-icons">qr_code</i>
               </button>
               <ng-template #qrLockedDesktop>
-                <button class="qr-btn qr-btn--disabled" type="button" disabled [title]="qrLockTitle()">
+                <button class="qr-btn qr-btn--disabled" type="button" disabled [title]="qrLockTitle(material)">
                   <i class="material-icons">lock</i>
                 </button>
               </ng-template>
@@ -2465,7 +2774,7 @@
                 </button>
               </ng-template>
             </td>
-            <td class="number-cell" [class.duplicate-cell]="material.isDuplicate">
+            <td *ngIf="showExtraCols" class="number-cell" [class.duplicate-cell]="material.isDuplicate">
               <span *ngIf="!material.isEditingOpeningStock"
                     class="display-value"
                     [class.display-value--locked]="!isManualStockEditOn"
@@ -2509,7 +2818,7 @@
               </ng-container>
             </td>
                         <!-- Cột "XT" - Chọn bag cần xuất -->
-            <td class="number-cell xt-column">
+            <td *ngIf="showExtraCols" class="number-cell xt-column">
               <button type="button"
                       class="xt-cell-btn" [class.xt-cell-btn--locked]="isXtLockedFor(material)" [attr.title]="isXtLockedFor(material) ? 'XT đang khóa ở ASM1 — mở khóa trong More' : null"
                       (click)="openXtBagPopup(material, $event)"
@@ -2543,7 +2852,7 @@
                 </span>
               </button>
             </td>
-            <td class="pallet-cell" title="Bấm để sửa số pallet">
+            <td *ngIf="showExtraCols" class="pallet-cell" title="Bấm để sửa số pallet">
               <button type="button"
                       class="loc-col-btn loc-col-btn--pallet"
                       [class.loc-col-btn--on]="isLayoutLocPickerRow(material) && layoutLocFocus === 'pallet'"
@@ -2552,7 +2861,7 @@
                 {{ material.palletId || 'Chọn pallet' }}
               </button>
             </td>
-            <td class="wh-cell" title="Chọn ASM3 hoặc J">
+            <td *ngIf="showExtraCols" class="wh-cell" title="Chọn ASM3 hoặc J">
               <select
                 class="editable-cell wh-select"
                 [ngModel]="locationWhTag(material.location)"
@@ -2561,20 +2870,28 @@
                 <option *ngFor="let wh of WH_SELECT_OPTIONS" [value]="wh.id">{{ wh.label }}</option>
               </select>
             </td>
-            <td class="change-cell change-cell-locked">
+            <td *ngIf="showExtraCols" class="change-cell change-cell-locked">
               <span class="change-locked-label" title="Chức năng đã khóa">Khóa</span>
             </td>
             <td class="type-cell">
               <input type="text" class="editable-cell" [(ngModel)]="material.type" (change)="updateType(material)">
             </td>
-            <td class="tem-thung-cell">
+            <td class="week-col-cell">
+              <button type="button" class="kk-week-btn" [class.kk-week-btn--empty]="!material.week"
+                      (click)="openKkWeekEdit(material)" [disabled]="!canEdit"
+                      [title]="material.week ? (kkWeekInfo(material).label + ' (' + (material.weekFormat || 'YYWW') + ' ' + material.week + ') — bấm để sửa') : 'Bấm để nhập Week'">
+                <ng-container *ngIf="material.week; else matWeekEmpty">{{ weekShortLabel(material) }}</ng-container>
+                <ng-template #matWeekEmpty>+ Week</ng-template>
+              </button>
+            </td>
+            <td *ngIf="showExtraCols" class="tem-thung-cell">
               <button type="button" class="tem-thung-cell-btn" (click)="openTemThungColumnPopup(material)" title="In Tem Thùng cho dòng này">
                 <i class="material-icons">local_offer</i>
               </button>
             </td>
             <td class="kh-cell" *ngIf="showKhColumn" [title]="getCustomerForMaterial(material)">{{ getCustomerForMaterial(material) || '—' }}</td>
 
-            <td class="notes-cell">
+            <td *ngIf="showExtraCols" class="notes-cell">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.remarks" 
@@ -2598,13 +2915,13 @@
                 {{ getStandardPacking(material.materialCode) }}
               </span>
             </td>
-            <td class="msd-esd-cell">
+            <td *ngIf="showExtraCols" class="msd-esd-cell">
               <span class="badge msd-esd-badge" *ngIf="getMsdEsdLabel(material.materialCode)">
                 {{ getMsdEsdLabel(material.materialCode) }}
               </span>
               <span *ngIf="!getMsdEsdLabel(material.materialCode)" class="no-msd-esd">—</span>
             </td>
-            <td class="kk-cell">
+            <td class="kk-cell" [class.kk-cell--today]="isKkTickedToday(material)">
               <input type="checkbox"
                      [checked]="!!material.kkChecked"
                      [disabled]="!canEdit"
@@ -3243,13 +3560,6 @@
         </div>
       </div>
 
-      <label class="mat-m-loc-scan-label" *ngIf="isNguyenLieuPage">Kho</label>
-      <select *ngIf="isNguyenLieuPage"
-              class="mat-m-nl-wh-select"
-              [(ngModel)]="mobileLocScanWh"
-              [disabled]="mobileLocScanBusy">
-        <option *ngFor="let w of kkWhSelectOptions" [ngValue]="w.id">{{ w.label }}</option>
-      </select>
 
       <label class="mat-m-loc-scan-label" for="mat-m-loc-scan-input">Vị trí mới</label>
       <div class="mat-m-loc-scan-wrap">
@@ -3428,7 +3738,20 @@
 
     <div class="modal-body more-popup-body">
       <section class="more-section">
-        <div class="more-section__label">In tem</div>
+        <div class="more-section__label">Hiển thị</div>
+        <div class="more-grid">
+          <button type="button" class="more-tile" (click)="toggleExtraCols()">
+            <span class="more-tile__icon more-tile__icon--blue"><i class="material-icons">{{ showExtraCols ? 'visibility_off' : 'visibility' }}</i></span>
+            <span class="more-tile__text">
+              <strong>{{ showExtraCols ? 'Ẩn cột phụ' : 'Hiện cột phụ' }}</strong>
+              <small>Tồn đầu, XT, Pallet, WH, Change, Tem Thùng, Lưu ý, MSD/ESD</small>
+            </span>
+            <i class="material-icons more-tile__chevron">{{ showExtraCols ? 'toggle_on' : 'toggle_off' }}</i>
+          </button>
+        </div>
+      </section>
+      <section class="more-section">
+        <div class="more-section__label">In &amp; xuất</div>
         <div class="more-grid">
           <button type="button" class="more-tile" (click)="openCustomPrintDialog()">
             <span class="more-tile__icon more-tile__icon--blue"><i class="material-icons">print</i></span>
@@ -3438,12 +3761,6 @@
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
-        </div>
-      </section>
-
-      <section class="more-section">
-        <div class="more-section__label">Export / Import</div>
-        <div class="more-grid">
           <button type="button" class="more-tile" (click)="exportToExcel(); closeMorePopup()">
             <span class="more-tile__icon more-tile__icon--green"><i class="material-icons">file_download</i></span>
             <span class="more-tile__text">
@@ -3452,28 +3769,25 @@
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
+          <button type="button" class="more-tile" (click)="downloadFIFOReport(); closeMorePopup()">
+            <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">assessment</i></span>
+            <span class="more-tile__text">
+              <strong>FIFO Report {{ selectedFactory }}</strong>
+              <small>Xuất báo cáo FIFO</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+        </div>
+      </section>
+
+      <section class="more-section">
+        <div class="more-section__label">Nhập dữ liệu</div>
+        <div class="more-grid">
           <button type="button" class="more-tile" (click)="downloadStockTemplate(); closeMorePopup()">
             <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">description</i></span>
             <span class="more-tile__text">
               <strong>Template inventory</strong>
               <small>File mẫu nhập tồn đầu</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
-          <!-- Khóa / mở khóa XT ở ASM1 — mở bằng mã Zalo ASP0106, giữ mở tới khi khóa lại -->
-          <button type="button" class="more-tile" *ngIf="xtAsm1Locked" (click)="openUnlockXtAsm1()">
-            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">lock</i></span>
-            <span class="more-tile__text">
-              <strong>Mở khóa XT ASM1</strong>
-              <small>XT đang khóa · cần mã Zalo (ASP0106){{ xtAsm1LockInfo ? ' · ' + xtAsm1LockInfo : '' }}</small>
-            </span>
-            <i class="material-icons more-tile__chevron">lock</i>
-          </button>
-          <button type="button" class="more-tile more-tile--warn" *ngIf="!xtAsm1Locked" (click)="lockXtAsm1()">
-            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">lock_open</i></span>
-            <span class="more-tile__text">
-              <strong>Khóa XT ASM1</strong>
-              <small>XT đang mở{{ xtAsm1LockInfo ? ' · ' + xtAsm1LockInfo : '' }}</small>
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
@@ -3485,30 +3799,6 @@
             </span>
             <i class="material-icons more-tile__chevron">lock</i>
           </button>
-          <button type="button" class="more-tile" (click)="goToDanhMucNvlTp(); closeMorePopup()">
-            <span class="more-tile__icon more-tile__icon--cyan"><i class="material-icons">manage_search</i></span>
-            <span class="more-tile__text">
-              <strong>Danh mục NVL</strong>
-              <small>Mã, tên, ĐVT, packing</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
-          <button type="button" class="more-tile" (click)="refreshNvlCatalogNow()" [disabled]="isCatalogLoading">
-            <span class="more-tile__icon more-tile__icon--green"><i class="material-icons">cloud_sync</i></span>
-            <span class="more-tile__text">
-              <strong>Cập nhật danh mục</strong>
-              <small>Làm mới Standard Packing từ Danh mục NVL ngay</small>
-            </span>
-            <i class="material-icons more-tile__chevron">{{ isCatalogLoading ? 'sync' : 'refresh' }}</i>
-          </button>
-          <button type="button" class="more-tile" (click)="openKkCatalogPopup()">
-            <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">category</i></span>
-            <span class="more-tile__text">
-              <strong>Danh mục KK</strong>
-              <small>Nhóm mã, loại hàng và vị trí được gán</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
           <button type="button" class="more-tile" (click)="openTieuHuyPopup()">
             <span class="more-tile__icon more-tile__icon--red"><i class="material-icons">delete_sweep</i></span>
             <span class="more-tile__text">
@@ -3517,11 +3807,11 @@
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
-          <button type="button" class="more-tile" (click)="openBulkDisposableLocPicker(); closeMorePopup()" [disabled]="!canEditInvLocation()">
-            <span class="more-tile__icon more-tile__icon--orange"><i class="material-icons">playlist_remove</i></span>
+          <button type="button" class="more-tile" (click)="goToDanhMucNvlTp(); closeMorePopup()">
+            <span class="more-tile__icon more-tile__icon--cyan"><i class="material-icons">manage_search</i></span>
             <span class="more-tile__text">
-              <strong>Dọn vị trí sai (hàng loạt)</strong>
-              <small>Tick D1 / TAM / NVLA… → xóa khỏi mọi mã</small>
+              <strong>Danh mục NVL</strong>
+              <small>Mã, tên, ĐVT, packing</small>
             </span>
             <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
@@ -3529,7 +3819,7 @@
       </section>
 
       <section class="more-section">
-        <div class="more-section__label">Hiển thị / Lọc</div>
+        <div class="more-section__label">Hiển thị</div>
         <div class="more-grid">
           <button type="button" class="more-tile" (click)="closeMorePopup(); openCustomerFilterPopup()">
             <span class="more-tile__icon more-tile__icon--blue"><i class="material-icons">groups</i></span>
@@ -3552,33 +3842,8 @@
       </section>
 
       <section class="more-section">
-        <div class="more-section__label">Báo cáo</div>
+        <div class="more-section__label">Kiểm soát tồn</div>
         <div class="more-grid">
-          <button type="button" class="more-tile" (click)="downloadFIFOReport(); closeMorePopup()">
-            <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">assessment</i></span>
-            <span class="more-tile__text">
-              <strong>FIFO Report {{ selectedFactory }}</strong>
-              <small>Xuất báo cáo FIFO</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
-        </div>
-      </section>
-
-      <section class="more-section">
-        <div class="more-section__label">Inventory</div>
-        <div class="more-grid">
-          <button type="button" class="more-tile" (click)="toggleManualStockEdit()">
-            <span class="more-tile__icon" [class.more-tile__icon--green]="isManualStockEditOn" [class.more-tile__icon--slate]="!isManualStockEditOn">
-              <i class="material-icons">{{ isManualStockEditOn ? 'toggle_on' : 'toggle_off' }}</i>
-            </span>
-            <span class="more-tile__text">
-              <strong>Manual</strong>
-              <small *ngIf="!isManualStockEditOn">OFF — khóa tồn đầu / xuất tay · bật cần OTP Zalo ASP0106</small>
-              <small *ngIf="isManualStockEditOn">ON — được nhập tồn đầu / xuất tay · bấm để tắt</small>
-            </span>
-            <i class="material-icons more-tile__chevron">{{ isManualStockEditOn ? 'toggle_on' : 'lock' }}</i>
-          </button>
           <button type="button" class="more-tile" (click)="openInvAdjustList()">
             <span class="more-tile__icon more-tile__icon--indigo"><i class="material-icons">fact_check</i></span>
             <span class="more-tile__text">
@@ -3587,45 +3852,29 @@
             </span>
             <i class="material-icons more-tile__chevron">lock</i>
           </button>
-          <button type="button" class="more-tile more-tile--accent" (click)="runMoreSensitiveAction('hidden-list', 'Danh mục Ẩn / Pushback — ' + selectedFactory)">
+          <button type="button" class="more-tile more-tile--accent" (click)="openHiddenInventoryView()">
             <span class="more-tile__icon more-tile__icon--amber"><i class="material-icons">visibility_off</i></span>
             <span class="more-tile__text">
               <strong>Danh mục Ẩn</strong>
-              <small>Search · Pushback · giữ {{ hiddenRetentionDaysView }} ngày · cần OTP</small>
+              <small>Xem các mã đã ẩn · giữ {{ hiddenRetentionDaysView }} ngày · Pushback cần OTP</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+          <button type="button" class="more-tile" (click)="openBulkDisposableLocPicker(); closeMorePopup()" [disabled]="!canEditInvLocation()">
+            <span class="more-tile__icon more-tile__icon--orange"><i class="material-icons">playlist_remove</i></span>
+            <span class="more-tile__text">
+              <strong>Dọn vị trí sai (hàng loạt)</strong>
+              <small>Tick D1 / TAM / NVLA… → xóa khỏi mọi mã</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+          <button type="button" class="more-tile more-tile--warn" (click)="runMoreSensitiveAction('consolidate', 'Gộp dòng trùng — ' + selectedFactory)">
+            <span class="more-tile__icon more-tile__icon--orange"><i class="material-icons">merge_type</i></span>
+            <span class="more-tile__text">
+              <strong>Gộp dòng trùng</strong>
+              <small>Gộp inventory trùng lặp · cần OTP</small>
             </span>
             <i class="material-icons more-tile__chevron">lock</i>
-          </button>
-          <button type="button" class="more-tile more-tile--accent" (click)="openMatrix()">
-            <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">grid_on</i></span>
-            <span class="more-tile__text">
-              <strong>Matrix rule &amp; quyền</strong>
-              <small>Tùy chỉnh rule + quyền từng nhân viên · {{ selectedFactory }} · cần mật khẩu</small>
-            </span>
-            <i class="material-icons more-tile__chevron">lock</i>
-          </button>
-          <button type="button" class="more-tile" (click)="toggleQtyBagRule()">
-            <span class="more-tile__icon more-tile__icon--blue"><i class="material-icons">{{ qtyBagRuleEnabled ? 'toggle_on' : 'toggle_off' }}</i></span>
-            <span class="more-tile__text">
-              <strong>QTY BAG rule</strong>
-              <small>Hiện tại: {{ qtyBagRuleEnabled ? 'ON' : 'OFF' }}</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
-          <button type="button" class="more-tile" (click)="openRuleBagPopup()">
-            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">tune</i></span>
-            <span class="more-tile__text">
-              <strong>Rule Bag</strong>
-              <small>Bật/tắt theo đầu mã</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
-          </button>
-          <button type="button" class="more-tile" (click)="loadInventoryFromFirebase(); closeMorePopup()">
-            <span class="more-tile__icon more-tile__icon--green"><i class="material-icons">cloud_download</i></span>
-            <span class="more-tile__text">
-              <strong>Load toàn bộ</strong>
-              <small>Tải lại inventory Firebase</small>
-            </span>
-            <i class="material-icons more-tile__chevron">chevron_right</i>
           </button>
           <button
             type="button"
@@ -3640,17 +3889,65 @@
             </span>
             <i class="material-icons more-tile__chevron">lock</i>
           </button>
-          <button type="button" class="more-tile more-tile--warn" (click)="runMoreSensitiveAction('consolidate', 'Gộp dòng trùng — ' + selectedFactory)">
-            <span class="more-tile__icon more-tile__icon--orange"><i class="material-icons">merge_type</i></span>
+          <button type="button" class="more-tile" (click)="loadInventoryFromFirebase(); closeMorePopup()">
+            <span class="more-tile__icon more-tile__icon--green"><i class="material-icons">cloud_download</i></span>
             <span class="more-tile__text">
-              <strong>Gộp dòng trùng</strong>
-              <small>Gộp inventory trùng lặp · cần OTP</small>
+              <strong>Load toàn bộ</strong>
+              <small>Tải lại inventory Firebase</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+        </div>
+      </section>
+
+      <section class="more-section">
+        <div class="more-section__label">Cài đặt &amp; khóa</div>
+        <div class="more-grid">
+          <button type="button" class="more-tile" (click)="toggleManualStockEdit()">
+            <span class="more-tile__icon" [class.more-tile__icon--green]="isManualStockEditOn" [class.more-tile__icon--slate]="!isManualStockEditOn">
+              <i class="material-icons">{{ isManualStockEditOn ? 'toggle_on' : 'toggle_off' }}</i>
+            </span>
+            <span class="more-tile__text">
+              <strong>Manual</strong>
+              <small *ngIf="!isManualStockEditOn">OFF — khóa tồn đầu / xuất tay · bật cần OTP Zalo ASP0106</small>
+              <small *ngIf="isManualStockEditOn">ON — được nhập tồn đầu / xuất tay · bấm để tắt</small>
+            </span>
+            <i class="material-icons more-tile__chevron">{{ isManualStockEditOn ? 'toggle_on' : 'lock' }}</i>
+          </button>
+          <button type="button" class="more-tile" *ngIf="xtAsm1Locked" (click)="openUnlockXtAsm1()">
+            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">lock</i></span>
+            <span class="more-tile__text">
+              <strong>Mở khóa XT ASM1</strong>
+              <small>XT đang khóa · cần mã Zalo (ASP0106){{ xtAsm1LockInfo ? ' · ' + xtAsm1LockInfo : '' }}</small>
+            </span>
+            <i class="material-icons more-tile__chevron">lock</i>
+          </button>
+          <button type="button" class="more-tile more-tile--warn" *ngIf="!xtAsm1Locked" (click)="lockXtAsm1()">
+            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">lock_open</i></span>
+            <span class="more-tile__text">
+              <strong>Khóa XT ASM1</strong>
+              <small>XT đang mở{{ xtAsm1LockInfo ? ' · ' + xtAsm1LockInfo : '' }}</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+          <button type="button" class="more-tile" (click)="openRuleBagPopup()">
+            <span class="more-tile__icon more-tile__icon--slate"><i class="material-icons">tune</i></span>
+            <span class="more-tile__text">
+              <strong>Rule Bag</strong>
+              <small>Tổng: {{ qtyBagRuleEnabled ? 'ON' : 'OFF' }} · bật/tắt chung + theo đầu mã</small>
+            </span>
+            <i class="material-icons more-tile__chevron">chevron_right</i>
+          </button>
+          <button type="button" class="more-tile more-tile--accent" (click)="openMatrix()">
+            <span class="more-tile__icon more-tile__icon--violet"><i class="material-icons">grid_on</i></span>
+            <span class="more-tile__text">
+              <strong>Matrix rule &amp; quyền</strong>
+              <small>Tùy chỉnh rule + quyền từng nhân viên · {{ selectedFactory }} · cần mật khẩu</small>
             </span>
             <i class="material-icons more-tile__chevron">lock</i>
           </button>
         </div>
       </section>
-
       <section class="more-section more-section--danger">
         <div class="more-section__label">Vùng nguy hiểm</div>
         <div class="more-grid">
@@ -4931,6 +5228,10 @@
       </button>
     </div>
     <div class="modal-body rule-bag-popup-body">
+      <button type="button" class="rule-bag-toggle-btn rule-bag-master" (click)="toggleQtyBagRule()" title="Bật / tắt QTY BAG rule cho toàn nhà máy">
+        <i class="material-icons">{{ qtyBagRuleEnabled ? 'toggle_on' : 'toggle_off' }}</i>
+        QTY BAG rule (tổng): <strong>{{ qtyBagRuleEnabled ? 'ON' : 'OFF' }}</strong>
+      </button>
       <p class="rule-bag-hint" *ngIf="qtyBagRuleEnabled">
         QTY BAG rule đang <strong>ON</strong>: nhóm đặt <strong>OFF</strong> bên dưới được nhập QTY BAG không cần bội số Standard Packing.
       </p>
@@ -5050,8 +5351,8 @@
 </div>
 
 <!-- Danh mục Ẩn -->
-<div class="modal-overlay more-overlay" *ngIf="showHiddenInventoryPopup" (click)="closeHiddenInventoryPopup()">
-  <div class="modal-content hidden-inventory-popup" (click)="$event.stopPropagation()" role="dialog" aria-label="Danh mục Ẩn">
+<div class="modal-overlay more-overlay hidden-page-overlay" *ngIf="showHiddenInventoryPopup">
+  <div class="modal-content hidden-inventory-popup hidden-page" (click)="$event.stopPropagation()" role="dialog" aria-label="Danh mục Ẩn">
     <div class="more-popup-header">
       <div class="more-popup-header__left">
         <span class="more-popup-header__icon more-popup-header__icon--amber" aria-hidden="true">
@@ -5062,6 +5363,11 @@
           <p class="more-popup-header__sub">{{ selectedFactory }} · giữ 30 ngày · backup mail trước khi xóa</p>
         </div>
       </div>
+      <button type="button" class="hidden-refresh-btn" *ngIf="!hiddenPushbackUnlocked && canDelete"
+              (click)="closeHiddenInventoryPopup(); runMoreSensitiveAction('hidden-list', 'Danh mục Ẩn / Pushback — ' + selectedFactory)"
+              title="Mở khóa Pushback (đưa dòng về inventory) — cần OTP Zalo">
+        <i class="material-icons">lock</i> Pushback (OTP)
+      </button>
       <button type="button" class="more-popup-close" (click)="closeHiddenInventoryPopup()" aria-label="Đóng">
         <i class="material-icons">close</i>
       </button>
@@ -5086,6 +5392,22 @@
             <i class="material-icons">close</i>
           </button>
         </div>
+        <select class="hidden-filter" [(ngModel)]="hiddenLocFilter" title="Lọc theo vị trí">
+          <option value="">Vị trí: tất cả</option>
+          <option *ngFor="let o of hiddenLocOptions" [value]="o.v">{{ o.v }} ({{ o.n }})</option>
+        </select>
+        <select class="hidden-filter" [(ngModel)]="hiddenLotFilter" title="Lọc theo lô hàng (IMD)">
+          <option value="">Lô hàng: tất cả</option>
+          <option *ngFor="let o of hiddenLotOptions" [value]="o.v">{{ o.v }} ({{ o.n }})</option>
+        </select>
+        <select class="hidden-filter" [(ngModel)]="hiddenReasonFilter" title="Lọc theo lý do ẩn">
+          <option value="">Lý do: tất cả</option>
+          <option *ngFor="let o of hiddenReasonOptions" [value]="o.v">{{ hideReasonLabel(o.v) }} ({{ o.n }})</option>
+        </select>
+        <button type="button" class="hidden-refresh-btn" *ngIf="hiddenLocFilter || hiddenLotFilter || hiddenReasonFilter"
+                (click)="hiddenLocFilter = ''; hiddenLotFilter = ''; hiddenReasonFilter = ''">
+          <i class="material-icons">filter_alt_off</i> Bỏ lọc
+        </button>
         <div class="hidden-toolbar__meta">
           <span>{{ filteredHiddenInventoryRows.length }} / {{ hiddenInventoryRows.length }}</span>
           <button type="button" class="hidden-refresh-btn" (click)="loadHiddenInventoryList()" [disabled]="isLoadingHiddenInventory">
@@ -5101,6 +5423,7 @@
             <tr>
               <th>Mã hàng</th>
               <th>PO</th>
+              <th>Lô (IMD)</th>
               <th>Vị trí</th>
               <th>Tồn lúc ẩn</th>
               <th>Lý do</th>
@@ -5114,6 +5437,7 @@
             <tr *ngFor="let row of filteredHiddenInventoryRows">
               <td><strong>{{ row.materialCode }}</strong></td>
               <td>{{ row.poNumber || '—' }}</td>
+              <td>{{ row.imd || '—' }}</td>
               <td>{{ row.location }}</td>
               <td class="col-num">{{ row.stock | number:'1.0-4' }} {{ row.unit }}</td>
               <td><span class="hidden-reason">{{ hideReasonLabel(row.hideReason) }}</span></td>
@@ -5124,7 +5448,7 @@
                 <button
                   type="button"
                   class="pushback-btn"
-                  *ngIf="canDelete"
+                  *ngIf="canDelete && hiddenPushbackUnlocked"
                   [disabled]="pushbackHiddenId === row.id"
                   (click)="pushbackHiddenItem(row)"
                   title="Đưa về inventory">
@@ -5139,7 +5463,7 @@
           <div class="hidden-empty">
             <i class="material-icons">inventory_2</i>
             <p *ngIf="hiddenInventoryRows.length === 0">Chưa có dòng nào trong danh mục Ẩn.</p>
-            <p *ngIf="hiddenInventoryRows.length > 0">Không khớp từ khóa “{{ hiddenSearchQuery }}”.</p>
+            <p *ngIf="hiddenInventoryRows.length > 0">Không có dòng khớp bộ lọc.</p>
           </div>
         </ng-template>
       </div>
@@ -5596,7 +5920,7 @@
                     <th>IMD</th>
                     <th>Vị trí</th>
                     <th>Lượng</th>
-                    <th>Box</th>
+                    <th>Lượng quét</th>
                     <th>KK</th>
                   </tr>
                 </thead>
@@ -5608,7 +5932,7 @@
                     <td>{{ getDisplayIMD(line) }}</td>
                     <td>{{ primaryLocationDisplay(line.location) }}</td>
                     <td class="n">{{ formatNumber(calculateCurrentStock(line)) }}</td>
-                    <td class="n">{{ formatNumber(getKkScanCount(line)) }}</td>
+                    <td class="n">{{ formatNumber(getKkScanQty(line)) }}</td>
                     <td>
                       <i class="material-icons">{{ line.kkChecked ? 'check_box' : 'check_box_outline_blank' }}</i>
                     </td>
@@ -6089,6 +6413,35 @@
 </div>
 
 <!-- Báo cáo điều chỉnh: Tồn đầu / Tồn cuối → Giảm / Tăng → lượng → Gửi (Zalo nhóm Quản lý kho) -->
+<!-- Quản lý NL: bấm ô Tồn kho → đề nghị số tồn mới (chờ duyệt ở Danh mục điều chỉnh) -->
+<div class="wx-overlay" *ngIf="kkStockPropose" (click)="kkStockPropose = null">
+  <div class="wx" (click)="$event.stopPropagation()" role="dialog" aria-label="Đề nghị số tồn mới">
+    <div class="wx__head">
+      <h3>Đề nghị số tồn mới</h3>
+      <button type="button" class="wx__x" (click)="kkStockPropose = null">✕</button>
+    </div>
+    <p class="wx__info">
+      <strong>{{ kkStockPropose.material.materialCode }}</strong> · PO {{ kkStockPropose.material.poNumber || '—' }} · IMD {{ getDisplayIMD(kkStockPropose.material) }}
+      · {{ primaryLocationDisplay(kkStockPropose.material.location) || '—' }}<br>
+      Tồn hiện tại: <strong>{{ formatNumber(kkStockPropose.current) }}</strong>
+    </p>
+    <div class="wx__opts">
+      <label class="inv-adj__lab" for="kk-stock-new">Số tồn mới</label>
+      <input id="kk-stock-new" type="number" class="wx__input" [(ngModel)]="kkStockPropose.next" min="0" step="any"
+             placeholder="Nhập số tồn đúng…" (keyup.enter)="submitKkStockPropose()">
+      <p class="kk-stock-propose__delta" *ngIf="kkStockProposeDelta() as d">
+        {{ d > 0 ? 'Tăng' : 'Giảm' }} <b>{{ formatNumber(d > 0 ? d : -d) }}</b> ({{ formatNumber(kkStockPropose.current) }} → {{ formatNumber(+kkStockPropose.next!) }})
+      </p>
+      <input type="text" class="wx__input" [(ngModel)]="kkStockPropose.note" placeholder="Ghi chú (không bắt buộc)" maxlength="200">
+    </div>
+    <p class="wx__msg" *ngIf="kkStockPropose.msg">{{ kkStockPropose.msg }}</p>
+    <div class="wx__foot">
+      <button type="button" class="wx__btn" (click)="kkStockPropose = null">Hủy</button>
+      <button type="button" class="wx__btn wx__btn--primary" [disabled]="!kkStockProposeDelta()" (click)="submitKkStockPropose()">Done</button>
+    </div>
+  </div>
+</div>
+
 <div class="wx-overlay" *ngIf="invAdjust" (click)="invAdjust = null">
   <div class="wx" (click)="$event.stopPropagation()" role="dialog" aria-label="Báo cáo điều chỉnh tồn">
     <div class="wx__head">
@@ -6263,8 +6616,18 @@
     </ng-container>
     <ng-container *ngIf="invAdjustUnlocked">
       <div class="inv-adj-list__bar">
-        <span>{{ invAdjustRows.length }} đề nghị chờ duyệt</span>
-        <button type="button" class="wx__btn" [disabled]="invAdjustLoading" (click)="loadInvAdjustRows()">
+        <label class="inv-adj-list__all">
+          <input type="checkbox" [checked]="invAdjustAllSelected()" [disabled]="!invAdjustRows.length || invAdjustBulkBusy"
+                 (change)="toggleInvAdjustAll($any($event.target).checked)">
+          Chọn tất cả
+        </label>
+        <span>{{ invAdjustRows.length }} đề nghị chờ duyệt · đã chọn {{ invAdjustSel.size }}</span>
+        <span class="inv-adj-list__spacer"></span>
+        <button type="button" class="wx__btn wx__btn--primary" [disabled]="!invAdjustSel.size || invAdjustBulkBusy || !!invAdjustBusyId"
+                (click)="approveInvAdjustSelected()">
+          {{ invAdjustBulkBusy ? ('Đang duyệt ' + invAdjustBulkDone + '/' + invAdjustSel.size + '…') : ('Duyệt đã chọn (' + invAdjustSel.size + ')') }}
+        </button>
+        <button type="button" class="wx__btn" [disabled]="invAdjustLoading || invAdjustBulkBusy" (click)="loadInvAdjustRows()">
           {{ invAdjustLoading ? 'Đang tải…' : 'Làm mới' }}
         </button>
       </div>
@@ -6273,13 +6636,16 @@
         <table>
           <thead>
             <tr>
+              <th class="inv-adj__chk"><input type="checkbox" [checked]="invAdjustAllSelected()" [disabled]="!invAdjustRows.length || invAdjustBulkBusy"
+                                              (change)="toggleInvAdjustAll($any($event.target).checked)" title="Chọn tất cả"></th>
+              <th>#</th>
               <th>Thời gian</th>
               <th>Người báo</th>
               <th>Mã hàng</th>
               <th>PO</th>
               <th>IMD</th>
-              <th>Báo cáo</th>
-              <th>Điều chỉnh</th>
+              <th>Vị trí</th>
+              <th>Đề nghị</th>
               <th>Lượng</th>
               <th>Hiện tại → Sau</th>
               <th>Ghi chú</th>
@@ -6287,26 +6653,31 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let r of invAdjustRows">
-              <td>{{ r.at ? (r.at | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+            <tr *ngFor="let r of invAdjustRows; let i = index" [class.inv-adj__row--sel]="invAdjustSel.has(r.id)">
+              <td class="inv-adj__chk"><input type="checkbox" [checked]="invAdjustSel.has(r.id)" [disabled]="invAdjustBulkBusy"
+                                              (change)="toggleInvAdjustSel(r.id, $any($event.target).checked)"></td>
+              <td class="inv-adj__num">{{ i + 1 }}</td>
+              <td class="inv-adj__nowrap">{{ r.at ? (r.at | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
               <td>{{ r.by || '—' }}</td>
-              <td><strong>{{ r.materialCode }}</strong></td>
-              <td>{{ r.po || '—' }}</td>
-              <td>{{ r.imd || '—' }}</td>
-              <td>{{ invAdjustTargetLabel(r.target) }}</td>
-              <td [class.inv-adj__dec]="r.direction === 'dec'" [class.inv-adj__inc]="r.direction === 'inc'">{{ invAdjustDirectionLabel(r.direction) }}</td>
-              <td class="inv-adj__num">{{ formatNumber(r.qty) }}</td>
-              <td class="inv-adj__num">{{ formatNumber(r.currentValue) }} → {{ formatNumber(r.expectedValue) }}</td>
-              <td>{{ r.note || '—' }}</td>
+              <td class="inv-adj__nowrap"><strong>{{ r.materialCode }}</strong></td>
+              <td class="inv-adj__nowrap">{{ r.po || '—' }}</td>
+              <td class="inv-adj__nowrap">{{ r.imd || '—' }}</td>
+              <td class="inv-adj__nowrap">{{ r.location || '—' }}</td>
+              <td class="inv-adj__nowrap" [class.inv-adj__dec]="r.direction === 'dec' || r.target === 'delete'" [class.inv-adj__inc]="r.direction === 'inc'">
+                {{ r.target === 'delete' || r.target === 'po' ? invAdjustTargetLabel(r.target) : invAdjustDirectionLabel(r.direction) + ' ' + invAdjustTargetLabel(r.target).toLowerCase() }}
+              </td>
+              <td class="inv-adj__num">{{ r.target === 'po' ? '—' : formatNumber(r.qty) }}</td>
+              <td class="inv-adj__num">{{ r.target === 'po' ? (r.po || '—') + ' → ' + r.newPo : formatNumber(r.currentValue) + ' → ' + formatNumber(r.expectedValue) }}</td>
+              <td class="inv-adj__note">{{ r.note || '—' }}</td>
               <td class="inv-adj__act">
-                <button type="button" class="wx__btn wx__btn--primary" [disabled]="!!invAdjustBusyId" (click)="approveInvAdjust(r)">
+                <button type="button" class="wx__btn wx__btn--primary" [disabled]="!!invAdjustBusyId || invAdjustBulkBusy" (click)="approveInvAdjust(r)">
                   {{ invAdjustBusyId === r.id ? '…' : 'Duyệt' }}
                 </button>
-                <button type="button" class="wx__btn inv-adj__del" [disabled]="!!invAdjustBusyId" (click)="deleteInvAdjust(r)">Xóa</button>
+                <button type="button" class="wx__btn inv-adj__del" [disabled]="!!invAdjustBusyId || invAdjustBulkBusy" (click)="deleteInvAdjust(r)">Xóa</button>
               </td>
             </tr>
             <tr *ngIf="!invAdjustLoading && !invAdjustRows.length">
-              <td colspan="11" class="inv-adj__empty">Không có đề nghị chờ duyệt.</td>
+              <td colspan="13" class="inv-adj__empty">Không có đề nghị chờ duyệt.</td>
             </tr>
           </tbody>
         </table>
@@ -6506,6 +6877,47 @@
   </div>
 </ng-template>
 
+<!-- So sánh PO: bấm mã → toàn bộ PO của mã ở web và LinkQ -->
+<div class="wx-overlay" *ngIf="kkPoCmpDetail as d" (click)="kkPoCmpDetail = null">
+  <div class="wx kk-po-cmp-pop" (click)="$event.stopPropagation()" role="dialog" aria-label="So sánh PO">
+    <div class="wx__head">
+      <h3>So sánh PO — {{ d.code }}<small *ngIf="d.name"> · {{ d.name }}</small></h3>
+      <button type="button" class="wx__x" (click)="kkPoCmpDetail = null">✕</button>
+    </div>
+    <table class="excel-table">
+      <thead>
+        <tr><th>PO</th><th>Web (tồn)</th><th>Số dòng web</th>
+          <th title="Lượng trên PXK của Work Order chưa Done mà web chưa scan xuất — LinkQ đã trừ, web chưa trừ">PXK chưa xuất</th>
+          <th>LinkQ (Tồn cuối kỳ)</th><th>Kết quả</th></tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of d.rows" [class.kk-po-cmp-row--surplus]="r.surplus" [class.kk-po-cmp-row--bad]="(r.web === null || !r.inLinkq) && !(r.web !== null && !r.inLinkq && r.pxk > 0 && r.web <= r.pxk + 0.001)">
+          <td><b>{{ r.po }}</b></td>
+          <td class="number-cell">{{ r.web === null ? '—' : formatNumber(r.web) }}</td>
+          <td class="number-cell">{{ r.webLines || '—' }}</td>
+          <td class="number-cell">{{ r.pxk > 0 ? formatNumber(r.pxk) : '—' }}<small class="kk-po-cmp-lsx" *ngIf="r.pxkLsx">{{ r.pxkLsx }}</small></td>
+          <td class="number-cell">{{ !r.inLinkq ? '—' : (r.linkq === null ? 'Có' : formatNumber(r.linkq)) }}</td>
+          <td>
+            <span *ngIf="r.web !== null && r.inLinkq">✅ Khớp PO<ng-container *ngIf="r.linkq !== null && r.linkq !== r.web"> · lệch lượng {{ formatNumber(r.web - r.linkq) }}</ng-container></span>
+            <span *ngIf="r.web !== null && !r.inLinkq && r.pxk > 0 && r.web <= r.pxk + 0.001" class="kk-po-cmp-pxk-txt">⏳ Do PXK chưa Done — web chưa scan xuất, LinkQ đã trừ</span>
+            <span *ngIf="r.surplus" class="kk-po-cmp-bad-txt">🗑 Dư sai — có thể xóa (đúng bằng phần lệch web − LinkQ, không có PXK)<br></span>
+            <span *ngIf="r.web !== null && !r.inLinkq && !(r.pxk > 0 && r.web <= r.pxk + 0.001)" class="kk-po-cmp-bad-txt">❌ Web có, LinkQ không có<ng-container *ngIf="r.pxk > 0"> (PXK chưa xuất chỉ {{ formatNumber(r.pxk) }})</ng-container></span>
+            <span *ngIf="r.web === null && r.inLinkq" class="kk-po-cmp-bad-txt">❌ LinkQ có, web không có</span>
+            <span *ngIf="r.web === null && !r.inLinkq" class="kk-po-cmp-pxk-txt">📄 Chỉ có trên PXK chưa xuất — web và LinkQ đều không có PO này</span>
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr><th>Tổng</th><th class="number-cell">{{ formatNumber(d.webTotal) }}</th><th></th><th></th>
+          <th class="number-cell">{{ d.linkqTotal === null ? '—' : formatNumber(d.linkqTotal) }}</th><th></th></tr>
+      </tfoot>
+    </table>
+    <p class="kk-po-cmp-note" *ngIf="kkPoCmpPending === null && selectedFactory === 'ASM1'">⏳ Đang đọc PXK chưa Done (Work Order chưa Done) — cột PXK chưa xuất sẽ tự hiện khi đọc xong.</p>
+    <p class="kk-po-cmp-note" *ngIf="selectedFactory !== 'ASM1'">PXK chưa xuất hiện chỉ tính cho ASM1.</p>
+    <p class="kk-po-cmp-note" *ngIf="d.linkqTotal === null">File tuổi hàng import trước đây chưa có lượng — Import lại để thấy Tồn cuối kỳ.</p>
+  </div>
+</div>
+
 <!-- Công cụ → Tiêu hủy: popup Import -->
 <div class="wx-overlay" *ngIf="showThCheck && thManage" (click)="showThCheck = false">
   <div class="wx kk-log th-check" (click)="$event.stopPropagation()" role="dialog" aria-label="Tiêu hủy">
@@ -6517,4 +6929,22 @@
   </div>
 </div>
 
+<!-- Kiểm kê: cùng màn hình scan "Cập nhật vị trí" của tab Location -->
+<app-loc-upd-scan *ngIf="showKiemKeScan"
+                  title="Kiểm kê"
+                  source="kiem-ke"
+                  [factory]="selectedFactory"
+                  [operatorId]="kkTypeScanOperator || kkOperatorIdCache || ''"
+                  (done)="onKiemKeDone($event)"
+                  (closed)="showKiemKeScan = false"></app-loc-upd-scan>
+
+<!-- Mục Week: nhập / sửa Week cho 1 PO -->
+<app-week-input-popup *ngIf="kkWeekEdit as we"
+                      title="Week cho PO"
+                      [subtitle]="we.materialCode + ' · PO ' + (we.poNumber || '—') + ' · IMD ' + getDisplayIMD(we)"
+                      [format]="we.weekFormat || 'YYWW'"
+                      [value]="we.week || ''"
+                      [busy]="kkWeekSaving"
+                      (saved)="saveKkWeekEdit($event)"
+                      (cancelled)="kkWeekEdit = null"></app-week-input-popup>
 

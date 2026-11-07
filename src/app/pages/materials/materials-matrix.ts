@@ -70,12 +70,6 @@ export const RULE_DEFS: MatrixRuleDef[] = [
     defaults: { ASM1: '2026-01-01', ASM2: '2026-01-01' }
   },
   {
-    key: 'kkAgingExemptMonths', group: 'Kiểm kê', type: 'number',
-    label: 'Không cần kiểm khi Aging dưới (tháng)',
-    hint: 'Dòng có Aging nhỏ hơn số tháng này được tự tick "Không cần kiểm".',
-    defaults: { ASM1: 1, ASM2: 1 }
-  },
-  {
     key: 'kkExcludedPrefixes', group: 'Kiểm kê', type: 'text',
     label: 'Đầu mã không kiểm KK',
     hint: 'Mã bắt đầu bằng các đầu này bị ẩn khỏi kiểm kê. Cách nhau bởi dấu phẩy.',

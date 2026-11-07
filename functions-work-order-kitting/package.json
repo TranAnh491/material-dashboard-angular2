@@ -2,7 +2,7 @@
   "name": "functions-work-order-kitting",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {

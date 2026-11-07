@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener, NgZone, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -460,6 +461,11 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
 
     const materialId = material.id;
+    const code = String((material as any).materialCode || '').trim();
+    const msg = material.isReceived
+      ? `Dòng ${code} đã nhận vào FG Inventory.\nXóa ở FG In KHÔNG trừ tồn TP — muốn bớt tồn phải sửa ở FG Inventory.\n\nVẫn xóa dòng này khỏi FG In?`
+      : `Xóa dòng FG In ${code}?`;
+    if (!confirm(msg)) return;
 
     // Chỉ xóa khỏi bảng SAU KHI Firestore xác nhận xóa thành công — tránh tình trạng UI báo đã xóa
     // nhưng document vẫn còn (F5 lại thấy dòng cũ, nhất là khi vừa bỏ khóa rồi xóa liền).
@@ -473,7 +479,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error('❌ Error deleting:', error);
-        alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại.');
+        appAlert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại.');
       });
   }
 
@@ -676,7 +682,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       console.error('Error printing tem:', e);
-      alert('Có lỗi khi in tem. Vui lòng thử lại.');
+      appAlert('Có lỗi khi in tem. Vui lòng thử lại.');
     }
   }
 
@@ -789,7 +795,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       console.error('Error printing LOT label:', e);
-      alert('Có lỗi khi in LOT Label. Vui lòng thử lại.');
+      appAlert('Có lỗi khi in LOT Label. Vui lòng thử lại.');
     }
   }
 
@@ -828,11 +834,11 @@ export class FgInComponent implements OnInit, OnDestroy {
     const code = (this.newNhapKhoItem.materialCode || '').trim();
     const qty = this.newNhapKhoItem.quantity != null ? Number(this.newNhapKhoItem.quantity) : 0;
     if (!code) {
-      alert('Vui lòng nhập Mã TP.');
+      appAlert('Vui lòng nhập Mã TP.');
       return;
     }
     if (!qty || qty <= 0) {
-      alert('Vui lòng nhập Số lượng hợp lệ.');
+      appAlert('Vui lòng nhập Số lượng hợp lệ.');
       return;
     }
     const factory = (this.newNhapKhoItem.factory || 'ASM1').trim().toUpperCase();
@@ -865,7 +871,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       })
       .catch(err => {
         console.error('Error adding FG In material:', err);
-        alert('Lỗi khi lưu: ' + (err?.message || err));
+        appAlert('Lỗi khi lưu: ' + (err?.message || err));
       });
   }
 
@@ -930,10 +936,33 @@ export class FgInComponent implements OnInit, OnDestroy {
   }
 
   // Lấy Tên khách hàng từ danh mục Mapping (cột Tên Khách Hàng = description)
-  getCustomerNameFromMapping(materialCode: string): string {
-    const mapping = this.mappingItems.find(item => item.materialCode === materialCode);
-    return mapping ? (mapping.description || '') : '';
+  // Mã chưa có trong Mapping → lấy theo mã gốc (phần trước "_", VD P011457_B → P011457_A) / Danh mục FG.
+  getCustomerNameFromMapping(materialCode: string, fallback?: string): string {
+    const code = String(materialCode || '').trim().toUpperCase();
+    if (!code) return fallback || '';
+    if (this.customerNameIndexSrc !== this.mappingItems) {
+      this.customerNameIndexSrc = this.mappingItems;
+      this.customerNameByCode = new Map();
+      this.customerNameByBase = new Map();
+      for (const m of this.mappingItems || []) {
+        const c = String(m.materialCode || '').trim().toUpperCase();
+        const name = String(m.description || '').trim();
+        if (!c || !name) continue;
+        this.customerNameByCode.set(c, name);
+        const base = c.split('_')[0];
+        if (base && !this.customerNameByBase.has(base)) this.customerNameByBase.set(base, name);
+      }
+    }
+    return this.customerNameByCode.get(code)
+      || String(fallback || '').trim()
+      || String(this.getCustomerFromCatalog(materialCode) || '').trim()
+      || this.customerNameByBase.get(code.split('_')[0])
+      || '';
   }
+
+  private customerNameIndexSrc: CustomerCodeMappingItem[] | null = null;
+  private customerNameByCode = new Map<string, string>();
+  private customerNameByBase = new Map<string, string>();
 
   // Clear all data from Firebase (for testing)
   clearAllData(): void {
@@ -944,11 +973,11 @@ export class FgInComponent implements OnInit, OnDestroy {
         const deletePromises = querySnapshot.docs.map(doc => doc.ref.delete());
         
         Promise.all(deletePromises).then(() => {
-          alert('✅ Đã xóa tất cả dữ liệu FG In');
+          appAlert('✅ Đã xóa tất cả dữ liệu FG In');
           this.refreshData();
         }).catch(error => {
           console.error('Error clearing data:', error);
-          alert('❌ Lỗi khi xóa dữ liệu: ' + error.message);
+          appAlert('❌ Lỗi khi xóa dữ liệu: ' + error.message);
         });
       });
     }
@@ -1009,7 +1038,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   confirmImportFactory(): void {
     if (!FgInComponent.VALID_IMPORT_LOCATIONS.includes(this.importSelectedLocation)) {
-      alert('❌ Vị trí nhập không hợp lệ. Vui lòng chọn Temp-1, Temp-2 hoặc Temp-3 rồi import lại.');
+      appAlert('❌ Vị trí nhập không hợp lệ. Vui lòng chọn Temp-1, Temp-2 hoặc Temp-3 rồi import lại.');
       return;
     }
     this.showImportFactoryDialog = false;
@@ -1033,21 +1062,21 @@ export class FgInComponent implements OnInit, OnDestroy {
   private async processImportFile(file: File): Promise<void> {
     try {
       if (!FgInComponent.VALID_IMPORT_LOCATIONS.includes(this.importSelectedLocation)) {
-        alert('❌ Vị trí nhập không hợp lệ (phải là Temp-1, Temp-2 hoặc Temp-3). Vui lòng import lại.');
+        appAlert('❌ Vị trí nhập không hợp lệ (phải là Temp-1, Temp-2 hoặc Temp-3). Vui lòng import lại.');
         return;
       }
       const rows = await this.readExcelFileAsRows(file);
       const materials = this.parseBangKeNhap02Data(rows);
       if (materials.length === 0) {
-        alert('Không có dòng nào hợp lệ (cần có Mã TP ở cột M).');
+        appAlert('Không có dòng nào hợp lệ (cần có Mã TP ở cột M).');
         return;
       }
       await this.saveMaterialsToFirebase(materials);
       this.refreshData();
-      alert(`✅ Đã import bảng kê nhập 02: ${materials.length} dòng.`);
+      appAlert(`✅ Đã import bảng kê nhập 02: ${materials.length} dòng.`);
     } catch (e) {
       console.error('Import bảng kê nhập 02:', e);
-      alert('❌ Lỗi import: ' + (e?.message || e));
+      appAlert('❌ Lỗi import: ' + (e?.message || e));
     }
   }
 
@@ -1141,15 +1170,15 @@ export class FgInComponent implements OnInit, OnDestroy {
       const rows = await this.readExcelFileAsRows(file);
       const materials = this.parsePhiếuNhapTPData(rows);
       if (materials.length === 0) {
-        alert('Không có dòng nào hợp lệ (cần có Mã TP ở cột F).');
+        appAlert('Không có dòng nào hợp lệ (cần có Mã TP ở cột F).');
         return;
       }
       await this.saveMaterialsToFirebase(materials);
       this.refreshData();
-      alert(`✅ Đã import phiếu nhập TP: ${materials.length} dòng.`);
+      appAlert(`✅ Đã import phiếu nhập TP: ${materials.length} dòng.`);
     } catch (e) {
       console.error('Import phiếu nhập TP:', e);
-      alert('❌ Lỗi import: ' + (e?.message || e));
+      appAlert('❌ Lỗi import: ' + (e?.message || e));
     }
   }
 
@@ -1223,11 +1252,11 @@ export class FgInComponent implements OnInit, OnDestroy {
       // Refresh data from Firebase to get the latest state
       this.refreshData();
       
-      alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
+      appAlert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -1419,7 +1448,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   applyUnhideFilter(): void {
     if (this.unhideMaterialCode.length < 7) {
-      alert('⚠️ Vui lòng nhập ít nhất 7 ký tự');
+      appAlert('⚠️ Vui lòng nhập ít nhất 7 ký tự');
       return;
     }
 
@@ -1451,7 +1480,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   downloadReport(): void {
     if (!this.reportMonth) {
-      alert('⚠️ Vui lòng chọn tháng');
+      appAlert('⚠️ Vui lòng chọn tháng');
       return;
     }
 
@@ -1485,7 +1514,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       });
 
       if (reportData.length === 0) {
-        alert('❌ Không có dữ liệu trong tháng này');
+        appAlert('❌ Không có dữ liệu trong tháng này');
         return;
       }
 
@@ -1497,7 +1526,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       const fileName = `FG_In_Report_${this.reportMonth}.xlsx`;
       XLSX.writeFile(wb, fileName);
       
-      alert(`✅ Đã tải báo cáo: ${fileName} (${reportData.length} dòng)`);
+      appAlert(`✅ Đã tải báo cáo: ${fileName} (${reportData.length} dòng)`);
       this.closeReportDialog();
     });
   }
@@ -1588,7 +1617,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       
       if (duplicates.length > 0) {
         const duplicateCodes = duplicates.map(d => d.materialCode).join(', ');
-        alert(`❌ Có ${duplicates.length} mã TP trùng lặp: ${duplicateCodes}`);
+        appAlert(`❌ Có ${duplicates.length} mã TP trùng lặp: ${duplicateCodes}`);
         return;
       }
       
@@ -1598,11 +1627,11 @@ export class FgInComponent implements OnInit, OnDestroy {
       // Refresh catalog data
       this.loadCatalogFromFirebase();
       
-      alert(`✅ Đã import thành công ${catalogItems.length} items vào danh mục!`);
+      appAlert(`✅ Đã import thành công ${catalogItems.length} items vào danh mục!`);
       
     } catch (error) {
       console.error('Error processing catalog Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -1640,7 +1669,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Add new catalog item manually
   addCatalogItem(): void {
     if (!this.newCatalogItem.materialCode.trim()) {
-      alert('❌ Vui lòng nhập Mã TP');
+      appAlert('❌ Vui lòng nhập Mã TP');
       return;
     }
 
@@ -1650,7 +1679,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     );
 
     if (isDuplicate) {
-      alert(`❌ Mã TP "${this.newCatalogItem.materialCode}" đã tồn tại trong danh mục`);
+      appAlert(`❌ Mã TP "${this.newCatalogItem.materialCode}" đã tồn tại trong danh mục`);
       return;
     }
 
@@ -1662,7 +1691,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('fg-catalog').add(newItem)
       .then((docRef) => {
-        alert(`✅ Đã thêm "${newItem.materialCode}" vào danh mục`);
+        appAlert(`✅ Đã thêm "${newItem.materialCode}" vào danh mục`);
         
         // Refresh catalog data
         this.loadCatalogFromFirebase();
@@ -1677,7 +1706,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error('Error adding FG Catalog item:', error);
-        alert(`❌ Lỗi khi thêm item: ${error.message || error}`);
+        appAlert(`❌ Lỗi khi thêm item: ${error.message || error}`);
       });
   }
 
@@ -1689,16 +1718,16 @@ export class FgInComponent implements OnInit, OnDestroy {
         this.firestore.collection('fg-catalog').doc(item.id).get().subscribe(doc => {
           if (doc.exists) {
             doc.ref.delete().then(() => {
-              alert(`✅ Đã xóa "${item.materialCode}" khỏi danh mục`);
+              appAlert(`✅ Đã xóa "${item.materialCode}" khỏi danh mục`);
               // Refresh catalog data
               this.loadCatalogFromFirebase();
             }).catch(error => {
               console.error('Error deleting FG Catalog item from Firebase:', error);
-              alert(`❌ Lỗi khi xóa item: ${error.message || error}`);
+              appAlert(`❌ Lỗi khi xóa item: ${error.message || error}`);
             });
           } else {
             console.error('❌ Catalog document does not exist in Firebase');
-            alert('❌ Không tìm thấy item trong Firebase');
+            appAlert('❌ Không tìm thấy item trong Firebase');
           }
         });
       }
@@ -1745,12 +1774,12 @@ export class FgInComponent implements OnInit, OnDestroy {
 
   private performSync(): void {
     if (this.mappingItems.length === 0) {
-      alert('❌ Không có dữ liệu mapping để đồng bộ!');
+      appAlert('❌ Không có dữ liệu mapping để đồng bộ!');
       return;
     }
 
     if (this.catalogItems.length === 0) {
-      alert('❌ Không có dữ liệu catalog để đồng bộ!');
+      appAlert('❌ Không có dữ liệu catalog để đồng bộ!');
       return;
     }
 
@@ -1804,13 +1833,13 @@ export class FgInComponent implements OnInit, OnDestroy {
       this.loadCatalogFromFirebase();
       
       if (updatedCount > 0) {
-        alert(`✅ Đã đồng bộ ${updatedCount} items trong catalog với Mã khách hàng từ mapping!`);
+        appAlert(`✅ Đã đồng bộ ${updatedCount} items trong catalog với Mã khách hàng từ mapping!`);
       } else {
-        alert('ℹ️ Tất cả items đã có Mã khách hàng đúng hoặc không có mapping tương ứng.');
+        appAlert('ℹ️ Tất cả items đã có Mã khách hàng đúng hoặc không có mapping tương ứng.');
       }
     }).catch(error => {
       console.error('❌ Error during sync:', error);
-      alert(`❌ Lỗi khi đồng bộ: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi đồng bộ: ${error.message || error}`);
     });
   }
 
@@ -1906,11 +1935,11 @@ export class FgInComponent implements OnInit, OnDestroy {
       // Refresh mapping data
       this.loadMappingFromFirebase();
       
-      alert(`✅ Đã import thành công ${mappingItems.length} items vào mapping!`);
+      appAlert(`✅ Đã import thành công ${mappingItems.length} items vào mapping!`);
       
     } catch (error) {
       console.error('Error processing mapping Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -1947,7 +1976,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Add new mapping item manually
   addMappingItem(): void {
     if (!this.newMappingItem.customerCode.trim() || !this.newMappingItem.materialCode.trim()) {
-      alert('❌ Vui lòng nhập đầy đủ Mã Khách Hàng và Mã Thành Phẩm');
+      appAlert('❌ Vui lòng nhập đầy đủ Mã Khách Hàng và Mã Thành Phẩm');
       return;
     }
 
@@ -1969,7 +1998,7 @@ export class FgInComponent implements OnInit, OnDestroy {
 
     this.firestore.collection('fg-customer-mapping').add(newItem)
       .then((docRef) => {
-        alert(`✅ Đã thêm mapping "${newItem.customerCode}" → "${newItem.materialCode}"`);
+        appAlert(`✅ Đã thêm mapping "${newItem.customerCode}" → "${newItem.materialCode}"`);
         
         // Refresh mapping data
         this.loadMappingFromFirebase();
@@ -1983,7 +2012,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error('Error adding Customer Code Mapping item:', error);
-        alert(`❌ Lỗi khi thêm item: ${error.message || error}`);
+        appAlert(`❌ Lỗi khi thêm item: ${error.message || error}`);
       });
   }
 
@@ -1994,16 +2023,16 @@ export class FgInComponent implements OnInit, OnDestroy {
         this.firestore.collection('fg-customer-mapping').doc(item.id).get().subscribe(doc => {
           if (doc.exists) {
             doc.ref.delete().then(() => {
-              alert(`✅ Đã xóa mapping "${item.customerCode}"`);
+              appAlert(`✅ Đã xóa mapping "${item.customerCode}"`);
               // Refresh mapping data
               this.loadMappingFromFirebase();
             }).catch(error => {
               console.error('Error deleting Customer Code Mapping item from Firebase:', error);
-              alert(`❌ Lỗi khi xóa item: ${error.message || error}`);
+              appAlert(`❌ Lỗi khi xóa item: ${error.message || error}`);
             });
           } else {
             console.error('❌ Mapping document does not exist in Firebase');
-            alert('❌ Không tìm thấy item trong Firebase');
+            appAlert('❌ Không tìm thấy item trong Firebase');
           }
         });
       }
@@ -2201,7 +2230,7 @@ export class FgInComponent implements OnInit, OnDestroy {
   async submitCartonCorrection(): Promise<void> {
     const n = Number(this.cartonCorrectInput);
     if (this.cartonCorrectInput === null || !Number.isFinite(n) || n < 2) {
-      alert('⚠️ Vui lòng nhập Lượng Đóng Thùng hợp lệ (số sản phẩm/thùng, tối thiểu 2).');
+      appAlert('⚠️ Vui lòng nhập Lượng Đóng Thùng hợp lệ (số sản phẩm/thùng, tối thiểu 2).');
       return;
     }
     const material = this.selectedReceiptMaterial;
@@ -2216,7 +2245,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       this.cartonPackingQtyMap.set(String(materialCode || '').trim().toUpperCase(), qty);
     } catch (err) {
       console.error('Save carton-packing-qty failed:', err);
-      alert('❌ Không lưu được Lượng Đóng Thùng. Thử lại.');
+      appAlert('❌ Không lưu được Lượng Đóng Thùng. Thử lại.');
       return;
     }
     this.displayCartonCount = Math.ceil(material.quantity / qty);
@@ -2866,12 +2895,12 @@ export class FgInComponent implements OnInit, OnDestroy {
   // Confirm and lock the receipt
   confirmAndLockReceipt(): void {
     if (!this.selectedReceiptMaterial) {
-      alert('❌ Không có phiếu được chọn');
+      appAlert('❌ Không có phiếu được chọn');
       return;
     }
 
     if (!this.isAllFieldsConfirmed()) {
-      alert('❌ Vui lòng xác nhận tất cả các thông tin trước khi khóa phiếu');
+      appAlert('❌ Vui lòng xác nhận tất cả các thông tin trước khi khóa phiếu');
       return;
     }
 
@@ -2882,7 +2911,7 @@ export class FgInComponent implements OnInit, OnDestroy {
         extractShelfSlot(this.confirmReceiptData.location) ||
         String(this.confirmReceiptData.location || '').trim();
       if (!shelf) {
-        alert('❌ Vui lòng chọn Temp-1/2/3 hoặc vị trí trên Sơ đồ lưu trữ trước khi Done');
+        appAlert('❌ Vui lòng chọn Temp-1/2/3 hoặc vị trí trên Sơ đồ lưu trữ trước khi Done');
         return;
       }
       const qr =
@@ -2901,13 +2930,13 @@ export class FgInComponent implements OnInit, OnDestroy {
         .then((invMsg) => {
           this.closeConfirmReceiptDialog();
           this.refreshData();
-          alert(`✅ Đã cập nhật vị trí: ${newLocation}${invMsg ? '\n' + invMsg : ''}`);
+          appAlert(`✅ Đã cập nhật vị trí: ${newLocation}${invMsg ? '\n' + invMsg : ''}`);
         })
         .catch(err => {
           console.error('Location update error:', err);
           this.closeConfirmReceiptDialog();
           this.refreshData();
-          alert(
+          appAlert(
             `⚠️ Đã cập nhật vị trí trên FG In: ${newLocation}\n` +
               `Nhưng FG Inventory: ${err?.message || err}`
           );
@@ -2922,7 +2951,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     }
 
     if (!this.confirmReceiptData.location || this.confirmReceiptData.location.trim() === '') {
-      alert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
+      appAlert('❌ Vui lòng scan hoặc nhập vị trí trước khi khóa phiếu');
       return;
     }
 
@@ -2949,7 +2978,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     this.updateMaterialInFirebase(this.selectedReceiptMaterial);
     this.addToInventory(this.selectedReceiptMaterial);
     this.closeConfirmReceiptDialog();
-    alert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
+    appAlert(`✅ Đã khóa phiếu và chuyển vào FG Inventory!\n\nVị trí: ${this.selectedReceiptMaterial.location}`);
     this.refreshData();
   }
 
@@ -2958,7 +2987,7 @@ export class FgInComponent implements OnInit, OnDestroy {
     if (!this.selectedReceiptMaterial) return;
 
     if (!this.isMultiLocationsValid()) {
-      alert(
+      appAlert(
         '❌ Kiểm tra lại danh sách vị trí:\n' +
           `- Tối đa ${this.maxMultiLocations} vị trí\n` +
           '- Mỗi dòng cần ô kệ A/B/C + mã QR pallet + số lượng > 0\n' +
@@ -3021,7 +3050,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       this.selectedReceiptMaterial.isReceived = false;
       this.updateMaterialInFirebase(this.selectedReceiptMaterial);
       this.closeConfirmReceiptDialog();
-      alert(
+      appAlert(
         `✅ Đã nhập ${planned.length} vị trí (${quantityToConfirm.toLocaleString()} sp)!\n\n` +
           planned.map((p) => `${p.location}: ${p.quantity.toLocaleString()} [${p.batch}]`).join('\n') +
           `\n\nCòn lại: ${remainingQuantity.toLocaleString()} — batch ${batchForRemaining}`
@@ -3031,7 +3060,7 @@ export class FgInComponent implements OnInit, OnDestroy {
       this.selectedReceiptMaterial.isReceived = true;
       this.updateMaterialInFirebase(this.selectedReceiptMaterial);
       this.closeConfirmReceiptDialog();
-      alert(
+      appAlert(
         `✅ Đã khóa phiếu — ${planned.length} vị trí vào FG Inventory!\n\n` +
           planned.map((p) => `${p.location}: ${p.quantity.toLocaleString()} [${p.batch}]`).join('\n')
       );

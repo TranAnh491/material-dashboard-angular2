@@ -41,6 +41,8 @@ export interface AppTab {
   desktopOnly?: boolean;
   /** Trang tự có nút Back / Về Menu: navbar ẩn nút "Về Menu" nổi */
   ownNav?: boolean;
+  /** Ẩn hẳn thanh hệ thống (navbar) — trang có thanh nút riêng ở đầu trang (quy tắc CLAUDE.md mục 2). */
+  hideNavbar?: boolean;
   /** Chỉ Admin / Quản lý (ngoài tab permission) */
   adminOnly?: boolean;
 }
@@ -58,6 +60,7 @@ export const APP_TABS: AppTab[] = [
   },
   {
     path: '/work-order-status', key: 'work-order-status', title: 'Work Order',
+    hideNavbar: true,
     subtitle: 'Theo dõi trạng thái lệnh sản xuất',
     menu: { category: 'Main', icon: 'description', iconImage: 'assets/img/workorder.png' },
     sidebarIcon: 'assignment',
@@ -75,7 +78,7 @@ export const APP_TABS: AppTab[] = [
     desktopOnly: true, ownNav: true,
   },
   {
-    path: '/location', key: 'location', title: 'Materials',
+    path: '/location', key: 'location', title: 'Quản lý vị trí',
     subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
     menu: { category: 'Main', icon: 'inventory_2', iconImage: 'assets/img/location.png' },
     sidebarIcon: 'inventory_2',
@@ -92,6 +95,7 @@ export const APP_TABS: AppTab[] = [
   },
   {
     path: '/j-warehouse', key: 'j-warehouse', title: 'J Warehouse',
+    hideNavbar: true,
     subtitle: 'Sơ đồ kho J — 105m × 30m',
     menu: { category: 'Main', icon: 'warehouse', iconImage: 'assets/img/location.png' },
     sidebarIcon: 'warehouse',
@@ -127,6 +131,17 @@ export const APP_TABS: AppTab[] = [
     sidebarIcon: 'precision_manufacturing',
     dashboard: { category: 'Production', icon: 'precision_manufacturing' },
     permission: { name: 'PD Control', group: 'Chính' },
+    ownNav: true,
+  },
+
+  {
+    path: '/jit', key: 'jit', title: 'JIT',
+    hideNavbar: true,
+    subtitle: 'Gọi kho lấy hàng theo LSX (ASM1 / ASM3) qua Zalo',
+    menu: { category: 'Production', icon: 'local_shipping', iconImage: 'assets/img/analytics.png' },
+    sidebarIcon: 'local_shipping',
+    dashboard: { category: 'Production', icon: 'local_shipping' },
+    permission: { name: 'JIT', group: 'Chính' },
     ownNav: true,
   },
 
@@ -177,7 +192,17 @@ export const APP_TABS: AppTab[] = [
     desktopOnly: true, ownNav: true,
   },
   {
+    path: '/aging-report-nvl', key: 'aging-report-nvl', title: 'Aging Report NVL',
+    subtitle: 'Kiểm báo cáo tuổi hàng NVL với bảng kê nhập xuất (theo PO)',
+    menu: { category: 'RM', icon: 'hourglass_bottom', iconImage: 'assets/img/stocktaking.png' },
+    sidebarIcon: 'hourglass_bottom',
+    dashboard: { category: 'RM', icon: 'hourglass_bottom' },
+    permission: { name: 'Aging Report NVL', group: 'RM' },
+    desktopOnly: true, ownNav: true,
+  },
+  {
     path: '/bag-history', key: 'bag-history', title: 'Control Batch',
+    hideNavbar: true,
     subtitle: 'Kiểm soát batch và bịch xuất',
     menu: { category: 'RM', icon: 'history', iconImage: 'assets/img/traceback.png' },
     sidebarIcon: 'H',
@@ -202,10 +227,11 @@ export const APP_TABS: AppTab[] = [
     sidebarIcon: 'assignment_turned_in',
     dashboard: { category: 'Quality', icon: 'verified' },
     permission: { name: 'Quality', group: 'Khác' },
-    desktopOnly: true, ownNav: true,
+    ownNav: true,
   },
   {
     path: '/nhiet-do', key: 'nhiet-do', title: 'Nhiệt Độ',
+    hideNavbar: true,
     subtitle: 'Ghi nhận và theo dõi nhiệt độ',
     menu: { category: 'Quality', icon: 'thermostat', iconImage: 'assets/img/qc.png' },
     sidebarIcon: 'thermostat',
@@ -214,6 +240,7 @@ export const APP_TABS: AppTab[] = [
   },
   {
     path: '/equipment-checklist', key: 'equipment-checklist', title: 'Quản lý thiết bị',
+    hideNavbar: true,
     subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo',
     menu: { category: 'Quality', icon: 'precision_manufacturing', iconImage: 'assets/img/qc.png' },
     sidebarIcon: 'precision_manufacturing',
@@ -228,7 +255,7 @@ export const APP_TABS: AppTab[] = [
     menu: { category: 'Quality', icon: 'timeline', iconImage: 'assets/img/traceback.png' },
     sidebarIcon: 'timeline',
     dashboard: { category: 'Quality', icon: 'timeline' },
-    desktopOnly: true, ownNav: true,
+    ownNav: true,
   },
 
   // ── ASM FG ──
@@ -301,6 +328,7 @@ export const APP_TABS: AppTab[] = [
   },
   {
     path: '/pallet-id', key: 'pallet-id', title: 'In tem nội bộ',
+    hideNavbar: true,
     subtitle: 'In tem nội bộ kho',
     menu: { category: 'ASM FG', icon: 'print', iconImage: 'assets/img/palletid.png' },
     sidebarIcon: 'print',
@@ -352,14 +380,6 @@ export const APP_TABS: AppTab[] = [
     dashboard: { category: 'Tools', icon: 'grid_view' },
     permission: { name: 'FGs Dashboard', group: 'Chính' },
     desktopOnly: true,
-  },
-  {
-    path: '/stock-check', key: 'stock-check', title: 'Stock Check',
-    subtitle: 'Quét vị trí, kiểm mã và lượng tồn',
-    menu: { category: 'Stock Check', icon: 'checklist', iconImage: 'assets/img/shipcheck.png' },
-    sidebarIcon: 'checklist',
-    dashboard: { category: 'Tools', icon: 'inventory_2' },
-    permission: { name: 'Stock Check', group: 'Khác' },
   },
   {
     path: '/bieu-mau', key: 'bieu-mau', title: 'Biểu mẫu',
@@ -444,13 +464,13 @@ type SidebarGroup = { title: string; icon: string; class: string; childClass: st
 export const SIDEBAR_LAYOUT: Array<string | SidebarGroup> = [
   '/dashboard',
   '/pd-control',
+  '/jit',
   '/work-order-status',
   '/lich-lam-viec',
   '/shipment',
-  '/stock-check',
   {
     title: 'RM', icon: 'inventory', class: 'asm1-rm-parent', childClass: '',
-    children: ['/inbound', '/outbound', '/materials', '/quan-ly-nguyen-lieu', '/inventory-overview', '/bag-history'],
+    children: ['/inbound', '/outbound', '/materials', '/quan-ly-nguyen-lieu', '/inventory-overview', '/aging-report-nvl', '/bag-history'],
   },
   {
     title: 'ASM FG', icon: 'check_circle_outline', class: 'asm1-fg-parent', childClass: 'material-child-icon',
@@ -505,6 +525,12 @@ export function isAdminOnlyTabKey(key: string): boolean {
 }
 
 export const DESKTOP_ONLY_TAB_PATHS: string[] = APP_TABS.filter(t => t.desktopOnly).map(t => t.path);
+
+/** Route ẩn navbar: tab có cờ hideNavbar + vài route không phải tab. */
+export const HIDE_NAVBAR_PATHS: string[] = [
+  '/maps', '/documents', '/kk-vi-tri',
+  ...APP_TABS.filter(t => t.hideNavbar).map(t => t.path),
+];
 
 export const OWN_NAV_TAB_PATHS: string[] = ['/menu', ...APP_TABS.filter(t => t.ownNav).map(t => t.path)];
 

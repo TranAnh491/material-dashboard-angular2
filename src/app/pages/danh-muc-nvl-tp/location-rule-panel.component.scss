@@ -1,0 +1,97 @@
+/* Rule vị trí — kiểu bảng Excel giống Danh mục: chữ đen, kẻ xám */
+$line: #a6a6a6;
+$grid: #d4d4d4;
+
+.lr { color: #000; }
+
+.lr-top {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.lr-seg {
+  display: inline-flex; border: 1px solid $line;
+  button {
+    border: 0; background: #fff; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #000;
+    & + button { border-left: 1px solid $line; }
+    &.on { background: #217346; color: #fff; }
+  }
+}
+.lr-icon {
+  border: 1px solid $line; background: #fff; width: 28px; height: 26px; display: inline-flex;
+  align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  .material-icons { font-size: 17px; }
+}
+.lr-spin { animation: lr-spin 1s linear infinite; }
+@keyframes lr-spin { to { transform: rotate(360deg); } }
+.lr-note { font-size: 11.5px; color: #444; flex: 1 1 360px; line-height: 1.4; }
+.lr-loading { font-size: 11px; color: #1976d2; }
+.lr-error { font-size: 11px; color: #b91c1c; }
+
+.rule-modal-grid {
+  display: grid; grid-template-columns: 1.4fr 0.9fr 1.1fr; gap: 8px;
+  @media (max-width: 1000px) { grid-template-columns: 1fr; }
+}
+
+.rule-panel { display: flex; flex-direction: column; min-height: 0; border: 1px solid $line; background: #fff; }
+.rule-panel__head {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #f3f3f3;
+  border-bottom: 1px solid $line; flex-wrap: wrap;
+}
+.rule-panel__title { font-size: 12px; font-weight: 700; flex: 1; min-width: 0; }
+.rule-panel__count { font-size: 11px; color: #333; border: 1px solid $line; padding: 0 7px; line-height: 1.5; }
+.rule-panel__filter, .rule-inline-input, .rule-inline-select {
+  padding: 3px 6px; border: 1px solid #c8c8c8; border-radius: 0; font-size: 11.5px; background: #fff; color: #000;
+  &:focus { outline: none; border-color: #217346; box-shadow: inset 0 0 0 1px #217346; }
+}
+.rule-panel__filter { width: 100%; max-width: 150px; }
+.rule-panel__add { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid $line; flex-wrap: wrap; }
+.rule-inline-input { flex: 1; min-width: 52px; }
+.rule-inline-input--code { max-width: 92px; flex: 0 0 92px; }
+.rule-inline-input--dest { min-width: 80px; }
+.rule-inline-select { flex: 1; min-width: 90px; }
+.rule-inline-btn {
+  flex: 0 0 auto; width: 28px; height: 26px; border: 1px solid $line; background: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0; color: #000;
+  .material-icons { font-size: 16px; }
+  &:hover:not(:disabled) { background: #f3f3f3; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+.rule-inline-btn--muted { color: #777; }
+.rule-panel__scroll { overflow: auto; max-height: calc(100vh - 300px); min-height: 160px; }
+.rule-panel__empty { padding: 12px 8px; font-size: 11.5px; color: #777; text-align: center; }
+.rule-panel__error { color: #b91c1c; text-align: left; padding: 4px 8px; }
+.rule-panel__foot { padding: 6px 8px; border-top: 1px solid $line; display: flex; justify-content: flex-end; }
+
+.lr-save {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid #217346; background: #217346; color: #fff;
+  font-size: 12px; font-weight: 600; padding: 4px 12px; cursor: pointer;
+  .material-icons { font-size: 16px; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.rule-compact-table {
+  width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px;
+  th {
+    position: sticky; top: 0; z-index: 1; background: #f3f3f3; padding: 4px 6px; text-align: left;
+    font-weight: 700; border-bottom: 1px solid $line; border-right: 1px solid $grid; white-space: nowrap;
+  }
+  td { padding: 2px 6px; vertical-align: middle; border-bottom: 1px solid $grid; border-right: 1px solid $grid; height: 24px; }
+  th:last-child, td:last-child { border-right: 0; }
+  tbody tr:hover { background: #eaf2fb; }
+}
+.rule-row--assigned { background: #f7fbf8; }
+.rule-row--editing { background: #fff8e1; }
+.rule-cell-loc { font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-cell-code { font-weight: 700; white-space: nowrap; }
+.rule-cell-dest { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-cell-select {
+  width: 100%; min-width: 88px; padding: 1px 2px; border: 0; background: transparent; font-size: 12px; color: #000;
+  &:focus { outline: 1px solid #217346; }
+}
+.rule-cell-act { width: 56px; white-space: nowrap; text-align: right; }
+.rule-icon-btn {
+  border: 0; background: transparent; padding: 0 2px; cursor: pointer; color: #555; line-height: 1;
+  .material-icons { font-size: 16px; }
+  &:hover:not(:disabled) { color: #217346; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+.rule-icon-btn--del:hover:not(:disabled) { color: #b91c1c; }

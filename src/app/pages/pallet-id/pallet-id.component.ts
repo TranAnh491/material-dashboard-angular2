@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, NgZone } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subject } from 'rxjs';
@@ -120,6 +121,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   daKiemLabelQuantity = 1;
   daKiemLabelError = '';
   isPrintingDaKiemLabels = false;
+  /** Chữ in trên tem 57×32: "Đã Kiểm" hoặc "WEEK" (dùng chung modal / cách in). */
+  daKiemWord: 'Đã Kiểm' | 'WEEK' = 'Đã Kiểm';
 
   // In tem NVL Trả / Return (57×32mm, cùng khổ tem PASS)
   showReturnLabelModal = false;
@@ -136,12 +139,35 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     { id: 'h2', vi: 'Chiều cao tối đa 2m', en: 'Maximum height 2m' },
     { id: 'noWay', vi: 'Không đi lối này', en: 'Do not go this way' },
     { id: 'noFork', vi: 'Cấm xe nâng cao', en: 'No high forklifts' },
-    { id: 'ppe', vi: 'Tuân thủ quy định về PPE', en: 'Comply with PPE regulations' }
+    { id: 'ppe', vi: 'Tuân thủ quy định về PPE', en: 'Comply with PPE regulations' },
+    { id: 'safetyFirst', vi: 'An toàn là trên hết', en: 'SAFETY FIRST (biển hình thoi vàng)' }
   ];
+
+  /** Biển SAFETY FIRST: hình thoi vàng, viền đen, chữ đen. */
+  private safetyFirstSvg(): string {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-hidden="true">`
+      + `<rect x="33" y="33" width="134" height="134" rx="9" transform="rotate(45 100 100)" fill="#FFC20E"/>`
+      + `<rect x="41" y="41" width="118" height="118" rx="5" transform="rotate(45 100 100)" fill="none" stroke="#111" stroke-width="2.6"/>`
+      + `<text x="100" y="97" text-anchor="middle" font-family="'Arial Narrow', Arial, Helvetica, sans-serif" font-weight="700" font-size="35" letter-spacing="-0.5" fill="#111">SAFETY</text>`
+      + `<text x="100" y="135" text-anchor="middle" font-family="'Arial Narrow', Arial, Helvetica, sans-serif" font-weight="700" font-size="35" letter-spacing="-0.5" fill="#111">FIRST</text>`
+      + `</svg>`;
+  }
 
   showFormSignModal = false;
   formSignSize: 'A4' | 'A5' = 'A4';
   isPrintingFormSigns = false;
+
+  // Biển khu vực A4 ngang: nền vàng, dải đen "KHU VỰC", tên khu vực, dòng tiếng Anh
+  showZoneSignModal = false;
+  isPrintingZoneSigns = false;
+  readonly zoneSigns: Array<{ id: string; vi: string; en: string }> = [
+    { id: 'rmReceive', vi: 'Nhận nguyên liệu', en: 'Raw material receiving area' },
+    { id: 'rmWaitIqc', vi: 'Nguyên liệu chờ kiểm', en: 'Raw material awaiting inspection' },
+    { id: 'rmPass', vi: 'NVL đã Pass', en: 'Passed raw material area' },
+    { id: 'fgWaitShip', vi: 'Thành phẩm chờ giao', en: 'Finished goods awaiting delivery' },
+    { id: 'fgPrep', vi: 'Soạn thành phẩm', en: 'Finished goods preparation area' },
+    { id: 'fgWaitPutaway', vi: 'Thành phẩm chờ cất', en: 'Finished goods awaiting put-away' }
+  ];
 
   showInternalTemplateModal = false;
   showInternalTemplateForm = false;
@@ -349,7 +375,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.loadPallets();
     } catch (error) {
       console.error('Error creating pallet:', error);
-      alert('Lỗi khi tạo pallet mới: ' + ((error as Error)?.message || error));
+      appAlert('Lỗi khi tạo pallet mới: ' + ((error as Error)?.message || error));
     } finally {
       this.isCreating = false;
     }
@@ -768,10 +794,29 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     `;
   }
 
+  /** Như printLabelHtml nhưng đợi font web (Google Fonts) tải xong rồi mới in — tránh in ra font thay thế sai dấu tiếng Việt. */
+  private printLabelHtmlAfterFonts(html: string): void {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+      throw new Error('print blocked');
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    const doPrint = () => {
+      printWindow.print();
+      printWindow.close();
+    };
+    const fonts = (printWindow.document as any).fonts;
+    const ready: Promise<unknown> = fonts?.ready ? fonts.ready : Promise.resolve();
+    const timeout = new Promise((r) => setTimeout(r, 4000));
+    void Promise.race([ready.then(() => new Promise((r) => setTimeout(r, 300))), timeout]).then(doPrint);
+  }
+
   private printLabelHtml(html: string): void {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+      appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
       throw new Error('print blocked');
     }
     printWindow.document.write(html);
@@ -950,7 +995,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -1032,7 +1077,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.closeTempLabelModal();
     } catch (err) {
       console.error('Error printing temp labels:', err);
-      alert('Lỗi khi in tem tạm. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem tạm. Vui lòng thử lại.');
     } finally {
       this.isPrintingTempLabels = false;
     }
@@ -1112,7 +1157,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -1177,7 +1222,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.closeNumberLabelModal();
     } catch (err) {
       console.error('Error printing number labels:', err);
-      alert('Lỗi khi in tem số. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem số. Vui lòng thử lại.');
     } finally {
       this.isPrintingNumberLabels = false;
     }
@@ -1248,7 +1293,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -1320,7 +1365,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.closePassLabelModal();
     } catch (err) {
       console.error('Error printing PASS labels:', err);
-      alert('Lỗi khi in tem PASS. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem PASS. Vui lòng thử lại.');
     } finally {
       this.isPrintingPassLabels = false;
     }
@@ -1328,7 +1373,8 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   // ====== In tem Đã Kiểm (57×32mm, không mật khẩu) ======
 
-  openDaKiemLabelModal(): void {
+  openDaKiemLabelModal(word: 'Đã Kiểm' | 'WEEK' = 'Đã Kiểm'): void {
+    this.daKiemWord = word;
     this.daKiemLabelQuantity = 1;
     this.daKiemLabelError = '';
     this.showDaKiemLabelModal = true;
@@ -1352,6 +1398,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
     this.daKiemLabelError = '';
     this.isPrintingDaKiemLabels = true;
+    const word = this.daKiemWord;
 
     const widthMm = 57;
     const heightMm = 32;
@@ -1365,10 +1412,10 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       const labelHtml = Array.from({ length: qty }, () => `
         <div class="pass-label-container">
           <div class="pass-label-fit">
-            <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="Đã Kiểm">
+            <svg viewBox="0 0 ${widthMm} ${heightMm}" xmlns="http://www.w3.org/2000/svg" aria-label="${word}">
               <text x="50%" y="44%" text-anchor="middle" dominant-baseline="central"
                     font-family="Arial, Helvetica, sans-serif" font-weight="900"
-                    font-size="9.8" letter-spacing="0.15">Đã Kiểm</text>
+                    font-size="${word === 'WEEK' ? 14 : 9.8}" letter-spacing="${word === 'WEEK' ? 0.8 : 0.15}">${word}</text>
               <text x="50%" y="${heightMm - 2}" text-anchor="middle"
                     font-family="Arial, Helvetica, sans-serif" font-weight="600"
                     font-size="3">${printedAt}</text>
@@ -1378,7 +1425,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -1386,7 +1433,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>In tem Đã Kiểm (${widthMm}×${heightMm}mm)</title>
+  <title>In tem ${word} (${widthMm}×${heightMm}mm)</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -1450,7 +1497,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.closeDaKiemLabelModal();
     } catch (err) {
       console.error('Error printing Đã Kiểm labels:', err);
-      alert('Lỗi khi in tem Đã Kiểm. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem Đã Kiểm. Vui lòng thử lại.');
     } finally {
       this.isPrintingDaKiemLabels = false;
     }
@@ -1503,7 +1550,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -1575,7 +1622,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.closeReturnLabelModal();
     } catch (err) {
       console.error('Error printing NVL Trả labels:', err);
-      alert('Lỗi khi in tem NVL TRẢ. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem NVL TRẢ. Vui lòng thử lại.');
     } finally {
       this.isPrintingReturnLabels = false;
     }
@@ -1594,6 +1641,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
   safetyLabelIcon(id: string): string {
     const ring = (inner: string) =>
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 265 265" aria-hidden="true">${inner}</svg>`;
+    if (id === 'safetyFirst') return this.safetyFirstSvg();
     if (id === 'load400') {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="34" width="48" height="6" rx="1" fill="#111"/><rect x="12" y="40" width="7" height="10" fill="#111"/><rect x="28.5" y="40" width="7" height="10" fill="#111"/><rect x="45" y="40" width="7" height="10" fill="#111"/><rect x="14" y="16" width="16" height="16" rx="1" fill="#111"/><rect x="32" y="8" width="18" height="24" rx="1" fill="#111"/></svg>`;
     }
@@ -1620,6 +1668,45 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
     const icon = this.safetyLabelIcon(item.id);
     const vi = this.escapeSafetyText(item.vi);
     const en = this.escapeSafetyText(item.en);
+    if (id === 'safetyFirst') {
+      // Biển SAFETY FIRST: chỉ hình thoi, căn giữa khổ 14×9 cm, không logo / không chữ phụ
+      try {
+        const pages = Array.from({ length: count }, () => `<section class="sf">${icon}</section>`).join('');
+        this.printLabelHtml(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SAFETY FIRST</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    .sf {
+      width: ${widthMm}mm;
+      height: ${heightMm}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      page-break-after: always;
+      break-after: page;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .sf:last-child { page-break-after: avoid; break-after: avoid; }
+    .sf svg { width: ${heightMm - 4}mm; height: ${heightMm - 4}mm; display: block; }
+  </style>
+</head>
+<body>${pages}</body>
+</html>`);
+      } catch (err) {
+        console.error('Error printing SAFETY FIRST sign:', err);
+        appAlert('Lỗi khi in biển SAFETY FIRST. Vui lòng thử lại.');
+      } finally {
+        this.isPrintingSafetyLabels = false;
+      }
+      return;
+    }
     try {
       const logoUrl = await this.resolveShelfLabelLogoUrl();
       const pages = Array.from({ length: count }, () => `
@@ -1707,9 +1794,127 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 </html>`);
     } catch (err) {
       console.error('Error printing safety label:', err);
-      alert('Lỗi khi in tem an toàn. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem an toàn. Vui lòng thử lại.');
     } finally {
       this.isPrintingSafetyLabels = false;
+    }
+  }
+
+  openZoneSignModal(): void {
+    this.showZoneSignModal = true;
+  }
+
+  closeZoneSignModal(): void {
+    if (this.isPrintingZoneSigns) return;
+    this.showZoneSignModal = false;
+  }
+
+  /** In biển khu vực A4 ngang. id = 'all' → in cả 6 biển (mỗi biển 1 trang). */
+  printZoneSign(id: string): void {
+    const items = id === 'all' ? this.zoneSigns : this.zoneSigns.filter((x) => x.id === id);
+    if (!items.length || this.isPrintingZoneSigns) return;
+    this.isPrintingZoneSigns = true;
+    // Tên khu vực càng dài chữ càng nhỏ để vừa 1 dòng trên khổ ~255mm
+    const nameMm = (text: string) => Math.max(16, Math.min(32, Math.floor(255 / (text.length * 0.66))));
+    const pages = items.map((item) => {
+      const name = item.vi.toLocaleUpperCase('vi-VN');
+      return `
+      <section class="zs">
+        <div class="sign">
+          <div class="top">KHU VỰC</div>
+          <div class="name" style="font-size:${nameMm(name)}mm">${this.escapeSafetyText(name)}</div>
+          <div class="en"><span></span><b>${this.escapeSafetyText(item.en.toUpperCase())}</b><span></span></div>
+        </div>
+      </section>`;
+    }).join('');
+    try {
+      this.printLabelHtmlAfterFonts(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Biển khu vực</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,800;0,900;1,800&display=block&subset=vietnamese">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 297mm 210mm; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    .zs {
+      width: 297mm;
+      height: 210mm;
+      padding: 12mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      page-break-after: always;
+      break-after: page;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .zs:last-child { page-break-after: avoid; break-after: avoid; }
+    .sign {
+      width: 273mm;
+      height: 172mm;
+      background: #FFD200;
+      border: 3.2mm solid #111;
+      border-radius: 10mm;
+      padding: 5mm;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Be Vietnam Pro', Arial, sans-serif;
+    }
+    .top {
+      height: 66mm;
+      flex: 0 0 66mm;
+      background: #111;
+      color: #FFD200;
+      border-radius: 6mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 36mm;
+      line-height: 1;
+      letter-spacing: 1mm;
+    }
+    .name {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #111;
+      font-weight: 900;
+      line-height: 1.05;
+      white-space: nowrap;
+      padding-top: 4mm;
+    }
+    .en {
+      display: flex;
+      align-items: center;
+      gap: 6mm;
+      padding: 0 6mm 4mm;
+      color: #111;
+    }
+    .en span { flex: 1; border-top: 1.2mm solid #111; }
+    .en b {
+      font-style: italic;
+      font-weight: 800;
+      font-size: 9.5mm;
+      letter-spacing: -0.2mm;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>${pages}</body>
+</html>`);
+    } catch (err) {
+      console.error('Error printing zone sign:', err);
+      appAlert('Lỗi khi in biển khu vực. Vui lòng thử lại.');
+    } finally {
+      this.isPrintingZoneSigns = false;
     }
   }
 
@@ -1849,7 +2054,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
 </html>`);
     } catch (err) {
       console.error('Error printing form sign:', err);
-      alert('Lỗi khi in biểu mẫu. Vui lòng thử lại.');
+      appAlert('Lỗi khi in biểu mẫu. Vui lòng thử lại.');
     } finally {
       this.isPrintingFormSigns = false;
     }
@@ -2051,7 +2256,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
       printWindow.document.write(`<!DOCTYPE html>
@@ -2137,7 +2342,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       }, 400);
     } catch (err) {
       console.error('Error printing J location labels:', err);
-      alert('Lỗi khi in tem vị trí. Vui lòng thử lại.');
+      appAlert('Lỗi khi in tem vị trí. Vui lòng thử lại.');
     } finally {
       this.isPrintingJLocLabels = false;
     }
@@ -2490,7 +2695,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
       printWindow.document.write(html);
@@ -2502,7 +2707,7 @@ export class PalletIdComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.showShelfLabelModal = false;
     } catch (err) {
       console.error('Error creating shelf labels:', err);
-      alert('Lỗi khi tạo tem kệ. Vui lòng thử lại.');
+      appAlert('Lỗi khi tạo tem kệ. Vui lòng thử lại.');
     } finally {
       this.isPrintingShelfLabels = false;
     }

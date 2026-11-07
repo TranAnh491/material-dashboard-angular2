@@ -8,7 +8,13 @@
   padding: 20px;
   position: relative;
   overflow: hidden;
-  
+
+  // Chữ "AIRSPEED WAREHOUSE" nằm trong ảnh nền (3802×2065, chữ ở ~17,5% phía trên). Với `cover`,
+  // đáy chữ luôn ≤ 17,5vh — chừa khoảng này để chọn ngôn ngữ và thẻ đăng nhập không đè lên chữ.
+  @media (min-width: 601px) {
+    padding-top: calc(18vh + 16px);
+  }
+
   // Modern Warehouse Background Pattern - AI Grid
   &::before {
     display: none;
@@ -259,12 +265,11 @@
 .language-selector {
   display: flex;
   gap: 12px;
-  margin-bottom: 25px;
-  background: rgba(255, 255, 255, 0.15);
-  padding: 12px 16px;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 6px;
   border-radius: 12px;
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #6B6B66;
   position: relative;
   z-index: 10;
 
@@ -274,9 +279,9 @@
     gap: 10px;
     padding: 10px 18px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #1f2937;
     font-weight: 600;
     transition: all 0.3s ease;
     min-width: 130px;
@@ -300,16 +305,13 @@
     }
 
     &:hover {
-      background: rgba(255, 255, 255, 0.35);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      background: #EAF2FF;
     }
 
     &.active {
-      background: rgba(255, 255, 255, 0.95);
-      color: #1e3c72;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-      border-color: rgba(30, 60, 114, 0.3);
+      background: #3478F6;
+      color: #fff;
+      border-color: #3478F6;
     }
 
     .flag {
@@ -323,14 +325,13 @@
   }
 }
 
+// Nền thẻ gần đặc: ảnh nhà kho phía sau không xuyên qua làm rối chữ và ô nhập.
 .login-card {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #6B6B66;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  padding: 40px;
+  padding: 32px 36px;
   width: 100%;
   max-width: 400px;
 }
@@ -404,7 +405,7 @@
 .login-scan-input {
   flex: 1 1 100%;
   height: 40px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   padding: 0 12px;
   background: rgba(255, 255, 255, 0.7);
@@ -414,10 +415,10 @@
   text-align: center;
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #8F8F89;
 
   button {
-    color: #667eea;
+    color: #3478F6;
     font-weight: 500;
   }
 }
@@ -580,3 +581,98 @@
     }
   }
 } 
+// ── Mobile: gọn, nền đặc, chữ rõ ───────────────────
+@media (max-width: 600px) {
+  .login-container {
+    background: #F4F5F7;
+    justify-content: flex-start;
+    padding: 16px 14px 28px;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .language-selector {
+    flex-direction: row;
+    gap: 6px;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 0 14px;
+    padding: 4px;
+    background: #fff;
+    border: 1px solid #6B6B66;
+    border-radius: 980px;
+    backdrop-filter: none;
+
+    .lang-btn {
+      flex: 1;
+      width: auto;
+      min-width: 0;
+      padding: 8px 10px;
+      gap: 6px;
+      border-radius: 980px;
+      background: transparent;
+      border: 0;
+      color: #000;
+      box-shadow: none;
+
+      &::before { display: none; }
+      &:hover { transform: none; box-shadow: none; background: #EAF2FF; }
+      &.active { background: #3478F6; color: #fff; box-shadow: none; }
+      .flag { font-size: 16px; }
+      .lang-text { font-size: 13px; }
+    }
+  }
+
+  .login-card {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid #6B6B66;
+    border-radius: 16px;
+    box-shadow: none;
+    padding: 22px 18px;
+    margin: 0;
+    max-width: 420px;
+  }
+
+  .login-header {
+    margin-bottom: 20px;
+    h2 { color: #000; font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    p { color: #333; font-size: 14px; }
+    .signup-hint { color: #333; font-size: 13px; }
+  }
+
+  .form-group { margin-bottom: 14px; }
+
+  :host ::ng-deep {
+    .login-card .mat-form-field-infix { padding: 0.9em 0 0.8em; border-top: 0.7em solid transparent; }
+    .login-card input.mat-input-element {
+      font-size: 17px;
+      font-weight: 500;
+      color: #000;
+      caret-color: #3478F6;
+      height: 1.6em;
+    }
+    .login-card .mat-form-field-label { color: #333; font-size: 15px; }
+    .login-card .mat-form-field-appearance-outline .mat-form-field-outline { color: #6B6B66 !important; }
+    .login-card .mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick { color: #3478F6 !important; }
+    .login-card .mat-form-field-wrapper { padding-bottom: 0.9em; }
+    .login-card button.mat-raised-button,
+    .login-card button.mat-stroked-button { min-height: 50px; font-size: 16px; border-radius: 12px; }
+  }
+
+  .login-scan {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+    button { min-width: 0; }
+  }
+  .login-scan-input { height: 48px; font-size: 16px; color: #000; background: #fff; }
+
+  .login-footer {
+    margin-top: 16px;
+    padding-top: 14px;
+    button { width: 100%; min-height: 46px; font-size: 15px; color: #2057B5; }
+  }
+}

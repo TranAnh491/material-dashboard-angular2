@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import {
   ChangeDetectorRef,
   Component,
@@ -306,7 +307,7 @@ export class FgStorageDiagramModalComponent implements OnChanges {
 
     const w = window.open('', '_blank');
     if (!w) {
-      alert('Không mở được cửa sổ in. Cho phép popup rồi thử lại.');
+      appAlert('Không mở được cửa sổ in. Cho phép popup rồi thử lại.');
       return;
     }
     w.document.write(html);
@@ -572,7 +573,7 @@ export class FgStorageDiagramModalComponent implements OnChanges {
       this.refreshPalletLines(toLabel);
     } catch (e) {
       console.error('confirmAndMove failed', e);
-      alert('❌ Không dời được vị trí. Thử lại.');
+      appAlert('❌ Không dời được vị trí. Thử lại.');
     } finally {
       this.isSavingMove = false;
       this.cdr.markForCheck();

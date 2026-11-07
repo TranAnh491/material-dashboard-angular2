@@ -158,11 +158,8 @@
             </div>
             <div class="wo-heatmap-inner" *ngIf="woSampleHeatmapDays.length">
               <div class="putaway-heatmap wo-heatmap" aria-label="Sample work order weekly heatmap">
-                <div *ngFor="let col of woSampleHeatmapDays" class="putaway-heatmap__col">
-                  <div class="putaway-heatmap__head">
-                    <span class="putaway-heatmap__week">{{ col.weekday }}</span>
-                    <span class="putaway-heatmap__cnt wo-heatmap__cnt">{{ col.total }}</span>
-                  </div>
+                <!-- Không lặp lại hàng thứ / ngày: cột thẳng hàng với heatmap chính ở trên -->
+                <div *ngFor="let col of woSampleHeatmapDays" class="putaway-heatmap__col" [attr.title]="col.weekday + ' · ' + col.total + ' LSX Sample'">
                   <div class="putaway-heatmap__cells">
                     <div
                       *ngFor="let c of col.cells"
@@ -912,13 +909,37 @@
     </div>
 
     <div class="modal-footer acc-turnover-footer">
-      <button type="button" class="acc-turnover-btn acc-turnover-btn--pxk" (click)="openWoPxkView()" [disabled]="woEditSaving || woPxkLoading">
-        {{ woPxkLoading ? 'Đang tải PXK...' : 'Show PXK' }}
+      <button type="button" class="acc-turnover-btn acc-turnover-btn--pxk" (click)="openWoLogView()" [disabled]="woEditSaving || woLogLoading">
+        {{ woLogLoading ? 'Đang tải log...' : 'Show Log' }}
       </button>
       <button type="button" class="acc-turnover-btn acc-turnover-btn--cancel" (click)="closeWoLsxModal()" [disabled]="woEditSaving">Hủy</button>
       <button type="button" class="acc-turnover-btn acc-turnover-btn--save" (click)="saveWoLsxModal()" [disabled]="woEditSaving">
         {{ woEditSaving ? 'Đang lưu...' : 'Lưu' }}
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Show Log LSX: giao diện Notepad -->
+<div class="modal-overlay wo-np-overlay" *ngIf="showWoLogModal" (click)="closeWoLogModal()">
+  <div class="wo-np" (click)="$event.stopPropagation()">
+    <div class="wo-np__title">
+      <span class="wo-np__icon">📄</span>
+      <span class="wo-np__name">LSX_Log_{{ woLogLsx }}.txt - Notepad</span>
+      <button type="button" class="wo-np__x" (click)="closeWoLogModal()" title="Đóng">✕</button>
+    </div>
+    <div class="wo-np__menu">
+      <button type="button" (click)="openWoLogView()" [disabled]="woLogLoading">{{ woLogLoading ? 'Đang đọc...' : 'Tải lại' }}</button>
+      <span class="wo-np__sep"></span>
+      <button type="button" (click)="copyWoLog()" [disabled]="woLogLoading">Copy</button>
+      <button type="button" (click)="downloadWoLog()" [disabled]="woLogLoading">Tải .txt</button>
+      <button type="button" (click)="printWoLog()" [disabled]="woLogLoading">In</button>
+    </div>
+    <textarea class="wo-np__body" readonly spellcheck="false" wrap="off" [value]="woLogText"></textarea>
+    <div class="wo-np__status">
+      <span>LSX {{ woLogLsx }}</span>
+      <span>UTF-8</span>
+      <span>Windows (CRLF)</span>
     </div>
   </div>
 </div>

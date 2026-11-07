@@ -136,7 +136,7 @@ $ob-r-sm: 10px;
 }
 
 .ob-m-hero__card {
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid $ob-line;
   border-radius: 18px;
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
@@ -303,7 +303,7 @@ $ob-r-sm: 10px;
   border-radius: 12px;
   padding: 0 12px;
   font-size: 14px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .ob-m-hero__batch {
@@ -327,7 +327,7 @@ $ob-r-sm: 10px;
   padding: 0 12px;
   border: 1px solid $ob-line;
   border-radius: 12px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 13px;
   font-weight: 700;
   color: $ob-ink;
@@ -476,7 +476,7 @@ $ob-r-sm: 10px;
   margin: 12px 14px 0;
   padding: 14px 14px 16px;
   border-radius: $ob-r;
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $ob-line;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
 }
@@ -568,7 +568,7 @@ $ob-r-sm: 10px;
 
   &:focus-within {
     border-color: $ob-blue;
-    background: #fff;
+    background: #FFFFFF;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   }
 }
@@ -715,7 +715,7 @@ $ob-r-sm: 10px;
 }
 
 .ob-m-kpi {
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $ob-line;
   border-radius: 14px;
   padding: 12px 10px;
@@ -758,7 +758,7 @@ $ob-r-sm: 10px;
   min-height: $ob-hit;
   height: $ob-hit;
   background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: $ob-r;
   padding: 0 4px 0 0;
   box-sizing: border-box;
@@ -843,7 +843,7 @@ $ob-r-sm: 10px;
   align-self: center;
   border: 1px solid $ob-line;
   border-radius: $ob-r-sm;
-  background: #fff;
+  background: #FFFFFF;
   color: #64748b;
   display: inline-flex;
   align-items: center;
@@ -964,13 +964,13 @@ $ob-r-sm: 10px;
   font-size: 14px;
   color: $ob-muted;
   font-weight: 500;
-  background: #fff;
-  border: 1px dashed #cbd5e1;
+  background: #FFFFFF;
+  border: 1px dashed #6B6B66;
   border-radius: 14px;
 }
 
 .ob-m-card {
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $ob-line;
   border-radius: 16px;
   margin-bottom: 10px;
@@ -1097,7 +1097,7 @@ $ob-r-sm: 10px;
 
 .ob-m-card__detail {
   padding: 0 14px 14px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #8F8F89;
   background: #fafbfc;
 }
 
@@ -1108,7 +1108,7 @@ $ob-r-sm: 10px;
   gap: 12px;
   padding: 8px 0;
   font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
 
   span {
     color: $ob-muted;
@@ -1134,7 +1134,7 @@ $ob-r-sm: 10px;
   min-height: 48px;
   border-radius: 12px;
   border: 1px solid #fecaca;
-  background: #fff;
+  background: #FFFFFF;
   color: #b91c1c;
   font-weight: 700;
   font-size: 14px;
@@ -1153,7 +1153,7 @@ $ob-r-sm: 10px;
   margin: 14px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $ob-line;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 
@@ -1251,7 +1251,7 @@ $ob-r-sm: 10px;
   z-index: 210;
   max-height: 78vh;
   overflow-y: auto;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 20px 20px 0 0;
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.18);
@@ -1393,7 +1393,7 @@ $ob-r-sm: 10px;
 
 .ob-m-scan__input-row:has(.scanner-input.active) {
   border-color: $ob-blue;
-  background: #fff;
+  background: #FFFFFF;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
@@ -1431,7 +1431,7 @@ $ob-r-sm: 10px;
   justify-content: space-between;
   gap: 10px;
   padding: 12px 10px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
   font-size: 14px;
 }
 
@@ -1497,7 +1497,7 @@ $ob-r-sm: 10px;
   height: 30px;
   border: 1px solid #f8bbd9;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   color: #b71c1c;
   flex-shrink: 0;
 
@@ -1517,7 +1517,7 @@ $ob-r-sm: 10px;
   padding: 6px 10px;
   border: 1px solid #f8bbd9;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .ob-m-bs__search-ico {
@@ -1639,7 +1639,7 @@ $ob-r-sm: 10px;
 
 .ob-m-bs__card--done {
   background: #f8fafc;
-  border-color: #e2e8f0;
+  border-color: #6B6B66;
 }
 
 .ob-m-bs__card-acts {
@@ -1668,8 +1668,8 @@ $ob-r-sm: 10px;
   }
 
   &--del {
-    background: #fff;
-    border: 1px solid #ddd;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     color: #888;
   }
 }
@@ -2134,7 +2134,7 @@ $ob-r-sm: 10px;
   align-items: center;
   padding: 4px 2px;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
 
   span {
     font-size: 10px;
@@ -2281,7 +2281,7 @@ $ob-r-sm: 10px;
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 

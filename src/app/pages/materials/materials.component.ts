@@ -1,9 +1,12 @@
+import { appAlert } from '../../shared/app-toast';
 import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, RM_QTY_DECIMALS_4 } from '../../services/rm-scan-qty.util';
+import { stripJ5Prefix } from '../../shared/location-prefix';
+import { autoKkFields, autoKkLog, isPassToShelf } from '../../shared/auto-kk';
 import { PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
 import { WEIGH_EXEMPT_REASONS, WEIGH_EXEMPT_OTHER, buildWeighExemptReason, temLeMustWeigh, catalogBagWeight, WEIGH_TOLERANCE_PERCENT } from '../../services/weigh-exempt-report';
 import { PxkOddWeighService } from '../../services/pxk-odd-weigh.service';
 import { readScaleNumber } from '../../services/scale-ocr.util';
-import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef, NgZone, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, HostListener, ChangeDetectorRef, NgZone, ViewChild, ElementRef, inject } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { Subject, BehaviorSubject, Subscription, firstValueFrom } from 'rxjs';
@@ -56,7 +59,7 @@ import { B037_REQUIRED_LOCATION, isB037Code } from './fridge-nvl-catalog';
 import { DvLuuTruCatalogService } from '../../services/dv-luu-tru-catalog.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
-import { LinkQPendingPxkService, PendingPxkInfo } from '../../services/linkq-pending-pxk.service';
+import { LinkQPendingPxkService, PendingPxkInfo, PendingPxkPo } from '../../services/linkq-pending-pxk.service';
 import { KkCatalogService, KkCatalogEntry } from '../../services/kk-catalog.service';
 import { SxxkSuspectService } from '../../services/sxxk-suspect.service';
 import { InventoryStockReportService } from '../../services/inventory-stock-report.service';
@@ -104,10 +107,22 @@ export interface InventoryMaterial {
   supplier: string;
   remarks: string;
   standardPacking?: number;
+  /** Standard của lô (PO) — Inbound ghi lúc nhận hàng từ LĐV. Ưu tiên hơn Standard danh mục. */
+  lotStandardPacking?: number;
   /** Đã kiểm kê (đếm tồn kho) — tick tay ở cột KK, riêng theo dòng (Mã + PO + IMD). */
   kkChecked?: boolean;
+  /** Dòng bị khóa in QR (Matrix qrLock): đã dùng hết lượt in fix. */
+  qrFixPrintedAt?: any;
+  qrFixPrintedBy?: string;
+  /** Số lần đã in fix (dòng cũ chỉ có qrFixPrintedAt → tính là 1). */
+  qrFixPrintCount?: number;
   /** Số lượng cộng dồn từ tem Scan KK — so sánh với tồn kho. */
   kkScanCount?: number;
+  /** Tổng lượng đã quét (cộng lượng trên từng tem) — so với tồn kho, đủ thì tick KK. */
+  kkScanQty?: number;
+  /** Week trên tem nhập ở Inbound (chỉ trên web): 4 số theo weekFormat. */
+  week?: string;
+  weekFormat?: 'YYWW' | 'MMYY';
   /** Vị trí gốc đã ghi nhận lần đầu (scan cập nhật vị trí). */
   kkOriginLocation?: string;
   /** Tài khoản đã tick/bỏ tick KK gần nhất. */
@@ -229,7 +244,7 @@ export type DoiKhoRow = {
 /** Kho đích khi Dời kho — tiền tố gắn vào đầu Vị trí. */
 export type DoiKhoWh = 'J' | 'ASM3';
 
-export type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock';
+export type InventoryHideReason = 'manual' | 'reset-zero' | 'reset-low-stock' | 'po-surplus' | 'delete-request';
 
 export type MaterialsOtpAction =
   | 'import'
@@ -248,6 +263,8 @@ export type HiddenInventoryRow = {
   materialCode: string;
   poNumber: string;
   location: string;
+  /** Lô hàng = IMD (batchNumber) của dòng tồn. */
+  imd: string;
   stock: number;
   unit: string;
   hideReason: InventoryHideReason | string;
@@ -259,7 +276,14 @@ export type HiddenInventoryRow = {
 
 /** So sánh tồn LinkQ với tổng tồn web theo mã. */
 /** Tab trang so sánh LinkQ. diffPos = lệch dương (web > LinkQ), diffNeg = lệch âm (LinkQ > web). */
-export type LinkQCompareTab = 'all' | 'linkq' | 'diff' | 'diffPos' | 'diffNeg' | 'linkqOnly' | 'webOnly';
+/** File LinkQ đã import: tồn theo mã; `po` = tồn theo mã → PO (chỉ khi file có cột PO). */
+export interface LinkQPack {
+  map: Map<string, number>;
+  label: string;
+  po?: Map<string, Map<string, number>>;
+}
+
+export type LinkQCompareTab ='all' | 'linkq' | 'diff' | 'diffPos' | 'diffNeg' | 'linkqOnly' | 'webOnly';
 
 export type LinkQCompareRow = {
   code: string;
@@ -285,12 +309,16 @@ export type KkTypeByCodeRow = {
   aging: number | null;
   web: number;
   linkQ: number | null;
+  /** PXK chưa xuất của mã (ASM1; null = chưa tính / nhà máy khác) */
+  pxk: number | null;
   diff: number | null;
   warn: boolean;
   checked: number;
   /** Số dòng cần KK (bỏ dòng Aging < 1 tháng) */
   kkLines: number;
   locs: string;
+  /** Các dòng tồn web (mỗi PO / IMD) của mã — bảng Theo mã LinkQ hiện đủ PO. */
+  items?: InventoryMaterial[];
 };
 
 export type KkStockBoxRef = {
@@ -301,6 +329,11 @@ export type KkStockBoxRef = {
   groupCodes?: string[];
 };
 
+import { LocUpdDoneEvent } from '../../shared/loc-upd-scan/loc-upd-scan.component';
+import { WeekWindow, WeekRules, WEEK_RULES_REV, getWeekRules, fmtDmy, weekCodeLabel, weekStatusText, weekWindow } from '../../shared/week-code';
+import { WeekRulesService } from '../../services/week-rules.service';
+import { WeekInputResult } from '../../shared/week-input-popup/week-input-popup.component';
+import { KK_PO_BLANK, KK_PO_CMP_COLLECTION, KkPoCmpData, KkPoCmpDetailRow, buildKkPoCmpDetail, buildKkPoCmpIndex, buildKkPoCmpQty, kkPoCmpCode, kkPoCmpPo, parseKkPoCmpSheet } from './kk-po-compare';
 @Component({
   selector: 'app-materials',
   templateUrl: './materials.component.html',
@@ -391,7 +424,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   protected static readonly LINKQ_COMPARE_PAGE = 200;
   protected static readonly LINKQ_COMPARE_TTL_MS = 90_000;
   private static readonly LINKQ_PACK_TTL_MS = 5 * 60_000;
-  private linkQPackCache = new Map<string, { pack: { map: Map<string, number>; label: string }; ts: number }>();
+  private linkQPackCache = new Map<string, { pack: LinkQPack; ts: number }>();
   linkQCheckOnly = false;
   protected linkQCheckSet = new Set<string>();
   protected linkQSheetEl: HTMLElement | null = null;
@@ -458,7 +491,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Lọc theo LinkQ: '' = tất cả, 'yes' = mã có trong LinkQ, 'no' = không có. */
   kkTypeLinkQFilter = '';
   /** Lọc trạng thái KK: '' tất cả · 'done' đã KK · 'todo' chưa KK. */
-  kkTypeKkFilter: '' | 'done' | 'todo' = '';
+  kkTypeKkFilter: '' | 'done' | 'done-short' | 'todo' = '';
   /** Lọc cột chênh lệch (Web − LinkQ − PXK): '' tất cả · bad |diff|>1 · ok · pos · neg. */
   kkTypeDiffFilter: '' | 'bad' | 'ok' | 'pos' | 'neg' = '';
   kkTypeFilterLoc = '';
@@ -470,6 +503,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeFilterWh: '' | KkWarehouse = '';
   kkTypeFilterRolls = '';
   kkTypeSortQtyDesc = false;
+  /** Chi tiết box: dòng nhiều cuộn nhất lên đầu. */
+  kkTypeSortRollsDesc = false;
   /** Chi tiết box: mã vừa tick KK mới nhất lên đầu. */
   kkTypeSortKkTimeDesc = false;
   protected kkTypeCacheRev = 0;
@@ -507,6 +542,24 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   } | null = null;
   /** Chi tiết KK — toàn bộ tồn kho, không phân loại theo loại hàng */
   kkAllStockDetail = false;
+  /** Xem toàn bộ → So sánh PO: chỉ hiện dòng có mã trong file tuổi hàng nhưng PO không có trong file. */
+  kkPoCmpOn = false;
+  kkPoCmp: KkPoCmpData | null = null;
+  kkPoCmpBusy = false;
+  /** Bấm mã khi đang So sánh PO: toàn bộ PO của mã ở web và LinkQ. */
+  kkPoCmpDetail: { code: string; name: string; rows: Array<KkPoCmpDetailRow & { pxk: number; pxkLsx: string; surplus: boolean }>; webTotal: number; linkqTotal: number | null } | null = null;
+  /** PXK chưa xuất theo "MÃ|PO" (Work Order chưa Done, web chưa scan) — ASM1. Dùng loại phần lệch do PXK chưa Done. */
+  kkPoCmpPending: Map<string, PendingPxkPo> | null = null;
+  /** Số dòng PO sai được giải thích bởi PXK chưa Done (đã ẩn khỏi bảng). */
+  kkPoCmpPxkHidden = 0;
+  /** So sánh PO → chỉ dòng "dư sai — có thể xóa". */
+  kkPoCmpSurplusOnly = false;
+  /** Số dòng dư sai trong lần lọc gần nhất. */
+  kkPoCmpSurplusCount = 0;
+  /** Dòng dư sai của lần lọc gần nhất (Excel / ẩn hàng loạt). */
+  private kkPoCmpSurplusRows: InventoryMaterial[] = [];
+  kkPoCmpSurplusBusy = false;
+  protected kkPoCmpFactory = '';
   readonly kkAllStockDetailTitle = 'Chi tiết KK';
   kkActivePinSplit: '1-4' | '5-10' | null = null;
   kkActiveSourceProductType: string | null = null;
@@ -818,6 +871,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   isLoadingHiddenInventory = false;
   hiddenInventoryRows: HiddenInventoryRow[] = [];
   hiddenSearchQuery = '';
+  hiddenLocFilter = '';
+  hiddenLotFilter = '';
+  hiddenReasonFilter = '';
   pushbackHiddenId: string | null = null;
   isHidingInventory = false;
 
@@ -969,7 +1025,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   protected denyAction(action: string): boolean {
     if (this.can(action)) return false;
     const label = ACTION_DEFS.find((a) => a.key === action)?.label || action;
-    alert(`🔒 Bạn không có quyền: ${label}\n(${this.currentEmployeeId || 'chưa rõ mã NV'} · ${this.selectedFactory}) — chỉnh ở More → Matrix rule & quyền.`);
+    appAlert(`🔒 Bạn không có quyền: ${label}\n(${this.currentEmployeeId || 'chưa rõ mã NV'} · ${this.selectedFactory}) — chỉnh ở More → Matrix rule & quyền.`);
     return true;
   }
 
@@ -1226,6 +1282,157 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return material.storageUnitSize || this.storageUnitCatalogMap.get(code) || '';
   }
 
+  // ===== Mục Week: hạn dùng của tem theo khách — theo Rule Week (Firestore week-rules/config, mặc định Gilbarco 8W/12W, khách khác 2W/8W, MMYY ±1 tháng) =====
+  private kkWeekMemo = new Map<string, { label: string; customer: string; win: WeekWindow | null }>();
+
+  kkWeekInfo(m: InventoryMaterial): { label: string; customer: string; win: WeekWindow | null } {
+    if (!this.weekRulesAsked) {
+      this.weekRulesAsked = true;
+      void this.weekRulesSvc.ensureLoaded().then(() => this.cdr.markForCheck());
+    }
+    const customer = this.getCustomerForMaterial(m);
+    const key = `${m.id}|${m.weekFormat}|${m.week}|${customer}|${WEEK_RULES_REV}`;
+    let v = this.kkWeekMemo.get(key);
+    if (!v) {
+      v = {
+        label: weekCodeLabel(m.weekFormat || 'YYWW', m.week) || String(m.week || ''),
+        customer,
+        win: weekWindow(m.weekFormat || 'YYWW', m.week, customer)
+      };
+      this.kkWeekMemo.set(key, v);
+    }
+    return v;
+  }
+
+  // ── Rule Week: hạn dùng tem theo khách — chỉnh ở Thao tác → Rule Week ──
+  protected weekRulesSvc = inject(WeekRulesService);
+  private weekRulesAsked = false;
+  weekRuleOpen = false;
+  weekRuleBusy = false;
+  weekRuleMsg = '';
+  weekRuleForm: WeekRules = getWeekRules();
+
+  async openWeekRules(): Promise<void> {
+    (this as any).kkActionsOpen = false; // popup Thao tác (Quản lý nguyên liệu)
+    this.weekRuleMsg = '';
+    this.weekRuleOpen = true;
+    this.weekRuleBusy = true;
+    try {
+      const r = await this.weekRulesSvc.ensureLoaded(true);
+      this.weekRuleForm = JSON.parse(JSON.stringify(r));
+    } finally {
+      this.weekRuleBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  addWeekRuleRow(): void {
+    this.weekRuleForm.customers.push({ prefix: '', name: '', early: this.weekRuleForm.defaultEarly, late: this.weekRuleForm.defaultLate });
+  }
+
+  removeWeekRuleRow(i: number): void {
+    this.weekRuleForm.customers.splice(i, 1);
+  }
+
+  async saveWeekRules(): Promise<void> {
+    if (!this.canEdit || this.weekRuleBusy) return;
+    const f = this.weekRuleForm;
+    const bad = f.customers.find((c) => !String(c.prefix || '').trim());
+    if (bad) { this.weekRuleMsg = 'Dòng khách thiếu "Khách bắt đầu bằng".'; return; }
+    this.weekRuleBusy = true;
+    this.weekRuleMsg = '';
+    try {
+      const u = await this.afAuthWeek.currentUser;
+      await this.weekRulesSvc.save(f, String(u?.email || '').split('@')[0].toUpperCase());
+      this.kkWeekMemo.clear();
+      this.weekRuleMsg = '✅ Đã lưu Rule Week — Outbound và mục Week dùng ngay rule mới.';
+    } catch (e: any) {
+      this.weekRuleMsg = '❌ Không lưu được: ' + (e?.message || e);
+    } finally {
+      this.weekRuleBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+  private afAuthWeek = inject(AngularFireAuth);
+
+  /** Mã bật theo dõi Week ở Danh mục NVL (+Week) — nạp khi mở mục Week. */
+  kkWeekCatalogTracked: Set<string> | null = null;
+
+  /** Nhập / sửa Week cho 1 PO (lô) ngay trong mục Week. */
+  kkWeekEdit: InventoryMaterial | null = null;
+  kkWeekSaving = false;
+
+  openKkWeekEdit(m: InventoryMaterial): void {
+    if (!this.canEdit || !m?.id) return;
+    this.kkWeekEdit = m;
+  }
+
+  async saveKkWeekEdit(r: WeekInputResult): Promise<void> {
+    const m = this.kkWeekEdit;
+    if (!m?.id || this.kkWeekSaving) return;
+    this.kkWeekSaving = true;
+    try {
+      const by = String(this.kkTypeScanOperator || this.kkOperatorIdCache || '').trim().toUpperCase() || 'quan-ly-nvl';
+      await this.firestore.firestore.collection('inventory-materials').doc(m.id).update({
+        week: r.value, weekFormat: r.format, weekUpdatedAt: new Date(), weekUpdatedBy: by, weekSource: 'quan-ly-nvl'
+      });
+      // Inbound của lô này cũng ghi Week (best effort)
+      void this.firestore.firestore.collection('inbound-materials').where('linkedInventoryDocId', '==', m.id).limit(5).get()
+        .then((s) => s.forEach((x) => void x.ref.update({ week: r.value, weekFormat: r.format, updatedAt: new Date() })))
+        .catch(() => undefined);
+      const stamp = (x: InventoryMaterial) => { if (x?.id === m.id) { x.week = r.value; x.weekFormat = r.format; } };
+      stamp(m);
+      this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+      this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+      this.inventoryMaterials.forEach(stamp);
+      this.patchKkInvSnapCache(m.id, { week: r.value, weekFormat: r.format });
+      // Mã đã có Week → Danh mục NVL tự bật theo dõi Week
+      void this.nvlCatalogFull.ensureWeekTracked(String(m.materialCode || ''), by).then(() => {
+        this.kkWeekCatalogTracked?.add(String(m.materialCode || '').trim().toUpperCase());
+      }).catch((e) => console.warn('ensureWeekTracked', e));
+      this.kkWeekMemo.clear();
+      this.invalidateKkTypeViewCache();
+      this.kkWeekEdit = null;
+    } catch (e) {
+      appAlert(`❌ Lỗi lưu Week: ${(e as any)?.message || e}`);
+    } finally {
+      this.kkWeekSaving = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Nhãn gọn cho cột Week bảng tồn: W35/26 (YYWW) hoặc 08/2026 (MMYY — tháng ghi đủ năm). */
+  weekShortLabel(m: InventoryMaterial): string {
+    const v = String(m.week || '').replace(/\D/g, '');
+    if (v.length !== 4) return String(m.week || '');
+    return (m.weekFormat === 'MMYY') ? `${v.slice(0, 2)}/20${v.slice(2, 4)}` : `W${v.slice(2, 4)}/${v.slice(0, 2)}`;
+  }
+
+  kkWeekDate(d: Date): string {
+    return fmtDmy(d);
+  }
+
+  /** Ngày gọn DD/MM cho cột Được dùng. */
+  kkWeekDdMm(d: Date): string {
+    return fmtDmy(d).slice(0, 5);
+  }
+
+  /** Hạn dùng ngắn: "Còn 19 ngày" / "Quá hạn 5 ngày" / "Chưa được dùng". */
+  kkWeekStatusShort(w: WeekWindow | null): string {
+    if (!w) return 'Week không hợp lệ';
+    if (w.status === 'early') return 'Chưa được dùng';
+    if (w.status === 'late') return `Quá hạn ${-w.daysLeft} ngày`;
+    return `Còn ${w.daysLeft} ngày`;
+  }
+
+  kkWeekRangeText(w: WeekWindow | null): string {
+    return w ? `${fmtDmy(w.from)} → ${fmtDmy(w.to)}` : '—';
+  }
+
+  kkWeekStatusText(w: WeekWindow | null): string {
+    return w ? weekStatusText(w) : 'Week không hợp lệ';
+  }
+
   /** Khách hàng của mã NVL (từ Danh mục NVLKH) — trống nếu chưa có trong danh mục. */
   getCustomerForMaterial(material: InventoryMaterial): string {
     const code = this.nvlkhCatalog.normalizeMaterialCode(material.materialCode);
@@ -1251,12 +1458,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   onStorageUnitCellClick(material: InventoryMaterial): void {
     if (this.hasStorageUnit(material)) {
-      alert('Mã NVL đã có DV Lưu trữ. Sửa tại Danh mục DV Lưu trữ.');
+      appAlert('Mã NVL đã có DV Lưu trữ. Sửa tại Danh mục DV Lưu trữ.');
       return;
     }
     const code = this.getStorageMaterialKey(material);
     if (!code) {
-      alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
+      appAlert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
       return;
     }
     this.storageUnitPickerMaterialCode = code;
@@ -1290,7 +1497,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.closeStorageUnitPicker();
     } catch (e) {
       console.error(e);
-      alert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
+      appAlert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
     } finally {
       this.isSavingStorageUnit = false;
     }
@@ -1712,7 +1919,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   get temLeTlExpected(): number | null {
     const code = this.temLeParsed?.materialCode || '';
     const gwFull = this.temLeGwFullKnown > 0 ? this.temLeGwFullKnown : Number(this.temLeGwFullInput2) || 0;
-    const std = this.getStandardPacking(code) || 0;
+    const std = this.stdForLot(code, this.temLeParsed?.po) || 0;
     const qty = Number(this.temLeSplitQty) || 0;
     return gwFull > 0 && std > 0 && qty > 0 ? gwFull * qty / std : null;
   }
@@ -1925,7 +2132,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const by = await this.getMaterialsOtpRequester();
       if (this.temLeGwFullKnownFor(code) <= 0 && gwFull > 0) await this.nvlCatalogFull.setGwBag(code, gwFull, by);
-      let std = this.getStandardPacking(code) || 0;
+      let std = this.stdForLot(code, po) || 0;
       if (!std) std = Number((await this.nvlCatalogFull.getByCode(code).catch(() => null))?.standardPacking) || 0;
       const fullQty = std || sourceQty;
       const dev = (gw: number, qty: number) => {
@@ -1962,14 +2169,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const lines: string[] = [];
         if (!cl.ok) lines.push(`GW bịch ${res.clTag} lệch ${cl.devPct ?? '?'}% (cân ${gwCl} g, dự kiến ${cl.expected ? Math.round(cl.expected) : '?'} g).`);
         if (tl && t && !t.ok) lines.push(`GW bịch ${res.tlTag} lệch ${t.devPct ?? '?'}% (cân ${tl.gw} g, dự kiến ${t.expected ? Math.round(t.expected) : '?'} g).`);
-        alert(`⚠️ ${lines.join('\n')}\nĐã in tem và ghi vào danh mục nghi ngờ (email 8h sáng mai).`);
+        appAlert(`⚠️ ${lines.join('\n')}\nĐã in tem và ghi vào danh mục nghi ngờ (email 8h sáng mai).`);
       }
       if (photoErr) {
-        alert(`Đã in tem nhưng chưa lưu được hình bịch ${res.tlTag}: ${photoErr}\nKhi scan xuất tem ${res.tlTag} ở Outbound sẽ phải chụp + cân lại.`);
+        appAlert(`Đã in tem nhưng chưa lưu được hình bịch ${res.tlTag}: ${photoErr}\nKhi scan xuất tem ${res.tlTag} ở Outbound sẽ phải chụp + cân lại.`);
       }
     } catch (e: any) {
       console.error('saveTemLeGwAfterSplit:', e);
-      alert('Đã in tem nhưng chưa lưu được GW / hình bịch TL: ' + (e?.message || e)
+      appAlert('Đã in tem nhưng chưa lưu được GW / hình bịch TL: ' + (e?.message || e)
         + '\nKhi scan xuất tem TL ở Outbound sẽ phải chụp + cân lại.');
     }
   }
@@ -2500,12 +2707,350 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   thOptionFilter = '';
   private thSaveTimer: any = null;
 
+  /** So sánh PO đang bật và đúng file của nhà máy đang xem. */
+  get kkPoCmpActive(): boolean {
+    return this.kkPoCmpOn && !!this.kkPoCmp && this.kkPoCmpFactory === this.selectedFactory;
+  }
+
+  /** Lượng PXK chưa xuất của mã + PO (Work Order chưa Done, web chưa scan xuất). */
+  kkPoCmpPendingOf(code: unknown, po: unknown): number {
+    // Service PXK để PO trống là '' (không phải '—')
+    const p = kkPoCmpPo(po);
+    return this.kkPoCmpPending?.get(`${kkPoCmpCode(code)}|${p === KK_PO_BLANK ? '' : p}`)?.qty || 0;
+  }
+
+  /** Web còn PO này chỉ vì PXK chưa Done: LinkQ đã trừ xuất, web chưa scan → tồn web của mã + PO ≤ lượng PXK chưa xuất. */
+  private isKkPoExplainedByPxk(m: InventoryMaterial, webByKey: Map<string, number>): boolean {
+    const pending = this.kkPoCmpPendingOf(m.materialCode, m.poNumber);
+    if (!(pending > 0)) return false;
+    const web = webByKey.get(`${kkPoCmpCode(m.materialCode)}|${kkPoCmpPo(m.poNumber)}`) || 0;
+    return web <= pending + 0.001;
+  }
+
+  /** Không tính vào Dư sai: dòng ở Kho NG hoặc trạng thái QC Chờ kiểm / NG. */
+  protected isKkPoSurplusExcluded(m: InventoryMaterial): boolean {
+    if (this.isKkNgLine(m)) return true;
+    const qc = String((m as any)?.iqcStatus || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd').toUpperCase().trim();
+    return qc.includes('CHO KIEM') || /\bNG\b/.test(qc);
+  }
+
+  /** QC / IQC = NG: trang Kiểm kê (Quản lý NL) không tính vào box / mục và không hiện khi mở. */
+  protected isKkQcNgData(data: any): boolean {
+    const qc = String(data?.iqcStatus || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[đĐ]/g, 'd').toUpperCase().trim();
+    return /\bNG\b/.test(qc);
+  }
+
+  /** Dòng tồn nằm ở Kho NG (vị trí NG…). */
+  protected isKkNgLine(m: InventoryMaterial): boolean {
+    const loc = String(m?.location ?? (m as any)?.viTri ?? '');
+    const tokens = splitMultiLocations(loc);
+    return (tokens.length ? tokens : [loc]).some((t) => this.locationMatchesViewWarehouse(t, 'NG'));
+  }
+
+  /** Tổng Tồn cuối kỳ của mã trong file LinkQ (null = file import cũ chưa có lượng). */
+  private kkPoCmpLinkqTotal(code: string): number | null {
+    const data = this.kkPoCmp;
+    const pos = data?.byCode.get(code);
+    if (!data || !pos) return null;
+    let sum = 0;
+    for (const po of pos) {
+      const q = data.qtyByKey.get(`${code}|${po}`);
+      if (q == null) return null;
+      sum += q;
+    }
+    return Math.round(sum * 10000) / 10000;
+  }
+
+  /**
+   * PO dư sai — có thể xóa: web có PO, LinkQ không; không có PXK chưa xuất của mã + PO;
+   * tồn web của PO ≈ lệch tổng mã (tổng web − tổng LinkQ).
+   */
+  private isKkPoSurplus(m: InventoryMaterial, webByKey: Map<string, number>, webByCode: Map<string, number>): boolean {
+    const code = kkPoCmpCode(m.materialCode);
+    const po = kkPoCmpPo(m.poNumber);
+    if (!this.isKkPoMismatch(m)) return false;
+    if (this.kkPoCmpPendingOf(code, po) > 0) return false;
+    const linkq = this.kkPoCmpLinkqTotal(code);
+    if (linkq == null) return false;
+    const webPo = webByKey.get(`${code}|${po}`) || 0;
+    const diff = (webByCode.get(code) || 0) - linkq;
+    if (!(webPo > 0)) return false;
+    return Math.abs(webPo - diff) <= Math.max(0.01, webPo * 0.001);
+  }
+
+  toggleKkPoCmpSurplus(): void {
+    this.kkPoCmpSurplusOnly = !this.kkPoCmpSurplusOnly;
+    this.onKkPoCmpChanged();
+  }
+
+  /** Excel các dòng dư sai — xem trước khi ẩn. */
+  async exportKkPoCmpSurplus(): Promise<void> {
+    const rows = this.kkPoCmpSurplusRows;
+    if (!rows.length) return;
+    const XLSX = await import('xlsx');
+    const webByCode = new Map<string, number>();
+    for (const m of this.kkTypeDetailAll) {
+      if (this.isKkPoSurplusExcluded(m)) continue;
+      const c = kkPoCmpCode(m.materialCode);
+      webByCode.set(c, (webByCode.get(c) || 0) + this.calculateCurrentStock(m));
+    }
+    const data = rows.map((m) => {
+      const code = kkPoCmpCode(m.materialCode);
+      const linkq = this.kkPoCmpLinkqTotal(code) || 0;
+      return {
+        'Mã hàng': code,
+        'Tên hàng': m.materialName || '',
+        'PO (web, không có trên LinkQ)': m.poNumber || '',
+        'IMD': this.getDisplayIMD(m),
+        'Vị trí': m.location || '',
+        'Tồn dòng này': this.calculateCurrentStock(m),
+        'Tổng web của mã (không tính kho NG)': Math.round((webByCode.get(code) || 0) * 10000) / 10000,
+        'Tổng LinkQ của mã': linkq,
+        'Lệch (web − LinkQ)': Math.round(((webByCode.get(code) || 0) - linkq) * 10000) / 10000,
+        'PO trên LinkQ': this.kkPoCmpFilePos(m)
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'PO du sai');
+    XLSX.writeFile(wb, `PO_du_sai_${this.selectedFactory}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  /** Ẩn hàng loạt các dòng dư sai (vào Danh mục Ẩn 30 ngày — khôi phục được). */
+  async hideKkPoCmpSurplus(): Promise<void> {
+    const rows = this.kkPoCmpSurplusRows.filter((m) => !!m.id && m.factory === this.selectedFactory);
+    if (!rows.length || this.kkPoCmpSurplusBusy) return;
+    if (!this.canDelete) {
+      appAlert('❌ Bạn không có quyền Xóa / Ẩn. Liên hệ admin để được cấp quyền.');
+      return;
+    }
+    const total = rows.reduce((s, m) => s + this.calculateCurrentStock(m), 0);
+    const sample = rows.slice(0, 10).map((m) => `• ${m.materialCode} · PO ${m.poNumber} · ${this.formatNumber(this.calculateCurrentStock(m))}`).join('\n');
+    if (!confirm(
+      `Ẩn ${rows.length} dòng PO dư sai (tổng ${this.formatNumber(total)}) khỏi ${this.selectedFactory} Inventory?\n\n` +
+      `${sample}${rows.length > 10 ? '\n…' : ''}\n\n` +
+      `Các dòng vào danh mục Ẩn (More), tự xóa sau ${this.hiddenRetentionDays} ngày — khôi phục được trong thời gian đó.\nNên tải Excel xem trước.`
+    )) return;
+    this.kkPoCmpSurplusBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const ids = rows.map((m) => m.id!) ;
+      const n = await this.hideInventoryDocsByIds(ids, 'po-surplus');
+      this.removeInventoryByIds(new Set(ids));
+      this.invalidateKkTypeViewCache();
+      appAlert(`✅ Đã ẩn ${n} / ${rows.length} dòng PO dư sai. Xem lại trong More → Danh mục Ẩn.`);
+    } catch (e: any) {
+      appAlert('❌ Lỗi khi ẩn: ' + (e?.message || e));
+    } finally {
+      this.kkPoCmpSurplusBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private kkPoCmpPendingFactory = '';
+
+  protected loadKkPoCmpPending(): void {
+    const factory = this.selectedFactory;
+    if (this.kkPoCmpPending && this.kkPoCmpPendingFactory === factory) return;
+    this.kkPoCmpPending = null;
+    this.linkQPendingPxkSvc.loadByPo(factory)
+      .then((map) => {
+        if (this.selectedFactory !== factory) return;
+        this.kkPoCmpPending = map;
+        this.kkPoCmpPendingFactory = factory;
+        // Popup mở trước khi PXK đọc xong → tính lại để có cột PXK chưa xuất
+        if (this.kkPoCmpDetail && this.kkPoCmpDetailSrc) this.openKkPoCmpDetail(this.kkPoCmpDetailSrc);
+      })
+      .catch((e) => { console.warn('So sánh PO: không đọc được PXK chưa xuất', e); this.kkPoCmpPending = new Map(); })
+      .finally(() => this.cdr.detectChanges());
+  }
+
+  /** Mã có trong file tuổi hàng nhưng PO của dòng tồn này không có trong file (không so IMD). */
+  isKkPoMismatch(m: InventoryMaterial): boolean {
+    const set = this.kkPoCmp?.byCode.get(kkPoCmpCode(m.materialCode));
+    return !!set && !set.has(kkPoCmpPo(m.poNumber));
+  }
+
+  /** PO của mã trong file (tooltip). */
+  kkPoCmpFilePos(m: InventoryMaterial): string {
+    const set = this.kkPoCmp?.byCode.get(kkPoCmpCode(m.materialCode));
+    return set ? Array.from(set).sort().join(', ') : '';
+  }
+
+  /** Công cụ → So sánh PO: chưa ở bảng xem toàn bộ thì mở "Xem toàn bộ tất cả mục" rồi bật so sánh. */
+  async kkPoCompareFromMenu(): Promise<void> {
+    if (!this.kkAllStockDetail && !this.kkMucAllDetail) {
+      this.openKkAllMucsForPoCmp();
+      if (!this.kkMucAllDetail) {
+        appAlert('Chưa có danh sách box KK — bấm Đọc toàn kho trước.');
+        return;
+      }
+      if (this.kkPoCmpOn) return;
+    }
+    await this.toggleKkPoCompare();
+  }
+
+  /** Bấm mã (đang So sánh PO): so toàn bộ PO của mã ở web (tồn từng PO) và LinkQ (Tồn cuối kỳ trong file). */
+  /** Dòng đang mở popup — PXK đọc xong thì tính lại popup. */
+  private kkPoCmpDetailSrc: InventoryMaterial | null = null;
+
+  openKkPoCmpDetail(m: InventoryMaterial): void {
+    if (!this.kkPoCmpActive || !this.kkPoCmp) return;
+    this.kkPoCmpDetailSrc = m;
+    const code = kkPoCmpCode(m.materialCode);
+    const web = this.kkTypeDetailAll
+      .filter((x) => kkPoCmpCode(x.materialCode) === code)
+      .map((x) => ({ po: x.poNumber, stock: this.calculateCurrentStock(x) }));
+    const lsxText = (info?: PendingPxkPo) =>
+      (info?.lsx || []).map((x) => `${x.lsx} (${this.formatNumber(x.qty)})`).join(', ');
+    const linkqTotal = this.kkPoCmpLinkqTotal(code);
+    // Dư sai không tính kho NG
+    const okLines = this.kkTypeDetailAll.filter((x) => kkPoCmpCode(x.materialCode) === code && !this.isKkPoSurplusExcluded(x));
+    const webTotalAll = okLines.reduce((s, x) => s + this.calculateCurrentStock(x), 0);
+    const okByPo = new Map<string, number>();
+    okLines.forEach((x) => okByPo.set(kkPoCmpPo(x.poNumber) || '—', (okByPo.get(kkPoCmpPo(x.poNumber) || '—') || 0) + this.calculateCurrentStock(x)));
+    const rows = buildKkPoCmpDetail(code, web, this.kkPoCmp).map((r) => {
+      const info = this.kkPoCmpPending?.get(`${code}|${r.po}`);
+      const pxk = info?.qty || 0;
+      const okWeb = okByPo.get(r.po) || 0;
+      const surplus = okWeb > 0 && !r.inLinkq && !(pxk > 0) && linkqTotal != null
+        && Math.abs(okWeb - (webTotalAll - linkqTotal)) <= Math.max(0.01, okWeb * 0.001);
+      return { ...r, pxk, pxkLsx: lsxText(info), surplus };
+    });
+    // PO chỉ có trên PXK chưa xuất (không có ở web lẫn LinkQ)
+    this.kkPoCmpPending?.forEach((info, key) => {
+      if (!key.startsWith(code + '|')) return;
+      const po = key.slice(code.length + 1) || '—';
+      if (rows.some((r) => r.po === po)) return;
+      rows.push({ po, web: null, webLines: 0, inLinkq: false, linkq: null, pxk: info.qty, pxkLsx: lsxText(info), surplus: false });
+    });
+    const sum = (arr: number[]) => Math.round(arr.reduce((a, b) => a + b, 0) * 10000) / 10000;
+    const linkqKnown = rows.every((r) => !r.inLinkq || r.linkq != null);
+    this.kkPoCmpDetail = {
+      code,
+      name: String(m.materialName || ''),
+      rows,
+      webTotal: sum(rows.map((r) => r.web || 0)),
+      linkqTotal: linkqKnown ? sum(rows.map((r) => r.linkq || 0)) : null
+    };
+  }
+
+  /** Lớp con mở "Xem toàn bộ tất cả mục". */
+  protected openKkAllMucsForPoCmp(): void {}
+
+  /** Lớp con (trang Quản lý NL) về trang 1 của bảng khi bật/tắt So sánh PO. */
+  protected onKkPoCmpChanged(): void {}
+
+  private kkPoCmpDocRef() {
+    return this.firestore.firestore.collection(KK_PO_CMP_COLLECTION).doc(this.selectedFactory);
+  }
+
+  protected async loadKkPoCmp(): Promise<void> {
+    const snap = await this.kkPoCmpDocRef().get();
+    const d = (snap.exists ? snap.data() : null) as any;
+    const pairs: string[] = Array.isArray(d?.pairs) ? d.pairs.map((x: unknown) => String(x)) : [];
+    this.kkPoCmpFactory = this.selectedFactory;
+    this.kkPoCmpPending = null;
+    this.kkPoCmp = pairs.length ? {
+      fileName: String(d?.fileName || ''),
+      importedAt: this.normalizeTimestamp(d?.importedAt),
+      importedBy: String(d?.importedBy || ''),
+      byCode: buildKkPoCmpIndex(pairs),
+      pairCount: pairs.length,
+      qtyByKey: buildKkPoCmpQty(pairs, d?.qtys)
+    } : null;
+  }
+
+  /** Nút So sánh PO: bật/tắt lọc; chưa có file thì mở chọn file import. */
+  async toggleKkPoCompare(): Promise<void> {
+    if (this.kkPoCmpOn) {
+      this.kkPoCmpOn = false;
+      this.onKkPoCmpChanged();
+      return;
+    }
+    this.kkPoCmpBusy = true;
+    this.cdr.detectChanges();
+    try {
+      if (!this.kkPoCmp || this.kkPoCmpFactory !== this.selectedFactory) await this.loadKkPoCmp();
+    } catch (e: any) {
+      appAlert('❌ Không đọc được file tuổi hàng đã import: ' + (e?.message || e));
+    } finally {
+      this.kkPoCmpBusy = false;
+    }
+    if (!this.kkPoCmp) {
+      this.importKkPoCompare();
+      return;
+    }
+    this.kkPoCmpOn = true;
+    this.loadKkPoCmpPending();
+    this.onKkPoCmpChanged();
+    this.cdr.detectChanges();
+  }
+
+  importKkPoCompare(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (ev: Event) => {
+      const file = (ev.target as HTMLInputElement)?.files?.[0];
+      if (file) void this.processKkPoCompareFile(file);
+    };
+    input.click();
+  }
+
+  /** File tuổi hàng: Mã vật tư + Số PO (+ Mã kho), dữ liệu từ dòng 7, bỏ kho NVL_KS. Lưu theo nhà máy. */
+  private async processKkPoCompareFile(file: File): Promise<void> {
+    this.kkPoCmpBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' }) as unknown[][];
+      const { pairs, qtys, skippedKs } = parseKkPoCmpSheet(rows);
+      if (!pairs.length) {
+        appAlert('❌ File không có dòng Mã vật tư + Số PO nào (dữ liệu bắt đầu từ dòng 7).');
+        return;
+      }
+      const importedAt = new Date();
+      await this.kkPoCmpDocRef().set({
+        fileName: file.name,
+        importedAt,
+        importedBy: this.currentEmployeeId || '',
+        pairs,
+        qtys
+      });
+      this.kkPoCmpFactory = this.selectedFactory;
+      this.kkPoCmp = {
+        fileName: file.name,
+        importedAt,
+        importedBy: this.currentEmployeeId || '',
+        byCode: buildKkPoCmpIndex(pairs),
+        pairCount: pairs.length,
+        qtyByKey: buildKkPoCmpQty(pairs, qtys)
+      };
+      this.kkPoCmpOn = true;
+      this.loadKkPoCmpPending();
+      if (!this.kkAllStockDetail && !this.kkMucAllDetail) this.openKkAllMucsForPoCmp();
+      this.onKkPoCmpChanged();
+      appAlert(`✅ Đã import ${pairs.length} cặp Mã + PO (${this.kkPoCmp.byCode.size} mã)` + (skippedKs ? ` · bỏ ${skippedKs} dòng kho NVL_KS` : '') + '.');
+    } catch (e: any) {
+      appAlert('❌ Không import được file tuổi hàng: ' + (e?.message || e));
+    } finally {
+      this.kkPoCmpBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   protected thDocRef() {
     return this.firestore.firestore.collection('tieu-huy-check').doc(this.selectedFactory);
   }
 
   /** Nút TH: mở bảng chi tiết như "Xem toàn bộ tất cả các mục", chỉ các mã trong danh sách tiêu hủy + cột TH. */
   kkThMode = false;
+  /** Mục Week: chỉ các dòng tồn có Week (nhập ở Inbound). */
+  kkWeekMode = false;
   private thItemByCode = new Map<string, { code: string; qty: number; option: '' | 'co' | 'khong-co' | 'thieu'; actualQty: number | null }>();
 
   thItemOf(code: unknown): { code: string; qty: number; option: '' | 'co' | 'khong-co' | 'thieu'; actualQty: number | null } | null {
@@ -2579,7 +3124,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const qty = this.parseTieuHuyQty(row?.[1]) || 0;
         byCode.set(code, Math.round(((byCode.get(code) || 0) + qty) * 10000) / 10000);
       }
-      if (!byCode.size) { alert('File không có mã nào (cột A = Mã, cột B = Lượng tiêu hủy).'); return; }
+      if (!byCode.size) { appAlert('File không có mã nào (cột A = Mã, cột B = Lượng tiêu hủy).'); return; }
       if (this.thItems.length && !confirm(`Thay danh sách hiện tại (${this.thItems.length} mã) bằng file mới (${byCode.size} mã)?\nKết quả Tùy chọn / Lượng hàng cũ sẽ mất.`)) return;
       const by = await this.resolveLocationOperatorId().catch(() => '');
       this.thItems = Array.from(byCode.entries()).map(([code, qty]) => ({ code, qty, option: '' as const, actualQty: null }));
@@ -2596,7 +3141,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.loadThStock();
     } catch (e: any) {
       console.error('❌ import tiêu hủy:', e);
-      alert('❌ Không import được file: ' + (e?.message || e));
+      appAlert('❌ Không import được file: ' + (e?.message || e));
     } finally {
       this.cdr.detectChanges();
     }
@@ -2624,7 +3169,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     } catch (e: any) {
-      alert('❌ Không lưu được: ' + (e?.message || e));
+      appAlert('❌ Không lưu được: ' + (e?.message || e));
     }
   }
 
@@ -2637,7 +3182,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.thStock = new Map();
       this.thMeta = { fileName: '', importedAt: null, importedBy: '' };
     } catch (e: any) {
-      alert('❌ Không xóa được: ' + (e?.message || e));
+      appAlert('❌ Không xóa được: ' + (e?.message || e));
     } finally {
       this.cdr.detectChanges();
     }
@@ -2679,7 +3224,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async exportThCheck(): Promise<void> {
     const rows = this.thFiltered;
-    if (!rows.length) { alert('Không có dòng nào để tải.'); return; }
+    if (!rows.length) { appAlert('Không có dòng nào để tải.'); return; }
     const XLSX = await import('xlsx');
     const label = (v: string) => this.thOptions.find((o) => o.value === v)?.label || '';
     const data = rows.map((x, i) => {
@@ -2719,10 +3264,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const pack = await this.getLinkQPackCached(false);
       this.invLinkQMap = pack.map;
       this.invLinkQLabel = pack.label;
-      if (!pack.map.size) alert(`Chưa có file LinkQ cho ${this.selectedFactory}. Import file LinkQ ở tab Inventory Overview.`);
+      if (!pack.map.size) appAlert(`Chưa có file LinkQ cho ${this.selectedFactory}. Import file LinkQ ở tab Inventory Overview.`);
       this.invLinkQOn = pack.map.size > 0;
     } catch (e: any) {
-      alert('❌ Không đọc được LinkQ: ' + (e?.message || e));
+      appAlert('❌ Không đọc được LinkQ: ' + (e?.message || e));
     } finally {
       this.invLinkQLoading = false;
       this.cdr.markForCheck();
@@ -2946,6 +3491,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.matrixSub?.();
     this.matrixSub = null;
     window.removeEventListener('storage', this.onNvlCatalogStorage);
+    if (this.adoptNewerTimer) clearTimeout(this.adoptNewerTimer);
     this.stopScanning();
     this.stopKkLive();
     if (this.kkScanOpTimer) {
@@ -2998,6 +3544,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   protected inventoryLocationWriteFields(location: string): Record<string, unknown> {
+    location = stripJ5Prefix(location);
     return { location, viTri: location };
   }
 
@@ -3161,11 +3708,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (duplicateGroups.length > 0) {
           console.log(`⚠️ Found ${duplicateGroups.length} duplicate groups, auto-consolidating...`);
           
-          // Gộp dòng tự động khi load toàn bộ inventory
-          this.autoConsolidateOnLoad().then(() => {
-            // Tiếp tục xử lý sau khi gộp xong
-            this.continueAfterConsolidation();
-          });
+          // KHÔNG tự gộp + xóa dòng trên Firestore nữa (05/11/2026): gộp mã + PO làm mất lô theo IMD
+          // (tem lẻ / lịch sử bịch theo IMD). Chỉ gộp hiển thị tại chỗ.
+          this.consolidateInventoryData();
+          this.continueAfterConsolidation();
         } else {
           console.log('✅ No duplicate groups found, proceeding with normal flow...');
           // Gộp dòng bình thường (chỉ local)
@@ -3215,7 +3761,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const codes = this.parseSnapshotMaterialCodesInput(this.snapshotMaterialCodesText);
     if (codes.length === 0) {
-      alert('Vui lòng nhập ít nhất một mã hàng (mỗi dòng hoặc cách bằng dấu phẩy).');
+      appAlert('Vui lòng nhập ít nhất một mã hàng (mỗi dòng hoặc cách bằng dấu phẩy).');
       return;
     }
     const ok = confirm(
@@ -3236,14 +3782,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           : '';
       const codesLine =
         r.requestedCodes != null ? `\n• Đã chọn ${r.requestedCodes} mã (khác nhau).` : '';
-      alert(
+      appAlert(
         `✅ Đã ghi ${r.written} dòng TỒN vào rm-bag-history.\n` +
           `Bỏ qua ${r.skipped} dòng (không còn tồn bịch, không có mã, hoặc không đủ dữ liệu ước).${derivedLine}${codesLine}\n` +
           `Đợt: ${r.resetId}`
       );
     } catch (e: any) {
       console.error('[materials] snapshot TỒN:', e);
-      alert(`❌ Lỗi: ${e?.message || String(e)}`);
+      appAlert(`❌ Lỗi: ${e?.message || String(e)}`);
     } finally {
       this.isSnapshottingBagHistory = false;
       this.cdr.markForCheck();
@@ -3328,8 +3874,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return baseDate;
   }
 
-  /** Standard Packing: đọc Danh mục NVL; chỉ fallback dòng tồn kho khi catalog chưa có. */
+  /** Standard Packing của dòng tồn: Standard của lô (PO) nếu có → Danh mục NVL → field cũ trên dòng tồn. */
   getEffectiveStandardPacking(material: InventoryMaterial): number {
+    const lot = Number(material?.lotStandardPacking);
+    if (lot > 0 && Number.isFinite(lot)) return lot;
     const fromCatalog = this.getStandardPacking(material.materialCode);
     if (fromCatalog > 0) return fromCatalog;
     const row = Number(material.standardPacking);
@@ -3479,7 +4027,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.denyAction('xt')) return;
     event?.stopPropagation();
     if (this.isXtLockedFor(material)) {
-      alert('🔒 XT đang khóa ở ASM1.\nMở khóa trong More → "Mở khóa XT ASM1" (mã Zalo gửi ASP0106).');
+      appAlert('🔒 XT đang khóa ở ASM1.\nMở khóa trong More → "Mở khóa XT ASM1" (mã Zalo gửi ASP0106).');
       return;
     }
     this.showBagStatusPopup = false;
@@ -3865,18 +4413,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (updateCount > 0) {
         await batch.commit();
         console.log(`✅ Fixed ${updateCount} problematic batchNumbers`);
-        alert(`✅ Đã sửa ${updateCount} batchNumber có format không đúng!`);
+        appAlert(`✅ Đã sửa ${updateCount} batchNumber có format không đúng!`);
         
         // Refresh data
         this.loadInventoryFromFirebase();
       } else {
         console.log('ℹ️ No problematic batchNumbers found');
-        alert('Không tìm thấy batchNumber nào cần sửa');
+        appAlert('Không tìm thấy batchNumber nào cần sửa');
       }
       
     } catch (error) {
       console.error('❌ Error fixing batchNumbers:', error);
-      alert('❌ Lỗi khi sửa batchNumbers. Vui lòng thử lại.');
+      appAlert('❌ Lỗi khi sửa batchNumbers. Vui lòng thử lại.');
     } finally {
       this.isLoading = false;
     }
@@ -3887,6 +4435,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   private static readonly CATALOG_IDB_NAME = 'asm-materials-cache';
   private static readonly CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
   private static readonly CATALOG_LS_MAX_CHARS = 3_200_000;
+  /** Mã đã tra danh mục mà không có — bỏ qua trong phiên (tránh đọc Firestore lặp lại). */
+  private static readonly catalogMissCodes = new Set<string>();
 
   private catalogTodayKey(): string {
     const d = new Date();
@@ -4133,7 +4683,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.hydrateCatalogFromDisk();
     }
     const unique = [...new Set(codes.map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
-    const missing = unique.filter(c => !this.catalogCache.has(c));
+    const missing = unique.filter(c => !this.catalogCache.has(c) && !MaterialsComponent.catalogMissCodes.has(c));
     if (missing.length === 0) {
       this.catalogLoaded = this.catalogCache.size > 0;
       return;
@@ -4148,7 +4698,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           ref.where('materialCode', '==', code).limit(1)
         ).get().toPromise();
         reads += q?.docs?.length || 0;
-        if (q && !q.empty) this.ingestCatalogDoc(q.docs[0]);
+        if (q && !q.empty && this.ingestCatalogDoc(q.docs[0])) return;
+        // Mã không có trong danh mục (hoặc thiếu tên) → không đọc lại mỗi lần đổi trang trong phiên này
+        MaterialsComponent.catalogMissCodes.add(code);
       } catch (e) {
         console.warn('[ASM1] ensureCatalogForMaterialCodes:', code, e);
       }
@@ -4184,7 +4736,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.consolidationMessage = `✅ Đã cập nhật danh mục NVL (${this.catalogCache.size} mã) — cột Standard Packing đã làm mới`;
     this.showConsolidationMessage = true;
     if (this.showKkLocMap) {
-      alert(this.consolidationMessage);
+      appAlert(this.consolidationMessage);
     }
     this.cdr.detectChanges();
   }
@@ -4341,10 +4893,30 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.catalogLoaded && this.catalogLoadedDateKey === this.catalogTodayKey() && !this.nvlCatalogIsNewer();
   }
 
+  private adoptNewerTimer: ReturnType<typeof setTimeout> | null = null;
+  private adoptNewerBusy = false;
+
   /** Áp Standard Packing vừa sửa ở Danh mục NVL lên bảng tồn, không đọc lại cả collection. */
-  private async adoptNewerNvlCatalog(): Promise<void> {
-    if (!this.nvlCatalogIsNewer()) return;
+  private adoptNewerNvlCatalog(): void {
+    // Gộp nhiều tín hiệu liên tiếp (storage event / changed$) thành 1 lần xử lý.
+    if (this.adoptNewerTimer) clearTimeout(this.adoptNewerTimer);
+    this.adoptNewerTimer = setTimeout(() => {
+      this.adoptNewerTimer = null;
+      void this.doAdoptNewerNvlCatalog();
+    }, 1500);
+  }
+
+  private async doAdoptNewerNvlCatalog(): Promise<void> {
+    if (this.adoptNewerBusy || !this.nvlCatalogIsNewer()) return;
+    this.adoptNewerBusy = true;
     try {
+      // Tab này chưa nạp danh mục đầy đủ trong service (trang Materials dùng cache riêng):
+      // chỉ tải các mã vừa sửa, không đọc lại ~10.000 mã.
+      if (!this.nvlCatalogFull.peekCached() && this.catalogCache.size > 0) {
+        this.catalogSourceTs = this.nvlCatalogFull.readCacheTimestamp() || Date.now();
+        await this.syncCatalogRemoteChanges();
+        return;
+      }
       const items = await this.nvlCatalogFull.listAll(false);
       if (!items.length) return;
       this.fillCatalogCacheFromNvlItems(items);
@@ -4357,6 +4929,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.detectChanges();
     } catch (e) {
       console.warn('adoptNewerNvlCatalog:', e);
+    } finally {
+      this.adoptNewerBusy = false;
     }
   }
 
@@ -4893,6 +5467,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       kkBy: data.kkBy || '',
       kkAt: data.kkAt || null,
       kkScanCount: Math.max(0, Number(data.kkScanCount) || 0),
+      kkScanQty: Math.max(0, Number(data.kkScanQty) || 0),
+      week: String(data.week || '').trim(),
+      weekFormat: data.weekFormat === 'MMYY' ? 'MMYY' : 'YYWW',
       kkOriginLocation: String(data.kkOriginLocation || '').trim().toUpperCase(),
       locationScannedAt: this.normalizeTimestamp(data.locationScannedAt)
     } as InventoryMaterial;
@@ -4904,6 +5481,18 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const tokens = splitMultiLocations(String(data?.location ?? data?.viTri ?? ''));
     if (!tokens.length) return false;
     return tokens.some((loc) => this.locationMatchesGroup(loc, normalizedLocation));
+  }
+
+  /** Dòng có đúng vị trí đã nhập (so chữ + số, bỏ dấu - . và tiền tố WH3/ASM3). */
+  private docMatchesExactLocation(data: any, normalizedLocation: string): boolean {
+    const want = this.locationCompact(normalizedLocation);
+    const wantBody = this.locationAlnum(normalizedLocation);
+    if (!want) return false;
+    const tokens = splitMultiLocations(String(data?.location ?? data?.viTri ?? ''));
+    return tokens.some((loc) => {
+      const c = this.locationCompact(loc);
+      return c === want || (!!wantBody && this.locationAlnum(loc) === wantBody && this.isWh3SearchTerm(normalizedLocation) === isAsm3OrWh3PrefixLocation(loc));
+    });
   }
 
   private locationCompact(loc: string): string {
@@ -5150,7 +5739,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const m = this.invShelfPickMaterial;
     if (!m?.id || this.invShelfPickSaving) return;
     if (!this.canEditInvLocation()) {
-      alert('Cần quyền sửa vị trí.');
+      appAlert('Cần quyền sửa vị trí.');
       return;
     }
     this.invShelfPickSaving = true;
@@ -5263,7 +5852,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const parts = this.locationParts(m.location);
     const selected = parts.filter((t) => this.invLocListSelected[this.invLocListKey(t)]);
     if (!selected.length) {
-      alert('Tick ít nhất một vị trí để xóa.');
+      appAlert('Tick ít nhất một vị trí để xóa.');
       return;
     }
     const labels = selected.map((t) => this.displayLocationToken(t)).join(', ');
@@ -5285,7 +5874,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const parts = this.locationParts(m.location);
     const wrong = parts.filter((t) => this.isKkDisposableLocation(t));
     if (!wrong.length) {
-      alert('Không có vị trí sai để xóa.\n(Giữ lại: Locker/Box và S/R dạng S03-3-4, R10-1…)');
+      appAlert('Không có vị trí sai để xóa.\n(Giữ lại: Locker/Box và S/R dạng S03-3-4, R10-1…)');
       return;
     }
     const labels = wrong.map((t) => this.displayLocationToken(t)).join(', ');
@@ -5320,7 +5909,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         });
       });
     } else {
-      alert('Không lưu được. Thử lại hoặc kiểm tra quyền sửa vị trí.');
+      appAlert('Không lưu được. Thử lại hoặc kiểm tra quyền sửa vị trí.');
     }
     this.cdr.detectChanges();
   }
@@ -5329,7 +5918,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openBulkDisposableLocPicker(): void {
     if (!this.canEditInvLocation()) {
-      alert('Cần quyền sửa vị trí để dọn hàng loạt.');
+      appAlert('Cần quyền sửa vị trí để dọn hàng loạt.');
       return;
     }
     this.showBulkDisposableLocPicker = true;
@@ -5426,7 +6015,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.bulkDisposableLocSelected = sel;
     } catch (e) {
       console.error('[Dọn vị trí sai] scan failed', e);
-      alert('Không quét được inventory. Thử lại.');
+      appAlert('Không quét được inventory. Thử lại.');
     } finally {
       this.bulkDisposableLocBusy = false;
       this.cdr.detectChanges();
@@ -5439,14 +6028,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       Object.keys(this.bulkDisposableLocSelected).filter((k) => this.bulkDisposableLocSelected[k])
     );
     if (!selectedKeys.size) {
-      alert('Tick ít nhất một vị trí để xóa hàng loạt.');
+      appAlert('Tick ít nhất một vị trí để xóa hàng loạt.');
       return;
     }
     const affected = Array.from(this.bulkDisposableLocMaterialMap.values()).filter((m) =>
       this.locationParts(m.location).some((t) => selectedKeys.has(this.invLocListKey(t)))
     );
     if (!affected.length) {
-      alert('Khong co dong nao chua vi tri da chon.');
+      appAlert('Khong co dong nao chua vi tri da chon.');
       return;
     }
     const tokenLabels = this.bulkDisposableLocRows
@@ -5529,11 +6118,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           if (mapRow) mapRow.location = p.location;
         }
       }
-      alert(`✅ Đã xóa vị trí sai trên ${okCount} dòng.${errCount ? `\n⚠ Lỗi: ${errCount}` : ''}`);
+      appAlert(`✅ Đã xóa vị trí sai trên ${okCount} dòng.${errCount ? `\n⚠ Lỗi: ${errCount}` : ''}`);
       await this.scanBulkDisposableLocations();
     } catch (e) {
       console.error('[Dọn vị trí sai] apply failed', e);
-      alert('Lỗi khi xóa hàng loạt. Một phần có thể đã lưu — quét lại danh sách.');
+      appAlert('Lỗi khi xóa hàng loạt. Một phần có thể đã lưu — quét lại danh sách.');
       await this.scanBulkDisposableLocations();
     } finally {
       this.bulkDisposableLocBusy = false;
@@ -5562,7 +6151,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Chuẩn hóa trước khi lưu: UPPER từng token, nối bằng xuống dòng. */
   protected normalizeMultiLocationValue(raw: string): string {
     return joinMultiLocations(
-      splitMultiLocations(raw).map((t) => {
+      splitMultiLocations(stripJ5Prefix(raw)).map((t) => {
         const token = String(t || '').trim().toUpperCase();
         if (!token) return '';
         const bare = this.stripDoiKhoWhPrefix(token);
@@ -5650,15 +6239,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.searchProgress = 70;
         const seen = new Set<string>();
         const filtered: any[] = [];
+        const exact: any[] = [];
         for (const snap of snaps) {
           for (const doc of snap?.docs || []) {
             if (seen.has(doc.id)) continue;
             if (!this.docMatchesLocationSearch(doc.data(), normalizedLocation)) continue;
             seen.add(doc.id);
             filtered.push(doc);
+            if (this.docMatchesExactLocation(doc.data(), normalizedLocation)) exact.push(doc);
           }
         }
-        querySnapshot = { docs: filtered, empty: filtered.length === 0 } as any;
+        // Có dòng đúng y vị trí đã nhập → chỉ hiện vị trí đó; không có (VD gõ nhóm "D12", "IQC") → hiện cả nhóm
+        const picked = exact.length ? exact : filtered;
+        querySnapshot = { docs: picked, empty: picked.length === 0 } as any;
       } else if (this.searchByCustomer) {
         const term = searchTerm.trim().toUpperCase();
         console.log(`🔍 ASM1 Searching by customer (Danh mục NVLKH): "${term}"`);
@@ -6289,7 +6882,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
         const validation = this.excelImportService.validateFile(file);
         if (!validation.valid) {
-          alert(validation.message);
+          appAlert(validation.message);
           return;
         }
 
@@ -6313,7 +6906,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           
         } catch (error) {
           console.error('Import error:', error);
-          alert(`❌ Lỗi import: ${error}`);
+          appAlert(`❌ Lỗi import: ${error}`);
         }
       };
       
@@ -6321,7 +6914,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       
     } catch (error) {
       console.error('Error setting up file input:', error);
-      alert('Có lỗi xảy ra khi mở file picker');
+      appAlert('Có lỗi xảy ra khi mở file picker');
     }
   }
 
@@ -6372,7 +6965,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       message += `\n⚠️ Có ${result.errors.length} lỗi xảy ra`;
     }
 
-    alert(message);
+    appAlert(message);
 
     // Show detailed errors if any
     if (result.errors.length > 0) {
@@ -6382,7 +6975,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         ? `Chi tiết lỗi:\n${result.errors.join('\n')}`
         : `Có ${result.errors.length} lỗi. Xem console để biết chi tiết.\n\nLỗi đầu tiên:\n${result.errors.slice(0, 5).join('\n')}`;
       
-      alert(`⚠️ ${errorMessage}`);
+      appAlert(`⚠️ ${errorMessage}`);
     }
   }
 
@@ -6460,7 +7053,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.detectChanges();
     } catch (e) {
       console.error('editKkEmployeeName:', e);
-      alert('❌ Không lưu được tên.');
+      appAlert('❌ Không lưu được tên.');
     }
   }
 
@@ -6997,7 +7590,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const n = this.ganPalletPending.length;
       this.ganPalletBusy = false;
       this.closeGanPallet();
-      alert(ok ? `✅ Đã gán pallet ${ok}/${n} dòng.` : '❌ Không lưu được dòng nào.');
+      appAlert(ok ? `✅ Đã gán pallet ${ok}/${n} dòng.` : '❌ Không lưu được dòng nào.');
     } catch (e) {
       console.error('❌ saveGanPalletPending', e);
       this.ganPalletBusy = false;
@@ -7189,7 +7782,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Dòng tồn khớp ô tìm hoặc ngày scan vị trí — không dựng cả danh sách khi chưa chọn gì. */
   private kkAllStockDetailLines(): InventoryMaterial[] {
     const q = this.kkAllStockSearch();
-    if (!q) return [];
+    // So sánh PO: không cần gõ tìm — lấy mọi dòng tồn của mã có trong file tuổi hàng
+    const poCmp = this.kkPoCmpActive ? this.kkPoCmp : null;
+    if (!q && !poCmp) return [];
     if (this.kkLocScanDay && !this.kkLocScanReady) return [];
 
     const range = this.kkLocScanDay ? this.kkLocScanRange(this.kkLocScanDay) : null;
@@ -7200,8 +7795,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       for (const m of list) {
         const id = String(m.id || '');
         if (id && seen.has(id)) continue;
-        if (q.code && !this.kkLineMatchesSearchQuery(m, q.code)) continue;
-        if (q.loc && !String(m.location || '').toUpperCase().includes(q.loc)) continue;
+        if (poCmp && !poCmp.byCode.has(kkPoCmpCode(m.materialCode))) continue;
+        if (q?.code && !this.kkLineMatchesSearchQuery(m, q.code)) continue;
+        if (q?.loc && !String(m.location || '').toUpperCase().includes(q.loc)) continue;
         if (range) {
           const scanned = !!(id && this.kkLocScanIds.has(id));
           const at = scanned ? null : this.normalizeTimestamp(m.locationScannedAt);
@@ -7584,8 +8180,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /** File LinkQ mới nhất + map tồn (cùng nguồn Overview). */
-  protected async loadKkKiemKeLinkQPack(): Promise<{ map: Map<string, number>; label: string }> {
+  protected async loadKkKiemKeLinkQPack(): Promise<LinkQPack> {
     const map = new Map<string, number>();
+    const po = new Map<string, Map<string, number>>();
     const put = (code: string, stock: unknown) => {
       const key = this.normalizeTieuHuyCode(code);
       if (!key) return;
@@ -7612,6 +8209,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (raw) {
         for (const [code, stock] of Object.entries(raw)) put(code, stock);
       }
+      const rawPo = (data?.linkQPoData || null) as Record<string, Record<string, unknown>> | null;
+      if (rawPo) {
+        for (const [code, byPo] of Object.entries(rawPo)) {
+          const key = this.normalizeTieuHuyCode(code);
+          if (!key || !byPo) continue;
+          const m = po.get(key) || new Map<string, number>();
+          for (const [p, q] of Object.entries(byPo)) m.set(String(p).trim().toUpperCase() || '—', Math.round(Number(q) || 0));
+          po.set(key, m);
+        }
+      }
       const ms = data?.uploadDate?.toMillis?.()
         || (data?.uploadDate?.seconds ? data.uploadDate.seconds * 1000 : 0)
         || 0;
@@ -7623,7 +8230,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e) {
       console.warn('[KK giấy kiểm kê] load LinkQ failed', e);
     }
-    return { map, label };
+    return { map, label, po };
   }
 
   /** Tem 57×32mm (cùng khổ Inbound) — chỉ tên nhóm hàng. */
@@ -7632,7 +8239,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!name) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
@@ -7700,7 +8307,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.detectChanges();
     } catch (e) {
       console.error('❌ saveHomeLoc:', e);
-      alert('❌ Không lưu được vị trí yêu cầu.');
+      appAlert('❌ Không lưu được vị trí yêu cầu.');
     }
   }
 
@@ -7728,8 +8335,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeFilterLoc,
       this.kkTypeFilterWh,
       this.kkTypeFilterRolls,
+      this.kkLastBagOnly ? 'LB' : '',
+      this.kkRecentExportAt,
       this.kkTypeSortQtyDesc ? 1 : 0,
+      this.kkTypeSortRollsDesc ? 1 : 0,
       this.kkTypeSortKkTimeDesc ? 1 : 0,
+      this.kkPoCmpOn && this.kkPoCmp ? `po:${this.kkPoCmp.pairCount}:${this.kkPoCmp.importedAt?.getTime() || 0}:${this.kkPoCmpPending?.size ?? -1}:${this.kkPoCmpSurplusOnly ? 1 : 0}` : '',
       this.kkCheckActive ? this.linkQCheckSet.size : 0,
       this.kkTypeInnerQuery,
       this.kkTypeWarnFilter,
@@ -7741,7 +8352,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkLocScanDay,
       this.kkLocScanReady ? 1 : 0,
       this.kkLocScanReq,
-      this.kkThMode ? 'TH' + this.thItems.length : ''
+      this.kkThMode ? 'TH' + this.thItems.length : '',
+      this.kkWeekMode ? 'WEEK' : ''
     ].join('|');
     if (sig === this.kkTypeDetailSig) return;
     this.kkTypeDetailSig = sig;
@@ -7758,9 +8370,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeDetailAllCached = this.kkTypeDetailLines(found);
     }
     // Mã đầu R / B033: không hiển thị, không kiểm
-    this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter((m) => !MaterialsComponent.isKkExcludedCode(m.materialCode));
+    this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter((m) => !MaterialsComponent.isKkExcludedCode(m.materialCode) && !this.isKkQcNgData(m));
     // Nút TH: chỉ các mã trong danh sách tiêu hủy
     if (this.kkThMode) this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter((m) => !!this.thItemOf(m.materialCode));
+    // Nút Week: chỉ dòng còn tồn kho và đã có Week
+    if (this.kkWeekMode) {
+      this.kkTypeDetailAllCached = this.kkTypeDetailAllCached.filter(
+        (m) => !!String(m.week || '').trim() && this.calculateCurrentStock(m) > 1e-6
+      );
+    }
     this.kkTypeDetailFilteredCached = this.buildKkTypeDetailFiltered(this.kkTypeDetailAllCached);
     let stock = 0;
     let checked = 0;
@@ -7781,11 +8399,37 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildKkTypeDetailFiltered(all: InventoryMaterial[]): InventoryMaterial[] {
     let rows = all;
+    if ((this.kkAllStockDetail || this.kkMucAllDetail) && this.kkPoCmpActive) {
+      const webByKey = new Map<string, number>();
+      for (const m of all) {
+        const k = `${kkPoCmpCode(m.materialCode)}|${kkPoCmpPo(m.poNumber)}`;
+        webByKey.set(k, (webByKey.get(k) || 0) + this.calculateCurrentStock(m));
+      }
+      const mismatch = rows.filter((m) => this.isKkPoMismatch(m));
+      rows = mismatch.filter((m) => !this.isKkPoExplainedByPxk(m, webByKey));
+      this.kkPoCmpPxkHidden = mismatch.length - rows.length;
+      // Dư sai: PO web không có trên LinkQ, không có PXK chưa xuất, tồn web của PO ≈ lệch tổng (web − LinkQ) của mã.
+      // Không tính kho NG (cả dòng ứng viên lẫn tổng web).
+      const okByKey = new Map<string, number>();
+      const okByCode = new Map<string, number>();
+      for (const m of all) {
+        if (this.isKkPoSurplusExcluded(m)) continue;
+        const c = kkPoCmpCode(m.materialCode);
+        const q = this.calculateCurrentStock(m);
+        okByKey.set(`${c}|${kkPoCmpPo(m.poNumber)}`, (okByKey.get(`${c}|${kkPoCmpPo(m.poNumber)}`) || 0) + q);
+        okByCode.set(c, (okByCode.get(c) || 0) + q);
+      }
+      const surplus = rows.filter((m) => !this.isKkPoSurplusExcluded(m) && this.isKkPoSurplus(m, okByKey, okByCode));
+      this.kkPoCmpSurplusRows = surplus;
+      this.kkPoCmpSurplusCount = surplus.length;
+      if (this.kkPoCmpSurplusOnly) rows = surplus;
+    }
     if (this.kkTypeLinkQFilter && this.kkTypeLinkQMap) {
       const want = this.kkTypeLinkQFilter === 'yes';
       rows = rows.filter((m) => this.kkTypeLinkQMap!.has(this.normalizeTieuHuyCode(m.materialCode)) === want);
     }
     if (this.kkTypeKkFilter === 'done') rows = rows.filter((m) => this.isKkFlagOn(m.kkChecked));
+    else if (this.kkTypeKkFilter === 'done-short') rows = rows.filter((m) => this.isKkTickedScanShort(m));
     else if (this.kkTypeKkFilter === 'todo') rows = rows.filter((m) => !this.isKkFlagOn(m.kkChecked) && !this.isKkAgingExempt(m));
     if (this.kkTypeWarnFilter === 'any') rows = rows.filter((m) => !!this.kkWarningOf(m));
     else if (this.kkTypeWarnFilter) rows = rows.filter((m) => this.kkWarningOf(m) === this.kkTypeWarnFilter);
@@ -7793,7 +8437,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const mode = this.kkTypeDiffFilter;
       const t = this.ruleNum('linkqDiffThreshold');
       rows = rows.filter((m) => {
-        const d = this.kkPxkDiff(m.materialCode);
+        const d = this.kkPxkDiffOf(m);
         if (d == null) return false;
         if (mode === 'bad') return d > t || d < -t;
         if (mode === 'ok') return d >= -t && d <= t;
@@ -7831,6 +8475,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeFilterRolls) {
       rows = rows.filter((m) => this.getKkRollsText(m) === this.kkTypeFilterRolls);
     }
+    // Tô sáng / lọc dòng vừa xuất còn 1 bag (đọc phiếu xuất 7 ngày ở nền)
+    void this.ensureKkRecentExports();
+    if (this.kkLastBagOnly) {
+      rows = this.kkRecentExportKeys ? rows.filter((m) => this.isKkRecentLastBag(m)) : [];
+    }
     if (this.kkLocScanDay) {
       if (!this.kkLocScanReady) {
         rows = [];
@@ -7853,6 +8502,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.kkTypeSortKkTimeDesc) {
       rows = [...rows].sort((a, b) => this.kkTickTimeMs(b) - this.kkTickTimeMs(a));
+    } else if (this.kkTypeSortRollsDesc) {
+      rows = [...rows].sort((a, b) => this.getKkRollsCount(b) - this.getKkRollsCount(a));
     } else if (this.kkTypeSortQtyDesc) {
       rows = [...rows].sort((a, b) => this.calculateCurrentStock(b) - this.calculateCurrentStock(a));
     }
@@ -7950,10 +8601,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       ids.forEach((id) => this.patchKkInvSnapCache(id, { kkWarning: '', kkWarningBy: '' }));
       this.kkTypeWarnFilter = '';
       this.invalidateKkTypeViewCache();
-      alert(`Đã xóa cảnh báo "${label}" của ${docs.length} dòng (${factory}).`);
+      appAlert(`Đã xóa cảnh báo "${label}" của ${docs.length} dòng (${factory}).`);
     } catch (e: any) {
       console.error('clearKkWarningAll:', e);
-      alert('❌ Không xóa được cảnh báo: ' + (e?.message || e));
+      appAlert('❌ Không xóa được cảnh báo: ' + (e?.message || e));
     } finally {
       this.kkWarnClearPending = '';
       this.cdr.detectChanges();
@@ -8009,7 +8660,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     fileKind: string
   ): Promise<void> {
     if (!rows.length) {
-      alert('Không có dữ liệu để tải báo cáo.');
+      appAlert('Không có dữ liệu để tải báo cáo.');
       return;
     }
     const XLSX = await import('xlsx');
@@ -8040,7 +8691,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
       if (kind === 'current' && !this.kkActiveProductType) {
-        alert('Hãy mở một loại hàng trước.');
+        appAlert('Hãy mở một loại hàng trước.');
         return;
       }
       const typeNames = kind === 'current' && this.kkActiveProductType
@@ -8069,7 +8720,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.writeKkTypeExcel(rows, sheet, names[kind]);
     } catch (e) {
       console.error('❌ exportKkTypeReport:', e);
-      alert('❌ Không tải được báo cáo Excel.');
+      appAlert('❌ Không tải được báo cáo Excel.');
     } finally {
       this.kkTypeReportBusy = false;
       this.cdr.detectChanges();
@@ -8077,7 +8728,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   protected buildEmptyKkTypeRow(productType: string): KkTypeRow {
-    const zone = this.kkLocMapWarehouseFilter || 'D1';
+    const zone = this.kkLocMapWarehouseFilter || 'J';
     return {
       productType,
       groupCodes: this.kkCatalogEntries
@@ -8098,7 +8749,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (warehouse === '00') return '00';
     if (warehouse === 'J' || warehouse === 'J5') return 'J';
     if (warehouse === 'ASM3') return 'ASM3';
-    return 'D1';
+    return 'J'; // từ 14/10/2026 mọi hàng thuộc Kho J
   }
 
   /** Token kho J: R1–R99 / S1–S99, tiền tố J5-/J-, locker/BOX, TRA, IQC, Pass. */
@@ -8184,13 +8835,13 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
             reportedBy: by
           });
         } catch (e: any) {
-          alert(`Đã lưu báo cáo nhưng chưa gửi được Zalo: ${e?.message || e}`);
+          appAlert(`Đã lưu báo cáo nhưng chưa gửi được Zalo: ${e?.message || e}`);
         }
       }
     } catch (e) {
       console.error('onInvReportChange:', e);
       (m as any).invReport = prev;
-      alert('❌ Không lưu được báo cáo.');
+      appAlert('❌ Không lưu được báo cáo.');
     } finally {
       this.invReportBusyId = null;
       this.cdr.detectChanges();
@@ -8213,7 +8864,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   } | null = null;
 
   invAdjustTargetLabel(t: string): string {
-    return t === 'opening' ? 'Tồn đầu' : t === 'closing' ? 'Tồn cuối' : '';
+    return t === 'opening' ? 'Tồn đầu' : t === 'closing' ? 'Tồn cuối' : t === 'delete' ? 'Xóa dòng' : t === 'po' ? 'Đổi PO' : '';
   }
 
   invAdjustDirectionLabel(d: string): string {
@@ -8293,6 +8944,49 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  // ===== Bấm ô Tồn kho (chi tiết mục) → đề nghị số tồn mới → duyệt ở Materials → More → Danh mục điều chỉnh =====
+  kkStockPropose: { material: InventoryMaterial; current: number; next: number | null; note: string; msg: string } | null = null;
+
+  openKkStockPropose(m: InventoryMaterial): void {
+    if (!this.canEdit || !m?.id || this.denyAction('invAdjustRequest')) return;
+    this.kkStockPropose = { material: m, current: this.calculateCurrentStock(m), next: null, note: '', msg: '' };
+    setTimeout(() => (document.getElementById('kk-stock-new') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  /** Số mới − tồn hiện tại; 0 khi chưa nhập / không đổi. */
+  kkStockProposeDelta(): number {
+    const p = this.kkStockPropose;
+    if (!p || p.next == null || String(p.next) === '') return 0;
+    const next = Number(p.next);
+    if (!Number.isFinite(next) || next < 0) return 0;
+    return Math.round((next - p.current) * 10000) / 10000;
+  }
+
+  /** Gửi bằng luồng Báo cáo điều chỉnh tồn có sẵn (Tồn cuối, Tăng/Giảm phần chênh) — lưu đề nghị + Zalo nhóm Quản lý kho. */
+  async submitKkStockPropose(): Promise<void> {
+    const p = this.kkStockPropose;
+    const delta = this.kkStockProposeDelta();
+    if (!p) return;
+    if (!delta) {
+      p.msg = 'Nhập số tồn mới khác số hiện tại (≥ 0).';
+      return;
+    }
+    const next = Number(p.next);
+    this.kkStockPropose = null;
+    this.invAdjust = {
+      material: p.material,
+      target: 'closing',
+      direction: delta > 0 ? 'inc' : 'dec',
+      qty: Math.abs(delta),
+      note: `Đề nghị số tồn mới ${this.formatNumber(next)} (đang ${this.formatNumber(p.current)})` + (p.note.trim() ? ` · ${p.note.trim()}` : ''),
+      busy: false,
+      msg: '',
+      ok: false
+    };
+    await this.submitInvAdjust();
+
+  }
+
   // --- More → Danh mục điều chỉnh (pass 2026) ---
   showInvAdjustList = false;
   invAdjustUnlocked = false;
@@ -8301,7 +8995,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   invAdjustRows: Array<{
     id: string; materialId: string; materialCode: string; po: string; imd: string; location: string;
     target: string; direction: string; qty: number; currentValue: number; expectedValue: number;
-    note: string; by: string; at: Date | null;
+    note: string; by: string; at: Date | null; newPo: string;
   }> = [];
   invAdjustLoading = false;
   invAdjustError = '';
@@ -8353,9 +9047,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           expectedValue: Number(x.expectedValue) || 0,
           note: String(x.note || ''),
           by: String(x.by || ''),
-          at: x.at?.toDate ? x.at.toDate() : null
+          at: x.at?.toDate ? x.at.toDate() : null,
+          newPo: String(x.newPo || '')
         };
       }).sort((a, b) => (b.at?.getTime() || 0) - (a.at?.getTime() || 0));
+      const ids = new Set(this.invAdjustRows.map((r) => r.id));
+      this.invAdjustSel = new Set(Array.from(this.invAdjustSel).filter((id) => ids.has(id)));
     } catch (e: any) {
       console.error('loadInvAdjustRows:', e);
       this.invAdjustError = 'Không đọc được danh mục: ' + (e?.message || e);
@@ -8365,47 +9062,164 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Câu hỏi xác nhận khi duyệt 1 đề nghị. */
+  private invAdjustConfirmText(row: (typeof this.invAdjustRows)[number]): string {
+    if (row.target === 'delete') {
+      return `Duyệt XÓA dòng tồn ${row.materialCode} · PO ${row.po || '—'} · IMD ${row.imd || '—'} · tồn ${this.formatNumber(row.currentValue)}?\n`
+        + `Dòng vào Danh mục Ẩn (More), khôi phục được trong ${this.hiddenRetentionDays} ngày.`;
+    }
+    if (row.target === 'po') return `Duyệt ĐỔI PO ${row.materialCode} · IMD ${row.imd || '—'}\n${row.po || '—'} → ${row.newPo}?`;
+    return `Duyệt: ${this.invAdjustDirectionLabel(row.direction)} ${this.invAdjustTargetLabel(row.target)} ${this.formatNumber(row.qty)}\n`
+      + `${row.materialCode} · PO ${row.po || '—'} · IMD ${row.imd || '—'}?`;
+  }
+
   async approveInvAdjust(row: (typeof this.invAdjustRows)[number]): Promise<void> {
     if (this.denyAction('invAdjustApprove')) return;
-    if (this.invAdjustBusyId) return;
-    const targetLabel = this.invAdjustTargetLabel(row.target);
-    const dirLabel = this.invAdjustDirectionLabel(row.direction);
-    if (!confirm(`Duyệt: ${dirLabel} ${targetLabel} ${this.formatNumber(row.qty)}\n${row.materialCode} · PO ${row.po || '—'} · IMD ${row.imd || '—'}?`)) return;
+    if (this.invAdjustBusyId || this.invAdjustBulkBusy) return;
+    if (!confirm(this.invAdjustConfirmText(row))) return;
     this.invAdjustBusyId = row.id;
     this.cdr.detectChanges();
     try {
-      const by = await this.getMaterialsOtpRequester();
-      const db = this.firestore.firestore;
-      const matRef = db.collection('inventory-materials').doc(row.materialId);
-      const reqRef = db.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id);
-      const field = row.target === 'opening' ? 'openingStock' : 'quantity';
-      const delta = row.direction === 'inc' ? row.qty : -row.qty;
-      let before = 0;
-      let after = 0;
-      await db.runTransaction(async (tx) => {
-        const [matSnap, reqSnap] = await Promise.all([tx.get(matRef), tx.get(reqRef)]);
-        if (!reqSnap.exists || (reqSnap.data() as any)?.status !== 'pending') throw new Error('Đề nghị đã được xử lý hoặc đã xóa.');
-        if (!matSnap.exists) throw new Error('Dòng tồn không còn trên hệ thống.');
-        before = Number((matSnap.data() as any)?.[field]) || 0;
-        after = Math.round((before + delta) * 10000) / 10000;
-        if (after < 0) {
-          throw new Error(`${field === 'openingStock' ? 'Tồn đầu' : 'NK'} sẽ âm (${this.formatNumber(before)} → ${this.formatNumber(after)}).`);
-        }
-        const now = firebase.default.firestore.FieldValue.serverTimestamp();
-        tx.update(matRef, { [field]: after, updatedAt: now });
-        tx.update(reqRef, { status: 'approved', approvedBy: by, approvedAt: now, field, fieldBefore: before, fieldAfter: after });
-      });
-      const local = (this.inventoryMaterials || []).find((m) => m.id === row.materialId);
-      if (local) (local as any)[field] = after;
-      this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
-      alert(`✅ Đã duyệt: ${dirLabel} ${targetLabel} ${this.formatNumber(row.qty)} cho ${row.materialCode}.`);
+      appAlert('✅ ' + await this.applyInvAdjust(row));
     } catch (e: any) {
       console.error('approveInvAdjust:', e);
-      alert('❌ Không duyệt được: ' + (e?.message || e));
+      appAlert('❌ Không duyệt được: ' + (e?.message || e));
     } finally {
       this.invAdjustBusyId = null;
       this.cdr.detectChanges();
     }
+  }
+
+  // --- Chọn nhiều → Duyệt đã chọn ---
+  invAdjustSel = new Set<string>();
+  invAdjustBulkBusy = false;
+  invAdjustBulkDone = 0;
+
+  invAdjustAllSelected(): boolean {
+    return this.invAdjustRows.length > 0 && this.invAdjustRows.every((r) => this.invAdjustSel.has(r.id));
+  }
+
+  toggleInvAdjustAll(on: boolean): void {
+    this.invAdjustSel = on ? new Set(this.invAdjustRows.map((r) => r.id)) : new Set();
+  }
+
+  toggleInvAdjustSel(id: string, on: boolean): void {
+    if (on) this.invAdjustSel.add(id);
+    else this.invAdjustSel.delete(id);
+  }
+
+  async approveInvAdjustSelected(): Promise<void> {
+    if (this.denyAction('invAdjustApprove')) return;
+    if (this.invAdjustBusyId || this.invAdjustBulkBusy) return;
+    const rows = this.invAdjustRows.filter((r) => this.invAdjustSel.has(r.id));
+    if (!rows.length) return;
+    const n = (t: string) => rows.filter((r) => r.target === t).length;
+    const parts = [
+      n('delete') && `xóa (ẩn) ${n('delete')} dòng`,
+      n('po') && `đổi PO ${n('po')}`,
+      (rows.length - n('delete') - n('po')) && `tăng/giảm tồn ${rows.length - n('delete') - n('po')}`
+    ].filter(Boolean).join(', ');
+    if (!confirm(`Duyệt ${rows.length} đề nghị đã chọn (${parts})?\nDòng xóa vào Danh mục Ẩn, khôi phục được trong ${this.hiddenRetentionDays} ngày.`)) return;
+    this.invAdjustBulkBusy = true;
+    this.invAdjustBulkDone = 0;
+    this.cdr.detectChanges();
+    const fails: string[] = [];
+    try {
+      for (const row of rows) {
+        this.invAdjustBusyId = row.id;
+        this.cdr.detectChanges();
+        try {
+          await this.applyInvAdjust(row);
+          this.invAdjustSel.delete(row.id);
+        } catch (e: any) {
+          console.error('approveInvAdjustSelected:', e);
+          fails.push(`${row.materialCode} · PO ${row.po || '—'}: ${e?.message || e}`);
+        }
+        this.invAdjustBulkDone += 1;
+      }
+    } finally {
+      this.invAdjustBusyId = null;
+      this.invAdjustBulkBusy = false;
+      this.cdr.detectChanges();
+    }
+    const ok = rows.length - fails.length;
+    appAlert(`✅ Đã duyệt ${ok}/${rows.length} đề nghị.`
+      + (fails.length ? `\n❌ Không duyệt được ${fails.length}:\n` + fails.slice(0, 15).join('\n') + (fails.length > 15 ? `\n… và ${fails.length - 15} đề nghị khác` : '') : ''));
+  }
+
+  /** Duyệt 1 đề nghị (không hỏi / không alert) — lỗi thì throw; trả câu báo thành công. */
+  private async applyInvAdjust(row: (typeof this.invAdjustRows)[number]): Promise<string> {
+    if (row.target === 'delete') return this.applyInvDeleteRequest(row);
+    if (row.target === 'po') return this.applyInvPoChange(row);
+    const by = await this.getMaterialsOtpRequester();
+    const db = this.firestore.firestore;
+    const matRef = db.collection('inventory-materials').doc(row.materialId);
+    const reqRef = db.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id);
+    const field = row.target === 'opening' ? 'openingStock' : 'quantity';
+    const delta = row.direction === 'inc' ? row.qty : -row.qty;
+    let before = 0;
+    let after = 0;
+    await db.runTransaction(async (tx) => {
+      const [matSnap, reqSnap] = await Promise.all([tx.get(matRef), tx.get(reqRef)]);
+      if (!reqSnap.exists || (reqSnap.data() as any)?.status !== 'pending') throw new Error('Đề nghị đã được xử lý hoặc đã xóa.');
+      if (!matSnap.exists) throw new Error('Dòng tồn không còn trên hệ thống.');
+      before = Number((matSnap.data() as any)?.[field]) || 0;
+      after = Math.round((before + delta) * 10000) / 10000;
+      if (after < 0) {
+        throw new Error(`${field === 'openingStock' ? 'Tồn đầu' : 'NK'} sẽ âm (${this.formatNumber(before)} → ${this.formatNumber(after)}).`);
+      }
+      const now = firebase.default.firestore.FieldValue.serverTimestamp();
+      tx.update(matRef, { [field]: after, updatedAt: now });
+      tx.update(reqRef, { status: 'approved', approvedBy: by, approvedAt: now, field, fieldBefore: before, fieldAfter: after });
+    });
+    const local = (this.inventoryMaterials || []).find((m) => m.id === row.materialId);
+    if (local) (local as any)[field] = after;
+    this.invalidateKkTypeViewCache();
+    this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
+    return `Đã duyệt: ${this.invAdjustDirectionLabel(row.direction)} ${this.invAdjustTargetLabel(row.target)} ${this.formatNumber(row.qty)} cho ${row.materialCode}.`;
+  }
+
+  /** Duyệt "Đề nghị xóa": ẩn dòng tồn (vào Danh mục Ẩn, khôi phục được trong hạn) — không xóa cứng. */
+  private async applyInvDeleteRequest(row: (typeof this.invAdjustRows)[number]): Promise<string> {
+    const db = this.firestore.firestore;
+    const reqRef = db.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id);
+    const reqSnap = await reqRef.get();
+    if (!reqSnap.exists || (reqSnap.data() as any)?.status !== 'pending') throw new Error('Đề nghị đã được xử lý hoặc đã xóa.');
+    const n = await this.hideInventoryDocsByIds([row.materialId], 'delete-request');
+    if (!n) throw new Error('Dòng tồn không còn trên hệ thống.');
+    const by = await this.getMaterialsOtpRequester();
+    await reqRef.update({
+      status: 'approved',
+      approvedBy: by,
+      approvedAt: firebase.default.firestore.FieldValue.serverTimestamp()
+    });
+    this.removeInventoryByIds(new Set([row.materialId]));
+    this.invalidateKkTypeViewCache();
+    this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
+    return `Đã xóa (ẩn) dòng ${row.materialCode} · PO ${row.po || '—'}. Khôi phục ở More → Danh mục Ẩn.`;
+  }
+
+  /** Duyệt "Đổi PO" (Tự sửa Check PO: PO web gõ khác LinkQ, cùng lượng) — chỉ đổi poNumber của dòng. */
+  private async applyInvPoChange(row: (typeof this.invAdjustRows)[number]): Promise<string> {
+    if (!row.newPo) throw new Error('Đề nghị thiếu PO mới.');
+    const by = await this.getMaterialsOtpRequester();
+    const db = this.firestore.firestore;
+    const matRef = db.collection('inventory-materials').doc(row.materialId);
+    const reqRef = db.collection(MaterialsComponent.INV_ADJUST_COL).doc(row.id);
+    await db.runTransaction(async (tx) => {
+      const [matSnap, reqSnap] = await Promise.all([tx.get(matRef), tx.get(reqRef)]);
+      if (!reqSnap.exists || (reqSnap.data() as any)?.status !== 'pending') throw new Error('Đề nghị đã được xử lý hoặc đã xóa.');
+      if (!matSnap.exists) throw new Error('Dòng tồn không còn trên hệ thống.');
+      const before = String((matSnap.data() as any)?.poNumber || '');
+      const now = firebase.default.firestore.FieldValue.serverTimestamp();
+      tx.update(matRef, { poNumber: row.newPo, updatedAt: now });
+      tx.update(reqRef, { status: 'approved', approvedBy: by, approvedAt: now, field: 'poNumber', fieldBefore: before, fieldAfter: row.newPo });
+    });
+    const local = (this.inventoryMaterials || []).find((m) => m.id === row.materialId);
+    if (local) local.poNumber = row.newPo;
+    this.invalidateKkTypeViewCache();
+    this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
+    return `Đã đổi PO ${row.materialCode}: ${row.po || '—'} → ${row.newPo}.`;
   }
 
   async deleteInvAdjust(row: (typeof this.invAdjustRows)[number]): Promise<void> {
@@ -8419,7 +9233,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.invAdjustRows = this.invAdjustRows.filter((r) => r.id !== row.id);
     } catch (e: any) {
       console.error('deleteInvAdjust:', e);
-      alert('❌ Không xóa được: ' + (e?.message || e));
+      appAlert('❌ Không xóa được: ' + (e?.message || e));
     } finally {
       this.invAdjustBusyId = null;
       this.cdr.detectChanges();
@@ -8444,7 +9258,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     { value: 'ncc-giao-thieu', label: 'NCC giao thiếu' },
     { value: 'lech-linkq-du', label: 'Lệch LinkQ (Dư)' },
     { value: 'du-sai-so', label: 'Dư sai số' },
-    { value: 'xoa', label: 'Xóa' }
+    { value: 'xoa', label: 'Xóa' },
+    { value: 'de-nghi-xoa', label: 'Đề nghị xóa' }
   ];
 
   kkWarningOf(line: InventoryMaterial): string {
@@ -8484,8 +9299,147 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Dòng tồn Aging dưới 1 tháng: hệ thống coi như đã KK ("Không cần kiểm"), không tính vào Đã KK / Tổng. */
   isKkAgingExempt(m: InventoryMaterial | null | undefined): boolean {
-    const a = this.kkAgingRaw(m);
-    return !!a && a.months < this.ruleNum('kkAgingExemptMonths');
+    // Đã bỏ quy tắc "Aging dưới 1 tháng không cần kiểm" (05/11/2026): mọi dòng đều phải kiểm.
+    void m;
+    return false;
+  }
+
+  // ───── Bộ phận: số bộ phận của mã (2 / 3 / 4) — lưu Danh mục NVL, hiện khi scan Outbound ─────
+  readonly boPhanOptions = [2, 3, 4];
+  private kkBoPhanMap: Map<string, number> | null = null;
+  private kkBoPhanLoading = false;
+
+  kkBoPhanOf(code: unknown): number {
+    const c = String(code ?? '').trim().toUpperCase();
+    if (!this.kkBoPhanMap && !this.kkBoPhanLoading) {
+      this.kkBoPhanLoading = true;
+      void this.nvlCatalogFull.listAll().then((items) => {
+        this.kkBoPhanMap = new Map(items.filter((i) => Number(i.boPhan) > 0).map((i) => [i.materialCode, Number(i.boPhan)]));
+        this.cdr.markForCheck();
+      }).catch(() => { this.kkBoPhanMap = new Map(); }).finally(() => { this.kkBoPhanLoading = false; });
+    }
+    return this.kkBoPhanMap?.get(c) || 0;
+  }
+
+  async setKkBoPhan(code: unknown, v: unknown): Promise<void> {
+    const c = String(code ?? '').trim().toUpperCase();
+    if (!c || !this.canEdit) return;
+    const n = Math.max(0, Math.round(Number(v) || 0));
+    const prev = this.kkBoPhanOf(c);
+    if (!this.kkBoPhanMap) this.kkBoPhanMap = new Map();
+    if (n > 0) this.kkBoPhanMap.set(c, n); else this.kkBoPhanMap.delete(c);
+    try {
+      const u = await this.afAuthWeek.currentUser;
+      await this.nvlCatalogFull.update(c, { boPhan: n }, String(u?.email || '').split('@')[0].toUpperCase());
+    } catch (e: any) {
+      if (prev > 0) this.kkBoPhanMap.set(c, prev); else this.kkBoPhanMap.delete(c);
+      appAlert('Không lưu được Bộ phận: ' + (e?.message || e));
+    } finally {
+      this.cdr.markForCheck();
+    }
+  }
+
+  // ───── Vừa xuất kho, chỉ còn 1 bag: tô sáng + lọc + GW bag ─────
+  /** Số ngày tính là "vừa xuất" */
+  readonly kkRecentExportDays = 7;
+  /** Lọc: chỉ dòng vừa xuất còn 1 bag */
+  kkLastBagOnly = false;
+  kkRecentExportLoading = false;
+  /** Khóa MÃ|PO|IMD và MÃ|PO có xuất kho trong kkRecentExportDays ngày (theo nhà máy) */
+  private kkRecentExportKeys: Set<string> | null = null;
+  private kkRecentExportFactory = '';
+  private kkRecentExportAt = 0;
+  /** GW bịch CL đã cân lúc tách tem lẻ — khóa id dòng tồn */
+  private kkLastBagClGw = new Map<string, { qty: number; gw: number } | null>();
+  private kkGwBagByCode = new Map<string, number>();
+  private kkGwBagTried = new Set<string>();
+
+  private kkRecentKey(code: unknown, po: unknown, imd?: unknown): string {
+    const c = String(code ?? '').trim().toUpperCase();
+    const p = String(po ?? '').trim().replace(/\s+/g, '').toUpperCase();
+    return imd === undefined ? `${c}|${p}` : `${c}|${p}|${String(imd ?? '').trim()}`;
+  }
+
+  /** Đọc phiếu xuất kkRecentExportDays ngày gần nhất (1 lần / 10 phút / nhà máy). */
+  async ensureKkRecentExports(force = false): Promise<void> {
+    const fac = String(this.selectedFactory || '');
+    if (this.kkRecentExportLoading) return;
+    if (!force && this.kkRecentExportKeys && this.kkRecentExportFactory === fac && Date.now() - this.kkRecentExportAt < 10 * 60000) return;
+    this.kkRecentExportLoading = true;
+    try {
+      const since = new Date(Date.now() - this.kkRecentExportDays * 86400000);
+      const snap = await this.firestore.firestore.collection('outbound-materials').where('exportDate', '>=', since).get();
+      const keys = new Set<string>();
+      snap.forEach((doc) => {
+        const d = doc.data() as any;
+        if (String(d.factory || '') !== fac) return;
+        if (!(Number(d.exportQuantity ?? d.quantity) > 0)) return;
+        const imd = String(d.importDate ?? d.batchNumber ?? '').trim().slice(0, 8);
+        keys.add(this.kkRecentKey(d.materialCode, d.poNumber));
+        if (/^\d{8}$/.test(imd)) keys.add(this.kkRecentKey(d.materialCode, d.poNumber, imd));
+      });
+      this.kkRecentExportKeys = keys;
+      this.kkRecentExportFactory = fac;
+      this.kkRecentExportAt = Date.now();
+      this.kkTypeDetailSig = '';
+      this.cdr.markForCheck();
+    } catch (e) {
+      console.warn('[KK] Không đọc được phiếu xuất gần đây:', e);
+    } finally {
+      this.kkRecentExportLoading = false;
+    }
+  }
+
+  /** Dòng vừa xuất kho (7 ngày) mà tồn chỉ còn 1 bag. */
+  isKkRecentLastBag(m: InventoryMaterial | null | undefined): boolean {
+    if (!m || !this.kkRecentExportKeys || this.kkRecentExportFactory !== String(this.selectedFactory || '')) return false;
+    if (!(this.calculateCurrentStock(m) > 0) || this.getKkRollsCount(m) !== 1) return false;
+    const imd = String(this.getDisplayIMD(m) || '').trim().slice(0, 8);
+    return this.kkRecentExportKeys.has(this.kkRecentKey(m.materialCode, m.poNumber, imd))
+      || this.kkRecentExportKeys.has(this.kkRecentKey(m.materialCode, m.poNumber));
+  }
+
+  toggleKkLastBagOnly(): void {
+    this.kkLastBagOnly = !this.kkLastBagOnly;
+    void this.ensureKkRecentExports(this.kkLastBagOnly);
+    this.kkTypeDetailSig = '';
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * GW (gram) của bag còn lại: bịch CL đã cân lúc tách tem lẻ → số cân; bag nguyên → GW bag danh mục;
+   * bag lẻ chưa cân → ước theo tỷ lệ (GW bag × tồn ÷ Standard).
+   */
+  kkLastBagGw(m: InventoryMaterial): { gw: number; how: 'cân' | 'nguyên' | 'ước' } | null {
+    const code = String(m.materialCode || '').trim().toUpperCase();
+    const stock = this.calculateCurrentStock(m);
+    const id = String(m.id || this.kkLineIdentityKey(m));
+    if (!this.kkLastBagClGw.has(id)) {
+      this.kkLastBagClGw.set(id, null);
+      const imd = String(this.getDisplayIMD(m) || '').trim();
+      void this.temLeCl.getState(this.selectedFactory, code, String(m.poNumber || '').trim(), imd)
+        .then((st) => {
+          if (st?.clActive && Number(st.clGw) > 0) {
+            this.kkLastBagClGw.set(id, { qty: Number(st.clQty) || 0, gw: Number(st.clGw) });
+            this.cdr.markForCheck();
+          }
+        })
+        .catch(() => undefined);
+    }
+    const cl = this.kkLastBagClGw.get(id);
+    if (cl && Math.abs(cl.qty - stock) < 0.01) return { gw: cl.gw, how: 'cân' };
+    if (!this.kkGwBagTried.has(code)) {
+      this.kkGwBagTried.add(code);
+      void this.nvlCatalogFull.getByCode(code).then((it: any) => {
+        const g = Number(it?.gwBag) || 0;
+        if (g > 0) { this.kkGwBagByCode.set(code, g); this.cdr.markForCheck(); }
+      }).catch(() => undefined);
+    }
+    const full = this.kkGwBagByCode.get(code) || 0;
+    if (!(full > 0)) return null;
+    const sp = this.getEffectiveStandardPacking(m);
+    if (!(sp > 0) || Math.abs(stock - sp) < 0.01) return { gw: full, how: 'nguyên' };
+    return { gw: Math.round((full * stock) / sp), how: 'ước' };
   }
 
   protected kkAgingRaw(m: InventoryMaterial | null | undefined): { months: number; by: 'IMD' | 'PO'; label: string } | null {
@@ -8530,6 +9484,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const lq = Number(this.kkTypeLinkQMap.get(this.normalizeTieuHuyCode(c))) || 0;
     const pxk = this.kkPendingPxk?.get(c)?.qty || 0;
     return Math.round((this.kkWebTotalOfCode(c) - (lq + pxk)) * 10000) / 10000;
+  }
+
+  /** Chênh lệch của 1 dòng (lọc Chênh lệch). Mặc định theo tổng mã; Quản lý NL tính theo dòng / PO. */
+  kkPxkDiffOf(m: InventoryMaterial): number | null {
+    return this.kkPxkDiff(m.materialCode);
   }
 
   protected restoreKkScanOpSession(): void {
@@ -8579,7 +9538,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.showKkTypeScanModal) {
       this.kkTypeScanStep = 'operator';
-      alert('Hết phiên làm việc (12:00 / 17:00 / 20:00). Vui lòng quét lại mã nhân viên.');
+      appAlert('Hết phiên làm việc (12:00 / 17:00 / 20:00). Vui lòng quét lại mã nhân viên.');
       this.cdr.detectChanges();
       this.focusKkTypeScanInput('kkTypeScanOperatorInput');
     }
@@ -8784,7 +9743,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private normalizeKkScanLocation(raw: string): string {
-    let loc = String(raw || '')
+    let loc = stripJ5Prefix(String(raw || ''))
       .replace(/[\u0000-\u001F]/g, '')
       .replace(/[\u2010-\u2015\u2212]/g, '-')
       .trim()
@@ -8896,7 +9855,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkScanIsFreeLocation(bare)) return true;
     // Bắt buộc có "-" sau số dãy — S01 / R15 không giữ; kho D1 cũng không khớp
     const n = this.normalizeKkScanLocation(bare) || bare;
-    return /^[SR]\d{1,2}-\d+(?:-\d+)?$/.test(n);
+    // Ô kệ J có thể có chữ cuối: R03-5-2B, R05-5-3C, R03-4-1A
+    if (/^[SR]\d{1,2}-\d+(?:-\d+[A-Z]?)?[A-Z]?$/.test(n)) return true;
+    // ASM2 không theo kệ J: vị trí kiểu S1.2(R), R2.3(L), U3.1(L) là vị trí thật
+    if (this.selectedFactory === 'ASM2' && /^[A-Z]{1,2}\d+(?:\.\d+)?\([LR]\)$/.test(bare.replace(/\s/g, ''))) return true;
+    return false;
   }
 
   /** Gộp vị trí khi scan đổi vị trí: giữ Locker/Box + S/R-…; xóa PASS vì hàng đã cất kệ. */
@@ -9259,9 +10222,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const prevOrigin = String(line.kkOriginLocation || '').trim();
     // Đếm mỗi lần quét mã = 1 box (cả cập nhật vị trí lẫn kiểm kê)
     const nextScan = this.roundKkQty(prevScanCount + 1);
+    // Lượng quét = cộng lượng trên tem
+    const prevScanQty = this.getKkScanQty(line);
+    const nextScanQty = this.roundKkQty(prevScanQty + (qty > 0 ? qty : 0));
     const stock = this.calculateCurrentStock(line);
     const rolls = this.getKkRollsCount(line);
-    const shouldKk = !locationOnly && rolls > 0 && nextScan + 1e-9 >= rolls && stock > 0 && this.can('kkTick');
+    const enoughQty = stock > 0 && nextScanQty + 1e-9 >= stock;
+    const enoughBox = rolls > 0 && nextScan + 1e-9 >= rolls;
+    const shouldKk = !locationOnly && (enoughQty || enoughBox) && stock > 0 && this.can('kkTick');
     const overStandard = rolls > 0 && nextScan > rolls + 1e-9;
     const firstReal =
       splitMultiLocations(nextLoc)
@@ -9274,6 +10242,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const payload: Record<string, unknown> = {
       ...this.inventoryLocationWriteFields(nextLoc),
       kkScanCount: nextScan,
+      kkScanQty: nextScanQty,
       updatedAt: kkAt,
       lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
       modifiedBy: operator,
@@ -9328,6 +10297,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const stampLocal = (
       location: string,
       scanCount: number,
+      scanQty: number,
       kkOn: boolean,
       kkBy?: string,
       kkWhen?: Date,
@@ -9346,6 +10316,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       };
       line.location = location;
       line.kkScanCount = scanCount;
+      line.kkScanQty = scanQty;
       if (locationOnly) line.locationScannedAt = kkAt;
       if (originLoc) line.kkOriginLocation = originLoc;
       const rowMeta = line as { __prevLocation?: string; __locationAtLoad?: string; locationManualOverride?: boolean };
@@ -9357,6 +10328,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (x.id !== line.id) return;
         x.location = location;
         x.kkScanCount = scanCount;
+        x.kkScanQty = scanQty;
         if (locationOnly) x.locationScannedAt = kkAt;
         if (originLoc) x.kkOriginLocation = originLoc;
         applyKk(x);
@@ -9369,13 +10341,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         viTri: location,
         locationManualOverride: true,
         kkScanCount: scanCount,
+        kkScanQty: scanQty,
         ...(locationOnly ? { locationScannedAt: kkAt } : {}),
         ...(originLoc ? { kkOriginLocation: originLoc } : {}),
         ...(kkOn ? { kkChecked: true, kkBy, kkAt: kkWhen } : { kkChecked: prevKk })
       });
     };
 
-    stampLocal(nextLoc, nextScan, shouldKk, operator, kkAt, originToKeep || undefined);
+    stampLocal(nextLoc, nextScan, nextScanQty, shouldKk, operator, kkAt, originToKeep || undefined);
     if (locationOnly && this.kkLocScanDay && line.id) {
       this.kkLocScanIds.add(line.id);
       this.invalidateKkTypeViewCache();
@@ -9457,6 +10430,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         stampLocal(
           prevLocation,
           prevScanCount,
+          prevScanQty,
           prevKk,
           prevKkBy as string | undefined,
           prevKkAt as Date | undefined,
@@ -9602,6 +10576,95 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   getKkScanCount(material: InventoryMaterial): number {
     return Math.max(0, Number(material?.kkScanCount) || 0);
+  }
+
+  // ===== Cột phụ bảng tồn kho (Tồn đầu, XT, Pallet, WH, Change, Tem Thùng, Lưu ý, MSD/ESD): mặc định ẩn, bật ở More =====
+  private static readonly EXTRA_COLS_KEY = 'materials-show-extra-cols';
+  showExtraCols = (() => {
+    try { return localStorage.getItem(MaterialsComponent.EXTRA_COLS_KEY) === '1'; } catch { return false; }
+  })();
+
+  toggleExtraCols(): void {
+    this.showExtraCols = !this.showExtraCols;
+    try { localStorage.setItem(MaterialsComponent.EXTRA_COLS_KEY, this.showExtraCols ? '1' : '0'); } catch { /* ignore */ }
+    this.cdr.markForCheck();
+  }
+
+  // ===== Kiểm kê (Quản lý NVL) = cùng màn hình scan "Cập nhật vị trí" của tab Location (<app-loc-upd-scan>) =====
+  showKiemKeScan = false;
+
+  openKiemKeScan(): void {
+    if (!this.canEdit) return;
+    this.showKiemKeScan = true;
+  }
+
+  /** DONE xong: cập nhật ngay các dòng đang hiện (vị trí, lượng quét, tick KK) — không đọc lại kho. */
+  onKiemKeDone(e: LocUpdDoneEvent): void {
+    const at = new Date();
+    const byId = new Map(e.lines.map((l) => [l.id, l]));
+    const stamp = (x: InventoryMaterial) => {
+      const l = x?.id ? byId.get(x.id) : undefined;
+      if (!l) return;
+      x.location = e.location;
+      (x as any).viTri = e.location;
+      x.kkScanQty = l.scannedQty;
+      x.kkScanCount = l.scans;
+      (x as any).locationScannedAt = at;
+      if (Math.abs(l.scannedQty - l.stock) < 1e-6) {
+        x.kkChecked = true;
+        x.kkBy = e.operator;
+        x.kkAt = at;
+      }
+    };
+    this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
+    this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
+    this.kkTypeScanExtraLines.forEach(stamp);
+    this.inventoryMaterials.forEach(stamp);
+    this.filteredInventory.forEach(stamp);
+    e.lines.forEach((l) => {
+      const tick = Math.abs(l.scannedQty - l.stock) < 1e-6;
+      this.patchKkInvSnapCache(l.id, {
+        location: e.location,
+        viTri: e.location,
+        locationManualOverride: true,
+        kkScanQty: l.scannedQty,
+        kkScanCount: l.scans,
+        locationScannedAt: at,
+        ...(tick ? { kkChecked: true, kkBy: e.operator, kkAt: at } : {})
+      });
+    });
+    this.invalidateKkTypeViewCache();
+    this.cdr.detectChanges();
+  }
+
+  /** Nút Vị trí (Quản lý NVL): mở tab mới — % kiểm kê theo từng vị trí. */
+  openKkViTriTab(): void {
+    window.open(`#/kk-vi-tri?factory=${encodeURIComponent(this.selectedFactory || 'ASM1')}`, '_blank');
+  }
+
+  /** Dòng tick KK trong hôm nay → viền xanh ở ô KK (tick cũ hơn không viền). */
+  isKkTickedToday(m: InventoryMaterial): boolean {
+    if (!m?.kkChecked) return false;
+    const raw: any = (m as any).kkAt;
+    const d: Date | null = !raw ? null
+      : typeof raw.toDate === 'function' ? raw.toDate()
+      : raw.seconds != null ? new Date(raw.seconds * 1000)
+      : raw instanceof Date ? raw : new Date(raw);
+    if (!d || Number.isNaN(d.getTime())) return false;
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+
+  /** Đã tick KK nhưng lượng quét (cộng lượng trên tem) nhỏ hơn tồn — gồm cả tick tay chưa quét. */
+  isKkTickedScanShort(m: InventoryMaterial): boolean {
+    if (!this.isKkFlagOn(m.kkChecked)) return false;
+    const stock = this.calculateCurrentStock(m);
+    if (!(stock > 0)) return false;
+    return this.getKkScanQty(m) < stock - 1e-6;
+  }
+
+  getKkScanQty(material: InventoryMaterial): number {
+    return Math.max(0, Number(material?.kkScanQty) || 0);
   }
 
   private roundKkQty(n: number): number {
@@ -9857,7 +10920,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .then(() => console.log(`✅ [${this.selectedFactory}] QTY bag / Rule Bag đã đồng bộ lên Firestore`))
       .catch(err => {
         console.error(`❌ [${this.selectedFactory}] Lỗi đồng bộ Rule lên Firestore:`, err);
-        alert('Không lưu được cài đặt Rule lên Firebase. Kiểm tra mạng hoặc quyền Firestore.');
+        appAlert('Không lưu được cài đặt Rule lên Firebase. Kiểm tra mạng hoặc quyền Firestore.');
       });
   }
 
@@ -9926,7 +10989,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   addRuleBagPrefix(): void {
     const p = this.getMaterialCodePrefix4(this.ruleBagNewPrefixInput);
     if (!p) {
-      alert('Nhập đầu mã (tối đa 4 ký tự, ví dụ 2602).');
+      appAlert('Nhập đầu mã (tối đa 4 ký tự, ví dụ 2602).');
       return;
     }
     if (this.ruleBagManualPrefixes.includes(p)) {
@@ -10196,10 +11259,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
       this.xtAsm1Locked = locked;
-      alert(locked ? '🔒 Đã khóa XT ở ASM1.' : '🔓 Đã mở khóa XT ở ASM1 — giữ mở cho tới khi bấm Khóa lại trong More.');
+      appAlert(locked ? '🔒 Đã khóa XT ở ASM1.' : '🔓 Đã mở khóa XT ở ASM1 — giữ mở cho tới khi bấm Khóa lại trong More.');
     } catch (e) {
       console.error('setXtAsm1Locked', e);
-      alert('Không lưu được trạng thái khóa XT. Thử lại.');
+      appAlert('Không lưu được trạng thái khóa XT. Thử lại.');
     } finally {
       this.cdr.markForCheck();
     }
@@ -10270,7 +11333,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showTieuHuyPopup = false;
   }
 
-  protected async getLinkQPackCached(force: boolean): Promise<{ map: Map<string, number>; label: string }> {
+  protected async getLinkQPackCached(force: boolean): Promise<LinkQPack> {
     const factory = this.selectedFactory;
     const hit = this.linkQPackCache.get(factory);
     if (!force && hit && Date.now() - hit.ts < MaterialsComponent.LINKQ_PACK_TTL_MS) return hit.pack;
@@ -10371,14 +11434,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const parsed = await this.parseTieuHuyExcel(file);
       if (!parsed.length) {
-        alert('Không tìm thấy dòng hợp lệ. Cần cột Mã và PO.');
+        appAlert('Không tìm thấy dòng hợp lệ. Cần cột Mã và PO.');
         return;
       }
       this.tieuHuyRows = parsed.map((r) => this.emptyTieuHuyRow(r));
       this.tieuHuyImportedCount = this.tieuHuyRows.length;
       await this.lookupAndMatchTieuHuyRows();
       this.saveTieuHuyLastImport();
-      alert(
+      appAlert(
         `File tiêu hủy: ${this.tieuHuyImportedCount} mã.\n` +
         `Trùng tồn kho (Mã + PO): ${this.tieuHuyMatchedCount} / ${this.tieuHuyImportedCount}.\n` +
         `So sánh Lượng file với Tồn kho hiện tại, tick chọn rồi bấm Đưa vào kho tiêu hủy.\n` +
@@ -10386,7 +11449,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       );
     } catch (e: any) {
       console.error('❌ processTieuHuyImportFile:', e);
-      alert('Lỗi khi đọc file tiêu hủy: ' + (e?.message || e));
+      appAlert('Lỗi khi đọc file tiêu hủy: ' + (e?.message || e));
     } finally {
       this.tieuHuyImporting = false;
       this.cdr.detectChanges();
@@ -10722,7 +11785,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       for (const id of row.inventoryIds) idSet.add(id);
     }
     if (!idSet.size) {
-      alert('Chọn mã đã khớp tồn kho trước khi đưa vào kho tiêu hủy.');
+      appAlert('Chọn mã đã khớp tồn kho trước khi đưa vào kho tiêu hủy.');
       return;
     }
     const ok = confirm(
@@ -10740,7 +11803,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const saved = await this.applyTieuHuyWarehouse(toWrite);
       if (!saved) {
-        alert('Không chuyển được kho (lỗi lưu).');
+        appAlert('Không chuyển được kho (lỗi lưu).');
         return;
       }
       this.tieuHuyUpdatedCount += toWrite.length;
@@ -10753,7 +11816,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         if (m.id && idSet.has(m.id)) m.location = this.tieuHuyWarehouseValue;
       }
       this.saveTieuHuyLastImport();
-      alert(`Đã chuyển ${toWrite.length} dòng sang kho ${this.tieuHuyWarehouseValue}.`);
+      appAlert(`Đã chuyển ${toWrite.length} dòng sang kho ${this.tieuHuyWarehouseValue}.`);
     } finally {
       this.tieuHuyBusy = false;
       this.cdr.detectChanges();
@@ -10763,11 +11826,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async hideTieuHuyRow(row: typeof this.tieuHuyRows[number]): Promise<void> {
     if (this.tieuHuyBusy || !row || row.done === 'hidden') return;
     if (!this.canDelete) {
-      alert('❌ Bạn không có quyền ẩn item này. Vui lòng liên hệ admin để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền ẩn item này. Vui lòng liên hệ admin để được cấp quyền.');
       return;
     }
     if (!row.inventoryIds.length) {
-      alert('Mã này chưa khớp tồn kho nên không ẩn được.');
+      appAlert('Mã này chưa khớp tồn kho nên không ẩn được.');
       return;
     }
     const ok = confirm(
@@ -10792,14 +11855,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       row.palletId = '';
       this.tieuHuyMatchedCount = this.tieuHuyRows.filter((r) => r.matched && r.done !== 'hidden').length;
       this.saveTieuHuyLastImport();
-      alert(
+      appAlert(
         n > 0
           ? `Đã ẩn ${row.materialCode}. Xem lại trong More → Danh mục Ẩn (giữ ${this.hiddenRetentionDays} ngày).`
           : `Không ẩn được ${row.materialCode}.`
       );
     } catch (e: any) {
       console.error('❌ hideTieuHuyRow:', e);
-      alert('Lỗi khi ẩn: ' + (e?.message || e));
+      appAlert('Lỗi khi ẩn: ' + (e?.message || e));
     } finally {
       this.tieuHuyBusy = false;
       this.cdr.detectChanges();
@@ -10890,7 +11953,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     } catch (e) {
       console.error('saveKkShelfGroups', e);
-      alert('Không lưu được danh mục dãy kệ.');
+      appAlert('Không lưu được danh mục dãy kệ.');
     } finally {
       this.kkShelfSaving = false;
       this.cdr.detectChanges();
@@ -10943,7 +12006,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e) {
       console.error('saveKkCatalogLocation:', e);
       entry.location = prev;
-      alert('Không lưu được vị trí của nhóm mã ' + entry.groupCode + '.');
+      appAlert('Không lưu được vị trí của nhóm mã ' + entry.groupCode + '.');
     } finally {
       this.kkCatalogSavingCode = '';
       this.cdr.detectChanges();
@@ -10962,7 +12025,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       );
     } catch (e) {
       console.error('❌ loadKkCatalogPopup:', e);
-      alert('❌ Không tải được Danh mục KK.');
+      appAlert('❌ Không tải được Danh mục KK.');
       this.kkCatalogEntries = [];
     } finally {
       this.kkCatalogLoading = false;
@@ -10997,7 +12060,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       const parsed = await this.parseKkCatalogExcel(file);
       if (!parsed.length) {
-        alert('Không tìm thấy dòng hợp lệ. Cần cột "Nhóm mã" (B + 6 số, vd B001680) và "Loại hàng".');
+        appAlert('Không tìm thấy dòng hợp lệ. Cần cột "Nhóm mã" (B + 6 số, vd B001680) và "Loại hàng".');
         return;
       }
       if (
@@ -11012,10 +12075,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const count = await this.kkCatalog.importFromRows(parsed);
       this.kkCatalogEntries = await this.kkCatalog.loadAll(true);
       this.kkCatalogTypeMap = await this.kkCatalog.loadAllAsMap();
-      alert(`Đã import ${count} nhóm mã.`);
+      appAlert(`Đã import ${count} nhóm mã.`);
     } catch (e: any) {
       console.error('❌ processKkCatalogImportFile:', e);
-      alert('Lỗi khi đọc file: ' + (e?.message || e));
+      appAlert('Lỗi khi đọc file: ' + (e?.message || e));
     } finally {
       this.kkCatalogImporting = false;
       this.cdr.detectChanges();
@@ -11156,11 +12219,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       XLSX.writeFile(workbook, fileName);
 
       console.log('✅ Inventory import template downloaded successfully');
-      alert(`✅ Đã tải template import tồn kho ${this.selectedFactory}!\n\n📁 File: ${fileName}\n\n💡 Hướng dẫn:\n- Điền thông tin theo mẫu\n- Import bằng nút "Import Inventory"`);
+      appAlert(`✅ Đã tải template import tồn kho ${this.selectedFactory}!\n\n📁 File: ${fileName}\n\n💡 Hướng dẫn:\n- Điền thông tin theo mẫu\n- Import bằng nút "Import Inventory"`);
 
     } catch (error) {
       console.error('❌ Error downloading template:', error);
-      alert('❌ Lỗi khi tải template: ' + error.message);
+      appAlert('❌ Lỗi khi tải template: ' + error.message);
     }
   }
 
@@ -11171,17 +12234,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Ẩn 1 dòng inventory → chuyển sang danh mục Ẩn (giữ 30 ngày). */
   async hideInventoryItem(material: InventoryMaterial): Promise<void> {
     if (!this.canDelete) {
-      alert('❌ Bạn không có quyền ẩn item này. Vui lòng liên hệ admin để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền ẩn item này. Vui lòng liên hệ admin để được cấp quyền.');
       return;
     }
 
     if (!material.id) {
-      alert('❌ Không thể ẩn item: Không tìm thấy ID');
+      appAlert('❌ Không thể ẩn item: Không tìm thấy ID');
       return;
     }
 
     if (material.factory !== this.selectedFactory) {
-      alert(`❌ LỖI BẢO MẬT: Không thể ẩn item từ ${material.factory} trong ${this.selectedFactory}!`);
+      appAlert(`❌ LỖI BẢO MẬT: Không thể ẩn item từ ${material.factory} trong ${this.selectedFactory}!`);
       return;
     }
 
@@ -11197,14 +12260,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isHidingInventory = true;
       const n = await this.hideInventoryDocsByIds([material.id], 'manual');
       this.removeInventoryByIds(new Set([material.id]));
-      alert(
+      appAlert(
         n > 0
           ? `✅ Đã ẩn ${material.materialCode}. Xem lại trong More → Danh mục Ẩn.`
           : `⚠️ Không ẩn được ${material.materialCode}.`
       );
     } catch (error: any) {
       console.error('❌ Error hiding item:', error);
-      alert(`❌ Lỗi khi ẩn item ${material.materialCode}: ${error?.message || 'Lỗi không xác định'}`);
+      appAlert(`❌ Lỗi khi ẩn item ${material.materialCode}: ${error?.message || 'Lỗi không xác định'}`);
     } finally {
       this.isHidingInventory = false;
       this.isLoading = false;
@@ -11243,7 +12306,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * Chuyển inventory docs sang collection ẩn rồi xóa khỏi inventory-materials.
    * Mỗi dòng: set hidden + delete inventory (2 write) → batch tối đa ~200 id.
    */
-  private async hideInventoryDocsByIds(ids: string[], reason: InventoryHideReason): Promise<number> {
+  protected async hideInventoryDocsByIds(ids: string[], reason: InventoryHideReason): Promise<number> {
     if (!ids.length) return 0;
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
     const hiddenBy = await this.getHiddenByLabel();
@@ -11291,11 +12354,25 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return hiddenCount;
   }
 
-  /** Mở danh mục Ẩn sau khi đã OTP (không hỏi lại). */
+  /** Danh mục Ẩn đang mở có cho Pushback không (chỉ sau OTP). */
+  hiddenPushbackUnlocked = false;
+
+  /** More → Danh mục Ẩn: chỉ xem / tìm, không cần OTP. Pushback mở khóa riêng bằng OTP. */
+  openHiddenInventoryView(): void {
+    this.showMorePopup = false;
+    this.hiddenSearchQuery = '';
+    this.pushbackHiddenId = null;
+    this.hiddenPushbackUnlocked = false;
+    this.showHiddenInventoryPopup = true;
+    void this.loadHiddenInventoryList();
+  }
+
+  /** Mở danh mục Ẩn sau khi đã OTP (không hỏi lại) — cho Pushback. */
   private openHiddenInventoryPopupDirect(): void {
     this.showMorePopup = false;
     this.hiddenSearchQuery = '';
     this.pushbackHiddenId = null;
+    this.hiddenPushbackUnlocked = true;
     this.showHiddenInventoryPopup = true;
     void this.loadHiddenInventoryList();
   }
@@ -11304,14 +12381,47 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.showHiddenInventoryPopup = false;
     this.hiddenInventoryRows = [];
     this.hiddenSearchQuery = '';
+    this.hiddenLocFilter = '';
+    this.hiddenLotFilter = '';
+    this.hiddenReasonFilter = '';
     this.pushbackHiddenId = null;
+  }
+
+  private hiddenOptions(pick: (r: HiddenInventoryRow) => string): Array<{ v: string; n: number }> {
+    const m = new Map<string, number>();
+    this.hiddenInventoryRows.forEach((r) => {
+      const v = pick(r) || '—';
+      m.set(v, (m.get(v) || 0) + 1);
+    });
+    return Array.from(m, ([v, n]) => ({ v, n })).sort((a, b) => a.v.localeCompare(b.v, 'en', { numeric: true }));
+  }
+
+  get hiddenLocOptions(): Array<{ v: string; n: number }> {
+    return this.hiddenOptions((r) => r.location);
+  }
+
+  /** Lô (IMD ddMMyyyy[nn]) mới nhất trước. */
+  get hiddenLotOptions(): Array<{ v: string; n: number }> {
+    const key = (v: string) => (/^[0-9]{8}/.test(v) ? v.slice(4, 8) + v.slice(2, 4) + v.slice(0, 2) + v.slice(8) : v);
+    return this.hiddenOptions((r) => r.imd).sort((a, b) => key(b.v).localeCompare(key(a.v)));
+  }
+
+  get hiddenReasonOptions(): Array<{ v: string; n: number }> {
+    return this.hiddenOptions((r) => r.hideReason);
   }
 
   get filteredHiddenInventoryRows(): HiddenInventoryRow[] {
     const q = (this.hiddenSearchQuery || '').trim().toLowerCase();
-    if (!q) return this.hiddenInventoryRows;
+    const loc = this.hiddenLocFilter;
+    const lot = this.hiddenLotFilter;
+    const reason = this.hiddenReasonFilter;
     return this.hiddenInventoryRows.filter((row) => {
+      if (loc && (row.location || '—') !== loc) return false;
+      if (lot && (row.imd || '—') !== lot) return false;
+      if (reason && (row.hideReason || '—') !== reason) return false;
+      if (!q) return true;
       const hay = [
+        row.imd,
         row.materialCode,
         row.poNumber,
         row.location,
@@ -11356,6 +12466,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
           materialCode: String(data.materialCode ?? '').trim(),
           poNumber: String(data.poNumber ?? '').trim(),
           location: String(data.location ?? data.viTri ?? '').trim().toUpperCase() || '—',
+          imd: String(data.batchNumber ?? '').trim(),
           stock,
           unit: String(data.unit ?? '').trim(),
           hideReason: String(data.hideReason || ''),
@@ -11374,7 +12485,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.hiddenInventoryRows = rows;
     } catch (error: any) {
       console.error('❌ loadHiddenInventoryList:', error);
-      alert(`❌ Lỗi tải danh mục Ẩn: ${error?.message || error}`);
+      appAlert(`❌ Lỗi tải danh mục Ẩn: ${error?.message || error}`);
       this.hiddenInventoryRows = [];
     } finally {
       this.isLoadingHiddenInventory = false;
@@ -11385,11 +12496,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async pushbackHiddenItem(row: HiddenInventoryRow): Promise<void> {
     if (!row?.id || this.pushbackHiddenId) return;
     if (!this.canDelete) {
-      alert('❌ Bạn không có quyền Pushback. Liên hệ admin.');
+      appAlert('❌ Bạn không có quyền Pushback. Liên hệ admin.');
       return;
     }
     if (!this.materialsInventoryUnlock.isUnlocked()) {
-      alert('❌ Phiên OTP đã hết hạn. Mở lại Danh mục Ẩn từ More và nhập mã OTP mới.');
+      appAlert('❌ Phiên OTP đã hết hạn. Mở lại Danh mục Ẩn từ More và nhập mã OTP mới.');
       this.closeHiddenInventoryPopup();
       return;
     }
@@ -11405,12 +12516,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const invRef = this.firestore.collection('inventory-materials').doc(row.id).ref;
       const [hiddenSnap, invSnap] = await Promise.all([hiddenRef.get(), invRef.get()]);
       if (!hiddenSnap.exists) {
-        alert('⚠️ Dòng này không còn trong danh mục Ẩn.');
+        appAlert('⚠️ Dòng này không còn trong danh mục Ẩn.');
         this.hiddenInventoryRows = this.hiddenInventoryRows.filter((r) => r.id !== row.id);
         return;
       }
       if (invSnap.exists) {
-        alert(
+        appAlert(
           `❌ Không Pushback được: inventory đã có document cùng ID.\n` +
             `Mã: ${row.materialCode}`
         );
@@ -11459,10 +12570,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         // Không chặn UX nếu remount local fail — user có thể Load lại
       }
 
-      alert(`✅ Đã Pushback ${row.materialCode} về inventory.`);
+      appAlert(`✅ Đã Pushback ${row.materialCode} về inventory.`);
     } catch (error: any) {
       console.error('❌ pushbackHiddenItem:', error);
-      alert(`❌ Lỗi Pushback: ${error?.message || error}`);
+      appAlert(`❌ Lỗi Pushback: ${error?.message || error}`);
     } finally {
       this.pushbackHiddenId = null;
     }
@@ -11476,6 +12587,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         return 'Reset tồn = 0';
       case 'reset-low-stock':
         return 'Reset tồn < 1';
+      case 'po-surplus':
+        return 'PO dư sai (So sánh PO)';
+      case 'delete-request':
+        return 'Đề nghị xóa (quản lý đã duyệt)';
       default:
         return reason || '—';
     }
@@ -11543,7 +12658,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       ? `ASP${normalized}`
       : normalized.slice(0, 7);
     if (!/^ASP\d{4}$/.test(shortCode)) {
-      alert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
+      appAlert('Mã nhân viên không đúng. Nhập 4 số (vd: 0106) hoặc quét ASP + 4 số.');
       return null;
     }
     this.kkOperatorIdCache = shortCode;
@@ -11588,12 +12703,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     );
     const newLocation = this.normalizeMultiLocationValue(String(material.location ?? ''));
     if (!newLocation && !opts?.allowEmpty) {
-      alert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
+      appAlert('⚠️ Vui lòng nhập vị trí trước khi lưu.');
       return false;
     }
     if (newLocation === fromLocation) {
       if (!opts?.silent) {
-        alert('Vị trí không đổi.');
+        appAlert('Vị trí không đổi.');
       }
       return false;
     }
@@ -11602,12 +12717,16 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     material.location = newLocation;
 
     const modifiedBy = await this.resolveLocationOperatorId();
+    // Từ PASS vào kệ → tự tick KK bởi người đổi vị trí
+    const kkAt = new Date();
+    const passToShelf = isPassToShelf(fromLocation, newLocation);
     const updatePayload: Record<string, unknown> = {
       ...this.inventoryLocationWriteFields(newLocation),
       updatedAt: new Date(),
       lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
       modifiedBy,
-      locationManualOverride: true
+      locationManualOverride: true,
+      ...(passToShelf ? autoKkFields(modifiedBy, kkAt, 'pass-to-shelf') : {})
     };
 
     if ((newLocation === 'F62' || newLocation === 'F62TRA') && material.iqcStatus !== 'Pass') {
@@ -11617,6 +12736,17 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
     try {
       await this.firestore.collection('inventory-materials').doc(material.id).update(updatePayload);
+      if (passToShelf) {
+        material.kkChecked = true;
+        material.kkBy = modifiedBy;
+        material.kkAt = kkAt;
+        void this.kkLogAdd(autoKkLog({
+          inventoryDocId: material.id, factory: this.selectedFactory, materialCode: material.materialCode,
+          poNumber: material.poNumber, batchNumber: material.batchNumber, location: newLocation,
+          quantity: material.quantity, stock: this.calculateCurrentStock(material), unit: material.unit,
+          by: modifiedBy, at: kkAt, source: 'pass-to-shelf'
+        })).catch((e) => console.warn('KK log (pass-to-shelf)', e));
+      }
 
       const changedAt = new Date();
       await this.firestore.collection('material-location-history').add({
@@ -11640,14 +12770,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       row.modifiedBy = modifiedBy;
       console.log(`✅ [ASM1] Đã lưu vị trí ${material.materialCode}: ${fromLocation} → ${newLocation} (${modifiedBy})`);
       if (!opts?.silent) {
-        alert(`✅ Đã lưu vị trí: ${newLocation}`);
+        appAlert(`✅ Đã lưu vị trí: ${newLocation}`);
       }
       this.cdr.markForCheck();
       return true;
     } catch (error) {
       material.location = previousUiLocation;
       console.error('[ASM1] persistLocationChange failed', error);
-      alert('❌ Không lưu được vị trí lên tồn kho. Vui lòng thử lại hoặc báo IT.');
+      appAlert('❌ Không lưu được vị trí lên tồn kho. Vui lòng thử lại hoặc báo IT.');
       this.cdr.markForCheck();
       return false;
     }
@@ -11688,14 +12818,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     // Validate: QTY BAG must be multiple of Standard Packing (theo master + Rule Bag prefix),
     // trừ khi QTY BAG = đúng tồn kho (in cả lô → in tách tem chuẩn + lẻ).
     if (this.shouldEnforceQtyBagMultipleForMaterial(material.materialCode) && normalized > 0) {
-      const sp = this.getStandardPacking(material.materialCode);
+      const sp = this.getEffectiveStandardPacking(material);
       if (
         sp &&
         sp > 0 &&
         !this.isMultipleOfStandardPacking(normalized, sp) &&
         !this.isQtyBagEqualsFullStockForPrint(material, normalized)
       ) {
-        alert(
+        appAlert(
           `❌ QTY BAG không hợp lệ.\n\nStandard Packing = ${sp}\nQTY BAG phải là bội số của Standard Packing (VD: ${sp}, ${sp * 2}, ${sp * 3}...)\n\n` +
             `Ngoại lệ: nhập QTY BAG đúng bằng Tồn kho thì được in tách tem xuất (bịch chuẩn + phần lẻ).`
         );
@@ -12273,7 +13403,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if ((locOk || palOk) && this.showKkLocMap) this.invalidateKkTypeViewCache();
 
     if (!locOk && !palOk) {
-      alert('Chọn vị trí Kho J hoặc pallet rồi bấm Done.');
+      appAlert('Chọn vị trí Kho J hoặc pallet rồi bấm Done.');
       return;
     }
     const savedLoc = material.location || '—';
@@ -12281,7 +13411,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const bits: string[] = [];
     if (locOk) bits.push(`Vị trí: ${savedLoc}`);
     if (palOk || pallet) bits.push(`Pallet: ${pallet || '—'}`);
-    alert(`✅ Đã lưu\n${bits.join('\n')}`);
+    appAlert(`✅ Đã lưu\n${bits.join('\n')}`);
   }
 
   rememberPalletBeforeEdit(material: InventoryMaterial): void {
@@ -12303,7 +13433,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     this.rememberLocationBeforeEdit(material);
     const bare = this.stripDoiKhoWhPrefix(String(material.location || '').trim());
     if (!bare && next) {
-      alert('Nhập vị trí trước khi gán WH.');
+      appAlert('Nhập vị trí trước khi gán WH.');
       this.cdr.markForCheck();
       return false;
     }
@@ -12339,14 +13469,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       (material as { __prevPalletId?: string }).__prevPalletId = next;
       if (!opts?.silent) {
-        alert(next ? `✅ Đã lưu pallet: ${next}` : '✅ Đã xóa pallet.');
+        appAlert(next ? `✅ Đã lưu pallet: ${next}` : '✅ Đã xóa pallet.');
       }
       this.cdr.markForCheck();
       return true;
     } catch (error) {
       material.palletId = previousUi;
       console.error('[ASM1] persistPalletChange failed', error);
-      if (!opts?.silent) alert('❌ Không lưu được pallet. Vui lòng thử lại.');
+      if (!opts?.silent) appAlert('❌ Không lưu được pallet. Vui lòng thử lại.');
       this.cdr.markForCheck();
       return false;
     }
@@ -12679,7 +13809,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   startEditingOpeningStock(material: InventoryMaterial): void {
     if (this.denyAction('edit')) return;
     if (!this.isManualStockEditOn) {
-      alert('Tồn đầu đang khóa. Vào More → Manual ON (OTP Zalo ASP0106) để sửa.');
+      appAlert('Tồn đầu đang khóa. Vào More → Manual ON (OTP Zalo ASP0106) để sửa.');
       return;
     }
     material.isEditingOpeningStock = true;
@@ -12716,6 +13846,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /** Standard theo Mã + PO: lấy Standard của lô (dòng tồn đang tải) nếu có, không thì danh mục. */
+  stdForLot(materialCode: string, po?: string | null): number {
+    const code = String(materialCode || '').trim().toUpperCase();
+    const p = String(po || '').trim().toUpperCase();
+    if (code && p) {
+      const row = (this.inventoryMaterials || []).find((m) =>
+        String(m.materialCode || '').trim().toUpperCase() === code &&
+        String(m.poNumber || '').trim().toUpperCase() === p &&
+        Number(m.lotStandardPacking) > 0);
+      if (row) return Number(row.lotStandardPacking);
+    }
+    return this.getStandardPacking(code);
+  }
+
   // Get standard packing from catalog
   getStandardPacking(materialCode: string): number {
     const code = String(materialCode || '').trim().toUpperCase();
@@ -12737,7 +13881,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     event.preventDefault();
     event.stopPropagation();
     if (!this.canEdit) {
-      alert('Bạn không có quyền tick KK trên tab này.');
+      appAlert('Bạn không có quyền tick KK trên tab này.');
       return;
     }
     if (!material?.id) return;
@@ -12765,10 +13909,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const kkAt = new Date();
     const prevScanCount = this.getKkScanCount(material);
+    const prevScanQty = this.getKkScanQty(material);
     material.kkChecked = next;
     material.kkBy = operator;
     material.kkAt = kkAt;
-    if (!next) material.kkScanCount = 0;
+    if (!next) { material.kkScanCount = 0; material.kkScanQty = 0; }
     this.cdr.markForCheck();
     try {
       const payload: Record<string, unknown> = {
@@ -12777,7 +13922,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         kkAt,
         updatedAt: new Date()
       };
-      if (!next) payload.kkScanCount = 0;
+      if (!next) { payload.kkScanCount = 0; payload.kkScanQty = 0; }
       await this.firestore.collection('inventory-materials').doc(material.id).update(payload);
       // Vá 1 dòng trong cache KK — không xoá cả cache (đỡ phải nạp lại 10k doc
       // cho lần Kiểm tra KK kế tiếp, chính là lúc hay bị "đứng máy").
@@ -12785,7 +13930,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         kkChecked: next,
         kkBy: operator,
         kkAt,
-        ...(next ? {} : { kkScanCount: 0 })
+        ...(next ? {} : { kkScanCount: 0, kkScanQty: 0 })
       });
       if (next) {
         await this.kkLogAdd({
@@ -12812,8 +13957,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       console.error('❌ toggleKk:', e);
       material.kkChecked = !next;
       material.kkScanCount = prevScanCount;
+      material.kkScanQty = prevScanQty;
       this.cdr.markForCheck();
-      alert('❌ Không lưu được trạng thái Kiểm kê.');
+      appAlert('❌ Không lưu được trạng thái Kiểm kê.');
     }
   }
 
@@ -12896,7 +14042,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     // Chưa có lượng chẵn — đánh dấu muốn KK, yêu cầu nhập SP
     material.kkChecked = false;
     this.cdr.markForCheck();
-    alert('Vui lòng nhập Lượng chẵn bịch/cuộn rồi bấm Xác nhận.');
+    appAlert('Vui lòng nhập Lượng chẵn bịch/cuộn rồi bấm Xác nhận.');
   }
 
   async openMobileKkConfirm(material: InventoryMaterial): Promise<void> {
@@ -12904,12 +14050,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const raw = this.getMobileKkSpDraft(material);
     const sp = parseFloat(String(raw).replace(/,/g, '').trim());
     if (!Number.isFinite(sp) || sp <= 0) {
-      alert('Lượng chẵn bịch/cuộn phải > 0.');
+      appAlert('Lượng chẵn bịch/cuộn phải > 0.');
       return;
     }
     const stock = this.calculateCurrentStock(material);
     if (stock <= 0) {
-      alert('Tồn kho phải > 0 để kiểm kê.');
+      appAlert('Tồn kho phải > 0 để kiểm kê.');
       return;
     }
     const code = String(material.materialCode || '').trim().toUpperCase();
@@ -12920,7 +14066,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.persistCatalogCache();
       }
       if ((live || this.catalogCache.get(code))?.standardPackingLocked === true) {
-        alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL — không thể cập nhật từ Kiểm kê.');
+        appAlert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL — không thể cập nhật từ Kiểm kê.');
         return;
       }
     } catch (e) {
@@ -12974,7 +14120,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.cdr.markForCheck();
     } catch (e) {
       console.error('❌ confirmMobileKk:', e);
-      alert('❌ Không lưu được Kiểm kê / Standard Packing. Vui lòng thử lại.');
+      appAlert('❌ Không lưu được Kiểm kê / Standard Packing. Vui lòng thử lại.');
     } finally {
       this.mobileKkConfirmBusy = false;
     }
@@ -13025,7 +14171,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .toUpperCase()
       .replace(/\s+/g, '');
     if (!newLoc) {
-      alert('Vui lòng quét / nhập vị trí mới.');
+      appAlert('Vui lòng quét / nhập vị trí mới.');
       setTimeout(() => this.focusMobileLocScanInput(), 0);
       return;
     }
@@ -13056,7 +14202,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         const whNote = this.isNguyenLieuPage
           ? `\nKho ${this.kkWarehouseLabel(this.kkWarehouseFromLocation(locWithWh))}`
           : '';
-        alert(`✅ ${material.materialCode}\n${oldLoc || '—'} → ${locWithWh}${whNote}`);
+        appAlert(`✅ ${material.materialCode}\n${oldLoc || '—'} → ${locWithWh}${whNote}`);
       } else {
         material.location = oldLoc;
         this.mobileLocScanBuffer = '';
@@ -13199,7 +14345,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e) {
       if (runId !== this.kkCheckRunId) return;
       console.error('❌ runKkCheck:', e);
-      alert('❌ Lỗi khi chạy Kiểm Kê. Vui lòng thử lại.');
+      appAlert('❌ Lỗi khi chạy Kiểm Kê. Vui lòng thử lại.');
     } finally {
       if (runId === this.kkCheckRunId) {
         this.kkCheckRunning = false;
@@ -13285,7 +14431,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const qty = parseFloat(String(rollsOrBagsValue).replace(/,/g, '').trim());
     if (!(qty > 0)) return false;
     if (!this.shouldEnforceQtyBagMultipleForMaterial(material.materialCode)) return true;
-    const sp = this.getStandardPacking(material.materialCode);
+    const sp = this.getEffectiveStandardPacking(material);
     if (sp && sp > 0) {
       if (this.isMultipleOfStandardPacking(qty, sp)) return true;
       if (this.isQtyBagEqualsFullStockForPrint(material, qty)) return true;
@@ -13303,8 +14449,34 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return q % s === 0;
   }
 
-  /** Khóa in QR cho dòng có IMD từ ngày trong Matrix trở đi (rule qrLockEnabled / qrLockImdFrom). */
+  /**
+   * Khóa in QR: dòng thuộc quy tắc khóa (IMD từ ngày trong Matrix) và đã dùng lần in fix duy nhất.
+   * Dòng thuộc quy tắc nhưng chưa in fix → vẫn in được 1 lần (isQrFixAvailable).
+   */
   isQrLocked(material: InventoryMaterial): boolean {
+    return this.isQrLockRule(material) && this.qrFixUsed(material) >= MaterialsComponent.QR_FIX_MAX;
+  }
+
+  /** Dòng bị khóa in QR nhưng còn lượt in để fix. */
+  isQrFixAvailable(material: InventoryMaterial): boolean {
+    return this.isQrLockRule(material) && this.qrFixUsed(material) < MaterialsComponent.QR_FIX_MAX;
+  }
+
+  /** Tạm thời: dòng bị khóa được in fix tối đa 10 lần (trước là 1). */
+  static readonly QR_FIX_MAX = 10;
+
+  private qrFixUsed(material: { qrFixPrintCount?: unknown; qrFixPrintedAt?: unknown } | null | undefined): number {
+    const n = Number(material?.qrFixPrintCount);
+    if (Number.isFinite(n) && n > 0) return n;
+    return material?.qrFixPrintedAt ? 1 : 0;
+  }
+
+  qrFixLeft(material: InventoryMaterial): number {
+    return Math.max(0, MaterialsComponent.QR_FIX_MAX - this.qrFixUsed(material));
+  }
+
+  /** Quy tắc khóa in QR cho dòng có IMD từ ngày trong Matrix trở đi (rule qrLockEnabled / qrLockImdFrom). */
+  private isQrLockRule(material: InventoryMaterial): boolean {
     if (!this.ruleBool('qrLockEnabled')) return false;
     const from = matrixDateMs(this.matrixRules['qrLockImdFrom']);
     if (!from) return false;
@@ -13319,18 +14491,68 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     return ms >= from;
   }
 
-  qrLockTitle(): string {
+  qrLockTitle(material?: InventoryMaterial): string {
     const d = String(this.matrixRules['qrLockImdFrom'] || '').split('-').reverse().join('/');
-    return `Đã khóa — ${this.selectedFactory}, IMD từ ${d}`;
+    const at = this.normalizeTimestamp(material?.qrFixPrintedAt);
+    const fix = at
+      ? ` · đã in ${this.qrFixUsed(material)} lần để fix, lần cuối ${at.toLocaleString('vi-VN')}${material?.qrFixPrintedBy ? ' bởi ' + material.qrFixPrintedBy : ''}`
+      : '';
+    return `Đã khóa — ${this.selectedFactory}, IMD từ ${d}${fix}`;
+  }
+
+  /**
+   * Ghi dấu "đã in fix" trước khi in (transaction: máy khác vừa in thì từ chối). true = được in.
+   */
+  private async claimQrFixPrint(material: InventoryMaterial): Promise<boolean> {
+    if (!material.id) {
+      appAlert('❌ Dòng này chưa có mã tài liệu — không ghi được lần in fix.');
+      return false;
+    }
+    const by = this.currentEmployeeId || '';
+    const ref = this.firestore.firestore.collection('inventory-materials').doc(material.id);
+    let nextCount = 0;
+    try {
+      const ok = await this.firestore.firestore.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new Error('Không tìm thấy dòng tồn kho.');
+        const cur = snap.data() as any;
+        const used = this.qrFixUsed(cur);
+        if (used >= MaterialsComponent.QR_FIX_MAX) {
+          material.qrFixPrintedAt = cur.qrFixPrintedAt;
+          material.qrFixPrintedBy = cur.qrFixPrintedBy || '';
+          material.qrFixPrintCount = used;
+          return false;
+        }
+        nextCount = used + 1;
+        tx.update(ref, { qrFixPrintedAt: new Date(), qrFixPrintedBy: by, qrFixPrintCount: nextCount });
+        return true;
+      });
+      if (!ok) {
+        appAlert(`🔒 ${this.qrLockTitle(material)}.`);
+        return false;
+      }
+      material.qrFixPrintedAt = new Date();
+      material.qrFixPrintedBy = by;
+      material.qrFixPrintCount = nextCount;
+      return true;
+    } catch (e: any) {
+      appAlert('❌ Không ghi được lần in fix: ' + (e?.message || e));
+      return false;
+    }
   }
 
   // Print QR Code for inventory items
   async printQRCode(material: InventoryMaterial): Promise<void> {
     if (this.denyAction('printQr')) return;
     if (this.isQrLocked(material)) {
-      alert(`🔒 ${this.qrLockTitle()} (Matrix rule).`);
+      appAlert(`🔒 ${this.qrLockTitle(material)} (Matrix rule).`);
       return;
     }
+    const fixPrint = this.isQrFixAvailable(material);
+    if (fixPrint && !confirm(
+      `🔒 Dòng ${material.materialCode} · PO ${material.poNumber || '—'} đang bị khóa in QR.\n\n` +
+      `Còn ${this.qrFixLeft(material)}/${MaterialsComponent.QR_FIX_MAX} lần in để fix — hết lượt sẽ khóa luôn.\n\nTiếp tục in?`
+    )) return;
     const QRCode = await import('qrcode') as any;
     try {
       console.log('🏷️ Generating QR code for ASM1 material:', material.materialCode);
@@ -13340,7 +14562,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!rollsOrBagsValue || 
           (typeof rollsOrBagsValue === 'string' && rollsOrBagsValue.trim() === '') ||
           parseFloat(String(rollsOrBagsValue).replace(/,/g, '')) <= 0) {
-        alert('❌ Không thể in tem QR!\n\nLý do: Thiếu Rolls/Bags\n\nVui lòng nhập số lượng Rolls/Bags trước khi in tem QR.');
+        appAlert('❌ Không thể in tem QR!\n\nLý do: Thiếu Rolls/Bags\n\nVui lòng nhập số lượng Rolls/Bags trước khi in tem QR.');
         return;
       }
       
@@ -13349,12 +14571,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const totalQuantity = this.calculateCurrentStock(material);
       
       if (!totalQuantity || totalQuantity <= 0) {
-        alert('❌ Vui lòng nhập số lượng trước khi tạo QR code!');
+        appAlert('❌ Vui lòng nhập số lượng trước khi tạo QR code!');
         return;
       }
 
       if (qtyBagRaw > totalQuantity) {
-        alert('❌ Không thể in tem QR!\n\nQTY BAG không được lớn hơn tồn kho.\n\nTồn kho: ' + this.formatNumber(totalQuantity) + '\nQTY BAG: ' + this.formatNumber(qtyBagRaw));
+        appAlert('❌ Không thể in tem QR!\n\nQTY BAG không được lớn hơn tồn kho.\n\nTồn kho: ' + this.formatNumber(totalQuantity) + '\nQTY BAG: ' + this.formatNumber(qtyBagRaw));
         return;
       }
 
@@ -13363,19 +14585,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       // Rule in tem:
       // - Số tem chuẩn = QTY BAG / Standard Packing
       // - Tem tồn = Tồn kho - QTY BAG
-      const standardPacking = this.getStandardPacking(material.materialCode);
+      const standardPacking = this.getEffectiveStandardPacking(material);
       if (!standardPacking || standardPacking <= 0) {
-        alert('❌ Standard Packing phải > 0 để in tem theo quy tắc mới.');
+        appAlert('❌ Standard Packing phải > 0 để in tem theo quy tắc mới.');
         return;
       }
       if (qtyBag <= 0) {
-        alert('❌ QTY BAG phải > 0.');
+        appAlert('❌ QTY BAG phải > 0.');
         return;
       }
 
       const bagTotal = this.effectiveTotalBags(material);
       if (!bagTotal || bagTotal < 1) {
-        alert('❌ Không thể in tem QR - thiếu BAG (Số bịch).');
+        appAlert('❌ Không thể in tem QR - thiếu BAG (Số bịch).');
         return;
       }
 
@@ -13451,7 +14673,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       if (qrCodes.length === 0) {
-        alert('❌ Vui lòng nhập đơn vị hợp lệ trước khi tạo QR code!');
+        appAlert('❌ Vui lòng nhập đơn vị hợp lệ trước khi tạo QR code!');
         return;
       }
 
@@ -13481,12 +14703,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         })
       );
 
+      // Dòng bị khóa: chỉ in khi ghi được lượt in fix (tối đa QR_FIX_MAX)
+      if (fixPrint && !(await this.claimQrFixPrint(material))) return;
+
       // Create print window
       this.createQRPrintWindow(qrImages, material, isPartialLabel);
       
     } catch (error) {
       console.error('❌ Error generating QR code for ASM1:', error);
-      alert('❌ Lỗi khi tạo QR code: ' + error.message);
+      appAlert('❌ Lỗi khi tạo QR code: ' + error.message);
     }
   }
 
@@ -13583,16 +14808,20 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.performResetInventory();
     } catch (error: any) {
       console.error('❌ Error during reset:', error);
-      alert(`❌ Lỗi khi reset ${this.selectedFactory}: ${error?.message || error}`);
+      appAlert(`❌ Lỗi khi reset ${this.selectedFactory}: ${error?.message || error}`);
     } finally {
       this.isResetting = false;
     }
   }
 
   async deleteSelectedLowStock(): Promise<void> {
+    if (!this.canDelete) {
+      appAlert('❌ Bạn không có quyền Ẩn / xóa dòng. Liên hệ admin để được cấp quyền.');
+      return;
+    }
     const selected = this.resetLowStockRows.filter((r) => r.selected);
     if (selected.length === 0) {
-      alert('Chưa chọn mã nào để ẩn.');
+      appAlert('Chưa chọn mã nào để ẩn.');
       return;
     }
     const confirmed = confirm(
@@ -13612,10 +14841,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         this.showResetLowStockPopup = false;
         this.resetZeroDeletedCount = 0;
       }
-      alert(`✅ Đã ẩn ${hiddenCount} mã tồn < 1. Xem More → Danh mục Ẩn.`);
+      appAlert(`✅ Đã ẩn ${hiddenCount} mã tồn < 1. Xem More → Danh mục Ẩn.`);
     } catch (error: any) {
       console.error('❌ Error hiding low-stock items:', error);
-      alert(`❌ Lỗi khi ẩn: ${error?.message || error}`);
+      appAlert(`❌ Lỗi khi ẩn: ${error?.message || error}`);
     } finally {
       this.isDeletingResetLowStock = false;
     }
@@ -13658,7 +14887,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       .toPromise();
 
     if (!snapshot || snapshot.empty) {
-      alert(`✅ Không có mã hàng nào trong ${this.selectedFactory}`);
+      appAlert(`✅ Không có mã hàng nào trong ${this.selectedFactory}`);
       return;
     }
 
@@ -13684,7 +14913,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     if (zeroStockIds.length === 0 && lowStockRows.length === 0) {
-      alert(`✅ Không có mã tồn = 0 hoặc tồn < 1 trong ${this.selectedFactory}`);
+      appAlert(`✅ Không có mã tồn = 0 hoặc tồn < 1 trong ${this.selectedFactory}`);
       return;
     }
 
@@ -13702,12 +14931,12 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.resetLowStockRows = lowStockRows;
       this.showResetLowStockPopup = true;
       if (hiddenZero > 0) {
-        alert(
+        appAlert(
           `✅ Đã ẩn ${hiddenZero} mã tồn = 0.\nCòn ${lowStockRows.length} mã tồn < 1 — tick chọn và bấm Ẩn trong popup.`
         );
       }
     } else {
-      alert(`✅ Reset hoàn thành!\nĐã ẩn ${hiddenZero} mã tồn = 0.`);
+      appAlert(`✅ Reset hoàn thành!\nĐã ẩn ${hiddenZero} mã tồn = 0.`);
     }
   }
 
@@ -13723,7 +14952,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       ).get().toPromise();
 
       if (!snapshot || snapshot.empty) {
-        alert(`✅ Không có dữ liệu tồn kho nào trong ${factory}`);
+        appAlert(`✅ Không có dữ liệu tồn kho nào trong ${factory}`);
         return;
       }
 
@@ -13760,7 +14989,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       // 🔧 SAFETY: nếu user đổi factory (qua switcher) trong lúc dialog đang mở, hủy để tránh xóa nhầm nhà máy.
       if (this.selectedFactory !== factory) {
-        alert('❌ Nhà máy đang chọn đã thay đổi trong lúc xác nhận. Thao tác bị hủy để tránh xóa nhầm dữ liệu.');
+        appAlert('❌ Nhà máy đang chọn đã thay đổi trong lúc xác nhận. Thao tác bị hủy để tránh xóa nhầm dữ liệu.');
         return;
       }
 
@@ -13804,7 +15033,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.isLoading = false;
 
-      alert(
+      appAlert(
         `✅ Reset hoàn thành!\n\n` +
         `Đã xóa ${deletedCount} mã hàng từ ${factory}\n\n` +
         `Bạn có thể import dữ liệu mới ngay bây giờ.`
@@ -13813,7 +15042,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (error) {
       console.error(`❌ Error during ${factory} complete reset:`, error);
       this.isLoading = false;
-      alert(`❌ Lỗi khi reset toàn bộ ${factory}: ${error.message}`);
+      appAlert(`❌ Lỗi khi reset toàn bộ ${factory}: ${error.message}`);
     }
   }
 
@@ -13873,15 +15102,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const imd  = (this.customPrintImd  || '').trim();
     const num  = Math.max(1, Math.min(200, Math.floor(Number(this.customPrintNumLabels) || 1)));
 
-    if (!code) { alert('Vui lòng nhập Mã hàng.'); return; }
-    if (!po)   { alert('Vui lòng nhập PO.'); return; }
+    if (!code) { appAlert('Vui lòng nhập Mã hàng.'); return; }
+    if (!po)   { appAlert('Vui lòng nhập PO.'); return; }
     if (!qty || isNaN(Number(qty.replace(/,/g, ''))) || Number(qty.replace(/,/g, '')) <= 0) {
-      alert('Vui lòng nhập Qty hợp lệ (> 0).'); return;
+      appAlert('Vui lòng nhập Qty hợp lệ (> 0).'); return;
     }
 
     // Mở cửa sổ in NGAY trong click handler để tránh bị chặn popup (do code bên dưới có await).
     const printWindow = window.open('', '_blank');
-    if (!printWindow) { alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!'); return; }
+    if (!printWindow) { appAlert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!'); return; }
 
     this.customPrintBusy = true;
     try {
@@ -13902,7 +15131,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.createQRPrintWindow(qrImages, null, false, false, [], printWindow);
     } catch (e: any) {
       console.error('[Custom Print] error', e);
-      alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
       try { printWindow.close(); } catch {}
     } finally {
       this.customPrintBusy = false;
@@ -13924,7 +15153,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     const printWindow = targetWindow || window.open('', '_blank');
 
     if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
 
@@ -13937,7 +15166,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     } catch (e: any) {
       console.error('❌ createQRPrintWindow error:', e);
       try { printWindow.close(); } catch {}
-      alert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi tạo tem: ' + (e?.message || e));
     }
   }
 
@@ -14215,7 +15444,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + group.length, 0);
       
       if (duplicateGroups.length === 0) {
-        alert('✅ Không có dòng trùng lặp nào để gộp!');
+        appAlert('✅ Không có dòng trùng lặp nào để gộp!');
         return;
       }
       
@@ -14392,7 +15621,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const finalCount = this.inventoryMaterials.length;
       const reducedCount = originalCount - finalCount;
       
-      alert(`✅ GỘP DÒNG HOÀN TẤT!\n\n` +
+      appAlert(`✅ GỘP DÒNG HOÀN TẤT!\n\n` +
         `📊 Kết quả:\n` +
         `• Tổng dòng trước: ${originalCount}\n` +
         `• Tổng dòng sau: ${finalCount}\n` +
@@ -14405,7 +15634,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       
     } catch (error) {
       console.error('❌ Error during consolidation:', error);
-      alert(`❌ Lỗi khi gộp dòng: ${error.message}\n\nVui lòng thử lại!`);
+      appAlert(`❌ Lỗi khi gộp dòng: ${error.message}\n\nVui lòng thử lại!`);
     } finally {
       this.isLoading = false;
     }
@@ -14414,7 +15643,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Tải Excel toàn bộ kết quả đang search (filteredInventory). */
   async downloadSearchResultsExcel(): Promise<void> {
     if (!this.filteredInventory?.length) {
-      alert('Không có dữ liệu để tải. Hãy search trước.');
+      appAlert('Không có dữ liệu để tải. Hãy search trước.');
       return;
     }
     this.isDownloadingSearch = true;
@@ -14437,7 +15666,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
         'Vị trí': m.location || '',
         'Loại Hình': m.type || '',
         'Lưu ý': m.remarks || '',
-        'Standard Packing': this.getStandardPacking(m.materialCode),
+        'Standard Packing': this.getEffectiveStandardPacking(m),
         'Trạng thái': this.getStatusText(m),
         'IQC Status': this.getIQCStatusText(m),
         'Last status': this.formatLastStatusDate(m.lastStatusAt),
@@ -14464,10 +15693,10 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       const hint = (this.searchTerm || 'all').trim().slice(0, 24).replace(/[^\w\-.]/g, '_') || 'all';
       const fileName = `${this.selectedFactory}_Search_${hint}_${date}.xlsx`;
       XLSX.writeFile(workbook, fileName);
-      alert(`✅ Đã tải ${exportData.length} dòng kết quả search.\n\nFile: ${fileName}`);
+      appAlert(`✅ Đã tải ${exportData.length} dòng kết quả search.\n\nFile: ${fileName}`);
     } catch (error: any) {
       console.error('❌ Download search Excel error:', error);
-      alert('❌ Lỗi tải file Excel: ' + (error?.message || error));
+      appAlert('❌ Lỗi tải file Excel: ' + (error?.message || error));
     } finally {
       this.isDownloadingSearch = false;
     }
@@ -14477,7 +15706,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   async exportToExcel(): Promise<void> {
     const XLSX = await import('xlsx');
     if (!this.canExport) {
-      alert('Bạn không có quyền xuất dữ liệu');
+      appAlert('Bạn không có quyền xuất dữ liệu');
       return;
     }
 
@@ -14545,11 +15774,11 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ ASM1 inventory data exported to Excel');
-      alert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
+      appAlert(`✅ Đã xuất ${exportData.length} records ra file Excel`);
       
     } catch (error) {
       console.error('❌ Export error:', error);
-      alert('Lỗi export: ' + error.message);
+      appAlert('Lỗi export: ' + error.message);
     }
   }
 
@@ -14578,7 +15807,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async openTemLeGwStep(res: TemLeSplitResult, code: string, po: string, imd: string, sourceQty: number): Promise<void> {
     let gwFull = 0;
-    let std = this.getStandardPacking(code) || 0;
+    let std = this.stdForLot(code, po) || 0;
     try {
       const cat = await this.nvlCatalogFull.getByCode(code);
       gwFull = catalogBagWeight(cat);

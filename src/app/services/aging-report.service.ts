@@ -3,7 +3,7 @@ import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { firstValueFrom } from 'rxjs';
 import {
-  AgingCorrection, AgingFactory, AgingFactoryMeta, AgingRow, FactoryLedger, InventoryRow, LedgerKind, LedgerRow,
+  AgingCorrection, AgingFactory, AgingFactoryMeta, AgingMode, AgingRow, FactoryLedger, InventoryRow, LedgerKind, LedgerRow,
   ParsedAgingFile, StoredReportInfo,
 } from './aging-report.parse';
 
@@ -24,12 +24,22 @@ export * from './aging-report.parse';
 
 type BatchOp = (b: ReturnType<AngularFirestore['firestore']['batch']>) => void;
 
-const COL_LEDGER = 'aging-ledger';
-const COL_REPORTS = 'aging-reports';
-const COL_INVENTORY = 'aging-inventory';
-const COL_META = 'aging-meta';
+/** Tên collection theo chế độ: TP dùng `aging-*` (giữ nguyên), NVL dùng `aging-nvl-*` (tách riêng hoàn toàn). */
+let COL_LEDGER = 'aging-ledger';
+let COL_REPORTS = 'aging-reports';
+let COL_INVENTORY = 'aging-inventory';
+let COL_META = 'aging-meta';
 /** `aging-corrections/{reportId}`: { items: { [key]: AgingCorrection } } — chỉnh sửa trên từng báo cáo tuổi hàng */
-const COL_CORRECTIONS = 'aging-corrections';
+let COL_CORRECTIONS = 'aging-corrections';
+
+function useCollections(mode: AgingMode): void {
+  const p = mode === 'nvl' ? 'aging-nvl' : 'aging';
+  COL_LEDGER = `${p}-ledger`;
+  COL_REPORTS = `${p}-reports`;
+  COL_INVENTORY = `${p}-inventory`;
+  COL_META = `${p}-meta`;
+  COL_CORRECTIONS = `${p}-corrections`;
+}
 const LEDGER_PART_SIZE = 1500;
 const REPORT_PART_SIZE = 1500;
 const MAX_IMPORT_LOG = 100;
@@ -47,6 +57,14 @@ function emptyMeta(factory: AgingFactory): AgingFactoryMeta {
 @Injectable({ providedIn: 'root' })
 export class AgingReportService {
   constructor(private firestore: AngularFirestore, private afAuth: AngularFireAuth) {}
+
+  /** Chế độ đang dùng (tp = thành phẩm, nvl = nguyên liệu) — gọi khi mở trang. */
+  mode: AgingMode = 'tp';
+
+  setMode(mode: AgingMode): void {
+    this.mode = mode;
+    useCollections(mode);
+  }
 
   async loadMeta(factory: AgingFactory): Promise<AgingFactoryMeta> {
     const snap = await firstValueFrom(this.firestore.collection(COL_META).doc(factory).get());
@@ -68,6 +86,33 @@ export class AgingReportService {
     out.N.sort((a, b) => a.d.localeCompare(b.d));
     out.X.sort((a, b) => a.d.localeCompare(b.d));
     return out;
+  }
+
+  /**
+   * Sửa 1 phiếu trong bảng kê (mã lô / kho / lượng) — tìm đúng dòng trong doc tháng của phiếu.
+   * Ghi lại giá trị cũ (orig) + người sửa. Lưu ý: import lại bảng kê cùng kỳ sẽ ghi đè phần sửa.
+   */
+  async updateLedgerRow(factory: AgingFactory, kind: LedgerKind, orig: LedgerRow, patch: Partial<LedgerRow>): Promise<void> {
+    const by = await this.currentUserLabel();
+    const month = String(orig.d || '').slice(0, 7);
+    const snap = await firstValueFrom(this.firestore.collection(COL_LEDGER, ref =>
+      ref.where('factory', '==', factory).where('kind', '==', kind).where('month', '==', month)).get());
+    const same = (a: LedgerRow, b: LedgerRow) => a.d === b.d && a.ct === b.ct && a.no === b.no && a.sku === b.sku
+      && a.lot === b.lot && a.wh === b.wh && Math.abs((a.q || 0) - (b.q || 0)) < 1e-9 && (a.lsx || '') === (b.lsx || '');
+    for (const doc of snap.docs) {
+      const rows = ((doc.data() as { rows?: LedgerRow[] }).rows || []).slice();
+      const idx = rows.findIndex(r => same(r, orig));
+      if (idx < 0) continue;
+      const prev = rows[idx] as LedgerRow & { orig?: unknown };
+      rows[idx] = {
+        ...prev, ...patch,
+        orig: prev.orig || { lot: prev.lot, wh: prev.wh, q: prev.q },
+        editedBy: by, editedAt: new Date().toISOString(),
+      } as LedgerRow;
+      await doc.ref.update({ rows, updatedAt: new Date().toISOString() });
+      return;
+    }
+    throw new Error('Không tìm thấy phiếu trong bảng kê (có thể vừa import lại) — bấm Tải lại rồi thử lại.');
   }
 
   async loadAgingRows(info: StoredReportInfo): Promise<AgingRow[]> {

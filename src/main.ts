@@ -22,9 +22,21 @@ import { AppModule } from './app/app.module';
 import { environment } from './environments/environment';
 import 'hammerjs';
 import 'firebase/compat/storage';
+import { installNetStatus } from './app/shared/net-status';
+import { installGlobalSearch } from './app/shared/global-search/global-search';
 
 if (environment.production) {
   enableProdMode();
+  // Bản chạy thật: tắt console.log / debug (hơn 1.700 chỗ) cho đỡ chậm; vẫn giữ warn / error để tra lỗi.
+  // Cần xem log trên máy thật: mở console gõ  localStorage.setItem('debugLog','1')  rồi tải lại trang.
+  let keepLog = false;
+  try { keepLog = localStorage.getItem('debugLog') === '1'; } catch { /* bỏ qua */ }
+  if (!keepLog) {
+    const noop = () => {};
+    console.log = noop;
+    console.debug = noop;
+    console.info = noop;
+  }
 }
 
 /**
@@ -44,4 +56,6 @@ function reloadOnStaleChunk(reason: unknown): void {
 window.addEventListener('unhandledrejection', (e) => reloadOnStaleChunk(e.reason));
 window.addEventListener('error', (e) => reloadOnStaleChunk((e as ErrorEvent).error || (e as ErrorEvent).message));
 
-platformBrowserDynamic().bootstrapModule(AppModule);
+installNetStatus();
+
+platformBrowserDynamic().bootstrapModule(AppModule).then((ref) => installGlobalSearch(ref.injector));

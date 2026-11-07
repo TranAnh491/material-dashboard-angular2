@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
 import { WEIGH_REQUIRED_PREFIXES } from '../../services/weigh-exempt-report';
 import { SxxkSuspectInfo, SxxkSuspectService } from '../../services/sxxk-suspect.service';
@@ -5,7 +6,8 @@ import { Component, HostListener, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import * as XLSX from 'xlsx';
-import { NvlCatalogFullService, NvlCatalogItem, OutboundQtyStats } from '../../services/nvl-catalog-full.service';
+import { NvlCatalogFullService, NvlCatalogItem, NvlStockLots, OutboundQtyStats } from '../../services/nvl-catalog-full.service';
+import { formatThousand, parseThousand } from '../../shared/thousand.directive';
 import { TpCatalogFullService, MergedCatalogItem, TpImportRow } from '../../services/tp-catalog-full.service';
 import { CatalogDeleteOtpService, CatalogDeleteScope } from '../../services/catalog-delete-otp.service';
 import { CartonPackingQtyService } from '../../services/carton-packing-qty.service';
@@ -17,7 +19,7 @@ import { CartonPackingQtyAlertService } from '../../services/carton-packing-qty-
 import { KkCatalogService } from '../../services/kk-catalog.service';
 import { STORAGE_ENV_CLIMATE, STORAGE_ENV_LABEL, STORAGE_MATERIAL_GROUPS, StorageMaterialGroup } from './storage-standard';
 
-type CatalogTab = 'nvl' | 'tp' | 'storage' | 'weigh';
+type CatalogTab = 'nvl' | 'tp' | 'storage' | 'weigh' | 'locRule';
 
 /** Dòng hiển thị NVL — gộp thêm Khách hàng (NVLKH) và DV Lưu trữ (dữ liệu riêng, gộp vào tab này để sửa cùng chỗ). */
 interface NvlCatalogRow extends NvlCatalogItem {
@@ -83,7 +85,45 @@ export class DanhMucNvlTpComponent implements OnInit {
   filteredNvlItems: NvlCatalogRow[] = [];
   pagedNvlItems: NvlCatalogRow[] = [];
   nvlSearchText = '';
-  nvlColumnFilters = { materialCode: '', materialName: '', unit: '', unitWeight: '', customer: '', requiredLocation: '' };
+  /** Lọc theo từng cột bảng NVL (lock / carton: '' | 'yes' | 'no'). */
+  nvlColumnFilters = {
+    materialCode: '', materialName: '', unit: '', standardPacking: '', gwBag: '', unitWeight: '', cartonQty: '',
+    customer: '', storageUnit: '', requiredLocation: '', lock: '', carton: '', week: '', editedBy: ''
+  };
+
+  clearNvlColumnFilters(): void {
+    Object.keys(this.nvlColumnFilters).forEach((k) => ((this.nvlColumnFilters as Record<string, string>)[k] = ''));
+    this.applyNvlFilters();
+  }
+
+  /**
+   * Ô lọc cột: chữ → chứa chữ đó; cột số: "<1", ">5", "<=10", ">=100", "10-20" hoặc gõ số = đúng số đó.
+   */
+  private nvlColMatch(val: unknown, filter: string, numeric = false): boolean {
+    const f = String(filter || '').trim();
+    if (!f) return true;
+    if (numeric) {
+      const num = (v: unknown) => parseThousand(v);
+      const v = num(val);
+      const op = /^(<=|>=|<|>|=)\s*(-?[\d,]+(?:\.\d+)?)$/.exec(f);
+      const range = op ? null : /^(-?[\d,]+(?:\.\d+)?)\s*-\s*(-?[\d,]+(?:\.\d+)?)$/.exec(f);
+      const exact = !op && !range && /^-?[\d,]+(?:\.\d+)?$/.test(f);
+      if (op || range || exact) {
+        if (v === null) return false;
+        if (range) return v >= num(range[1])! && v <= num(range[2])!;
+        if (exact) return Math.abs(v - num(f)!) < 1e-9;
+        const n = num(op![2])!;
+        switch (op![1]) {
+          case '<': return v < n;
+          case '>': return v > n;
+          case '<=': return v <= n;
+          case '>=': return v >= n;
+          default: return Math.abs(v - n) < 1e-9;
+        }
+      }
+    }
+    return String(val ?? '').toLowerCase().includes(f.toLowerCase());
+  }
   nvlPageSize = 25;
   nvlCurrentPage = 1;
   nvlLoadedAt: Date | null = null;
@@ -94,6 +134,8 @@ export class DanhMucNvlTpComponent implements OnInit {
   nvlOnlyWithStock = false;
   isNvlStockFilterLoading = false;
   private nvlCodesWithStock: Set<string> | null = null;
+  /** Tồn từng lô theo mã (ASM1 / ASM2) — nạp khi bật "Bag tồn kho"; dùng tính số bag. */
+  nvlStockLots: Map<string, NvlStockLots> | null = null;
   showNvlAddForm = false;
   editingNvlCode: string | null = null;
   nvlEditDraft: Partial<NvlCatalogRow> | null = null;
@@ -270,11 +312,29 @@ export class DanhMucNvlTpComponent implements OnInit {
     this.cancelEditNvl();
   }
 
+  /** Cache tag khách hàng theo chuỗi — template gọi nhiều lần mỗi dòng mỗi lần vẽ. */
+  private customerTagCache = new Map<string, string[]>();
+
+  /** Ô số có dấu phẩy hàng ngàn: "12,500" → "12500" để lưu (trống → ''). */
+  rawNum(v: unknown): string {
+    const n = parseThousand(v);
+    return n === null ? '' : String(n);
+  }
+
+  /** Hiện số có dấu phẩy hàng ngàn (chuỗi không phải số giữ nguyên). */
+  fmtNum(v: unknown): string {
+    return formatThousand(v);
+  }
+
   getCustomerTags(customer: string): string[] {
-    return String(customer || '')
-      .split(/[,;|/]+/)
-      .map(s => s.trim())
-      .filter(Boolean);
+    const key = String(customer || '');
+    let tags = this.customerTagCache.get(key);
+    if (!tags) {
+      tags = key.split(/[,;|/]+/).map(s => s.trim()).filter(Boolean);
+      if (this.customerTagCache.size > 5000) this.customerTagCache.clear();
+      this.customerTagCache.set(key, tags);
+    }
+    return tags;
   }
 
   isSharedCustomerTag(label: string): boolean {
@@ -304,7 +364,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.applyNvlFilters();
     } catch (e: any) {
       console.error(e);
-      alert('Không tải được Danh mục NVL.\n' + (e?.message || e));
+      appAlert('Không tải được Danh mục NVL.\n' + (e?.message || e));
     } finally {
       this.isNvlLoading = false;
     }
@@ -320,15 +380,29 @@ export class DanhMucNvlTpComponent implements OnInit {
         item.customer.toLowerCase().includes(q) ||
         (item.requiredLocation || '').toLowerCase().includes(q)
       )) return false;
-      if (cf.materialCode && !item.materialCode.toLowerCase().includes(cf.materialCode.toLowerCase())) return false;
-      if (cf.materialName && !item.materialName.toLowerCase().includes(cf.materialName.toLowerCase())) return false;
-      if (cf.unit && !item.unit.toLowerCase().includes(cf.unit.toLowerCase())) return false;
-      if (cf.unitWeight && !String(item.unitWeight ?? '').toLowerCase().includes(cf.unitWeight.toLowerCase())) return false;
-      if (cf.customer && !item.customer.toLowerCase().includes(cf.customer.toLowerCase())) return false;
-      if (cf.requiredLocation && !(item.requiredLocation || '').toLowerCase().includes(cf.requiredLocation.toLowerCase())) return false;
+      const m = (val: unknown, f: string, numeric = false) => this.nvlColMatch(val, f, numeric);
+      if (!m(item.materialCode, cf.materialCode)) return false;
+      if (!m(item.materialName, cf.materialName)) return false;
+      if (!m(item.unit, cf.unit)) return false;
+      if (!m(item.standardPacking, cf.standardPacking, true)) return false;
+      if (!m(item.gwBag, cf.gwBag, true)) return false;
+      if (cf.unitWeight && !m(this.nvlUnitWeightCalc(item), cf.unitWeight, true)) return false;
+      if (!m(item.cartonQty, cf.cartonQty, true)) return false;
+      if (!m(item.customer, cf.customer)) return false;
+      if (cf.storageUnit && !m(this.getStorageUnitLabel(item.storageUnitSize), cf.storageUnit)) return false;
+      if (!m(item.requiredLocation, cf.requiredLocation)) return false;
+      if (cf.lock && (!!item.standardPackingLocked) !== (cf.lock === 'yes')) return false;
+      if (cf.carton && (!!item.allowExportByCarton) !== (cf.carton === 'yes')) return false;
+      if (cf.week && (!!item.weekTracked) !== (cf.week === 'yes')) return false;
+      if (!m(item.lastEditedBy, cf.editedBy)) return false;
       if (this.nvlOnlyWithStock && this.nvlCodesWithStock && !this.nvlCodesWithStock.has(item.materialCode)) return false;
       return true;
     });
+    // Bag tồn kho: mã nhiều bag nhất lên đầu để sắp xếp kho
+    if (this.nvlOnlyWithStock && this.nvlStockLots) {
+      const bags = new Map(this.filteredNvlItems.map(i => [i.materialCode, this.nvlBagStock(i)?.total ?? -1]));
+      this.filteredNvlItems.sort((a, b) => (bags.get(b.materialCode)! - bags.get(a.materialCode)!) || a.materialCode.localeCompare(b.materialCode));
+    }
     this.nvlCurrentPage = 1;
     this.updateNvlPaging();
   }
@@ -339,16 +413,43 @@ export class DanhMucNvlTpComponent implements OnInit {
     if (this.nvlOnlyWithStock && !this.nvlCodesWithStock) {
       this.isNvlStockFilterLoading = true;
       try {
-        this.nvlCodesWithStock = await this.nvlService.loadCodesWithStock();
+        this.nvlStockLots = await this.nvlService.loadStockLotsByCode();
+        this.nvlCodesWithStock = new Set(this.nvlStockLots.keys());
       } catch (e) {
         console.error(e);
-        alert('❌ Không tải được dữ liệu tồn kho để lọc.');
+        appAlert('❌ Không tải được dữ liệu tồn kho để lọc.');
         this.nvlOnlyWithStock = false;
       } finally {
         this.isNvlStockFilterLoading = false;
       }
     }
     this.applyNvlFilters();
+  }
+
+  /**
+   * Số bag đang tồn của 1 mã: mỗi lô = làm tròn lên (tồn ÷ Standard Packing); thiếu Standard → null.
+   * qty = tổng lượng tồn (ASM1 + ASM2).
+   */
+  /** Cache bag tồn theo mã + Standard (tính lại khi tải lại tồn). */
+  private bagStockCache: { src: unknown; map: Map<string, ReturnType<DanhMucNvlTpComponent['computeNvlBagStock']>> } = { src: null, map: new Map() };
+
+  nvlBagStock(row: NvlCatalogItem): { asm1: number | null; asm2: number | null; total: number | null; qty: number } | null {
+    if (this.bagStockCache.src !== this.nvlStockLots) this.bagStockCache = { src: this.nvlStockLots, map: new Map() };
+    const key = `${row.materialCode}|${Number(row.standardPacking) || 0}`;
+    if (!this.bagStockCache.map.has(key)) this.bagStockCache.map.set(key, this.computeNvlBagStock(row));
+    return this.bagStockCache.map.get(key)!;
+  }
+
+  private computeNvlBagStock(row: NvlCatalogItem): { asm1: number | null; asm2: number | null; total: number | null; qty: number } | null {
+    const lots = this.nvlStockLots?.get(row.materialCode);
+    if (!lots) return this.nvlStockLots ? { asm1: 0, asm2: 0, total: 0, qty: 0 } : null;
+    const std = Number(row.standardPacking) || 0;
+    const qty = Math.round([...lots.asm1, ...lots.asm2].reduce((s, n) => s + n, 0) * 10000) / 10000;
+    if (!(std > 0)) return { asm1: null, asm2: null, total: null, qty };
+    const bags = (arr: number[]) => arr.reduce((s, n) => s + Math.ceil(n / std - 1e-9), 0);
+    const asm1 = bags(lots.asm1);
+    const asm2 = bags(lots.asm2);
+    return { asm1, asm2, total: asm1 + asm2, qty };
   }
 
   onNvlSearchChange(): void {
@@ -386,7 +487,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   async addNvlItem(): Promise<void> {
     const code = this.newNvlItem.materialCode.trim();
     if (!code) {
-      alert('Vui lòng nhập Mã NVL');
+      appAlert('Vui lòng nhập Mã NVL');
       return;
     }
     try {
@@ -394,9 +495,9 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.nvlService.addNew(this.newNvlItem, editedBy);
       this.newNvlItem = { materialCode: '', materialName: '', unit: '', unitWeight: 0, standardPacking: 0 };
       await this.loadNvl();
-      alert(`✅ Đã thêm mã NVL "${code}"`);
+      appAlert(`✅ Đã thêm mã NVL "${code}"`);
     } catch (e: any) {
-      alert('❌ ' + (e?.message || e));
+      appAlert('❌ ' + (e?.message || e));
     }
   }
 
@@ -417,7 +518,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       row.cartonQty = cq;
       if (editedBy) row.lastEditedBy = editedBy;
     } catch (e: any) {
-      alert('❌ Không lưu được Lượng thùng: ' + (e?.message || e));
+      appAlert('❌ Không lưu được Lượng thùng: ' + (e?.message || e));
     }
   }
 
@@ -431,13 +532,13 @@ export class DanhMucNvlTpComponent implements OnInit {
       row.gwBag = gw;
       if (editedBy) row.lastEditedBy = editedBy;
     } catch (e: any) {
-      alert('❌ Không lưu được GW bag: ' + (e?.message || e));
+      appAlert('❌ Không lưu được GW bag: ' + (e?.message || e));
     }
   }
 
   async updateNvlItem(item: NvlCatalogItem): Promise<void> {
     if (item.standardPackingLocked) {
-      alert('⚠️ Mã này đang Lock — không thể sửa. Tắt Lock trước.');
+      appAlert('⚠️ Mã này đang Lock — không thể sửa. Tắt Lock trước.');
       await this.loadNvl();
       return;
     }
@@ -455,7 +556,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       );
       if (editedBy) item.lastEditedBy = editedBy;
     } catch (e: any) {
-      alert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
       await this.loadNvl();
     }
   }
@@ -465,7 +566,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       await this.nvlkhCatalog.setCustomer(row.materialCode, row.customer);
     } catch (e: any) {
-      alert('❌ Lỗi khi cập nhật Khách hàng: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi cập nhật Khách hàng: ' + (e?.message || e));
       await this.loadNvl();
     }
   }
@@ -500,7 +601,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.closeStorageUnitPicker();
     } catch (e: any) {
       console.error(e);
-      alert('❌ Không lưu được DV Lưu trữ.');
+      appAlert('❌ Không lưu được DV Lưu trữ.');
     } finally {
       this.isSavingStorageUnit = false;
     }
@@ -515,7 +616,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (editedBy) item.lastEditedBy = editedBy;
     } catch (e) {
       console.error(e);
-      alert('❌ Không lưu được trạng thái Lock.');
+      appAlert('❌ Không lưu được trạng thái Lock.');
     }
   }
 
@@ -528,7 +629,78 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (editedBy) item.lastEditedBy = editedBy;
     } catch (e) {
       console.error(e);
-      alert('❌ Không lưu được trạng thái Xuất thùng.');
+      appAlert('❌ Không lưu được trạng thái Xuất thùng.');
+    }
+  }
+
+  async toggleNvlWeekTracked(item: NvlCatalogItem): Promise<void> {
+    const next = !item.weekTracked;
+    try {
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setWeekTracked(item.materialCode, next, editedBy);
+      item.weekTracked = next;
+      if (editedBy) item.lastEditedBy = editedBy;
+    } catch (e) {
+      console.error(e);
+      appAlert('❌ Không lưu được trạng thái theo dõi Week.');
+    }
+  }
+
+  // ===== +Week: scan QR hàng (hoặc gõ mã B + 6 số) → mã cần theo dõi Week; chi tiết Week nhập sau ở Materials =====
+  showWeekAdd = false;
+  weekAddInput = '';
+  weekAddBusy = false;
+  weekAddLog: Array<{ ok: boolean; text: string }> = [];
+
+  openWeekAdd(): void {
+    this.showWeekAdd = true;
+    this.weekAddInput = '';
+    this.weekAddLog = [];
+    setTimeout(() => (document.getElementById('weekAddInput') as HTMLInputElement | null)?.focus(), 60);
+  }
+
+  closeWeekAdd(): void {
+    if (this.weekAddBusy) return;
+    this.showWeekAdd = false;
+  }
+
+  async submitWeekAdd(): Promise<void> {
+    const raw = String(this.weekAddInput || '').trim();
+    this.weekAddInput = '';
+    if (!raw || this.weekAddBusy) return;
+    // QR hàng: Mã|PO|Lượng|IMD → lấy mã; gõ tay: B + 6 số
+    const code = raw.split('|')[0].trim().toUpperCase().replace(/\s+/g, '').substring(0, 7);
+    const push = (ok: boolean, text: string) => { this.weekAddLog = [{ ok, text }, ...this.weekAddLog].slice(0, 30); };
+    const focus = () => setTimeout(() => (document.getElementById('weekAddInput') as HTMLInputElement | null)?.focus(), 30);
+    if (!/^B\d{6}$/.test(code)) {
+      push(false, `${raw} — mã không hợp lệ (cần B + 6 số, VD B030019)`);
+      focus();
+      return;
+    }
+    const item = this.nvlItems.find((i) => i.materialCode === code);
+    if (!item) {
+      push(false, `${code} — chưa có trong Danh mục NVL`);
+      focus();
+      return;
+    }
+    if (item.weekTracked) {
+      push(true, `${code} — đã theo dõi Week từ trước`);
+      focus();
+      return;
+    }
+    this.weekAddBusy = true;
+    try {
+      const editedBy = await this.currentEmployeeId();
+      await this.nvlService.setWeekTracked(code, true, editedBy);
+      item.weekTracked = true;
+      if (editedBy) item.lastEditedBy = editedBy;
+      push(true, `${code} — đã thêm, cần theo dõi Week (nhập Week ở Materials)`);
+    } catch (e) {
+      console.error(e);
+      push(false, `${code} — lỗi lưu, thử lại`);
+    } finally {
+      this.weekAddBusy = false;
+      focus();
     }
   }
 
@@ -540,7 +712,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.applyNvlFilters();
     } catch (e) {
       console.error(e);
-      alert('❌ Không xóa được bản ghi.');
+      appAlert('❌ Không xóa được bản ghi.');
     }
   }
 
@@ -551,14 +723,14 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       const result = await this.nvlService.dedupeDuplicates();
       if (result.dedupedCodes === 0) {
-        alert('✅ Không có mã nào bị trùng.');
+        appAlert('✅ Không có mã nào bị trùng.');
       } else {
-        alert(`✅ Đã gộp ${result.dedupedCodes} mã bị trùng (xóa ${result.deletedDocs} bản ghi thừa).`);
+        appAlert(`✅ Đã gộp ${result.dedupedCodes} mã bị trùng (xóa ${result.deletedDocs} bản ghi thừa).`);
       }
       await this.loadNvl(true);
     } catch (e: any) {
       console.error(e);
-      alert('❌ Lỗi khi xóa trùng lặp: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi xóa trùng lặp: ' + (e?.message || e));
     } finally {
       this.isNvlDeduping = false;
     }
@@ -609,7 +781,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.spAuditSuggestions = suggestions;
     } catch (e: any) {
       console.error(e);
-      alert('❌ Lỗi khi rà soát: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi rà soát: ' + (e?.message || e));
     } finally {
       this.isSpAuditRunning = false;
     }
@@ -629,7 +801,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.spAuditSuggestions = this.spAuditSuggestions.filter(x => x.materialCode !== s.materialCode);
       this.applyNvlFilters();
     } catch (e: any) {
-      alert('❌ Lỗi khi áp dụng: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi áp dụng: ' + (e?.message || e));
     }
   }
 
@@ -650,7 +822,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     }
     this.spAuditSuggestions = this.spAuditSuggestions.filter(s => s.locked || s.suggestedSp == null);
     this.applyNvlFilters();
-    alert(`✅ Đã áp dụng ${ok}/${applicable.length} mã.`);
+    appAlert(`✅ Đã áp dụng ${ok}/${applicable.length} mã.`);
   }
 
   importNvlFromExcel(): void {
@@ -662,6 +834,62 @@ export class DanhMucNvlTpComponent implements OnInit {
       if (file) void this.processNvlImportFile(file);
     };
     input.click();
+  }
+
+  /** Import file danh mục vật tư (hệ thống): chỉ thêm mã chưa có, không đổi gì danh mục trên web. */
+  importNvlNewOnlyFromExcel(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (event: any) => {
+      const file = event.target.files?.[0];
+      if (file) void this.processNvlNewOnlyFile(file);
+    };
+    input.click();
+  }
+
+  /** Tìm dòng tiêu đề có "Mã vật tư" → lấy cột Mã vật tư / Tên vật tư / Đvt theo tên cột. */
+  private async processNvlNewOnlyFile(file: File): Promise<void> {
+    this.isNvlImporting = true;
+    try {
+      const rows = await this.readExcelRowsAsArray(file);
+      const norm = (v: any) => String(v ?? '').normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+      const headerIdx = rows.findIndex((r: any[]) => (r || []).some((c) => norm(c) === 'mã vật tư'));
+      if (headerIdx < 0) {
+        appAlert('Không thấy cột "Mã vật tư" trong file. File cần có tiêu đề: Mã vật tư, Tên vật tư, Đvt…');
+        return;
+      }
+      const header = (rows[headerIdx] || []).map(norm);
+      const iCode = header.indexOf('mã vật tư');
+      const iName = header.indexOf('tên vật tư');
+      const iUnit = header.findIndex((h: string) => h === 'đvt' || h === 'dvt' || h === 'đơn vị tính');
+      const parsed = rows.slice(headerIdx + 1)
+        .map((r: any[]) => ({
+          materialCode: String(r?.[iCode] ?? '').trim(),
+          materialName: iName >= 0 ? String(r?.[iName] ?? '').trim() : '',
+          unit: iUnit >= 0 ? String(r?.[iUnit] ?? '').trim() : ''
+        }))
+        .filter((r) => r.materialCode);
+      if (!parsed.length) {
+        appAlert('File không có dòng mã vật tư nào.');
+        return;
+      }
+      const res = await this.nvlService.addMissingFromRows(parsed);
+      const list = (a: string[]) => a.slice(0, 30).join(', ') + (a.length > 30 ? ', …' : '');
+      appAlert(
+        `✅ Import danh mục NVL xong\n📄 Mã trong file: ${res.uniqueInFile}\n` +
+        `✔️ Đã có trên web: ${res.existing} (chỉ điền tên cho mã đang trống tên: ${res.named.length})\n` +
+        `➕ Thêm mã mới: ${res.added.length}` +
+        (res.added.length ? `\n\nMã mới: ${list(res.added)}` : '') +
+        (res.named.length ? `\n\nĐã điền tên: ${list(res.named)}` : '')
+      );
+      if (res.added.length || res.named.length) await this.loadNvl(true);
+    } catch (e: any) {
+      console.error(e);
+      appAlert('Lỗi khi import: ' + (e?.message || e));
+    } finally {
+      this.isNvlImporting = false;
+    }
   }
 
   /** Cột A = Mã, Cột D = Tên, Cột E = DVT. Dữ liệu bắt đầu từ dòng 5 (bỏ qua 4 dòng đầu). */
@@ -679,17 +907,17 @@ export class DanhMucNvlTpComponent implements OnInit {
         .filter(r => r.materialCode);
 
       if (!parsed.length) {
-        alert('Không tìm thấy dòng hợp lệ (Cột A = Mã, Cột D = Tên, Cột E = DVT, dữ liệu từ dòng 5).');
+        appAlert('Không tìm thấy dòng hợp lệ (Cột A = Mã, Cột D = Tên, Cột E = DVT, dữ liệu từ dòng 5).');
         return;
       }
       const result = await this.nvlService.importCatalogFromRows(parsed);
-      alert(
+      appAlert(
         `✅ Import xong!\n➕ Thêm mã mới: ${result.added}\n✏️ Cập nhật Tên/ĐVT: ${result.updated}\n⏭️ Bỏ qua (dòng thiếu Tên/ĐVT của mã đã có): ${result.skipped}\n📄 Tổng mã trong file: ${result.uniqueInFile}\n\nStandard Packing / Lock / Xuất thùng không bị ảnh hưởng.`
       );
       await this.loadNvl();
     } catch (e: any) {
       console.error(e);
-      alert('Lỗi khi đọc file: ' + (e?.message || e));
+      appAlert('Lỗi khi đọc file: ' + (e?.message || e));
     } finally {
       this.isNvlImporting = false;
     }
@@ -721,10 +949,15 @@ export class DanhMucNvlTpComponent implements OnInit {
       'Lượng thùng': i.cartonQty || 0,
       'Khách hàng': i.customer,
       'Vị trí yêu cầu': i.requiredLocation,
-      'Standard Packing': i.standardPacking
+      'Standard Packing': i.standardPacking,
+      ...(this.nvlStockLots ? (() => {
+        const b = this.nvlBagStock(i);
+        const n = (v: number | null | undefined) => (v == null ? '' : v);
+        return { 'Tồn kho': b?.qty ?? 0, 'Bag ASM1': n(b?.asm1), 'Bag ASM2': n(b?.asm2), 'Tổng bag': n(b?.total) };
+      })() : {})
     }));
     if (!rows.length) {
-      alert('Không có dữ liệu để tải');
+      appAlert('Không có dữ liệu để tải');
       return;
     }
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -763,7 +996,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       }
 
       if (!parsed.length) {
-        alert('Không tìm thấy dòng hợp lệ (cần cột "Mã NVL" và "Khách hàng").');
+        appAlert('Không tìm thấy dòng hợp lệ (cần cột "Mã NVL" và "Khách hàng").');
         return;
       }
       if (
@@ -776,11 +1009,11 @@ export class DanhMucNvlTpComponent implements OnInit {
 
       this.isNvlKhImporting = true;
       const count = await this.nvlkhCatalog.importFromRows(parsed);
-      alert(`✅ Đã import ${count} mã Khách hàng.`);
+      appAlert(`✅ Đã import ${count} mã Khách hàng.`);
       await this.loadNvl();
     } catch (e: any) {
       console.error(e);
-      alert('Lỗi khi đọc file: ' + (e?.message || e));
+      appAlert('Lỗi khi đọc file: ' + (e?.message || e));
     } finally {
       this.isNvlKhImporting = false;
     }
@@ -818,7 +1051,7 @@ export class DanhMucNvlTpComponent implements OnInit {
         : '';
     } catch (e: any) {
       console.error(e);
-      alert('Không tải được Danh mục TP.\n' + (e?.message || e));
+      appAlert('Không tải được Danh mục TP.\n' + (e?.message || e));
     } finally {
       this.isTpLoading = false;
     }
@@ -904,14 +1137,14 @@ export class DanhMucNvlTpComponent implements OnInit {
     const mc = this.newTpItem.materialCode.trim();
     const cc = this.newTpItem.customerCode.trim();
     if (!mc && !cc) {
-      alert('Vui lòng nhập ít nhất Mã TP hoặc Mã KH');
+      appAlert('Vui lòng nhập ít nhất Mã TP hoặc Mã KH');
       return;
     }
     const exists = this.tpItems.some(
       i => i.materialCode.toUpperCase() === mc.toUpperCase() && i.customerCode.toUpperCase() === cc.toUpperCase()
     );
     if (exists) {
-      alert(`❌ Cặp Mã TP "${mc}" + Mã KH "${cc}" đã tồn tại`);
+      appAlert(`❌ Cặp Mã TP "${mc}" + Mã KH "${cc}" đã tồn tại`);
       return;
     }
     try {
@@ -929,9 +1162,9 @@ export class DanhMucNvlTpComponent implements OnInit {
         netWeight: ''
       };
       await this.loadTp();
-      alert('✅ Đã thêm vào danh mục');
+      appAlert('✅ Đã thêm vào danh mục');
     } catch (e: any) {
-      alert('❌ ' + (e?.message || e));
+      appAlert('❌ ' + (e?.message || e));
     }
   }
 
@@ -941,7 +1174,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.tpService.updateItem(item, editedBy);
       if (editedBy) item.lastEditedBy = editedBy;
     } catch (e: any) {
-      alert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi cập nhật: ' + (e?.message || e));
       await this.loadTp();
     }
   }
@@ -988,9 +1221,9 @@ export class DanhMucNvlTpComponent implements OnInit {
         cartonPackingQty: item.cartonPackingQty || 0,
         reportedBy: reportedBy || 'UNKNOWN'
       });
-      alert(`✅ Đã gửi mail báo mã "${item.materialCode}" tới nhóm mail ENG.`);
+      appAlert(`✅ Đã gửi mail báo mã "${item.materialCode}" tới nhóm mail ENG.`);
     } catch (e: any) {
-      alert('❌ Gửi mail thất bại: ' + (e?.message || e));
+      appAlert('❌ Gửi mail thất bại: ' + (e?.message || e));
     } finally {
       this.tpSendingMailCodes.delete(item.materialCode);
     }
@@ -1023,7 +1256,7 @@ export class DanhMucNvlTpComponent implements OnInit {
         item.lastEditedBy = editedBy;
       }
     } catch (e: any) {
-      alert('❌ Lỗi khi lưu Lượng Đóng Thùng: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi lưu Lượng Đóng Thùng: ' + (e?.message || e));
       await this.loadTp();
     }
   }
@@ -1032,7 +1265,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   async copyCartonPackingQtyFromStandard(): Promise<void> {
     const fillable = this.tpItems.filter(i => !i.cartonPackingQty && parseFloat(i.standard) > 0);
     if (fillable.length === 0) {
-      alert('Không có mã nào cần copy (Lượng Đóng Thùng đang trống + có SL SP/thùng > 0).');
+      appAlert('Không có mã nào cần copy (Lượng Đóng Thùng đang trống + có SL SP/thùng > 0).');
       return;
     }
     if (
@@ -1048,9 +1281,9 @@ export class DanhMucNvlTpComponent implements OnInit {
         fillable.map(i => ({ materialCode: i.materialCode, standard: i.standard }))
       );
       await this.loadTp(true);
-      alert(`✅ Đã copy Lượng Đóng Thùng cho ${count} mã.`);
+      appAlert(`✅ Đã copy Lượng Đóng Thùng cho ${count} mã.`);
     } catch (e: any) {
-      alert('❌ Lỗi khi copy: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi copy: ' + (e?.message || e));
     } finally {
       this.isTpCopyingCartonQty = false;
     }
@@ -1063,7 +1296,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.loadTp();
     } catch (e) {
       console.error(e);
-      alert('❌ Lỗi khi xóa');
+      appAlert('❌ Lỗi khi xóa');
     }
   }
 
@@ -1106,7 +1339,7 @@ export class DanhMucNvlTpComponent implements OnInit {
         .filter(r => r.materialCode || r.customerCode);
 
       if (!parsed.length) {
-        alert('❌ Không có dòng hợp lệ (cần ít nhất Mã vật tư hoặc Mã S.Phẩm KH)');
+        appAlert('❌ Không có dòng hợp lệ (cần ít nhất Mã vật tư hoặc Mã S.Phẩm KH)');
         return;
       }
       if (
@@ -1118,10 +1351,10 @@ export class DanhMucNvlTpComponent implements OnInit {
         return;
       }
       const result = await this.tpService.replaceAllFromRows(parsed, file.name);
-      alert(`✅ Import hoàn tất! Danh mục TP hiện có ${result.count} dòng.`);
+      appAlert(`✅ Import hoàn tất! Danh mục TP hiện có ${result.count} dòng.`);
       await this.loadTp(true);
     } catch (e: any) {
-      alert('❌ Lỗi đọc file: ' + (e?.message || e));
+      appAlert('❌ Lỗi đọc file: ' + (e?.message || e));
     } finally {
       this.isTpImporting = false;
     }
@@ -1130,16 +1363,16 @@ export class DanhMucNvlTpComponent implements OnInit {
   async deleteTpItemsWithoutCustomerCode(): Promise<void> {
     const count = this.tpItems.filter(i => !i.customerCode.trim()).length;
     if (count === 0) {
-      alert('Không có dòng nào thiếu Mã KH.');
+      appAlert('Không có dòng nào thiếu Mã KH.');
       return;
     }
     if (!confirm(`Xác nhận xóa ${count} dòng không có Mã KH khỏi Danh mục TP?\n\nHành động này không thể hoàn tác.`)) return;
     try {
       const deleted = await this.tpService.deleteItemsWithoutCustomerCode(this.tpItems);
       await this.loadTp(true);
-      alert(`✅ Đã xóa ${deleted} dòng không có Mã KH.`);
+      appAlert(`✅ Đã xóa ${deleted} dòng không có Mã KH.`);
     } catch (e: any) {
-      alert('❌ Lỗi khi xóa: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi xóa: ' + (e?.message || e));
     }
   }
 
@@ -1187,7 +1420,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       'SL SP trên thùng': item.standard
     }));
     if (!rows.length) {
-      alert('❌ Không có dữ liệu để tải');
+      appAlert('❌ Không có dữ liệu để tải');
       return;
     }
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -1318,7 +1551,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       this.k100Rows = this.sxxkSuspect.list();
       this.weighLoadedAt = Date.now();
     } catch (e: any) {
-      alert('❌ Không tải được danh mục check lượng: ' + (e?.message || e));
+      appAlert('❌ Không tải được danh mục check lượng: ' + (e?.message || e));
     } finally {
       this.weighLoading = false;
     }
@@ -1340,7 +1573,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       await this.weighReports.approve(r, await this.currentEmployeeId());
       await this.loadWeigh();
-    } catch (e: any) { alert('❌ Không duyệt được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không duyệt được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async rejectWeigh(r: PxkWeightCheckReport): Promise<void> {
@@ -1349,7 +1582,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       await this.weighReports.reject(r, await this.currentEmployeeId());
       await this.loadWeigh();
-    } catch (e: any) { alert('❌ Không từ chối được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không từ chối được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async removeWeighExempt(code: string): Promise<void> {
@@ -1358,7 +1591,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       await this.weighReports.removeExempt(code);
       this.weighExempt = this.weighExempt.filter((r) => r.code !== code);
-    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async addWeighInclude(): Promise<void> {
@@ -1369,7 +1602,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.weighReports.addInclude(code, await this.currentEmployeeId());
       this.weighIncludeDraft = '';
       await this.loadWeigh();
-    } catch (e: any) { alert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async addTemLeNoWeigh(): Promise<void> {
@@ -1382,7 +1615,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.weighReports.saveTemLeNoWeighPrefixes(next, await this.currentEmployeeId());
       this.temLeNoWeigh = next.sort();
       this.temLeNoWeighDraft = '';
-    } catch (e: any) { alert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async removeTemLeNoWeigh(prefix: string): Promise<void> {
@@ -1392,7 +1625,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       const next = this.temLeNoWeigh.filter((p) => p !== prefix);
       await this.weighReports.saveTemLeNoWeighPrefixes(next, await this.currentEmployeeId());
       this.temLeNoWeigh = next;
-    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   async removeWeighInclude(code: string): Promise<void> {
@@ -1401,7 +1634,7 @@ export class DanhMucNvlTpComponent implements OnInit {
     try {
       await this.weighReports.removeInclude(code);
       this.weighInclude = this.weighInclude.filter((c) => c !== code);
-    } catch (e: any) { alert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+    } catch (e: any) { appAlert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 
   // Kiểm 100% (gộp từ Inbound): tự động từ SXXK (xuất bổ sung) + nhập tay — mã trong danh sách phải có GW bag ở Inbound
@@ -1463,7 +1696,7 @@ export class DanhMucNvlTpComponent implements OnInit {
       await this.catalogDeleteOtp.requestOtp(this.deleteAllScope, requestedBy);
       this.deleteAllStep = 'otp';
     } catch (e: any) {
-      alert('❌ Không gửi được mã xác nhận: ' + (e?.message || e));
+      appAlert('❌ Không gửi được mã xác nhận: ' + (e?.message || e));
     } finally {
       this.deleteAllSending = false;
     }
@@ -1472,28 +1705,28 @@ export class DanhMucNvlTpComponent implements OnInit {
   async confirmDeleteAll(): Promise<void> {
     const code = this.deleteAllCode.trim();
     if (!/^\d{4}$/.test(code)) {
-      alert('Mã xác nhận phải gồm 4 chữ số.');
+      appAlert('Mã xác nhận phải gồm 4 chữ số.');
       return;
     }
     this.deleteAllVerifying = true;
     try {
       const ok = await this.catalogDeleteOtp.verifyOtp(this.deleteAllScope, code);
       if (!ok) {
-        alert('❌ Mã xác nhận không đúng.');
+        appAlert('❌ Mã xác nhận không đúng.');
         return;
       }
       if (this.deleteAllScope === 'nvl') {
         const count = await this.nvlService.deleteAll();
         await this.loadNvl(true);
-        alert(`✅ Đã xóa ${count} mã khỏi ${this.deleteAllScopeLabel}.`);
+        appAlert(`✅ Đã xóa ${count} mã khỏi ${this.deleteAllScopeLabel}.`);
       } else {
         const count = await this.tpService.deleteAll();
         await this.loadTp(true);
-        alert(`✅ Đã xóa ${count} dòng khỏi ${this.deleteAllScopeLabel}.`);
+        appAlert(`✅ Đã xóa ${count} dòng khỏi ${this.deleteAllScopeLabel}.`);
       }
       this.closeDeleteAllDialog();
     } catch (e: any) {
-      alert('❌ Lỗi khi xóa: ' + (e?.message || e));
+      appAlert('❌ Lỗi khi xóa: ' + (e?.message || e));
     } finally {
       this.deleteAllVerifying = false;
     }

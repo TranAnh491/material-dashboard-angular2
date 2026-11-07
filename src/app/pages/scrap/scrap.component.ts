@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router } from '@angular/router';
@@ -296,7 +297,7 @@ export class ScrapComponent implements OnInit, OnDestroy {
         await this.db.collection(ScrapComponent.CODE_BOX_COL).doc(item.materialCode.replace(/\//g, '_')).delete();
       }
     } catch (e: any) {
-      alert('Lỗi khi xóa: ' + (e?.message || e));
+      appAlert('Lỗi khi xóa: ' + (e?.message || e));
     } finally {
       this.deletingId = '';
       this.focusScan();

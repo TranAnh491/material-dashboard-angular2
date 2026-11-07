@@ -344,6 +344,12 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/xe-tai';
     }
 
+    /** FG Check có thanh trên cùng riêng (tìm kiếm, Back, Về Menu): thanh hệ thống không được che, không hiện nút Home tròn. */
+    isFgCheckPage(): boolean {
+      const path = this.currentAppPath();
+      return path === '/fg-check' || path.startsWith('/fg-check/');
+    }
+
     isFgInventoryPage(): boolean {
       const path = this.currentAppPath();
       return path === '/fg-inventory' || path.startsWith('/fg-inventory/');
@@ -355,6 +361,11 @@ export class NavbarComponent implements OnInit, OnDestroy {
 
     isScrapPage(): boolean {
       return this.currentAppPath() === '/scrap';
+    }
+
+    /** Danh mục NVL & TP: navbar trong suốt đè lên nút "Về Menu" → cho click xuyên qua. */
+    isDanhMucPage(): boolean {
+      return this.currentAppPath() === '/danh-muc-nvl-tp';
     }
 
     /**

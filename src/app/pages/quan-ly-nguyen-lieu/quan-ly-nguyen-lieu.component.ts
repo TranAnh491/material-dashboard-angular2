@@ -1,12 +1,63 @@
-import { Component } from '@angular/core';
+import { appAlert } from '../../shared/app-toast';
+import { Component, inject } from '@angular/core';
+import { MaterialPlanService } from '../report/material-plan.service';
 import { firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { splitMultiLocations } from '../layout-warehouse/layout-warehouse-location.util';
 import { getLayoutLocationGroups, isJWarehouseLocation, jKhoMatSFirstRowForPrefix, jKhoMatBlocksForRow, parseJRackLocation, formatJRackAisle } from '../materials/layout-location-catalog';
 import { PendingPxkInfo } from '../../services/linkq-pending-pxk.service';
+import { InventoryStockReportService } from '../../services/inventory-stock-report.service';
 import { KkLogRow, kkLogDateKey } from '../../services/kk-history-log.service';
 import * as firebase from 'firebase/compat/app';
+import { KK_PO_BLANK, kkPoCmpCode, kkPoCmpPo } from '../materials/kk-po-compare';
 import { MaterialsComponent, InventoryMaterial, KkWarehouse, KkLocMaterialRow, KkTypeRow, LinkQCompareTab, LinkQCompareRow, KkTypeByCodeRow, KkStockBoxRef } from '../materials/materials.component';
+
+/** Mục DS Check: '' = tắt. */
+type DsCheckMode = '' | 'willUse' | 'usedUp';
+type LinkQRowFn = 'lines' | 'po';
+/** Check PO: LinkQ làm gốc, so tồn web theo từng PO. */
+interface LinkQPoRow {
+  po: string;
+  linkQ: number | null;
+  web: number;
+  diff: number;
+  status: 'ok' | 'over' | 'short' | 'nodata';
+  lines: InventoryMaterial[];
+}
+/** Cảnh báo theo mã: hết stock / cần giảm / cần tăng stock web cho khớp LinkQ. */
+interface LinkQWarn {
+  cls: 'out' | 'dec' | 'inc';
+  label: string;
+  qty: number;
+}
+/** Tự sửa Check PO: 1 đề nghị cho 1 dòng tồn (gửi vào Danh mục điều chỉnh, quản lý duyệt). */
+interface KkFixItem {
+  key: string;
+  m: InventoryMaterial;
+  kind: 'delete' | 'dec' | 'po';
+  target: '' | 'opening' | 'closing';
+  qty: number;
+  newPo: string;
+  reason: string;
+  code: string;
+  po: string;
+  on: boolean;
+}
+/** Mã + PO lệch nhưng không tự sửa được (thiếu dòng / lệch quá lớn) → làm tay. */
+interface KkFixManual {
+  code: string;
+  po: string;
+  text: string;
+}
+interface KkFixPlan {
+  items: KkFixItem[];
+  manual: KkFixManual[];
+  before: number;
+  after: number;
+  /** id dòng → lý do tô đỏ (dòng có đề nghị + dòng của nhóm phải làm tay). */
+  flags: Map<string, string>;
+}
+const DS_CHECK_MODES: DsCheckMode[] = ['willUse', 'usedUp'];
 
 /**
  * Tab Quản lý Nguyên Liệu (`/quan-ly-nguyen-lieu`) — Kiểm tra KK theo loại hàng, mã hàng và vị trí.
@@ -32,6 +83,14 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.nlScanDevice = 'pda';
       this.showNlDevicePicker = false;
     }
+  }
+
+  protected override openKkAllMucsForPoCmp(): void {
+    this.openKkAllMucs();
+  }
+
+  protected override onKkPoCmpChanged(): void {
+    this.kkTypePage = 1;
   }
 
   protected override onKkPageFactoryChanged(): void {
@@ -66,7 +125,19 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   linkQCompareRefreshing = false;
   linkQCompareUpdatedAt = 0;
   private linkQCompareFactory = '';
-  private linkQCompareCache = new Map<string, { rows: LinkQCompareRow[]; label: string; ts: number }>();
+  private linkQCompareCache = new Map<string, { rows: LinkQCompareRow[]; label: string; ts: number; po: Map<string, Map<string, number>> }>();
+  /** Tồn LinkQ theo mã → PO (chỉ có khi file LinkQ import kèm cột PO). */
+  linkQPoByCode = new Map<string, Map<string, number>>();
+  /** Chức năng đang chọn trong phần mở rộng của từng mã: dòng tồn web / Check PO. */
+  linkQRowFn = new Map<string, LinkQRowFn>();
+  /** PO đang mở chi tiết trong Check PO — key `mã|PO`. */
+  linkQPoOpen = new Set<string>();
+  private linkQPoRowsCache = new Map<string, LinkQPoRow[]>();
+  /** Lượng thiếu / dư nhập tay theo dòng tồn (id) — gửi thành đề nghị điều chỉnh chờ quản lý duyệt. */
+  private linkQAdjDrafts = new Map<string, { short: number | null; over: number | null }>();
+  /** Đề nghị điều chỉnh đang chờ duyệt theo dòng tồn (materialId). */
+  linkQAdjPending = new Map<string, Array<{ direction: string; qty: number; target: string }>>();
+  linkQAdjPendingCount = 0;
   linkQCheckImporting = false;
   private linkQCompareQueryTimer: any = null;
   readonly kkTypePageSizeOptions = [20, 50, 100];
@@ -114,11 +185,9 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     lines: number;
     found: boolean;
   } | null = null;
+  /** Từ 14/10/2026 chỉ còn Kho J (D1 / 00 / ASM3 đã bỏ). */
   readonly kkLocMapWarehouseOptions: Array<{ id: KkWarehouse; label: string }> = [
-    { id: 'D1', label: 'D1' },
-    { id: '00', label: '00' },
-    { id: 'J', label: 'Kho J' },
-    { id: 'ASM3', label: 'ASM3' }
+    { id: 'J', label: 'Kho J' }
   ];
   kkTypeBoxMenuX = 0;
   kkTypeBoxMenuY = 0;
@@ -230,7 +299,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   downloadKkLogView(): void {
     const rows = this.kkLogFiltered;
-    if (!rows.length) { alert('Không có dòng nào để tải.'); return; }
+    if (!rows.length) { appAlert('Không có dòng nào để tải.'); return; }
     const sorted = [...rows].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const from = sorted[0].date;
     const to = sorted[sorted.length - 1].date;
@@ -245,13 +314,13 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (!file) return;
     try {
       const rows = this.kkLog.parseFileText(await file.text());
-      if (!rows.length) { alert('File không đúng định dạng log KK (hoặc trống).'); return; }
+      if (!rows.length) { appAlert('File không đúng định dạng log KK (hoặc trống).'); return; }
       this.kkLogRows = rows;
       this.kkLogPage = 1;
       this.kkLogError = '';
       this.kkLogSourceLabel = `File: ${file.name} (${rows.length.toLocaleString('vi-VN')} dòng)`;
     } catch (e: any) {
-      alert('❌ Không đọc được file: ' + (e?.message || e));
+      appAlert('❌ Không đọc được file: ' + (e?.message || e));
     } finally {
       this.cdr.detectChanges();
     }
@@ -266,7 +335,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       const f = this.selectedFactory;
       const arc = await this.kkLog.loadArchive(f);
       this.readTracker.track('materials', 'kk-history-log', arc.ids.length || 1);
-      if (!arc.ids.length) { this.kkLogArchiveDue = false; alert('Không có log quá 1 năm.'); return; }
+      if (!arc.ids.length) { this.kkLogArchiveDue = false; appAlert('Không có log quá 1 năm.'); return; }
       const name = `KK-log_${f}_${arc.from}_${arc.to}.txt`;
       this.kkLog.downloadText(name, this.kkLog.buildFileText(f, arc.rows, arc.from, arc.to));
       const ok = confirm(`Đã tải file "${name}" (${arc.rows.length.toLocaleString('vi-VN')} dòng, ${arc.from} → ${arc.to}).\n\n` +
@@ -276,10 +345,10 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       await this.kkLog.deleteDocs(arc.ids);
       this.kkLogArchiveDue = false;
       try { localStorage.setItem(`kk-log-archive-check:${f}`, `${kkLogDateKey(new Date())}:0`); } catch { /* bỏ qua */ }
-      alert('✅ Đã lưu file và dọn log quá 1 năm.');
+      appAlert('✅ Đã lưu file và dọn log quá 1 năm.');
     } catch (e: any) {
       console.error('❌ archiveKkLog:', e);
-      alert('❌ Không lưu trữ được: ' + (e?.message || e));
+      appAlert('❌ Không lưu trữ được: ' + (e?.message || e));
     } finally {
       this.kkLogArchiveBusy = false;
       this.cdr.detectChanges();
@@ -362,7 +431,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   async downloadZaloCheckLog(): Promise<void> {
     const rows = this.zaloCheckFiltered;
-    if (!rows.length) { alert('Không có dòng nào để tải.'); return; }
+    if (!rows.length) { appAlert('Không có dòng nào để tải.'); return; }
     const XLSX = await import('xlsx');
     const data = rows.map((r) => ({
       'Thời gian': r.at ? r.at.toLocaleString('vi-VN') : '',
@@ -390,15 +459,47 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (this.thItems.length) void this.loadThStock();
   }
 
+  /** Mục Week: bảng chi tiết như Xem toàn bộ tất cả các mục — chỉ dòng có Week (nhập ở Inbound). */
+  openKkWeekView(code = ''): void {
+    const boxes = this.kkTypeBoxGroups.reduce((acc, m) => acc.concat(m.boxes as any[]), [] as any[]);
+    if (!boxes.length) {
+      appAlert('Chưa có danh sách box KK — bấm Đọc toàn kho trước.');
+      return;
+    }
+    const needFullRead = !this.kkStockLoaded;
+    this.openKkMucAll({ category: '__WEEK__', title: 'mã có Week', boxes }, undefined, needFullRead);
+    this.kkWeekMode = true;
+    this.kkTypePageSize = QuanLyNguyenLieuComponent.KK_WEEK_PAGE_SIZE;
+    this.kkTypePage = 1;
+    if (code) {
+      this.kkTypeDetailQuery = code;
+      this.kkTypeSearchDraft = code;
+    }
+    // Mã bật theo dõi Week ở Danh mục NVL (+Week) → hiện cả PO chưa có Week của mã đó
+    void this.nvlCatalogFull.loadWeekTrackedCodes().then((set) => {
+      this.kkWeekCatalogTracked = set;
+      this.invalidateKkTypeViewCache();
+      this.cdr.detectChanges();
+    }).catch(() => undefined);
+    // Khách theo Danh mục NVLKH → quyết định hạn dùng tem (Gilbarco / khách khác)
+    void this.nvlkhCatalog.loadAllAsMap().then((map) => {
+      this.nvlkhCustomerMap = map;
+      this.cdr.detectChanges();
+    }).catch(() => undefined);
+    this.invalidateKkTypeViewCache();
+    if (needFullRead) void this.loadKkByType();
+    this.cdr.detectChanges();
+  }
+
   async openKkThView(): Promise<void> {
     await this.loadThList();
     if (!this.thItems.length) {
-      alert('Chưa có danh sách tiêu hủy. Vào Công cụ → Tiêu hủy để import.');
+      appAlert('Chưa có danh sách tiêu hủy. Vào Công cụ → Tiêu hủy để import.');
       return;
     }
     const boxes = this.kkTypeBoxGroups.reduce((acc, m) => acc.concat(m.boxes as any[]), [] as any[]);
     if (!boxes.length) {
-      alert('Chưa có danh sách box KK — bấm Đọc toàn kho trước.');
+      appAlert('Chưa có danh sách box KK — bấm Đọc toàn kho trước.');
       return;
     }
     const needFullRead = !this.kkStockLoaded;
@@ -554,6 +655,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
+        if (this.isKkQcNgData(data)) continue;
         const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
         const cur = byWh.get(warehouse);
         if (!cur) continue;
@@ -575,7 +677,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.kkPalletCheckTotal = this.kkPalletCheckRows.reduce((n, r) => n + r.pallets, 0);
     } catch (e) {
       console.error('loadKkPalletCheck:', e);
-      alert('Không đếm được pallet theo kho.');
+      appAlert('Không đếm được pallet theo kho.');
     } finally {
       this.kkPalletCheckBusy = false;
       this.cdr.detectChanges();
@@ -654,7 +756,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         lines: 0,
         found: false
       };
-      alert('❌ Không tra được mã hàng.');
+      appAlert('❌ Không tra được mã hàng.');
     } finally {
       this.kkCodeLookupBusy = false;
       this.cdr.detectChanges();
@@ -695,7 +797,8 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     // `kkTypeBoxes` đã tự cache theo `kkTypeBoxesSig`; nhóm mục chỉ phụ thuộc vào nó
     // nên tái dùng kết quả cho tới khi chữ ký đổi — tránh gom nhóm lại mỗi CD tick.
     const boxes = this.kkTypeBoxes;
-    if (this.kkTypeBoxGroupsSig === this.kkTypeBoxesSig) {
+    const groupsSig = `${this.kkTypeBoxesSig}|${this.selectedFactory}`;
+    if (this.kkTypeBoxGroupsSig === groupsSig) {
       return this.kkTypeBoxGroupsCached;
     }
     const map = new Map<string, typeof this.kkTypeBoxesCached>();
@@ -719,8 +822,13 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       .filter((muc) => !this.kkStockLoaded || muc.boxes.some((b) => (b.stock || 0) > 0 || (b.totalLines || 0) > 0))
       // Không hiển thị mục B033 — 14/10/2026
       .filter((muc) => !MaterialsComponent.KK_HIDDEN_MUCS.includes(muc.category));
-    this.kkTypeBoxGroupsCached = this.mergeKkSingletonMucsFromB019(this.kkTypeBoxGroupsCached);
-    this.kkTypeBoxGroupsSig = this.kkTypeBoxesSig;
+    if (this.selectedFactory === 'ASM2') {
+      // ASM2 theo đầu mã: mục nào cũng giữ riêng, xếp theo đầu mã
+      this.kkTypeBoxGroupsCached.sort((a, b) => a.category.localeCompare(b.category, 'en', { numeric: true }));
+    } else {
+      this.kkTypeBoxGroupsCached = this.mergeKkSingletonMucsFromB019(this.kkTypeBoxGroupsCached);
+    }
+    this.kkTypeBoxGroupsSig = groupsSig;
     return this.kkTypeBoxGroupsCached;
   }
 
@@ -764,6 +872,12 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (!raw) return 'Khác';
     if (raw === 'Chưa gán danh mục') return raw;
     const prefixes = this.kkTypeGroupPrefixes(groupCodes);
+    // ASM2: mỗi mục = 1 đầu mã (B001, B002, R028…), không gom mục đặc biệt
+    if (this.selectedFactory === 'ASM2') {
+      if (prefixes.length) return prefixes[0];
+      const head = /^([A-Z]\d{3})/i.exec(raw);
+      return head ? head[1].toUpperCase() : this.kkTypeNameHeadOf(raw);
+    }
     // Mọi loại có mã đầu A (A001, A031…) gom chung một mục "A" — 14/10/2026
     if (prefixes.length ? prefixes.every((p) => p.startsWith('A')) : /^A\d{3}$/i.test(raw)) return 'A';
     if (this.isKkDauNoiMuc(raw, groupCodes)) return this.kkDauNoiGroupKey({ groupCodes });
@@ -1037,6 +1151,35 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     return (muc.boxes || []).reduce((n, box) => n + (Number(box.totalLines) || 0), 0);
   }
 
+  // ===== Nút % của mục: đọc toàn kho (nếu chưa) → % mã đã KK / tổng mã của từng mục =====
+  kkMucPctOn = false;
+  kkMucPctLoading = false;
+
+  async showKkMucPct(event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (this.kkMucPctOn && !this.kkMucPctLoading) {
+      this.kkMucPctOn = false;
+      return;
+    }
+    this.kkMucPctOn = true;
+    if (!this.kkStockLoaded) {
+      this.kkMucPctLoading = true;
+      this.cdr.detectChanges();
+      try {
+        await this.loadKkByType();
+      } finally {
+        this.kkMucPctLoading = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  /** % KK của mục: số dòng (mã + PO) đã tick KK / tổng dòng của mục. */
+  kkMucLinePct(muc: { boxes?: Array<{ checked?: number; totalLines?: number }> }): number {
+    const total = this.kkMucCodeTotal(muc);
+    return total ? Math.round((this.kkMucCheckedTotal(muc) / total) * 1000) / 10 : 0;
+  }
+
   kkMucCheckedTotal(muc: { boxes?: Array<{ checked?: number }> }): number {
     return (muc.boxes || []).reduce((n, box) => n + (Number(box.checked) || 0), 0);
   }
@@ -1054,12 +1197,12 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     const category = this.kkMucShelfMenuCategory;
     if (!category || this.kkMucShelfSaving) return;
     if (!this.canEdit) {
-      alert('Bạn không có quyền thêm kệ.');
+      appAlert('Bạn không có quyền thêm kệ.');
       return;
     }
     const shelf = this.normalizeKkParentShelf(this.kkMucShelfDraft);
     if (!shelf) {
-      alert('Nhập tên kệ mẹ.');
+      appAlert('Nhập tên kệ mẹ.');
       return;
     }
     const defs = new Set(this.kkConnectorRackShelfDefs(category).map((row) => row.shelf));
@@ -1070,7 +1213,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       return;
     }
     if (this.kkMucParentShelves(category).includes(shelf)) {
-      alert(`${shelf} đã có trong mục ${category}.`);
+      appAlert(`${shelf} đã có trong mục ${category}.`);
       return;
     }
     const next = defs.has(shelf)
@@ -1149,6 +1292,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeSortKkTimeDesc = false;
     this.kkTypeShowExtraFilter = false;
     this.kkTypeDetailSig = '';
@@ -1160,7 +1304,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   /** Chi tiết KK đang chờ người dùng nhập mã hoặc vị trí. */
   kkAllStockWaitingSearch(): boolean {
-    return this.kkAllStockDetail && !this.kkAllStockSearch();
+    return this.kkAllStockDetail && !this.kkAllStockSearch() && !this.kkPoCmpActive;
   }
 
   kkB009ViewSub(muc: {
@@ -1210,6 +1354,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     event?.stopPropagation();
     if (!muc?.boxes?.length) return;
     this.kkThMode = false;
+    this.kkWeekMode = false;
     this.kkTypeListScrollTop = this.kkPageBodyEl()?.scrollTop || 0;
     const title = `Toàn bộ ${muc.title}`;
     this.kkAllStockDetail = false;
@@ -1226,6 +1371,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeShowExtraFilter = false;
     this.invalidateKkTypeViewCache();
     if (!this.kkStockLoaded && !skipBoxLoad) {
@@ -1424,7 +1570,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.cdr.detectChanges();
     } catch (e) {
       console.error('saveKkTypeBoxManager:', e);
-      alert('Không lưu được tên người quản lý. Thử lại.');
+      appAlert('Không lưu được tên người quản lý. Thử lại.');
       this.kkTypeBoxMenuSaving = false;
       this.cdr.detectChanges();
     }
@@ -1555,7 +1701,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       .filter((k) => this.kkKiemKeSelectedPrefixes[k])
       .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
     if (!prefixes.length) {
-      alert('Tick ít nhất một đầu mã để in giấy kiểm kê.');
+      appAlert('Tick ít nhất một đầu mã để in giấy kiểm kê.');
       return null;
     }
     this.kkTypePrintBusy = true;
@@ -1601,7 +1747,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         }
       }
       if (!shelves.length) {
-        alert('Các đầu mã đã chọn chưa có vị trí kệ S/R để in.');
+        appAlert('Các đầu mã đã chọn chưa có vị trí kệ S/R để in.');
         return null;
       }
 
@@ -1835,7 +1981,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   ): Promise<void> {
     const win = window.open('', '_blank', 'width=980,height=900');
     if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
+      appAlert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
@@ -2096,7 +2242,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
           loc: t.loc
         }));
       if (!labels.length) {
-        alert(`Mục ${rackPrefix} chưa có dải mã để in tem kệ.`);
+        appAlert(`Mục ${rackPrefix} chưa có dải mã để in tem kệ.`);
         return;
       }
       this.closeKkShelfLabelPicker();
@@ -2113,7 +2259,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       .sort((a, b) => a.loc.localeCompare(b.loc, 'en', { numeric: true })
         || a.name.localeCompare(b.name, 'vi', { numeric: true }));
     if (!labels.length) {
-      alert(`Nhóm ${group?.title || ''} chưa có vị trí yêu cầu để in tem kệ.`);
+      appAlert(`Nhóm ${group?.title || ''} chưa có vị trí yêu cầu để in tem kệ.`);
       return;
     }
     this.closeKkShelfLabelPicker();
@@ -2155,7 +2301,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (!labels.length) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
@@ -2250,7 +2396,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     } catch (e) {
       console.error('❌ printKkShelfLabels QR:', e);
       printWindow.close();
-      alert('Lỗi tạo QR tem kệ. Vui lòng thử lại.');
+      appAlert('Lỗi tạo QR tem kệ. Vui lòng thử lại.');
     }
   }
 
@@ -2428,7 +2574,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   printKkSShelfMap(): void {
     const win = window.open('', '_blank', 'width=980,height=860');
     if (!win) {
-      alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
+      appAlert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.');
       return;
     }
     const esc = (s: string) => this.escapeHtmlForPrint(s);
@@ -2590,6 +2736,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   backKkTypeBoxes(): void {
     this.kkThMode = false;
+    this.kkWeekMode = false;
     this.kkMucAllDetail = null;
     this.kkTypeInnerQuery = '';
     this.kkActiveProductType = null;
@@ -2605,6 +2752,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeSortKkTimeDesc = false;
     this.kkTypeShowExtraFilter = false;
     this.clearKkLocScanDay();
@@ -2674,6 +2822,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeSortKkTimeDesc = false;
     this.kkTypeDetailQuery = '';
     this.kkTypeSearchDraft = '';
@@ -2737,7 +2886,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       if (req !== this.kkLocScanReq) return;
       this.kkLocScanIds = new Set();
       this.kkLocScanReady = true;
-      alert('Không lọc được mã scan vị trí. Vui lòng thử lại.');
+      appAlert('Không lọc được mã scan vị trí. Vui lòng thử lại.');
     } finally {
       if (req === this.kkLocScanReq) {
         this.kkLocScanLoading = false;
@@ -2749,13 +2898,29 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   toggleKkTypeSortQty(): void {
     this.kkTypeSortQtyDesc = !this.kkTypeSortQtyDesc;
-    if (this.kkTypeSortQtyDesc) this.kkTypeSortKkTimeDesc = false;
+    if (this.kkTypeSortQtyDesc) {
+      this.kkTypeSortKkTimeDesc = false;
+      this.kkTypeSortRollsDesc = false;
+    }
+    this.kkTypePage = 1;
+  }
+
+  /** Mã / dòng nhiều cuộn nhất lên đầu (cột Cuộn). */
+  toggleKkTypeSortRolls(): void {
+    this.kkTypeSortRollsDesc = !this.kkTypeSortRollsDesc;
+    if (this.kkTypeSortRollsDesc) {
+      this.kkTypeSortQtyDesc = false;
+      this.kkTypeSortKkTimeDesc = false;
+    }
     this.kkTypePage = 1;
   }
 
   toggleKkTypeSortKkTime(): void {
     this.kkTypeSortKkTimeDesc = !this.kkTypeSortKkTimeDesc;
-    if (this.kkTypeSortKkTimeDesc) this.kkTypeSortQtyDesc = false;
+    if (this.kkTypeSortKkTimeDesc) {
+      this.kkTypeSortQtyDesc = false;
+      this.kkTypeSortRollsDesc = false;
+    }
     this.kkTypePage = 1;
     this.kkTypeDetailSig = '';
   }
@@ -2808,7 +2973,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   /** Số bộ lọc đang bật (hiện trên nút Lọc). */
   get kkTypeActiveFilterCount(): number {
     return [this.kkTypeWarnFilter, this.kkTypeLinkQFilter, this.kkTypeKkFilter, this.kkTypeDiffFilter, this.kkTypeFilterLoc, this.kkTypeFilterRolls, this.kkLocScanDay,
-      this.kkTypeSortQtyDesc ? 1 : '', this.kkTypeSortKkTimeDesc ? 1 : ''].filter((v) => !!v).length;
+      this.kkTypeSortQtyDesc ? 1 : '', this.kkTypeSortRollsDesc ? 1 : '', this.kkTypeSortKkTimeDesc ? 1 : ''].filter((v) => !!v).length;
   }
 
   onKkTypeWarnFilterChange(): void {
@@ -2949,7 +3114,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
             kkBy: operator,
             kkAt,
             updatedAt: new Date(),
-            ...(next ? {} : { kkScanCount: 0 })
+            ...(next ? {} : { kkScanCount: 0, kkScanQty: 0 })
           });
         }
         await batch.commit();
@@ -2980,13 +3145,13 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
+        if (!next) { m.kkScanCount = 0; m.kkScanQty = 0; }
       }
       this.invalidateKkInvSnapCache();
       this.syncKkMaterialRows(row.materialCode);
     } catch (e) {
       console.error('❌ onKkByMaterialTick:', e);
-      alert('❌ Không lưu được tick KK theo mã hàng.');
+      appAlert('❌ Không lưu được tick KK theo mã hàng.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -3034,7 +3199,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       row.palletMixed = false;
     } catch (e) {
       console.error('❌ saveKkMaterialPallet:', e);
-      alert('❌ Không lưu được số pallet.');
+      appAlert('❌ Không lưu được số pallet.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -3105,7 +3270,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       row.locationSaved = next;
     } catch (e) {
       console.error('❌ saveKkMaterialLocation:', e);
-      alert('❌ Không lưu được vị trí.');
+      appAlert('❌ Không lưu được vị trí.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -3119,6 +3284,12 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (next === prev) return;
     (line as any).kkWarning = next;
     this.cdr.detectChanges();
+    // Cảnh báo "Đề nghị xóa": gửi đề nghị (chờ quản lý duyệt) + Zalo nhóm Quản lý kho; hủy thì trả lại cảnh báo cũ
+    if (next === 'de-nghi-xoa' && !(await this.requestKkDelete(line))) {
+      (line as any).kkWarning = prev;
+      this.cdr.detectChanges();
+      return;
+    }
     try {
       const by = await this.resolveLocationOperatorId();
       const patch = {
@@ -3132,7 +3303,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     } catch (e) {
       console.error('❌ saveKkWarning:', e);
       (line as any).kkWarning = prev;
-      alert('❌ Không lưu được cảnh báo.');
+      appAlert('❌ Không lưu được cảnh báo.');
     } finally {
       this.cdr.detectChanges();
     }
@@ -3177,12 +3348,512 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     return 'LinkQ';
   }
   private kkTypeByCodeMemo: { sig: string; rows: KkTypeByCodeRow[] } = { sig: '', rows: [] };
+  /** Số mã web không có trong file LinkQ — bị ẩn ở bảng Theo mã LinkQ. */
+  kkByCodeHiddenCount = 0;
 
   async toggleKkTypeByCodeView(): Promise<void> {
     this.kkTypeByCodeView = !this.kkTypeByCodeView;
     if (!this.kkTypeByCodeView) return;
-    await this.ensureKkTypeLinkQ();
+    this.kkPoCheckView = false;
+    await Promise.all([this.ensureKkTypeLinkQ(), this.loadKkByCodePxk()]);
   }
+
+  /** PXK chưa xuất theo mã (ASM1) cho bảng Theo mã LinkQ — đọc mới mỗi lần bật; lỗi thì bỏ cột (null). */
+  kkByCodePxk: Map<string, { qty: number; lsx: number }> | null = null;
+
+  private async loadKkByCodePxk(): Promise<void> {
+    const factory = this.selectedFactory;
+    if (factory !== 'ASM1') {
+      this.kkByCodePxk = null;
+      return;
+    }
+    try {
+      const map = await this.linkQPendingPxkSvc.load(factory, true);
+      if (factory === this.selectedFactory) this.kkByCodePxk = map;
+    } catch (e) {
+      console.warn('loadKkByCodePxk:', e);
+      this.kkByCodePxk = null;
+    } finally {
+      this.cdr.detectChanges();
+    }
+  }
+
+  // ===== Check PO: bảng chi tiết giữ nguyên, chỉ thêm 2 cột PO LinkQ + Lượng PO LinkQ (file tuổi hàng LinkQ) =====
+  kkPoCheckView = false;
+  kkPoCheckLoading = false;
+
+  async toggleKkPoCheck(): Promise<void> {
+    if (this.kkPoCheckView) {
+      this.kkPoCheckView = false;
+      return;
+    }
+    this.kkPoCheckLoading = true;
+    this.cdr.detectChanges();
+    try {
+      if (!this.kkPoCmp || this.kkPoCmpFactory !== this.selectedFactory) await this.loadKkPoCmp();
+    } catch (e: any) {
+      appAlert('❌ Không đọc được file PO LinkQ (tuổi hàng): ' + (e?.message || e));
+      return;
+    } finally {
+      this.kkPoCheckLoading = false;
+      this.cdr.detectChanges();
+    }
+    if (!this.kkPoCmp) {
+      if (confirm(`Chưa có file PO LinkQ (Báo cáo tuổi hàng NVL) cho ${this.selectedFactory}. Import file ngay?`)) this.importKkPoCompare();
+      return;
+    }
+    this.kkTypeByCodeView = false;
+    this.kkPoCheckView = true;
+    // File tồn LinkQ: biết file tuổi hàng đã trừ PXK chưa (tránh trừ PXK 2 lần)
+    void this.ensureKkTypeLinkQ();
+    // PXK chưa xuất theo PO (ASM1) — trừ vào phần dư khi tô dòng nghi sai
+    if (this.selectedFactory === 'ASM1') this.loadKkPoCmpPending();
+    void this.loadLinkQAdjPending();
+    this.cdr.detectChanges();
+  }
+
+  /** Bật Check PO và chưa bật So sánh PO (So sánh PO đã có cột PO LinkQ riêng). */
+  get kkPoCheckCols(): boolean {
+    return this.kkPoCheckView && !!this.kkPoCmp && !this.kkPoCmpActive;
+  }
+
+  /**
+   * PO LinkQ của 1 dòng tồn web: LinkQ có đúng PO này → PO + lượng;
+   * không có → vẫn hiện các PO LinkQ của mã kèm lượng (để so), match = false.
+   */
+  kkPoCheckLinkQ(m: InventoryMaterial): { match: boolean; items: Array<{ po: string; qty: number }> } {
+    const d = this.kkPoCmp;
+    // Cùng 1 object cho cùng Mã + PO — tránh ngFor vẽ lại cả ô mỗi lần change detection
+    if (this.kkPoCheckMemoSrc !== d) {
+      this.kkPoCheckMemoSrc = d;
+      this.kkPoCheckMemo.clear();
+    }
+    const code = kkPoCmpCode(m.materialCode);
+    const po = kkPoCmpPo(m.poNumber);
+    const key = `${code}|${po}`;
+    const hit = this.kkPoCheckMemo.get(key);
+    if (hit) return hit;
+    const pos = d?.byCode.get(code);
+    // LinkQ không có đúng Mã + PO của dòng → để trống (không liệt kê PO khác của mã)
+    const out = d && pos?.has(po)
+      ? { match: true, items: [{ po, qty: d.qtyByKey.get(`${code}|${po}`) ?? 0 }] }
+      : { match: false, items: [] };
+    this.kkPoCheckMemo.set(key, out);
+    return out;
+  }
+
+  /**
+   * Dòng nghi sai (tô đỏ ô Tồn kho) = đúng các dòng mà Tự sửa sẽ đề nghị xóa / giảm / tăng / đổi PO,
+   * cộng mọi dòng của Mã + PO lệch mà không tự sửa được. Mã không có trên LinkQ thì bỏ qua.
+   */
+  kkPoCheckSuspect(m: InventoryMaterial): string {
+    const all = this.kkTypeDetailAll;
+    const d = this.kkPoCmp;
+    const sig = [this.kkTypeCacheRev, all.length, this.kkActiveProductType || '', d?.pairCount || 0,
+      d?.importedAt?.getTime() || 0, this.kkPoCmpPending?.size ?? -1, this.kkTypeLinkQMap?.size ?? -1].join('|');
+    if (sig !== this.kkPoSuspectSig) {
+      this.kkPoSuspectSig = sig;
+      this.kkPoSuspect = this.buildKkFixPlan(all, false).flags;
+    }
+    return this.kkPoSuspect.get(String(m.id || '')) || '';
+  }
+
+  private kkPoSuspectSig = '';
+  private kkPoSuspect = new Map<string, string>();
+
+  /** Dòng giữ lại trước: đã KK / đã scan vị trí, rồi dòng tạo trước. */
+  private kkFixKeepRank(m: InventoryMaterial): number {
+    const scanned = m.kkAt || m.locationScannedAt ? 1 : 0;
+    const t = new Date((m.createdAt || m.importDate || 0) as any).getTime() || 0;
+    return scanned * 1e15 - t;
+  }
+
+  /** Số ngày coi là "mới nhập" — file LinkQ thường chưa kịp có PO này. */
+  private static readonly KK_FIX_FRESH_DAYS = 7;
+
+  /** Dòng đang ở IQC hoặc nhập trong vài ngày gần đây → Tự sửa không đụng (chỉ báo làm tay). */
+  private isKkFixFresh(m: InventoryMaterial): boolean {
+    const loc = String(this.primaryLocationDisplay(m.location) || m.location || '').trim().toUpperCase();
+    if (loc.startsWith('IQC')) return true;
+    const toMs = (v: any): number => {
+      if (!v) return 0;
+      const d = typeof v?.toDate === 'function' ? v.toDate() : new Date(v);
+      return d.getTime() || 0;
+    };
+    let t = Math.max(toMs((m as any).receivedDate), toMs(m.createdAt), toMs(m.importDate));
+    const imd = String(this.getDisplayIMD(m) || '');
+    if (/^\d{8}/.test(imd)) {
+      const it = new Date(+imd.slice(4, 8), +imd.slice(2, 4) - 1, +imd.slice(0, 2)).getTime() || 0;
+      t = Math.max(t, it);
+    }
+    return t > 0 && Date.now() - t < QuanLyNguyenLieuComponent.KK_FIX_FRESH_DAYS * 864e5;
+  }
+
+  /**
+   * Phương án Tự sửa theo từng Mã + PO (gốc = LinkQ file tuổi hàng), lệch = web − PXK chưa xuất − LinkQ:
+   * 1) PO web không có trên LinkQ, cùng lượng với 1 PO LinkQ chưa khớp → đổi PO.
+   * 2) Web dư: xóa dòng trùng (cùng IMD + vị trí + lượng) → xóa 1–3 dòng cộng đúng phần dư → giảm dòng mới nhất.
+   * 3) Web thiếu: không bao giờ tăng tồn → làm tay. PO LinkQ chưa có dòng web / lệch quá lớn → làm tay.
+   */
+  private buildKkFixPlan(lines: InventoryMaterial[], skipPending: boolean): KkFixPlan {
+    const plan: KkFixPlan = { items: [], manual: [], before: 0, after: 0, flags: new Map() };
+    const d = this.kkPoCmp;
+    if (!d) return plan;
+    const tol = 1;
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
+    const fmt = (n: number) => this.formatNumber(n);
+    const isOff = (e: number) => Math.abs(e) > tol && this.isLinkqDiffBad(e);
+    const byCode = new Map<string, Map<string, { lines: InventoryMaterial[]; web: number }>>();
+    for (const m of lines) {
+      const code = kkPoCmpCode(m.materialCode);
+      if (!d.byCode.get(code)?.size) continue;
+      const stock = this.calculateCurrentStock(m);
+      if (!(stock > 0)) continue;
+      const po = kkPoCmpPo(m.poNumber) || '—';
+      const pos = byCode.get(code) || new Map();
+      const g = pos.get(po) || { lines: [], web: 0 };
+      g.lines.push(m);
+      g.web = r4(g.web + stock);
+      pos.set(po, g);
+      byCode.set(code, pos);
+    }
+    const usable = (m: InventoryMaterial) => !skipPending || !this.linkQAdjPending.get(String(m.id || ''))?.length;
+    const add = (it: Omit<KkFixItem, 'key' | 'on'>) => {
+      plan.items.push({ ...it, key: `${it.m.id}|${it.kind}|${it.target}`, on: true });
+      const id = String(it.m.id || '');
+      if (!plan.flags.has(id)) plan.flags.set(id, it.reason);
+    };
+    const manual = (code: string, po: string, text: string, g?: { lines: InventoryMaterial[] }) => {
+      plan.manual.push({ code, po, text });
+      g?.lines.forEach((m) => {
+        const id = String(m.id || '');
+        if (!plan.flags.has(id)) plan.flags.set(id, 'Cần làm tay: ' + text);
+      });
+    };
+
+    byCode.forEach((pos, code) => {
+      const lqPos = d.byCode.get(code) || new Set<string>();
+      const lq = (po: string) => (lqPos.has(po) ? d.qtyByKey.get(`${code}|${po}`) ?? 0 : 0);
+      // PO chung của LinkQ không làm đích đổi PO
+      const lqUnused = Array.from(lqPos).filter((po) => po !== KK_PO_BLANK && !pos.has(po) && lq(po) > tol);
+      plan.before = r4(plan.before + lqUnused.reduce((s, po) => s + lq(po), 0));
+
+      pos.forEach((g, po) => {
+        const pxk = this.kkAgingPxkOf(code, po);
+        const L = lq(po);
+        const E = r4(g.web - pxk - L);
+        if (!isOff(E)) return;
+        if (po === KK_PO_BLANK) {
+          // PO chung (trống / PO00000000): không tự sửa, chỉ báo
+          manual(code, po, `PO chung lệch ${E > 0 ? '+' : ''}${fmt(E)} (web ${fmt(g.web)}${pxk ? ` − PXK ${fmt(pxk)}` : ''} vs LinkQ ${fmt(L)}) — không tự sửa PO chung`, g);
+          plan.before = r4(plan.before + Math.abs(E));
+          plan.after = r4(plan.after + Math.abs(E));
+          return;
+        }
+        plan.before = r4(plan.before + Math.abs(E));
+        const base = `PO ${po}: web ${fmt(g.web)}${pxk ? ` − PXK ${fmt(pxk)}` : ''} ${lqPos.has(po) ? `vs LinkQ ${fmt(L)}` : '(LinkQ không có PO này)'}`;
+        const avail = g.lines.filter(usable);
+
+        // Có dòng mới nhập / đang IQC: LinkQ có thể chưa cập nhật → không tự xóa / giảm / đổi PO, chỉ báo làm tay
+        const fresh = g.lines.filter((m) => this.isKkFixFresh(m));
+        if (fresh.length && E > 0) {
+          const fs = r4(fresh.reduce((s, m) => s + this.calculateCurrentStock(m), 0));
+          manual(code, po, `Dư ${fmt(E)} (${base}) — có ${fresh.length} dòng mới nhập / IQC (${fmt(fs)}), LinkQ có thể chưa cập nhật → không tự sửa, kiểm tra tay`, g);
+          plan.after = r4(plan.after + E);
+          return;
+        }
+
+        // 1) PO gõ khác: web có PO lạ, LinkQ có đúng 1 PO chưa dòng nào khớp cùng lượng
+        if (!lqPos.has(po)) {
+          const net = r4(g.web - pxk);
+          const cand = lqUnused.filter((p) => Math.abs(lq(p) - net) <= tol);
+          if (cand.length === 1 && avail.length === g.lines.length) {
+            const to = cand[0];
+            lqUnused.splice(lqUnused.indexOf(to), 1);
+            plan.before = r4(plan.before - lq(to));
+            g.lines.forEach((m) => add({
+              m, kind: 'po', target: '', qty: 0, newPo: to, code, po,
+              reason: `Đổi PO ${po} → ${to}: LinkQ không có ${po}, PO ${to} trên LinkQ ${fmt(lq(to))} = web ${fmt(net)}`
+            }));
+            return;
+          }
+        }
+
+        if (E > 0) {
+          let rest = E;
+          const picked = new Set<InventoryMaterial>();
+          // 2a) dòng trùng
+          const buckets = new Map<string, InventoryMaterial[]>();
+          avail.forEach((m) => {
+            const k = `${this.getDisplayIMD(m)}|${this.primaryLocationDisplay(m.location)}|${r4(this.calculateCurrentStock(m))}`;
+            buckets.set(k, [...(buckets.get(k) || []), m]);
+          });
+          buckets.forEach((list) => {
+            if (list.length < 2) return;
+            const sorted = [...list].sort((a, b) => this.kkFixKeepRank(b) - this.kkFixKeepRank(a));
+            const keep = sorted[0];
+            for (const m of sorted.slice(1)) {
+              const s = this.calculateCurrentStock(m);
+              if (s > rest + tol) break;
+              picked.add(m);
+              rest = r4(rest - s);
+              add({
+                m, kind: 'delete', target: '', qty: s, newPo: '', code, po,
+                reason: `Trùng dòng (cùng PO, IMD ${this.getDisplayIMD(keep)}, vị trí ${this.primaryLocationDisplay(keep.location) || '—'}, lượng ${fmt(s)}) · ${base}`
+              });
+            }
+          });
+          // 2b) 1–3 dòng cộng đúng phần dư (ưu tiên ít dòng, dòng mới)
+          if (rest > tol) {
+            const pool = avail.filter((m) => !picked.has(m)).sort((a, b) => this.kkFixKeepRank(a) - this.kkFixKeepRank(b));
+            const st = pool.map((m) => this.calculateCurrentStock(m));
+            const near = (s: number) => Math.abs(s - rest) <= tol;
+            let hit: number[] | null = null;
+            for (let i = 0; i < pool.length && !hit; i++) if (near(st[i])) hit = [i];
+            if (pool.length <= 60) {
+              for (let i = 0; i < pool.length && !hit; i++) {
+                for (let j = i + 1; j < pool.length && !hit; j++) if (near(st[i] + st[j])) hit = [i, j];
+              }
+            }
+            if (pool.length <= 25) {
+              for (let i = 0; i < pool.length && !hit; i++) {
+                for (let j = i + 1; j < pool.length && !hit; j++) {
+                  for (let k = j + 1; k < pool.length && !hit; k++) if (near(st[i] + st[j] + st[k])) hit = [i, j, k];
+                }
+              }
+            }
+            if (hit) {
+              const sum = hit.reduce((s, i) => s + st[i], 0);
+              hit.forEach((i) => {
+                picked.add(pool[i]);
+                add({
+                  m: pool[i], kind: 'delete', target: '', qty: st[i], newPo: '', code, po,
+                  reason: `${hit!.length > 1 ? `${hit!.length} dòng cộng` : 'Dòng'} ${fmt(sum)} = phần dư ${fmt(rest)} · ${base}`
+                });
+              });
+              rest = r4(rest - sum);
+            }
+          }
+          // 2c) giảm dòng mới nhất (chỉ giảm nên dư lớn vẫn sửa; không còn dòng nào → làm tay)
+          if (rest > tol) {
+            if (!avail.some((m) => !picked.has(m))) {
+              manual(code, po, `Dư ${fmt(rest)} (${base}) — các dòng đang chờ duyệt, làm tay`, g);
+              plan.after = r4(plan.after + rest);
+              return;
+            }
+            const pool = avail.filter((m) => !picked.has(m)).sort((a, b) => this.kkFixKeepRank(a) - this.kkFixKeepRank(b));
+            for (const m of pool) {
+              if (rest <= tol) break;
+              const s = this.calculateCurrentStock(m);
+              const take = r4(Math.min(rest, s));
+              rest = r4(rest - take);
+              const why = `Dư ${fmt(E)} không khớp dòng nào → giảm dòng mới nhất · ${base}`;
+              if (take >= s - tol) {
+                add({ m, kind: 'delete', target: '', qty: s, newPo: '', code, po, reason: why });
+                continue;
+              }
+              const nk = Math.max(0, Number(m.quantity) || 0);
+              const c = r4(Math.min(take, nk));
+              if (c > 0) add({ m, kind: 'dec', target: 'closing', qty: c, newPo: '', code, po, reason: why });
+              if (take - c > 0) add({ m, kind: 'dec', target: 'opening', qty: r4(take - c), newPo: '', code, po, reason: why });
+            }
+          }
+          plan.after = r4(plan.after + Math.abs(rest));
+          return;
+        }
+
+        // 3) Web thiếu — Tự sửa không bao giờ tăng tồn, chỉ báo làm tay
+        const S = -E;
+        manual(code, po, `Web thiếu ${fmt(S)} (${base}) — không tự tăng tồn, kiểm tra / làm tay`, g);
+        plan.after = r4(plan.after + S);
+      });
+
+      lqUnused.forEach((po) => {
+        manual(code, po, `LinkQ có PO ${po} ${fmt(lq(po))} nhưng web không có dòng nào → tạo dòng tay (cần IMD, vị trí)`);
+        plan.after = r4(plan.after + lq(po));
+      });
+    });
+    plan.items.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }) || a.po.localeCompare(b.po));
+    return plan;
+  }
+
+  // ===== Nút Tự sửa (Check PO): xem trước → tick → gửi đề nghị vào Danh mục điều chỉnh + 1 tin Zalo =====
+  kkFix: (KkFixPlan & { busy: boolean; msg: string; ok: boolean }) | null = null;
+  kkFixLoading = false;
+
+  async openKkAutoFix(): Promise<void> {
+    if (!this.canEdit || this.denyAction('invAdjustRequest')) return;
+    if (!this.kkPoCheckCols || this.kkFixLoading) return;
+    this.kkFixLoading = true;
+    this.cdr.detectChanges();
+    try {
+      await Promise.all([this.loadLinkQAdjPending(), this.ensureKkTypeLinkQ()]);
+      const factory = this.selectedFactory;
+      let kitting = new Map<string, string[]>();
+      if (factory === 'ASM1') {
+        // Đọc lại PXK chưa xuất ngay lúc bấm — Kitting đang scan xuất, số cũ có thể đã sai
+        const fresh = await this.linkQPendingPxkSvc.loadByPo(factory, true).catch(() => null);
+        if (fresh && factory === this.selectedFactory) {
+          this.kkPoCmpPending = fresh;
+          this.kkPoSuspectSig = '';
+        }
+        kitting = await this.linkQPendingPxkSvc.loadKittingCodes(factory).catch(() => new Map());
+      }
+      const bs = await this.loadKkBsPendingCodes(factory);
+      if (factory !== this.selectedFactory) return;
+      // Mã đang Kitting / đang chờ Xuất BS: có thể sắp scan xuất → không tự sửa, chỉ báo
+      const skip = new Map<string, string>();
+      kitting.forEach((lsx, code) => skip.set(kkPoCmpCode(code), `Đang Kitting (${lsx.join(', ')}) — có thể đang scan xuất, không tự sửa`));
+      bs.forEach((lsx, code) => {
+        const why = `Đang chờ Xuất BS (${lsx.join(', ')}) — có thể sắp scan xuất, không tự sửa`;
+        skip.set(code, skip.has(code) ? `${skip.get(code)} · ${why}` : why);
+      });
+      const plan = this.buildKkFixPlan(this.kkTypeDetailAll, true);
+      const skipped = new Set<string>();
+      [...plan.items.map((x) => x.code), ...plan.manual.map((x) => x.code)].forEach((c) => skip.has(c) && skipped.add(c));
+      plan.items = plan.items.filter((x) => !skipped.has(x.code));
+      plan.manual = [
+        ...Array.from(skipped).sort().map((code) => ({ code, po: '—', text: skip.get(code) || '' })),
+        ...plan.manual.filter((x) => !skipped.has(x.code))
+      ];
+      this.kkFix = { ...plan, busy: false, msg: '', ok: false };
+    } finally {
+      this.kkFixLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Mã còn trên phiếu Xuất BS chưa xuất (pxk-bs-data: chưa done / ẩn / xóa, import trong 30 ngày + LSX Chung) → các LSX.
+   * Đọc theo factory (không cần index ghép), lỗi thì coi như không có.
+   */
+  private async loadKkBsPendingCodes(factory: string): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    try {
+      const cutoff = Date.now() - 30 * 86400000;
+      const snap = await this.firestore.firestore.collection('pxk-bs-data').where('factory', '==', factory).get();
+      snap.docs.forEach((doc) => {
+        const d = doc.data() as any;
+        const common = doc.id.endsWith('_LSX_Chung') || doc.id.endsWith('_NO_LSX');
+        const at = d?.importedAt?.toDate ? d.importedAt.toDate().getTime() : (d?.importedAt ? new Date(d.importedAt).getTime() : 0);
+        if (!common && at && at < cutoff) return;
+        const lsxRaw = String(d?.lsx || '').trim();
+        const lsx = common || !lsxRaw || /^lsx\s*chung$/i.test(lsxRaw) ? 'N/A' : lsxRaw;
+        (Array.isArray(d?.lines) ? d.lines : []).forEach((l: any) => {
+          if (l?.done || l?.hidden || l?.deletedAt) return;
+          if (!(Number(l?.quantity ?? l?.soLuong ?? 0) > 0)) return;
+          const code = kkPoCmpCode(l?.materialCode || l?.maVatTu || l?.maHang);
+          if (!code) return;
+          const list = out.get(code) || [];
+          if (!list.includes(lsx)) out.set(code, [...list, lsx]);
+        });
+      });
+    } catch (e) {
+      console.warn('loadKkBsPendingCodes:', e);
+    }
+    return out;
+  }
+
+  kkFixKindLabel(it: KkFixItem): string {
+    if (it.kind === 'delete') return 'Xóa dòng';
+    if (it.kind === 'po') return 'Đổi PO';
+    return `Giảm ${it.target === 'opening' ? 'tồn đầu' : 'tồn'}`;
+  }
+
+  kkFixSelected(): KkFixItem[] {
+    return this.kkFix?.items.filter((x) => x.on) || [];
+  }
+
+  kkFixToggleAll(on: boolean): void {
+    this.kkFix?.items.forEach((x) => (x.on = on));
+  }
+
+  async submitKkAutoFix(): Promise<void> {
+    const f = this.kkFix;
+    if (!f || f.busy || f.ok) return;
+    const sel = this.kkFixSelected();
+    if (!sel.length) {
+      f.msg = 'Chưa tick đề nghị nào.';
+      return;
+    }
+    f.busy = true;
+    f.msg = '';
+    this.cdr.detectChanges();
+    try {
+      const db = this.firestore.firestore;
+      const by = await this.getMaterialsOtpRequester();
+      const now = firebase.default.firestore.FieldValue.serverTimestamp();
+      for (let i = 0; i < sel.length; i += 400) {
+        const batch = db.batch();
+        sel.slice(i, i + 400).forEach((it) => {
+          const m = it.m;
+          const stock = this.calculateCurrentStock(m);
+          const current = it.target === 'opening' ? Number(m.openingStock) || 0 : stock;
+          const expected = it.kind === 'delete' ? 0
+            : it.kind === 'po' ? stock
+              : Math.round((current - it.qty) * 10000) / 10000;
+          batch.set(db.collection('inventory-adjust-requests').doc(), {
+            factory: this.selectedFactory,
+            materialId: m.id,
+            materialCode: m.materialCode || '',
+            po: m.poNumber || '',
+            imd: this.getDisplayIMD(m),
+            location: this.primaryLocationDisplay(m.location),
+            target: it.kind === 'delete' ? 'delete' : it.kind === 'po' ? 'po' : it.target,
+            direction: it.kind === 'dec' ? 'dec' : '',
+            qty: it.kind === 'po' ? 0 : it.qty,
+            currentValue: current,
+            expectedValue: expected,
+            ...(it.kind === 'po' ? { newPo: it.newPo } : {}),
+            note: 'Tự sửa Check PO: ' + it.reason,
+            source: 'kk-autofix',
+            status: 'pending',
+            by,
+            at: now
+          });
+        });
+        await batch.commit();
+      }
+      const count = (k: KkFixItem['kind']) => sel.filter((x) => x.kind === k).length;
+      const parts = [
+        count('delete') && `xóa ${count('delete')} dòng`,
+        count('dec') && `giảm ${count('dec')}`,
+        count('po') && `đổi PO ${count('po')}`
+      ].filter(Boolean).join(', ');
+      const sample = sel.slice(0, 12).map((x) =>
+        `• ${x.code} · ${x.po} · ${this.kkFixKindLabel(x)}${x.kind === 'po' ? ` → ${x.newPo}` : ` ${this.formatNumber(x.qty)}`}`).join('\n');
+      let zaloOk = true;
+      try {
+        await this.invStockReportSvc.notify({
+          factory: this.selectedFactory,
+          materialCode: `Mục ${this.kkActiveProductType || ''}`.trim(),
+          po: '',
+          imd: '',
+          stock: '',
+          location: '',
+          status: `Tự sửa Check PO: ${sel.length} đề nghị`,
+          reportedBy: by,
+          detail: `Đề nghị ${parts} để khớp PO LinkQ.\n${sample}${sel.length > 12 ? `\n… và ${sel.length - 12} đề nghị khác` : ''}`
+            + '\nDuyệt tại Materials → More → Danh mục điều chỉnh.'
+        });
+      } catch (e) {
+        console.warn('submitKkAutoFix zalo:', e);
+        zaloOk = false;
+      }
+      f.ok = true;
+      f.msg = `✅ Đã gửi ${sel.length} đề nghị (${parts}).` + (zaloOk ? ' Bot Zalo đã báo nhóm Quản lý kho.' : ' Zalo chưa gửi được.');
+      await this.loadLinkQAdjPending();
+    } catch (e: any) {
+      console.error('submitKkAutoFix:', e);
+      f.msg = '❌ Không gửi được: ' + (e?.message || e);
+    } finally {
+      f.busy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private kkPoCheckMemoSrc: unknown = null;
+  private kkPoCheckMemo = new Map<string, { match: boolean; items: Array<{ po: string; qty: number }> }>();
 
   /** File LinkQ (1 doc, có cache) — cho cột Có LinkQ / Tồn LinkQ ở chi tiết box. */
   private async ensureKkTypeLinkQ(): Promise<void> {
@@ -3206,14 +3877,15 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   get kkTypeByCodeRows(): KkTypeByCodeRow[] {
     const lines = this.kkTypeDetailFiltered;
-    const sig = [this.kkTypeDetailSig, this.kkTypeCacheRev, lines.length, this.kkTypeLinkQLabel].join('|');
+    const sig = [this.kkTypeDetailSig, this.kkTypeCacheRev, lines.length, this.kkTypeLinkQLabel, this.kkByCodePxk?.size ?? -1].join('|');
     if (sig === this.kkTypeByCodeMemo.sig) return this.kkTypeByCodeMemo.rows;
-    const map = new Map<string, { code: string; name: string; lines: number; web: number; checked: number; exempt: number; aging: number | null; locs: Set<string> }>();
+    const map = new Map<string, { code: string; name: string; lines: number; web: number; checked: number; exempt: number; aging: number | null; locs: Set<string>; items: InventoryMaterial[] }>();
     for (const m of lines) {
       const code = String(m.materialCode || '').trim().toUpperCase();
       if (!code) continue;
-      const cur = map.get(code) || { code, name: this.getKkMaterialName(m), lines: 0, web: 0, checked: 0, exempt: 0, aging: null, locs: new Set<string>() };
+      const cur = map.get(code) || { code, name: this.getKkMaterialName(m), lines: 0, web: 0, checked: 0, exempt: 0, aging: null, locs: new Set<string>(), items: [] };
       cur.lines += 1;
+      cur.items.push(m);
       const age = this.kkAging(m)?.months;
       if (age != null && (cur.aging == null || age > cur.aging)) cur.aging = age;
       cur.web += this.calculateCurrentStock(m);
@@ -3224,11 +3896,20 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       map.set(code, cur);
     }
     const linkQ = this.kkTypeLinkQMap;
-    const rows = Array.from(map.values()).map((v) => {
+    // Chỉ mã có trong file LinkQ (chưa đọc xong LinkQ thì tạm hiện hết)
+    const onlyLinkQ = !!linkQ && linkQ.size > 0;
+    let hidden = 0;
+    const rows = Array.from(map.values()).filter((v) => {
+      if (!onlyLinkQ || linkQ!.has(this.normalizeTieuHuyCode(v.code))) return true;
+      hidden += 1;
+      return false;
+    }).map((v) => {
       const key = this.normalizeTieuHuyCode(v.code);
       const q = linkQ && linkQ.has(key) ? Number(linkQ.get(key)) : null;
       const web = Math.round(v.web * 10000) / 10000;
-      const diff = q == null ? null : Math.round((web - q) * 10000) / 10000;
+      // Theo mã: không so PO — Lệch = Tồn web − (Tồn LinkQ + PXK chưa xuất của mã)
+      const pxk = this.kkByCodePxk ? this.kkByCodePxk.get(v.code)?.qty || 0 : null;
+      const diff = q == null ? null : Math.round((web - q - (pxk || 0)) * 10000) / 10000;
       return {
         code: v.code,
         name: v.name,
@@ -3236,14 +3917,17 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         aging: v.aging,
         web,
         linkQ: q,
+        pxk,
         diff,
         warn: this.isLinkqDiffBad(diff),
         checked: v.checked,
         kkLines: v.lines - v.exempt,
-        locs: Array.from(v.locs).sort().join(', ')
+        locs: Array.from(v.locs).sort().join(', '),
+        items: v.items.sort((a, b) => String(a.poNumber || '').localeCompare(String(b.poNumber || '')) || this.getDisplayIMD(a).localeCompare(this.getDisplayIMD(b)))
       };
     }).sort((a, b) => Number(b.warn) - Number(a.warn) || a.code.localeCompare(b.code));
     this.kkTypeByCodeMemo = { sig, rows };
+    this.kkByCodeHiddenCount = hidden;
     return rows;
   }
 
@@ -3286,13 +3970,24 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.kkTypeDetailSig = '';
       return;
     }
-    if (this.selectedFactory !== 'ASM1') { alert('PXK chưa xuất hiện chỉ tính cho ASM1.'); return; }
+    if (this.selectedFactory !== 'ASM1') { appAlert('PXK chưa xuất hiện chỉ tính cho ASM1.'); return; }
     this.kkPendingPxkLoading = true;
     this.cdr.detectChanges();
     try {
-      this.kkPendingPxk = await this.linkQPendingPxkSvc.load(this.selectedFactory, true);
+      const factory = this.selectedFactory;
+      // File tuổi hàng (LinkQ theo PO) cho cột Chênh lệch theo dòng — đọc trước vì nó xóa PXK theo PO;
+      // chưa có file thì cột tính theo tổng mã
+      if (!this.kkPoCmp || this.kkPoCmpFactory !== factory) await this.loadKkPoCmp().catch((e) => console.warn('loadKkPoCmp:', e));
+      await this.ensureKkTypeLinkQ();
+      this.kkPendingPxk = await this.linkQPendingPxkSvc.load(factory, true);
+      // Cùng 1 lần tính (cache của service) — lượng theo Mã + PO cho cột PXK chưa xuất từng dòng
+      const byPo = await this.linkQPendingPxkSvc.loadByPo(factory);
+      if (factory === this.selectedFactory) {
+        this.kkPoCmpPending = byPo;
+        this.kkPoSuspectSig = '';
+      }
     } catch (e: any) {
-      alert('❌ Không tính được PXK chưa xuất: ' + (e?.message || e));
+      appAlert('❌ Không tính được PXK chưa xuất: ' + (e?.message || e));
     } finally {
       this.kkPendingPxkLoading = false;
       this.cdr.detectChanges();
@@ -3315,6 +4010,136 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   kkPendingPxkText(code: string | null | undefined): string {
     const p = this.kkPendingPxk?.get(String(code || '').trim().toUpperCase());
     return p ? this.formatNumber(p.qty) : '—';
+  }
+
+  /**
+   * Chênh lệch từng dòng: mã có trong file tuổi hàng → LinkQ + PXK chưa xuất của PO được trừ dần vào các dòng
+   * của PO (dòng giữ lại trước: đã KK / scan, rồi dòng tạo trước) → phần dư rơi vào dòng nghi sai,
+   * thiếu (âm) dồn vào dòng lớn nhất. Tổng các dòng = chênh lệch của PO. Mã không có trong file → theo tổng mã.
+   */
+  override kkPxkDiffOf(m: InventoryMaterial): number | null {
+    const hit = this.kkLineDiffMap().get(String(m.id || ''));
+    return hit ? hit.diff : this.kkPxkDiff(m.materialCode);
+  }
+
+  kkLineDiffText(m: InventoryMaterial): string {
+    const d = this.kkPxkDiffOf(m);
+    return d == null ? '…' : `${d > 0 ? '+' : ''}${this.formatNumber(d)}`;
+  }
+
+  kkLineDiffTitle(m: InventoryMaterial): string {
+    const hit = this.kkLineDiffMap().get(String(m.id || ''));
+    return hit ? hit.why : this.kkPxkDiffTitle(m.materialCode);
+  }
+
+  /**
+   * PXK chưa xuất cộng thêm khi so web với file tuổi hàng (LinkQ theo PO).
+   * File tuổi hàng có thể cũ hơn file tồn LinkQ: nếu tổng tuổi hàng của mã ≈ LinkQ tồn + PXK chưa xuất
+   * (gần hơn ≈ LinkQ tồn) thì file tuổi hàng CHƯA trừ PXK → không cộng PXK nữa (tránh trừ 2 lần).
+   * Chưa đọc được file tồn LinkQ → cộng PXK như cũ.
+   */
+  kkAgingPxkOf(code: string, po: string): number {
+    const pxk = this.kkPoCmpPendingOf(code, po);
+    return pxk > 0 && this.kkAgingHasPxk(code) ? 0 : pxk;
+  }
+
+  /** true = file tuổi hàng của mã còn chứa lượng PXK chưa xuất (LinkQ chưa trừ lúc xuất file tuổi hàng). */
+  kkAgingHasPxk(code: string): boolean {
+    const d = this.kkPoCmp;
+    const lqMap = this.kkTypeLinkQMap;
+    if (!d || !lqMap?.size) return false;
+    const sig = `${d.pairCount}|${d.importedAt?.getTime() || 0}|${this.kkPoCmpPending?.size ?? -1}|${lqMap.size}`;
+    if (sig !== this.kkAgingHasPxkSig) {
+      this.kkAgingHasPxkSig = sig;
+      this.kkAgingHasPxkMemo.clear();
+    }
+    const c = kkPoCmpCode(code);
+    const hit = this.kkAgingHasPxkMemo.get(c);
+    if (hit != null) return hit;
+    let aging = 0;
+    let pxk = 0;
+    (d.byCode.get(c) || new Set<string>()).forEach((po) => {
+      aging += d.qtyByKey.get(`${c}|${po}`) ?? 0;
+    });
+    this.kkPoCmpPending?.forEach((v, key) => {
+      if (key.slice(0, key.indexOf('|')) === c) pxk += v.qty;
+    });
+    const lq = Number(lqMap.get(this.normalizeTieuHuyCode(c)));
+    const out = pxk > 0 && Number.isFinite(lq) && Math.abs(aging - (lq + pxk)) < Math.abs(aging - lq);
+    this.kkAgingHasPxkMemo.set(c, out);
+    return out;
+  }
+
+  private kkAgingHasPxkSig = '';
+  private kkAgingHasPxkMemo = new Map<string, boolean>();
+
+  private kkLineDiffSig = '';
+  private kkLineDiffCache = new Map<string, { diff: number; why: string }>();
+
+  private kkLineDiffMap(): Map<string, { diff: number; why: string }> {
+    const all = this.kkTypeDetailAll;
+    const d = this.kkPoCmp;
+    const sig = [this.kkTypeCacheRev, all.length, this.kkActiveProductType || '', d?.pairCount || 0,
+      d?.importedAt?.getTime() || 0, this.kkPoCmpPending?.size ?? -1, this.kkTypeLinkQMap?.size ?? -1].join('|');
+    if (sig === this.kkLineDiffSig) return this.kkLineDiffCache;
+    this.kkLineDiffSig = sig;
+    const out = new Map<string, { diff: number; why: string }>();
+    this.kkLineDiffCache = out;
+    if (!d) return out;
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
+    const fmt = (n: number) => this.formatNumber(n);
+    const groups = new Map<string, { code: string; po: string; lines: InventoryMaterial[] }>();
+    for (const m of all) {
+      const code = kkPoCmpCode(m.materialCode);
+      if (!d.byCode.get(code)?.size) continue;
+      const po = kkPoCmpPo(m.poNumber);
+      const key = `${code}|${po}`;
+      const g = groups.get(key) || { code, po, lines: [] };
+      g.lines.push(m);
+      groups.set(key, g);
+    }
+    groups.forEach((g, key) => {
+      const inLq = !!d.byCode.get(g.code)?.has(g.po);
+      const lq = inLq ? d.qtyByKey.get(key) ?? 0 : 0;
+      const pxk = this.kkAgingPxkOf(g.code, g.po);
+      const web = r4(g.lines.reduce((s, m) => s + Math.max(0, this.calculateCurrentStock(m)), 0));
+      const poDiff = r4(web - lq - pxk);
+      const rawPxk = this.kkPoCmpPendingOf(g.code, g.po);
+      const pxkNote = rawPxk > pxk ? ` (PXK chưa xuất ${fmt(rawPxk)} đã nằm trong file tuổi hàng — không cộng)` : '';
+      const head = `PO ${g.po}: web ${fmt(web)} − (LinkQ ${inLq ? fmt(lq) : 'không có PO'} + PXK ${fmt(pxk)}) = ${poDiff > 0 ? '+' : ''}${fmt(poDiff)}${pxkNote}`;
+      const order = [...g.lines].sort((a, b) => this.kkFixKeepRank(b) - this.kkFixKeepRank(a));
+      let cover = r4(lq + pxk);
+      order.forEach((m) => {
+        const s = Math.max(0, this.calculateCurrentStock(m));
+        const used = Math.min(s, cover);
+        cover = r4(cover - used);
+        out.set(String(m.id || ''), { diff: r4(s - used), why: `Dòng ${fmt(s)}, được trừ ${fmt(used)} · ${head}` });
+      });
+      if (cover > 0 && order.length) {
+        // Web thiếu so với LinkQ + PXK → dồn phần âm vào dòng lớn nhất
+        const big = [...order].sort((a, b) => this.calculateCurrentStock(b) - this.calculateCurrentStock(a))[0];
+        const cur = out.get(String(big.id || ''))!;
+        out.set(String(big.id || ''), { diff: r4(cur.diff - cover), why: `${cur.why} · thiếu ${fmt(cover)} dồn vào dòng này` });
+      }
+    });
+    return out;
+  }
+
+  /** PXK chưa xuất của Mã + PO dòng này (mọi dòng cùng PO hiện cùng số). */
+  kkPendingPxkPoText(m: InventoryMaterial): string {
+    const q = this.kkPoCmpPendingOf(m.materialCode, m.poNumber);
+    return q > 0 ? this.formatNumber(q) : '—';
+  }
+
+  kkPendingPxkPoTitle(m: InventoryMaterial): string {
+    const p = kkPoCmpPo(m.poNumber);
+    const hit = this.kkPoCmpPending?.get(`${kkPoCmpCode(m.materialCode)}|${p === KK_PO_BLANK ? '' : p}`);
+    const code = this.kkPendingPxk?.get(String(m.materialCode || '').trim().toUpperCase());
+    const total = code ? ` · tổng mã ${this.formatNumber(code.qty)}` : '';
+    if (!hit?.qty) return `PO ${m.poNumber || '—'}: không có PXK chưa xuất${total}`;
+    return `PO ${m.poNumber || '—'}: ${this.formatNumber(hit.qty)} chưa xuất — `
+      + hit.lsx.map((x) => `${x.lsx} ${this.formatNumber(x.qty)}`).join(', ')
+      + ` (số của cả PO, các dòng cùng PO hiện cùng số)${total}`;
   }
 
   kkPendingPxkTitle(code: string | null | undefined): string {
@@ -3365,8 +4190,15 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
           'Có LinkQ': this.kkHasLinkQText(m.materialCode),
           'Tồn LinkQ (mã)': this.kkTypeLinkQMap?.get(this.normalizeTieuHuyCode(m.materialCode)) ?? '',
           ...(this.kkPendingPxk ? { 'PXK chưa xuất (mã)': this.kkPendingPxk.get(String(m.materialCode || '').trim().toUpperCase())?.qty ?? '' } : {}),
-          ...(this.kkPendingPxk ? { 'Chênh lệch (Web − (LinkQ + PXK))': this.kkPxkDiff(m.materialCode) ?? '' } : {}),
+          ...(this.kkPendingPxk ? { 'Chênh lệch dòng (Web − (LinkQ + PXK))': this.kkPxkDiffOf(m) ?? '' } : {}),
           'PO': m.poNumber || '',
+          ...(this.kkPoCheckCols ? (() => {
+            const lq = this.kkPoCheckLinkQ(m);
+            return {
+              'PO LinkQ': lq.match ? lq.items[0].po : '',
+              'Lượng PO LinkQ': lq.match ? lq.items[0].qty : ''
+            };
+          })() : {}),
           'IMD': this.getDisplayIMD(m),
           'Aging (tháng)': age ? age.months : '',
           'QC': m.iqcStatus || '',
@@ -3381,7 +4213,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
           'Pallet': m.palletId || '',
           'Standard': this.getEffectiveStandardPacking(m) || '',
           'Cuộn': this.getKkRollsText(m),
-          'Lần quét (Box)': `${this.getKkScanCount(m)} / ${this.getKkRollsCount(m) || '—'}`,
+          'Lượng quét': `${this.getKkScanQty(m)} / ${this.calculateCurrentStock(m)}`,
           'KK': this.isKkFlagOn(m.kkChecked) ? 'Có' : '',
           'Thời gian KK': this.kkTickTimeText(m),
           'Người KK': this.kkTickByText(m),
@@ -3399,12 +4231,12 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   async printKkTypeDetail(withHistory = true): Promise<void> {
     if (!this.kkActiveProductType) return;
     const win = window.open('', '_blank');
-    if (!win) { alert('Trình duyệt chặn cửa sổ in — cho phép popup rồi thử lại.'); return; }
+    if (!win) { appAlert('Trình duyệt chặn cửa sổ in — cho phép popup rồi thử lại.'); return; }
     await this.ensureKkTypeLinkQ();
     const rows = this.kkTypeDetailExportRows();
     const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
     // Bản in gọn: bỏ các cột ít dùng khi kiểm trên giấy
-    const hidden = new Set(['Tên hàng', 'Kho', 'Pallet', 'Standard', 'Cuộn', 'Lần quét (Box)', 'Ghi chú', 'Cảnh báo', '% thiếu']);
+    const hidden = new Set(['Tên hàng', 'Kho', 'Pallet', 'Standard', 'Cuộn', 'Lượng quét', 'Ghi chú', 'Cảnh báo', '% thiếu']);
     // Không lịch sử: bỏ cột Thời gian / Người KK, cột KK để trống (giấy kiểm mới)
     if (!withHistory) {
       hidden.add('Thời gian KK');
@@ -3462,9 +4294,160 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       XLSX.writeFile(wb, `KK_${this.selectedFactory}_${safe}_${this.toDateKey(new Date())}.xlsx`);
     } catch (e) {
       console.error('downloadKkTypeDetail:', e);
-      alert('❌ Không tải được file.');
+      appAlert('❌ Không tải được file.');
     } finally {
       this.kkTypeDetailExportBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  kkAccountingExportBusy = false;
+
+  /**
+   * File Excel "Kế toán KK" để in: mọi dòng đang lọc của mục, cột Thực tế để trống điền tay,
+   * Chênh lệch = Thực tế − Tồn sổ (công thức), ký tên cuối trang. A4 dọc, vừa 1 trang ngang, lặp tiêu đề cột.
+   */
+  async downloadKkAccounting(): Promise<void> {
+    if (this.denyAction('export')) return;
+    if (this.kkAccountingExportBusy || !this.kkActiveProductType) return;
+    const lines = this.kkTypeDetailFiltered;
+    if (!lines.length) {
+      appAlert('Không có dòng nào để xuất.');
+      return;
+    }
+    this.kkAccountingExportBusy = true;
+    this.cdr.detectChanges();
+    try {
+      const ExcelJS: any = await import('exceljs');
+      const wb = new (ExcelJS.Workbook || ExcelJS.default.Workbook)();
+      const ws = wb.addWorksheet('Kế toán KK', {
+        pageSetup: {
+          paperSize: 9,
+          orientation: 'portrait',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+          horizontalCentered: true,
+          margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.5, header: 0.2, footer: 0.2 }
+        },
+        headerFooter: { oddFooter: '&LKế toán KK &CTrang &P / &N' }
+      });
+      const cols = [
+        { h: 'STT', w: 5 },
+        { h: 'Mã hàng', w: 11 },
+        { h: 'Tên hàng', w: 30 },
+        { h: 'PO', w: 15 },
+        { h: 'IMD', w: 10 },
+        { h: 'Vị trí', w: 10 },
+        { h: 'ĐVT', w: 6 },
+        { h: 'Tồn sổ', w: 11 },
+        { h: 'Thực tế KK', w: 11 },
+        { h: 'Chênh lệch', w: 11 },
+        { h: 'Ghi chú', w: 16 }
+      ];
+      ws.columns = cols.map((c) => ({ width: c.w }));
+      const last = String.fromCharCode(64 + cols.length);
+      const thin = { style: 'thin', color: { argb: 'FF000000' } };
+      const box = { top: thin, left: thin, bottom: thin, right: thin };
+
+      const date = new Date();
+      const dd = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+      ws.mergeCells(`A1:${last}1`);
+      ws.getCell('A1').value = 'BIÊN BẢN KIỂM KÊ NGUYÊN VẬT LIỆU';
+      ws.getCell('A1').font = { bold: true, size: 15 };
+      ws.getCell('A1').alignment = { horizontal: 'center' };
+      ws.mergeCells(`A2:${last}2`);
+      ws.getCell('A2').value = `Nhà máy: ${this.selectedFactory}   ·   Mục: ${this.kkActiveProductType}   ·   Ngày kiểm: ${dd}   ·   ${lines.length} dòng`;
+      ws.getCell('A2').alignment = { horizontal: 'center' };
+      ws.getRow(3).height = 6;
+
+      const head = ws.getRow(4);
+      cols.forEach((c, i) => {
+        const cell = head.getCell(i + 1);
+        cell.value = c.h;
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE6E6E6' } };
+        cell.border = box;
+      });
+      head.height = 20;
+      ws.pageSetup.printTitlesRow = '4:4';
+      ws.views = [{ state: 'frozen', ySplit: 4 }];
+
+      const sorted = [...lines].sort((a, b) =>
+        String(a.materialCode || '').localeCompare(String(b.materialCode || '')) ||
+        String(a.poNumber || '').localeCompare(String(b.poNumber || '')));
+      sorted.forEach((m, i) => {
+        const r = 5 + i;
+        const row = ws.getRow(r);
+        const vals = [
+          i + 1,
+          m.materialCode || '',
+          this.getKkMaterialName(m) || '',
+          m.poNumber || '',
+          this.getDisplayIMD(m),
+          this.primaryLocationDisplay(m.location) || '',
+          (m as any).unit || '',
+          Math.round(this.calculateCurrentStock(m) * 10000) / 10000,
+          null,
+          null,
+          ''
+        ];
+        vals.forEach((v, ci) => {
+          const cell = row.getCell(ci + 1);
+          cell.value = v;
+          cell.border = box;
+          cell.alignment = { vertical: 'middle', wrapText: ci === 2 };
+        });
+        row.getCell(10).value = { formula: `IF(I${r}="","",I${r}-H${r})` };
+        [8, 9, 10].forEach((ci) => (row.getCell(ci).numFmt = '#,##0.####'));
+        row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.height = 18;
+      });
+
+      const end = 5 + sorted.length;
+      const total = ws.getRow(end);
+      ws.mergeCells(`A${end}:G${end}`);
+      total.getCell(1).value = 'TỔNG CỘNG';
+      total.getCell(1).alignment = { horizontal: 'right' };
+      total.getCell(8).value = { formula: `SUM(H5:H${end - 1})` };
+      total.getCell(9).value = { formula: `IF(COUNT(I5:I${end - 1})=0,"",SUM(I5:I${end - 1}))` };
+      total.getCell(10).value = { formula: `IF(I${end}="","",I${end}-H${end})` };
+      for (let ci = 1; ci <= cols.length; ci++) {
+        total.getCell(ci).border = box;
+        total.getCell(ci).font = { bold: true };
+        if (ci >= 8 && ci <= 10) total.getCell(ci).numFmt = '#,##0.####';
+      }
+
+      const sign = end + 3;
+      const signs: Array<[string, string]> = [['A', 'C'], ['D', 'G'], ['H', last]];
+      ['Người kiểm kê', 'Kế toán', 'Thủ kho'].forEach((label, i) => {
+        const [a, b] = signs[i];
+        ws.mergeCells(`${a}${sign}:${b}${sign}`);
+        ws.getCell(`${a}${sign}`).value = label;
+        ws.getCell(`${a}${sign}`).font = { bold: true };
+        ws.getCell(`${a}${sign}`).alignment = { horizontal: 'center' };
+        ws.mergeCells(`${a}${sign + 1}:${b}${sign + 1}`);
+        ws.getCell(`${a}${sign + 1}`).value = '(Ký, ghi rõ họ tên)';
+        ws.getCell(`${a}${sign + 1}`).font = { italic: true, size: 9 };
+        ws.getCell(`${a}${sign + 1}`).alignment = { horizontal: 'center' };
+      });
+      ws.pageSetup.printArea = `A1:${last}${sign + 5}`;
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safe = String(this.kkActiveProductType).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
+      link.href = url;
+      link.download = `KeToan_KK_${this.selectedFactory}_${safe}_${this.toDateKey(date)}.xlsx`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (e) {
+      console.error('downloadKkAccounting:', e);
+      appAlert('❌ Không tạo được file Kế toán KK.');
+    } finally {
+      this.kkAccountingExportBusy = false;
       this.cdr.detectChanges();
     }
   }
@@ -3701,7 +4684,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       XLSX.writeFile(wb, `Report_NVL_${factory}_${day}.xlsx`);
     } catch (e) {
       console.error('downloadKkFullReport:', e);
-      alert('❌ Không tạo được report. Thử lại.');
+      appAlert('❌ Không tạo được report. Thử lại.');
     } finally {
       this.kkFullReportBusy = false;
       this.kkFullReportStatus = '';
@@ -3748,7 +4731,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     } catch (e) {
       console.error('❌ saveKkExcessQty:', e);
       (line as any).kkExcessQty = prev;
-      alert('❌ Không lưu được lượng dư.');
+      appAlert('❌ Không lưu được lượng dư.');
     } finally {
       this.cdr.detectChanges();
     }
@@ -3772,7 +4755,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     } catch (e) {
       console.error('❌ saveKkShortQty:', e);
       (line as any).kkShortQty = prev;
-      alert('❌ Không lưu được lượng thiếu.');
+      appAlert('❌ Không lưu được lượng thiếu.');
     } finally {
       this.cdr.detectChanges();
     }
@@ -3791,7 +4774,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (fromRaw == null) return;
     const from = String(fromRaw).trim().toUpperCase();
     if (!from) {
-      alert('Chưa nhập số pallet hiện tại.');
+      appAlert('Chưa nhập số pallet hiện tại.');
       return;
     }
 
@@ -3799,11 +4782,11 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     if (toRaw == null) return;
     const to = String(toRaw).trim().toUpperCase();
     if (!to) {
-      alert('Chưa nhập số pallet mới.');
+      appAlert('Chưa nhập số pallet mới.');
       return;
     }
     if (from === to) {
-      alert('Số pallet không đổi.');
+      appAlert('Số pallet không đổi.');
       return;
     }
 
@@ -3811,7 +4794,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       (m) => String(m.palletId || '').trim().toUpperCase() === from && !!m.id
     );
     if (!lines.length) {
-      alert(`Không có dòng pallet ${from} trong loại hàng này.`);
+      appAlert(`Không có dòng pallet ${from} trong loại hàng này.`);
       return;
     }
     if (!confirm(`Đổi pallet ${from} → ${to}?\n${lines.length} dòng loại ${row.productType}`)) return;
@@ -3842,10 +4825,10 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       };
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
       this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
-      alert(`✅ Đã đổi pallet ${from} → ${to} (${lines.length} dòng).`);
+      appAlert(`✅ Đã đổi pallet ${from} → ${to} (${lines.length} dòng).`);
     } catch (e) {
       console.error('❌ renameKkTypePallet:', e);
-      alert('❌ Không đổi được số pallet.');
+      appAlert('❌ Không đổi được số pallet.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -3901,12 +4884,12 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     }
     const name = this.kkTypePalletLabelName(row);
     if (!name) {
-      alert('Chưa có tên pallet để in.');
+      appAlert('Chưa có tên pallet để in.');
       return;
     }
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      appAlert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
       return;
     }
     this.kkTypePrintBusy = true;
@@ -3982,7 +4965,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     } catch (e) {
       console.error('❌ printKkTypePalletLabel:', e);
       try { printWindow.close(); } catch { /* ignore */ }
-      alert('Không in được tem pallet.');
+      appAlert('Không in được tem pallet.');
     } finally {
       this.kkTypePrintBusy = false;
       this.cdr.detectChanges();
@@ -4262,7 +5245,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp(),
             modifiedBy: operator
           };
-          if (!next) payload.kkScanCount = 0;
+          if (!next) { payload.kkScanCount = 0; payload.kkScanQty = 0; }
           batch.update(this.firestore.collection('inventory-materials').doc(m.id!).ref, payload);
         }
         await batch.commit();
@@ -4295,13 +5278,13 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
+        if (!next) { m.kkScanCount = 0; m.kkScanQty = 0; }
         const stamp = (x: InventoryMaterial) => {
           if (x.id !== m.id) return;
           x.kkChecked = next;
           x.kkBy = operator;
           x.kkAt = kkAt;
-          if (!next) x.kkScanCount = 0;
+          if (!next) { x.kkScanCount = 0; x.kkScanQty = 0; }
         };
         this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
         this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
@@ -4316,7 +5299,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       console.error('❌ applyKkTypeScanTick:', e);
       this.pushKkTypeScanLog(false, 'Không lưu được tick KK');
       this.kkTypeScanBeep('err');
-      alert('❌ Không lưu được tick KK.');
+      appAlert('❌ Không lưu được tick KK.');
     } finally {
       this.kkTypeScanBusy = false;
       this.cdr.detectChanges();
@@ -4332,28 +5315,27 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.cdr.detectChanges();
   }
 
+  /** So Lượng quét (cộng lượng trên tem) với tồn kho của dòng. */
   kkScanStockTone(material: InventoryMaterial): '' | 'ok' | 'low' | 'over' {
-    const scanned = this.getKkScanCount(material);
+    const scanned = this.getKkScanQty(material);
     if (scanned <= 0) return '';
-    const total = this.getKkRollsCount(material);
-    if (!total) return 'low';
-    if (scanned === total) return 'ok';
+    const total = this.calculateCurrentStock(material);
+    if (!(total > 0)) return 'over';
+    if (Math.abs(scanned - total) < 1e-6) return 'ok';
     return scanned < total ? 'low' : 'over';
   }
 
   getKkScanCompareTitle(material: InventoryMaterial): string {
-    const scanned = this.getKkScanCount(material);
-    const total = this.getKkRollsCount(material);
+    const scanned = this.getKkScanQty(material);
+    const total = this.calculateCurrentStock(material);
     const tone = this.kkScanStockTone(material);
-    if (!total) {
-      return scanned ? `Đã quét ${scanned} Box · chưa có số cuộn/thùng` : 'Chưa scan';
-    }
-    if (tone === 'ok') return `Đã quét ${scanned} Box = ${total} Box · Standard đúng`;
-    if (tone === 'low') return `Đã quét ${scanned} / ${total} Box — thiếu ${total - scanned}`;
-    if (tone === 'over') {
-      return `Đã quét ${scanned} / ${total} Box — thừa ${scanned - total} · cần xem lại Standard`;
-    }
-    return `Chưa scan · ${total} Box`;
+    const f = (n: number) => this.formatNumber(Math.round(n * 10000) / 10000);
+    const boxes = this.getKkScanCount(material);
+    const boxNote = boxes ? ` · ${boxes} lần quét` : '';
+    if (tone === 'ok') return `Đã quét ${f(scanned)} = tồn ${f(total)} — đủ${boxNote}`;
+    if (tone === 'low') return `Đã quét ${f(scanned)} / tồn ${f(total)} — thiếu ${f(total - scanned)}${boxNote}`;
+    if (tone === 'over') return `Đã quét ${f(scanned)} / tồn ${f(total)} — thừa ${f(scanned - total)}${boxNote}`;
+    return `Chưa quét · tồn ${f(total)}`;
   }
 
   getKkRollsTitle(material: InventoryMaterial): string {
@@ -4384,7 +5366,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         this.mergeNvlItemIntoCatalogCache(live);
         this.persistCatalogCache();
         if (live.standardPackingLocked === true) {
-          alert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
+          appAlert('⚠️ Standard Packing của mã này đang Lock trên Danh mục NVL.');
           material.standardPacking = Number(live.standardPacking) || 0;
           this.applyKkStandardToCode(code, Number(live.standardPacking) || 0);
           return;
@@ -4405,7 +5387,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.applyKkStandardToCode(code, sp);
     } catch (e) {
       console.error('❌ saveKkTypeStandard:', e);
-      alert('❌ Không lưu được Standard Packing lên danh mục.');
+      appAlert('❌ Không lưu được Standard Packing lên danh mục.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -4579,7 +5561,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
             kkBy: operator,
             kkAt,
             updatedAt: new Date(),
-            ...(next ? {} : { kkScanCount: 0 })
+            ...(next ? {} : { kkScanCount: 0, kkScanQty: 0 })
           });
         }
         await batch.commit();
@@ -4610,13 +5592,13 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         m.kkChecked = next;
         m.kkBy = operator;
         m.kkAt = kkAt;
-        if (!next) m.kkScanCount = 0;
+        if (!next) { m.kkScanCount = 0; m.kkScanQty = 0; }
       }
       this.invalidateKkInvSnapCache();
       this.syncKkTypeRows();
     } catch (e) {
       console.error('❌ onKkByTypeTick:', e);
-      alert('❌ Không lưu được tick KK theo loại hàng.');
+      appAlert('❌ Không lưu được tick KK theo loại hàng.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -4654,9 +5636,9 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   private async commitKkScanCountReset(lines: InventoryMaterial[], label: string): Promise<void> {
     if (!this.canEdit) return;
-    const targets = (lines || []).filter((m) => !!m?.id && this.getKkScanCount(m) > 0);
+    const targets = (lines || []).filter((m) => !!m?.id && (this.getKkScanCount(m) > 0 || this.getKkScanQty(m) > 0));
     if (!targets.length) {
-      alert(`Chưa có lần quét nào để xóa (${label}).`);
+      appAlert(`Chưa có lần quét nào để xóa (${label}).`);
       return;
     }
     if (!confirm(`Xóa lần quét cũ của ${label}?\n${targets.length} dòng sẽ về 0 để quét lại.`)) {
@@ -4674,6 +5656,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         for (const m of chunk) {
           const payload: Record<string, unknown> = {
             kkScanCount: 0,
+            kkScanQty: 0,
             updatedAt: new Date(),
             lastModified: firebase.default.firestore.FieldValue.serverTimestamp()
           };
@@ -4684,14 +5667,14 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       }
       const ids = new Set(targets.map((m) => m.id));
       const stamp = (x: InventoryMaterial) => {
-        if (x?.id && ids.has(x.id)) x.kkScanCount = 0;
+        if (x?.id && ids.has(x.id)) { x.kkScanCount = 0; x.kkScanQty = 0; }
       };
-      targets.forEach((m) => { m.kkScanCount = 0; });
+      targets.forEach((m) => { m.kkScanCount = 0; m.kkScanQty = 0; });
       this.kkLocMapTypeCache.forEach((list) => list.forEach(stamp));
       this.kkLocMapMaterialCache.forEach((list) => list.forEach(stamp));
       this.kkTypeScanExtraLines.forEach(stamp);
       this.inventoryMaterials.forEach(stamp);
-      targets.forEach((m) => this.patchKkInvSnapCache(m.id!, { kkScanCount: 0 }));
+      targets.forEach((m) => this.patchKkInvSnapCache(m.id!, { kkScanCount: 0, kkScanQty: 0 }));
       const codes = new Set(
         targets.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
       );
@@ -4704,7 +5687,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       }
     } catch (e) {
       console.error('❌ resetKkScanCount:', e);
-      alert('❌ Không xóa được lần quét. Thử lại.');
+      appAlert('❌ Không xóa được lần quét. Thử lại.');
     } finally {
       this.kkLocMapBusy = false;
       this.kkTypeScanBusy = false;
@@ -4792,7 +5775,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       row.locationSaved = next;
     } catch (e) {
       console.error('❌ writeKkTypeLocations:', e);
-      alert(next ? '❌ Không lưu được vị trí theo loại hàng.' : '❌ Không xóa được vị trí theo loại hàng.');
+      appAlert(next ? '❌ Không lưu được vị trí theo loại hàng.' : '❌ Không xóa được vị trí theo loại hàng.');
     } finally {
       this.kkLocMapBusy = false;
       this.cdr.detectChanges();
@@ -4809,11 +5792,14 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.linkQCompareQuery = '';
     this.linkQCompareSort = { key: 'code', dir: 1 };
     this.linkQCompareExpanded = new Set<string>();
+    this.linkQRowFn = new Map<string, LinkQRowFn>();
+    this.linkQPoOpen = new Set<string>();
     this.loadLinkQCheckStored();
     const factory = this.selectedFactory;
+    void this.loadLinkQAdjPending();
     const cached = this.linkQCompareCache.get(factory);
     if (cached) {
-      this.applyLinkQCompareData(factory, cached.rows, cached.label, cached.ts);
+      this.applyLinkQCompareData(factory, cached.rows, cached.label, cached.ts, cached.po);
       if (Date.now() - cached.ts > MaterialsComponent.LINKQ_COMPARE_TTL_MS) void this.loadLinkQCompare();
       return;
     }
@@ -4861,8 +5847,9 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       }
       const rows = this.buildLinkQCompareRows(pack.map, docs);
       const ts = Date.now();
-      this.linkQCompareCache.set(factory, { rows, label: pack.label, ts });
-      this.applyLinkQCompareData(factory, rows, pack.label, ts);
+      const po = pack.po || new Map<string, Map<string, number>>();
+      this.linkQCompareCache.set(factory, { rows, label: pack.label, ts, po });
+      this.applyLinkQCompareData(factory, rows, pack.label, ts, po);
     } catch (e) {
       console.error('[LinkQ compare] failed', e);
       if (!background) this.linkQCompareError = 'Không đọc được dữ liệu so sánh. Thử lại.';
@@ -4956,7 +5943,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   runLinkQPendingPxk(): void {
     if (this.linkQPendingPxkLoading) return;
     if ((this.linkQCompareFactory || this.selectedFactory) !== 'ASM1') {
-      alert('PXK chưa xuất chỉ tính cho ASM1.');
+      appAlert('PXK chưa xuất chỉ tính cho ASM1.');
       return;
     }
     this.loadLinkQPendingPxk(true);
@@ -5049,95 +6036,24 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     return String(m.id || '');
   }
 
-  private applyLinkQCompareData(factory: string, rows: LinkQCompareRow[], label: string, ts: number): void {
+  private applyLinkQCompareData(factory: string, rows: LinkQCompareRow[], label: string, ts: number, po: Map<string, Map<string, number>>): void {
     if (this.linkQCompareFactory !== factory) this.linkQPendingPxk = null;
     this.linkQCompareFactory = factory;
     this.linkQCompareRows = rows;
+    this.linkQPoByCode = po;
     this.linkQLinesCache.clear();
+    this.linkQPoRowsCache.clear();
+    if (!po.size) void this.ensureLinkQPoFromAging();
     this.linkQCompareLabel = label;
     this.linkQCompareUpdatedAt = ts;
     this.linkQCompareError = '';
     this.recomputeLinkQCompareBase();
   }
 
-  private async saveSharedCheckList(): Promise<void> {
-    const factory = this.selectedFactory;
-    const ref = this.firestore.firestore.collection('kk-check-lists').doc(factory);
-    if (!this.linkQCheckCodes.length) {
-      await ref.delete();
-      return;
-    }
-    await ref.set({
-      factory,
-      codes: this.linkQCheckCodes,
-      fileName: this.linkQCheckFileName,
-      updatedBy: await this.getMaterialsOtpRequester(),
-      updatedAt: firebase.default.firestore.FieldValue.serverTimestamp()
-    });
-  }
-
-  /** File Check: sheet đầu, cột A từ dòng 2 = mã cần kiểm kê. */
-  async onLinkQCheckFileSelected(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (input) input.value = '';
-    if (!file || this.linkQCheckImporting) return;
-    this.linkQCheckImporting = true;
-    try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames?.[0]];
-      const aoa: any[][] = ws ? XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) : [];
-      const seen = new Set<string>();
-      const codes: string[] = [];
-      for (let i = 1; i < aoa.length; i++) {
-        const code = this.normalizeTieuHuyCode(aoa[i]?.[0]);
-        if (!code || seen.has(code)) continue;
-        seen.add(code);
-        codes.push(code);
-      }
-      if (!codes.length) {
-        alert('File Check không có mã nào ở cột A (từ dòng 2).');
-        return;
-      }
-      this.linkQCheckCodes = codes;
-      this.linkQCheckSet = seen;
-      this.linkQCheckFileName = file.name;
-      this.linkQCheckOnly = true;
-      this.saveLinkQCheckStored();
-      this.recomputeLinkQCompareBase();
-      this.invalidateKkTypeViewCache();
-      await this.saveSharedCheckList().catch((e) => {
-        console.warn('[DS Check] lưu danh sách chung lỗi', e);
-        alert('Đã nhận danh sách trên máy này nhưng chưa lưu chung cho máy khác.');
-      });
-    } catch (e) {
-      console.error('[LinkQ check] import failed', e);
-      alert('Không đọc được file Check.');
-    } finally {
-      this.linkQCheckImporting = false;
-      this.cdr.detectChanges();
-    }
-  }
-
+  /** Bật / tắt DS Check (bật lại mục đã chọn trước, mặc định "Mục sẽ xài"). */
   toggleLinkQCheckOnly(): void {
     if (!this.linkQCheckCodes.length) return;
-    this.linkQCheckOnly = !this.linkQCheckOnly;
-    this.saveLinkQCheckStored();
-    this.recomputeLinkQCompareBase();
-    this.invalidateKkTypeViewCache();
-  }
-
-  clearLinkQCheck(): void {
-    if (this.linkQCheckCodes.length && !confirm('Bỏ danh sách Check cho mọi máy (nhà máy ' + this.selectedFactory + ')?')) return;
-    this.linkQCheckCodes = [];
-    this.linkQCheckSet = new Set<string>();
-    this.linkQCheckFileName = '';
-    this.linkQCheckOnly = false;
-    this.saveLinkQCheckStored();
-    this.recomputeLinkQCompareBase();
-    this.invalidateKkTypeViewCache();
-    void this.saveSharedCheckList().catch((e) => console.warn('[DS Check] xóa danh sách chung lỗi', e));
+    this.setDsCheckMode(this.dsCheckMode ? '' : (this.pendingCheckMode || 'willUse'));
   }
 
   setLinkQCompareTab(tab: LinkQCompareTab): void {
@@ -5178,8 +6094,297 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   toggleLinkQCompareRow(code: string): void {
     const next = new Set(this.linkQCompareExpanded);
     if (next.has(code)) next.delete(code);
-    else next.add(code);
+    else {
+      next.add(code);
+      // Standard / tên hàng đọc từ danh mục — máy chưa có cache danh mục thì đọc riêng mã này
+      if (!this.catalogCache.has(code)) {
+        void this.ensureCatalogForMaterialCodes([code]).then(() => this.cdr.detectChanges());
+      }
+    }
     this.linkQCompareExpanded = next;
+  }
+
+  // ===== Phần mở rộng của từng mã: chọn chức năng (Dòng tồn web / Check PO), cảnh báo, nhập lượng thiếu / dư =====
+
+  linkQFnOf(code: string): LinkQRowFn {
+    return this.linkQRowFn.get(code) || 'lines';
+  }
+
+  setLinkQRowFn(code: string, fn: LinkQRowFn): void {
+    const next = new Map(this.linkQRowFn);
+    next.set(code, fn);
+    this.linkQRowFn = next;
+  }
+
+  linkQCatalogName(code: string): string {
+    return String(this.catalogCache.get(code)?.materialName || '').trim();
+  }
+
+  linkQCatalogUnit(code: string): string {
+    return String(this.catalogCache.get(code)?.unit || '').trim();
+  }
+
+  /** Lệch dùng để cảnh báo: đã tính PXK chưa xuất thì lấy lệch sau PXK. */
+  private linkQWarnDiff(r: LinkQCompareRow): number {
+    const after = this.linkQDiffAfterPxk(r);
+    return after == null ? r.diff : after;
+  }
+
+  /**
+   * Cảnh báo theo mã (LinkQ làm gốc):
+   * web hết mà LinkQ còn / LinkQ hết mà web còn → "Đã hết stock";
+   * web > LinkQ → "Cần giảm stock"; web < LinkQ → "Cần tăng stock".
+   */
+  linkQWarn(r: LinkQCompareRow): LinkQWarn | null {
+    if (r.kind === 'linkqOnly') return { cls: 'out', label: 'Web đã hết stock · cần tăng', qty: r.linkQ || 0 };
+    if (r.kind === 'webOnly') return { cls: 'out', label: 'LinkQ đã hết stock · cần giảm', qty: r.web };
+    const diff = this.linkQWarnDiff(r);
+    if (!this.isLinkqDiffBad(diff)) return null;
+    return diff > 0
+      ? { cls: 'dec', label: 'Cần giảm stock', qty: diff }
+      : { cls: 'inc', label: 'Cần tăng stock', qty: -diff };
+  }
+
+  /** File LinkQ tồn kho không có cột PO → lấy tồn theo PO từ file tuổi hàng LinkQ (đã import ở So sánh PO). */
+  private async ensureLinkQPoFromAging(): Promise<void> {
+    if (this.linkQPoByCode.size) return;
+    try {
+      if (!this.kkPoCmp || this.kkPoCmpFactory !== this.selectedFactory) await this.loadKkPoCmp();
+    } catch (e) {
+      console.warn('[LinkQ] load PO aging failed', e);
+      return;
+    }
+    const d = this.kkPoCmp;
+    if (!d || this.linkQPoByCode.size) return;
+    const map = new Map<string, Map<string, number>>();
+    d.byCode.forEach((pos, code) => {
+      const byPo = new Map<string, number>();
+      pos.forEach((po) => byPo.set(po, d.qtyByKey.get(`${code}|${po}`) ?? 0));
+      map.set(this.normalizeTieuHuyCode(code), byPo);
+    });
+    this.linkQPoByCode = map;
+    this.linkQPoRowsCache.clear();
+    this.cdr.detectChanges();
+  }
+
+  get linkQHasPoData(): boolean {
+    return this.linkQPoByCode.size > 0;
+  }
+
+  /** Check PO của 1 mã: LinkQ làm gốc, so tồn web theo từng PO → PO web dư / thiếu so với LinkQ. */
+  linkQPoRows(code: string): LinkQPoRow[] {
+    const hit = this.linkQPoRowsCache.get(code);
+    if (hit) return hit;
+    const lines = this.linkQCodeLines(code);
+    const web = new Map<string, { qty: number; lines: InventoryMaterial[] }>();
+    for (const m of lines) {
+      const po = kkPoCmpPo(m.poNumber) || '—';
+      const cur = web.get(po) || { qty: 0, lines: [] };
+      cur.qty += this.calculateCurrentStock(m);
+      cur.lines.push(m);
+      web.set(po, cur);
+    }
+    const linkQ = this.linkQPoByCode.get(code) || null;
+    const pos = new Set<string>([...web.keys(), ...(linkQ ? Array.from(linkQ.entries()).filter(([, q]) => q > 0).map(([p]) => p) : [])]);
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
+    const rows: LinkQPoRow[] = Array.from(pos).map((po) => {
+      const w = r4(web.get(po)?.qty || 0);
+      const q = linkQ ? (linkQ.get(po) || 0) : null;
+      const diff = q == null ? 0 : r4(w - q);
+      const status: LinkQPoRow['status'] = q == null
+        ? 'nodata'
+        : !this.isLinkqDiffBad(diff) ? 'ok' : diff > 0 ? 'over' : 'short';
+      return { po, linkQ: q, web: w, diff, status, lines: web.get(po)?.lines || [] };
+    });
+    const rank = { short: 0, over: 1, nodata: 2, ok: 3 };
+    rows.sort((a, b) => rank[a.status] - rank[b.status] || a.po.localeCompare(b.po, 'en', { numeric: true }));
+    this.linkQPoRowsCache.set(code, rows);
+    return rows;
+  }
+
+  linkQPoCount(code: string, status: LinkQPoRow['status']): number {
+    return this.linkQPoRows(code).filter((p) => p.status === status).length;
+  }
+
+  linkQPoStatusLabel(p: LinkQPoRow): string {
+    if (p.status === 'nodata') return 'Chưa có PO LinkQ';
+    if (p.status === 'ok') return 'Khớp';
+    if (p.status === 'over') return p.linkQ ? 'Web dư' : 'Web dư PO (LinkQ không có)';
+    return p.web ? 'Web thiếu' : 'Web thiếu PO (web không có)';
+  }
+
+  toggleLinkQPo(code: string, po: string): void {
+    const key = `${code}|${po}`;
+    const next = new Set(this.linkQPoOpen);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.linkQPoOpen = next;
+  }
+
+  linkQAdjDraft(line: InventoryMaterial): { short: number | null; over: number | null } {
+    const id = String(line.id || '');
+    let d = this.linkQAdjDrafts.get(id);
+    if (!d) {
+      d = { short: null, over: null };
+      this.linkQAdjDrafts.set(id, d);
+    }
+    return d;
+  }
+
+  linkQAdjPendingText(line: InventoryMaterial): string {
+    const list = this.linkQAdjPending.get(String(line.id || ''));
+    if (!list?.length) return '';
+    return list.map((x) => x.target === 'delete' ? 'xóa dòng' : `${x.direction === 'inc' ? '+' : '−'}${this.formatNumber(x.qty)}`).join(', ');
+  }
+
+  /** Dòng tồn đã có đề nghị xóa đang chờ quản lý duyệt. */
+  kkDeletePending(m: InventoryMaterial): boolean {
+    return !!this.linkQAdjPending.get(String(m.id || ''))?.some((x) => x.target === 'delete');
+  }
+
+  kkDeleteBusyId: string | null = null;
+
+  /**
+   * Cột Đề nghị xóa: lưu đề nghị (chờ duyệt ở Danh mục điều chỉnh) + bot Zalo báo nhóm Quản lý kho.
+   * Quản lý duyệt → dòng vào Danh mục Ẩn (khôi phục được), không xóa cứng.
+   */
+  async requestKkDelete(m: InventoryMaterial): Promise<boolean> {
+    if (!this.canEdit || this.denyAction('invAdjustRequest')) return false;
+    if (!m?.id || this.kkDeleteBusyId) return false;
+    await this.loadLinkQAdjPending();
+    if (this.kkDeletePending(m)) {
+      appAlert('Dòng này đã có đề nghị xóa đang chờ quản lý duyệt.');
+      return true;
+    }
+    const stock = this.calculateCurrentStock(m);
+    const suspect = this.kkPoCheckCols ? this.kkPoCheckSuspect(m) : '';
+    const reason = prompt(
+      `Đề nghị XÓA dòng tồn ${m.materialCode} · PO ${m.poNumber || '—'} · IMD ${this.getDisplayIMD(m)} · tồn ${this.formatNumber(stock)} · ${this.primaryLocationDisplay(m.location) || '—'}\n`
+      + 'Lý do (gửi kèm Zalo nhóm Quản lý kho):',
+      suspect.replace(/^Nghi sai: /, '')
+    );
+    if (reason === null) return false;
+    this.kkDeleteBusyId = String(m.id);
+    this.cdr.detectChanges();
+    try {
+      const by = await this.getMaterialsOtpRequester();
+      const note = reason.trim();
+      await this.firestore.firestore.collection('inventory-adjust-requests').add({
+        factory: this.selectedFactory,
+        materialId: m.id,
+        materialCode: m.materialCode || '',
+        po: m.poNumber || '',
+        imd: this.getDisplayIMD(m),
+        location: this.primaryLocationDisplay(m.location),
+        target: 'delete',
+        direction: '',
+        qty: stock,
+        currentValue: stock,
+        expectedValue: 0,
+        note,
+        status: 'pending',
+        by,
+        at: firebase.default.firestore.FieldValue.serverTimestamp()
+      });
+      let zaloOk = true;
+      try {
+        await this.invStockReportSvc.notify({
+          factory: this.selectedFactory,
+          materialCode: String(m.materialCode || ''),
+          po: String(m.poNumber || ''),
+          imd: this.getDisplayIMD(m),
+          stock: this.formatNumber(stock),
+          location: this.primaryLocationDisplay(m.location),
+          status: 'Đề nghị xóa dòng',
+          reportedBy: by,
+          detail: `Đề nghị xóa dòng tồn ${this.formatNumber(stock)}.`
+            + (note ? `\nLý do: ${note}` : '')
+            + '\nDuyệt tại Quản lý NL → More → Danh mục điều chỉnh.'
+        });
+      } catch (e) {
+        console.warn('requestKkDelete zalo:', e);
+        zaloOk = false;
+      }
+      await this.loadLinkQAdjPending();
+      appAlert(zaloOk
+        ? '✅ Đã gửi đề nghị xóa — bot Zalo đã báo nhóm Quản lý kho.'
+        : '✅ Đã lưu đề nghị xóa (chờ duyệt). Zalo chưa gửi được tới nhóm Quản lý kho.');
+      return true;
+    } catch (e: any) {
+      console.error('requestKkDelete:', e);
+      appAlert('❌ Không gửi được đề nghị xóa: ' + (e?.message || e));
+      return false;
+    } finally {
+      this.kkDeleteBusyId = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Nhập lượng thiếu (tăng tồn) hoặc dư (giảm tồn) cho 1 dòng tồn → gửi đề nghị điều chỉnh Tồn cuối,
+   * quản lý mở More → Danh mục điều chỉnh để duyệt / sửa số sau.
+   */
+  async sendLinkQAdjust(line: InventoryMaterial, code: string, context: string): Promise<void> {
+    if (!this.canEdit || this.denyAction('invAdjustRequest')) return;
+    const d = this.linkQAdjDraft(line);
+    const short = Number(d.short) || 0;
+    const over = Number(d.over) || 0;
+    if (short > 0 && over > 0) {
+      appAlert('Chỉ nhập 1 ô: Thiếu hoặc Dư.');
+      return;
+    }
+    if (!(short > 0) && !(over > 0)) {
+      appAlert('Nhập lượng thiếu hoặc lượng dư (> 0).');
+      return;
+    }
+    const r = this.linkQCompareRows.find((x) => x.code === code);
+    const base = r ? `LinkQ ${r.linkQText} · web ${r.webText}` : 'LinkQ';
+    this.invAdjust = {
+      material: line,
+      target: 'closing',
+      direction: short > 0 ? 'inc' : 'dec',
+      qty: short > 0 ? short : over,
+      note: `Check LinkQ (${context}): ${short > 0 ? 'thiếu' : 'dư'} · ${base}`,
+      busy: false,
+      msg: '',
+      ok: false
+    };
+    await this.submitInvAdjust();
+    if (this.invAdjust?.ok) {
+      this.linkQAdjDrafts.delete(String(line.id || ''));
+      void this.loadLinkQAdjPending();
+    }
+  }
+
+  /** Đề nghị điều chỉnh đang chờ duyệt của nhà máy — hiện cạnh dòng tồn để khỏi gửi trùng. */
+  async loadLinkQAdjPending(): Promise<void> {
+    const factory = this.selectedFactory;
+    try {
+      const snap = await this.firestore.firestore.collection('inventory-adjust-requests')
+        .where('factory', '==', factory)
+        .where('status', '==', 'pending')
+        .get();
+      if (factory !== this.selectedFactory) return;
+      const map = new Map<string, Array<{ direction: string; qty: number; target: string }>>();
+      snap.docs.forEach((doc) => {
+        const x = doc.data() as any;
+        const id = String(x.materialId || '');
+        if (!id) return;
+        const list = map.get(id) || [];
+        list.push({ direction: String(x.direction || ''), qty: Number(x.qty) || 0, target: String(x.target || '') });
+        map.set(id, list);
+      });
+      this.linkQAdjPending = map;
+      this.linkQAdjPendingCount = snap.size;
+    } catch (e) {
+      console.warn('[LinkQ] load pending adjust failed', e);
+    } finally {
+      this.cdr.detectChanges();
+    }
+  }
+
+  openLinkQAdjustList(): void {
+    this.openInvAdjustList();
   }
 
   trackLinkQCompareRow(_: number, r: LinkQCompareRow): string {
@@ -5472,6 +6677,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         const doc = locDocs[i];
         const data = doc.data() as any;
         if (this.stockFromInventoryDoc(data) <= 0) continue;
+        if (this.isKkQcNgData(data)) continue;
         const code = String(data.materialCode || '').trim().toUpperCase();
         if (!code) continue;
         const tokens = splitMultiLocations(String(data.location || data.viTri || ''));
@@ -5526,7 +6732,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       if (loadId !== this.kkLocMapLoadId) return;
       console.error('❌ loadKkLocMap:', e);
       this.kkLocMapBoxes = [];
-      alert('❌ Không tải được sơ đồ KK theo vị trí.');
+      appAlert('❌ Không tải được sơ đồ KK theo vị trí.');
     } finally {
       this.finishKkLocMapLoad(loadId);
     }
@@ -5560,6 +6766,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
+        if (this.isKkQcNgData(data)) continue;
         const materialCode = String(data.materialCode || '').trim().toUpperCase();
         if (!materialCode) continue;
         const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
@@ -5608,7 +6815,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       if (loadId !== this.kkLocMapLoadId) return;
       console.error('❌ loadKkByMaterial:', e);
       this.kkLocMapByMaterial = [];
-      alert('❌ Không tải được Kiểm tra KK theo mã hàng.');
+      appAlert('❌ Không tải được Kiểm tra KK theo mã hàng.');
     } finally {
       this.finishKkLocMapLoad(loadId);
     }
@@ -5766,65 +6973,98 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   }
 
   protected loadLinkQCheckStored(): void {
-    let codes: string[] = [];
-    let fileName = '';
-    let on = false;
+    let mode: DsCheckMode = '';
     try {
       const raw = localStorage.getItem(this.linkQCheckStorageKey());
-      if (raw) {
-        const saved = JSON.parse(raw);
-        codes = Array.isArray(saved?.codes) ? saved.codes.map((c: unknown) => String(c)) : [];
-        fileName = String(saved?.fileName || '');
-        on = !!saved?.on && codes.length > 0;
-      }
+      const saved = raw ? JSON.parse(raw) : null;
+      // Bản cũ chỉ lưu { on } → coi như "Mục sẽ xài"
+      mode = DS_CHECK_MODES.includes(saved?.mode) ? saved.mode : (saved?.on ? 'willUse' : '');
     } catch {
-      codes = [];
+      mode = '';
     }
-    this.linkQCheckCodes = codes;
-    this.linkQCheckSet = new Set(codes);
-    this.linkQCheckFileName = fileName;
-    this.linkQCheckOnly = on;
-    void this.loadSharedCheckList();
+    this.pendingCheckMode = mode;
+    void this.loadPlanCheckList();
   }
 
-  /** DS Check dùng chung mọi máy: kk-check-lists/{factory} (1 read). Bật/tắt On vẫn theo từng máy. */
-  private sharedCheckLoadedFor = '';
+  private readonly materialPlan = inject(MaterialPlanService);
+  private readonly invStockReportSvc = inject(InventoryStockReportService);
+  /** Kế hoạch NVL chỉ tải 1 lần mỗi lần mở trang (dùng chung 2 nhà máy). */
+  private planCheckLoad: Promise<void> | null = null;
+  /** Mục đã lưu, áp khi danh sách tải xong. */
+  private pendingCheckMode: DsCheckMode = '';
+  /** Mục DS Check đang chọn ('' = tắt). */
+  dsCheckMode: DsCheckMode = '';
+  /** Các mục DS Check từ Kế hoạch NVL (tab Report). */
+  dsCheckLists: Record<Exclude<DsCheckMode, ''>, string[]> = { willUse: [], usedUp: [] };
+  readonly dsCheckOptions: Array<{ mode: Exclude<DsCheckMode, ''>; label: string; hint: string }> = [
+    { mode: 'willUse', label: 'Mục sẽ xài', hint: 'Mã có nhu cầu xuất từ đầu tháng này trở đi (hoặc còn nợ cũ)' },
+    { mode: 'usedUp', label: 'Mục xài hết', hint: 'Mã mà nhu cầu các tháng tới ≥ tồn trong file kế hoạch — tồn sẽ dùng hết' }
+  ];
 
-  private async loadSharedCheckList(): Promise<void> {
-    const factory = this.selectedFactory;
-    if (this.sharedCheckLoadedFor === factory) return;
-    this.sharedCheckLoadedFor = factory;
-    try {
-      const snap = await this.firestore.firestore.collection('kk-check-lists').doc(factory).get();
-      if (factory !== this.selectedFactory) return;
-      const d = snap.exists ? (snap.data() as any) : null;
-      const codes: string[] = Array.isArray(d?.codes) ? d.codes.map((c: unknown) => String(c)) : [];
-      const same = codes.length === this.linkQCheckCodes.length && codes.every((c, i) => c === this.linkQCheckCodes[i]);
-      if (same) return;
-      this.linkQCheckCodes = codes;
-      this.linkQCheckSet = new Set(codes);
-      this.linkQCheckFileName = String(d?.fileName || '');
-      if (!codes.length) this.linkQCheckOnly = false;
-      this.saveLinkQCheckStored();
-      this.recomputeLinkQCompareBase();
-      this.invalidateKkTypeViewCache();
-      this.cdr.detectChanges();
-    } catch (e) {
-      console.warn('[DS Check] đọc danh sách chung lỗi', e);
+  /**
+   * DS Check theo Kế hoạch NVL (bản import mới nhất), chỉ tính mốc ngày từ đầu tháng này:
+   *  - Mục sẽ xài: có nợ cũ (Shortage) hoặc có lượng xuất;
+   *  - Mục xài hết: có tồn trong file và tổng cần xuất (nợ cũ + xuất) ≥ tồn đó.
+   */
+  private loadPlanCheckList(): Promise<void> {
+    if (this.planCheckLoad) {
+      return this.planCheckLoad.then(() => this.applyDsCheckMode(this.pendingCheckMode, false));
     }
+    this.planCheckLoad = (async () => {
+      const lists: Record<Exclude<DsCheckMode, ''>, string[]> = { willUse: [], usedUp: [] };
+      try {
+        const plan = await this.materialPlan.loadLatest();
+        const now = new Date();
+        const fromKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const idx = (plan?.buckets || []).map((b, i) => (b >= fromKey ? i : -1)).filter((i) => i >= 0);
+        const seen = new Set<string>();
+        for (const row of plan?.rows || []) {
+          const code = this.normalizeTieuHuyCode(row.code);
+          if (!code || seen.has(code)) continue;
+          const shortage = Number(row.shortage) || 0;
+          const out = shortage + idx.reduce((a, i) => a + (Number(row.outQty?.[i]) || 0), 0);
+          if (out <= 0.0005) continue;
+          seen.add(code);
+          lists.willUse.push(code);
+          const stock = Number(row.stock) || 0;
+          if (stock > 0.0005 && out >= stock - 0.0005) lists.usedUp.push(code);
+        }
+        this.linkQCheckFileName = plan ? `Kế hoạch NVL: ${plan.fileName}` : '';
+      } catch (e) {
+        console.warn('[DS Check] đọc Kế hoạch NVL lỗi', e);
+        this.linkQCheckFileName = '';
+      }
+      this.dsCheckLists = lists;
+    })();
+    return this.planCheckLoad.then(() => this.applyDsCheckMode(this.pendingCheckMode, false));
+  }
+
+  /** Chọn mục DS Check ('' = tắt). */
+  setDsCheckMode(mode: DsCheckMode): void {
+    this.applyDsCheckMode(mode, true);
+  }
+
+  private applyDsCheckMode(mode: DsCheckMode, save: boolean): void {
+    const codes = mode ? this.dsCheckLists[mode] || [] : [];
+    this.dsCheckMode = codes.length ? mode : '';
+    // Tắt: vẫn giữ danh sách "Mục sẽ xài" để nút hiện số mã
+    this.linkQCheckCodes = codes.length ? codes : this.dsCheckLists.willUse;
+    this.linkQCheckSet = new Set(this.linkQCheckCodes);
+    this.linkQCheckOnly = !!this.dsCheckMode;
+    if (save) this.saveLinkQCheckStored();
+    this.recomputeLinkQCompareBase();
+    this.invalidateKkTypeViewCache();
+    this.cdr.detectChanges();
+  }
+
+  get dsCheckLabel(): string {
+    return this.dsCheckOptions.find((o) => o.mode === this.dsCheckMode)?.label || '';
   }
 
   protected saveLinkQCheckStored(): void {
+    this.pendingCheckMode = this.dsCheckMode;
     try {
-      if (!this.linkQCheckCodes.length) {
-        localStorage.removeItem(this.linkQCheckStorageKey());
-        return;
-      }
-      localStorage.setItem(this.linkQCheckStorageKey(), JSON.stringify({
-        codes: this.linkQCheckCodes,
-        fileName: this.linkQCheckFileName,
-        on: this.linkQCheckOnly
-      }));
+      localStorage.setItem(this.linkQCheckStorageKey(), JSON.stringify({ mode: this.dsCheckMode }));
     } catch {
       /* localStorage đầy / bị chặn — chỉ giữ trong phiên */
     }
@@ -6057,7 +7297,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   applyNlSearchScan(raw: string): void {
     const code = this.extractMaterialCodeFromScan(raw);
     if (!code) {
-      alert('Không đọc được mã hàng. Quét lại tem.');
+      appAlert('Không đọc được mã hàng. Quét lại tem.');
       return;
     }
     this.searchTerm = code;
@@ -6236,7 +7476,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.kkMucRemovedShelves = { ...this.kkMucRemovedShelves, [category]: prevRemoved };
       this.invalidateKkTypeViewCache();
       this.kkMucShelfSaving = false;
-      alert('Không lưu được kệ mẹ.');
+      appAlert('Không lưu được kệ mẹ.');
       this.cdr.detectChanges();
     }
   }
@@ -6283,6 +7523,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeSortKkTimeDesc = false;
     this.kkTypeShowExtraFilter = false;
     this.kkTypeDetailSig = '';
@@ -6424,6 +7665,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   selectKkTypeBox(productType: string): void {
     this.kkThMode = false;
+    this.kkWeekMode = false;
     this.kkMucAllDetail = null;
     this.kkTypeListScrollTop = this.kkPageBodyEl()?.scrollTop || 0;
     this.kkAllStockDetail = false;
@@ -6445,6 +7687,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     this.kkTypeFilterWh = '';
     this.kkTypeFilterRolls = '';
     this.kkTypeSortQtyDesc = false;
+    this.kkTypeSortRollsDesc = false;
     this.kkTypeSortKkTimeDesc = false;
     this.kkTypeShowExtraFilter = false;
     if (!this.kkStockLoaded && !this.isKkTypeBoxStockLoaded(box || { productType })) {
@@ -6504,7 +7747,17 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   }
 
   /** "Vừa trang": số dòng = chiều cao vùng bảng ÷ chiều cao 1 dòng. */
+  /** Trang Week: cố định 39 dòng / trang. */
+  static readonly KK_WEEK_PAGE_SIZE = 39;
+
   fitKkTypePageSize(): void {
+    if (this.kkWeekMode) {
+      if (this.kkTypePageSize !== QuanLyNguyenLieuComponent.KK_WEEK_PAGE_SIZE) {
+        this.kkTypePageSize = QuanLyNguyenLieuComponent.KK_WEEK_PAGE_SIZE;
+        this.cdr.detectChanges();
+      }
+      return;
+    }
     if (!this.kkTypePageAuto || !this.kkActiveProductType) return;
     const box = document.querySelector('.kk-page .kk-type-detail__table') as HTMLElement | null;
     if (!box || !box.clientHeight) return;
@@ -6656,16 +7909,11 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
   protected async ensureKkTypeMaterialNames(): Promise<void> {
     try {
       const rows = this.kkTypeDetailPaged;
+      // Lấy cả mã đã có tên trên dòng tồn: cột Standard chỉ đọc từ danh mục — trước đây bỏ qua các mã này
+      // nên máy nào chưa có cache danh mục trong ngày (chưa mở Danh mục / Materials) thì Standard trống.
       const codes = [...new Set(
         rows.map((m) => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean)
-      )].filter((code) => {
-        if (String(this.catalogCache.get(code)?.materialName || '').trim()) return false;
-        return !rows.some((m) =>
-          String(m.materialCode || '').trim().toUpperCase() === code &&
-          String(m.materialName || '').trim() &&
-          String(m.materialName || '').trim().toUpperCase() !== code
-        );
-      });
+      )].filter((code) => !this.catalogCache.has(code));
       if (!codes.length) return;
       await this.ensureCatalogForMaterialCodes(codes);
       this.applyCatalogToMaterials(rows);
@@ -6737,6 +7985,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         const data = doc.data() as any;
         const stock = this.stockFromInventoryDoc(data);
         if (stock <= 0) continue;
+        if (this.isKkQcNgData(data)) continue;
         const materialCode = String(data.materialCode || '').trim().toUpperCase();
         if (!materialCode) continue;
         const warehouse = this.kkWarehouseFromLocation(this.locationFromInventoryDoc(data));
@@ -6785,7 +8034,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       console.error('❌ loadKkByType:', e);
       this.kkLocMapByType = [];
       const timedOut = String((e as any)?.name || e).toLowerCase().includes('timeout');
-      alert(timedOut
+      appAlert(timedOut
         ? '❌ Hết thời gian đọc tồn kho. Bấm Làm mới để thử lại.'
         : '❌ Không tải được Kiểm tra KK theo loại hàng.');
     } finally {
@@ -6894,6 +8143,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
           const data = doc.data() as any;
           if (String(data.factory || '').trim().toUpperCase() !== factory) continue;
           if (this.stockFromInventoryDoc(data) <= 0) continue;
+          if (this.isKkQcNgData(data)) continue;
           const materialCode = String(data.materialCode || '').trim().toUpperCase();
           if (!materialCode) continue;
           const productType = this.kkTypeOrGroupOfMaterial(materialCode);
@@ -6937,7 +8187,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.scheduleFitKkTypePageSize();
     } catch (e) {
       console.error('❌ loadKkStockForBox:', e);
-      alert(`❌ Không đọc được tồn kho của ${label}.`);
+      appAlert(`❌ Không đọc được tồn kho của ${label}.`);
     } finally {
       if (this.kkBoxStockLoadingKey === loadKey) {
         this.kkBoxStockLoadingKey = null;

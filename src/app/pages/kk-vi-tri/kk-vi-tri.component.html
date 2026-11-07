@@ -1,0 +1,137 @@
+<!-- Trang chi tiết 1 vị trí (tab mới khi bấm ô vị trí) -->
+<div class="kvt" *ngIf="detailLoc">
+  <header class="kvt__head">
+    <div class="kvt__nav">
+      <button type="button" class="kvt__btn" (click)="goBack()" title="Quay lại"><i class="material-icons">arrow_back</i>Back</button>
+      <button type="button" class="kvt__btn" (click)="goMenu()" title="Về Menu"><i class="material-icons">home</i>Menu</button>
+    </div>
+    <div class="kvt__title">
+      <strong>Vị trí {{ detailLoc }} · {{ factory }}</strong>
+      <small>Các mã đang để tại vị trí này (còn tồn) · không tính mã đầu R, B033</small>
+    </div>
+    <button type="button" class="kvt__btn" (click)="downloadDetail()" [disabled]="detailLoading || !detailItems.length" title="Tải danh sách mã (Excel)">
+      <i class="material-icons">download</i>Tải về
+    </button>
+    <button type="button" class="kvt__btn" (click)="printDetail()" [disabled]="detailLoading || !detailItems.length" title="In danh sách mã">
+      <i class="material-icons">print</i>In
+    </button>
+    <button type="button" class="kvt__run" (click)="loadDetail()" [disabled]="detailLoading">
+      <i class="material-icons" [class.rotating]="detailLoading">{{ detailLoading ? 'sync' : 'refresh' }}</i>
+      {{ detailLoading ? 'Đang đọc…' : 'Tải lại' }}
+    </button>
+  </header>
+
+  <div class="kvt__sum" *ngIf="ranAt && !detailLoading">
+    <strong>{{ detailPct }}%</strong>
+    <span>{{ detailCodes }} mã · {{ detailChecked }}/{{ detailItems.length }} dòng đã KK · đọc lúc {{ ranAt | date:'HH:mm dd/MM' }}</span>
+  </div>
+  <p class="kvt__msg kvt__msg--err" *ngIf="error">{{ error }}</p>
+  <p class="kvt__msg" *ngIf="detailLoading">Đang đọc tồn kho…</p>
+  <p class="kvt__msg" *ngIf="!detailLoading && ranAt && !detailItems.length">Vị trí này đang trống.</p>
+
+  <div class="kvt__tablewrap" *ngIf="!detailLoading && detailItems.length">
+    <table class="kvt__table">
+      <thead>
+        <tr><th>#</th><th>Mã hàng</th><th>Tên hàng</th><th>PO</th><th>IMD / Batch</th><th>Tồn</th><th>ĐVT</th><th>KK</th></tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let it of detailItems; let i = index" [class.is-done]="it.checked">
+          <td>{{ i + 1 }}</td>
+          <td><strong>{{ it.code }}</strong></td>
+          <td class="kvt__name">{{ it.name || '—' }}</td>
+          <td>{{ it.po || '—' }}</td>
+          <td>{{ it.batch || '—' }}</td>
+          <td class="kvt__num">{{ it.stock | number:'1.0-3' }}</td>
+          <td>{{ it.unit }}</td>
+          <td><i class="material-icons kvt__kk" [class.on]="it.checked">{{ it.checked ? 'check_circle' : 'radio_button_unchecked' }}</i></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="kvt" *ngIf="!detailLoc">
+  <header class="kvt__head">
+    <div class="kvt__nav">
+      <button type="button" class="kvt__btn" (click)="goBack()" title="Quay lại"><i class="material-icons">arrow_back</i>Back</button>
+      <button type="button" class="kvt__btn" (click)="goMenu()" title="Về Menu"><i class="material-icons">home</i>Menu</button>
+    </div>
+    <div class="kvt__title">
+      <strong>% Kiểm kê theo vị trí</strong>
+      <small *ngIf="factory === 'ASM1'">Theo sơ đồ kho J (tab J-Warehouse, bỏ R19–R28) + Locker · vị trí đang có hàng luôn hiện · không tính mã đầu R, B033</small>
+      <small *ngIf="factory === 'ASM2'">Theo danh mục vị trí · vị trí đang có hàng luôn hiện · không tính mã đầu R, B033</small>
+    </div>
+    <div class="kvt__fac">
+      <button type="button" [class.on]="factory === 'ASM1'" (click)="setFactory('ASM1')" [disabled]="running">ASM1</button>
+      <button type="button" [class.on]="factory === 'ASM2'" (click)="setFactory('ASM2')" [disabled]="running">ASM2</button>
+    </div>
+    <button type="button" class="kvt__run" (click)="run()" [disabled]="running || loadingLocs">
+      <i class="material-icons" [class.rotating]="running">{{ running ? 'sync' : 'play_arrow' }}</i>
+      {{ running ? 'Đang đọc tồn…' : 'Run' }}
+    </button>
+  </header>
+
+  <div class="kvt__bar">
+    <input type="text" [(ngModel)]="query" placeholder="Tìm vị trí / dãy (VD S20, R05-2, LOCKER)…">
+    <ng-container *ngIf="ranAt">
+      <button type="button" [class.on]="filter === ''" (click)="filter = ''">Tất cả ({{ counts.all }})</button>
+      <button type="button" [class.on]="filter === 'todo'" (click)="filter = 'todo'">Chưa đủ ({{ counts.todo }})</button>
+      <button type="button" [class.on]="filter === 'done'" (click)="filter = 'done'">100% ({{ counts.done }})</button>
+      <button type="button" [class.on]="filter === 'empty'" (click)="filter = 'empty'">Trống ({{ counts.empty }})</button>
+      <button type="button" [class.on]="filter === 'extra'" (click)="filter = 'extra'"
+              title="Vị trí có hàng nhưng ngoài sơ đồ / danh mục">Ngoài sơ đồ ({{ counts.extra }})</button>
+    </ng-container>
+    <select [(ngModel)]="sort">
+      <option value="loc">Sắp xếp: Vị trí A → Z</option>
+      <option value="pctAsc">% thấp → cao</option>
+      <option value="pctDesc">% cao → thấp</option>
+      <option value="lines">Nhiều dòng → ít</option>
+    </select>
+  </div>
+
+  <div class="kvt__sum" *ngIf="ranAt">
+    <strong>{{ totalPct }}%</strong>
+    <span>Tổng {{ factory }}: {{ totalChecked }}/{{ totalLines }} dòng đã KK · {{ counts.withStock }} vị trí có hàng · đọc lúc {{ ranAt | date:'HH:mm dd/MM' }}</span>
+    <span class="kvt__use kvt__use--total" title="Số ô trong sơ đồ / danh mục đang có hàng / tổng số ô">
+      Sử dụng vị trí <b>{{ usage.pct }}%</b> <small>{{ usage.used }}/{{ usage.slots }} ô</small>
+      <i class="kvt__bar2 kvt__bar2--use"><span [style.width.%]="usage.pct"></span></i>
+    </span>
+  </div>
+  <p class="kvt__msg kvt__msg--err" *ngIf="error">{{ error }}</p>
+  <p class="kvt__msg" *ngIf="loadingLocs">Đang tải danh sách vị trí…</p>
+  <p class="kvt__msg" *ngIf="!loadingLocs && !ranAt && rows.length">{{ rows.length }} vị trí — bấm <b>Run</b> để tính % kiểm kê. Bấm 1 dãy để xem từng ô, bấm 1 ô để mở danh sách mã (tab mới).</p>
+
+  <section class="kvt__group" *ngFor="let g of groups; trackBy: trackByKey"
+           [class.is-done]="g.lines > 0 && g.checked === g.lines"
+           [class.is-todo]="g.lines > 0 && g.checked < g.lines">
+    <button type="button" class="kvt__ghead" (click)="toggleGroup(g.key)">
+      <i class="material-icons">{{ isOpen(g.key) ? 'expand_more' : 'chevron_right' }}</i>
+      <strong>{{ g.key }}</strong>
+      <span class="kvt__gcount">{{ g.rows.length }} ô</span>
+      <ng-container *ngIf="ranAt">
+        <b class="kvt__gpct">{{ g.lines ? g.pct + '%' : '—' }}</b>
+        <span class="kvt__gcount">{{ g.lines ? (g.checked + '/' + g.lines + ' dòng') : 'trống' }}</span>
+        <i class="kvt__bar2 kvt__bar2--wide"><span [style.width.%]="g.pct || 0"></span></i>
+        <span class="kvt__use" *ngIf="g.slots" title="Ô đang có hàng / tổng số ô của dãy">
+          Sử dụng <b>{{ g.usePct }}%</b> <small>{{ g.usedSlots }}/{{ g.slots }} ô</small>
+          <i class="kvt__bar2 kvt__bar2--use"><span [style.width.%]="g.usePct || 0"></span></i>
+        </span>
+      </ng-container>
+    </button>
+    <div class="kvt__grid" *ngIf="isOpen(g.key)">
+      <div class="kvt__cell kvt__cell--link" *ngFor="let r of g.rows; trackBy: trackByLoc" (click)="openLoc(r)"
+           [class.is-done]="r.lines > 0 && r.checked === r.lines"
+           [class.is-todo]="r.lines > 0 && r.checked < r.lines"
+           [class.is-empty]="ranAt && r.lines === 0"
+           [class.is-extra]="!r.inBase"
+           [title]="r.loc + (r.lines ? (' · ' + r.checked + '/' + r.lines + ' dòng · ' + r.codes + ' mã') : (ranAt ? ' · trống' : '')) + (!r.inBase ? ' · ngoài sơ đồ / danh mục' : '') + ' · bấm để xem danh sách mã'">
+        <strong>{{ r.loc }}</strong>
+        <ng-container *ngIf="ranAt">
+          <b class="kvt__pct">{{ r.lines ? r.pct + '%' : '—' }}</b>
+          <small>{{ r.lines ? (r.checked + '/' + r.lines + ' dòng') : 'trống' }}</small>
+          <i class="kvt__bar2"><span [style.width.%]="r.pct || 0"></span></i>
+        </ng-container>
+      </div>
+    </div>
+  </section>
+</div>

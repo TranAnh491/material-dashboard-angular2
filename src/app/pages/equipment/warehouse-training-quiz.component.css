@@ -15,9 +15,9 @@
   gap: 6px;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 0.8rem;
   font-weight: 600;
   color: #475569;
@@ -25,8 +25,8 @@
 }
 
 .qz-btn-primary {
-  background: #6b46c1;
-  border-color: #6b46c1;
+  background: #2057B5;
+  border-color: #2057B5;
   color: #fff;
 }
 
@@ -75,29 +75,29 @@
   align-items: flex-start;
   gap: 4px;
   padding: 12px 14px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .quiz-picker-tab:hover {
-  border-color: #c4b5fd;
-  background: #faf5ff;
+  border-color: #BBD3FB;
+  background: #EAF2FF;
 }
 
 .quiz-picker-tab.active {
-  border-color: #6b46c1;
-  background: #f3e8ff;
-  box-shadow: 0 0 0 3px rgba(107, 70, 193, 0.12);
+  border-color: #2057B5;
+  background: #EAF2FF;
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
 }
 
 .quiz-picker-num {
   font-size: 0.72rem;
   font-weight: 700;
-  color: #6b46c1;
+  color: #2057B5;
   text-transform: uppercase;
 }
 
@@ -118,8 +118,8 @@
 .quiz-print-area {
   max-width: 880px;
   margin: 0 auto;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: #FFFFFF;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   padding: 28px 32px 36px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
@@ -334,7 +334,7 @@
 }
 
 .quiz-question {
-  border: 1px solid #ccc;
+  border: 1px solid #6B6B66;
   border-left: 3px solid #000;
   padding: 10px 12px;
   margin-bottom: 8px;
@@ -406,7 +406,7 @@
   height: 100px;
   border: 1px solid #666;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   cursor: crosshair;
   touch-action: none;
 }
@@ -415,7 +415,7 @@
   margin-top: 6px;
   border: none;
   background: transparent;
-  color: #6b46c1;
+  color: #2057B5;
   font-size: 11px;
   cursor: pointer;
   text-decoration: underline;
@@ -470,9 +470,9 @@
   max-width: 1100px;
   margin: 24px auto 0;
   padding: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .quiz-saved-header {
@@ -510,7 +510,7 @@
 
 .quiz-saved-table th,
 .quiz-saved-table td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;

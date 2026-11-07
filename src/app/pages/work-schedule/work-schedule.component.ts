@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import {
@@ -213,7 +214,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
   groupColor(groupId: string | null | undefined): string {
     if (!groupId) return '#9aa5b1';
     const idx = this.groups.findIndex((g) => g.id === groupId);
-    const palette = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+    const palette = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#3478F6', '#06b6d4', '#ec4899', '#84cc16'];
     return palette[idx >= 0 ? idx % palette.length : 0];
   }
 
@@ -255,7 +256,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       };
     } catch (e) {
       console.error('❌ toggleAssign:', e);
-      alert('❌ Không lưu được phân công.');
+      appAlert('❌ Không lưu được phân công.');
     } finally {
       this.saving = false;
     }
@@ -286,7 +287,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       this.groups = await this.ws.loadGroups(true);
       this.newGroupName = '';
     } catch (e: any) {
-      alert(e?.message || 'Không thêm được nhóm.');
+      appAlert(e?.message || 'Không thêm được nhóm.');
     } finally {
       this.groupSaving = false;
     }
@@ -299,7 +300,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       await this.ws.renameGroup(group.id, name);
       this.groups = await this.ws.loadGroups(true);
     } catch (e: any) {
-      alert(e?.message || 'Không đổi được tên nhóm.');
+      appAlert(e?.message || 'Không đổi được tên nhóm.');
     }
   }
 
@@ -309,7 +310,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       await this.ws.deleteGroup(group.id);
       [this.groups, this.employees] = await Promise.all([this.ws.loadGroups(true), this.ws.loadEmployees(true)]);
     } catch (e: any) {
-      alert(e?.message || 'Không xoá được nhóm.');
+      appAlert(e?.message || 'Không xoá được nhóm.');
     }
   }
 
@@ -321,7 +322,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       this.employees = await this.ws.loadEmployees(true);
       this.newEmployeeName = '';
     } catch (e: any) {
-      alert(e?.message || 'Không thêm được nhân viên.');
+      appAlert(e?.message || 'Không thêm được nhân viên.');
     }
   }
 
@@ -330,7 +331,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       await this.ws.updateEmployee(employee.id, { groupId: groupId || null });
       employee.groupId = groupId || null;
     } catch (e: any) {
-      alert(e?.message || 'Không đổi được nhóm.');
+      appAlert(e?.message || 'Không đổi được nhóm.');
     }
   }
 
@@ -342,7 +343,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       await this.applySkillToCurrentWeek(employee.id, taskKey, next);
     } catch (e: any) {
       employee.skills = { ...employee.skills, [taskKey]: !next };
-      alert(e?.message || 'Không lưu được kỹ năng.');
+      appAlert(e?.message || 'Không lưu được kỹ năng.');
     }
   }
 
@@ -371,7 +372,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       this.newTaskName = '';
       await this.loadWeekData();
     } catch (e: any) {
-      alert(e?.message || 'Không thêm được công việc.');
+      appAlert(e?.message || 'Không thêm được công việc.');
     } finally {
       this.taskSaving = false;
     }
@@ -384,7 +385,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       await this.ws.renameTask(task.id, name);
       this.tasks = await this.ws.loadTasks(true);
     } catch (e: any) {
-      alert(e?.message || 'Không đổi được tên công việc.');
+      appAlert(e?.message || 'Không đổi được tên công việc.');
     }
   }
 
@@ -396,7 +397,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       this.employees = await this.ws.loadEmployees(true);
       await this.loadWeekData();
     } catch (e: any) {
-      alert(e?.message || 'Không xoá được công việc.');
+      appAlert(e?.message || 'Không xoá được công việc.');
     }
   }
 
@@ -407,7 +408,7 @@ export class WorkScheduleComponent implements OnInit, OnDestroy {
       this.employees = this.employees.filter((e) => e.id !== employee.id);
       await this.removeEmployeeFromCurrentWeek(employee.id);
     } catch (e: any) {
-      alert(e?.message || 'Không xoá được nhân viên.');
+      appAlert(e?.message || 'Không xoá được nhân viên.');
     }
   }
 

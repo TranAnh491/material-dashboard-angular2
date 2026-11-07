@@ -16,13 +16,18 @@ type Source = {
   doc: string;
   /** Trường thời điểm import trong doc (lấy trường đầu tiên có giá trị) */
   fields: string[];
+  /** Ngày nhắc (0 = CN … 6 = T7) — hôm sau ngày phải import */
+  remindDays: number[];
+  /** Lịch import để ghi trong tin nhắn */
+  schedule: string;
 };
 
 const SOURCES: Source[] = [
-  { label: 'Báo cáo tồn kho TP', tab: 'FG Overview', factory: 'ASM1', doc: 'fg-overview-import-cache/current-asm1', fields: ['updatedAt'] },
-  { label: 'Báo cáo tồn kho TP', tab: 'FG Overview', factory: 'ASM2', doc: 'fg-overview-import-cache/current-asm2', fields: ['updatedAt'] },
-  { label: 'LinkQ', tab: 'Inventory Overview', factory: 'ASM1', doc: 'linkQFiles/ASM1', fields: ['uploadDate', 'importedAt'] },
-  { label: 'LinkQ', tab: 'Inventory Overview', factory: 'ASM2', doc: 'linkQFiles/ASM2', fields: ['uploadDate', 'importedAt'] }
+  // FG Overview: import 1 tuần 1 lần vào thứ 5 → nhắc thứ 6
+  { label: 'Báo cáo tồn kho TP', tab: 'FG Overview', factory: 'ASM1', doc: 'fg-overview-import-cache/current-asm1', fields: ['updatedAt'], remindDays: [5], schedule: 'thứ 5 hằng tuần' },
+  { label: 'Báo cáo tồn kho TP', tab: 'FG Overview', factory: 'ASM2', doc: 'fg-overview-import-cache/current-asm2', fields: ['updatedAt'], remindDays: [5], schedule: 'thứ 5 hằng tuần' },
+  { label: 'LinkQ', tab: 'Inventory Overview', factory: 'ASM1', doc: 'linkQFiles/ASM1', fields: ['uploadDate', 'importedAt'], remindDays: [2, 4, 6], schedule: 'thứ 2, 4, 6' },
+  { label: 'LinkQ', tab: 'Inventory Overview', factory: 'ASM2', doc: 'linkQFiles/ASM2', fields: ['uploadDate', 'importedAt'], remindDays: [2, 4, 6], schedule: 'thứ 2, 4, 6' }
 ];
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -58,7 +63,8 @@ export async function runImportOverdueZalo(
 ): Promise<{ overdue: string[]; sent: boolean; message: string }> {
   const since = startOfYesterdayVn(now);
   const overdue: Array<{ s: Source; last: Date | null }> = [];
-  for (const s of SOURCES) {
+  const todayVn = new Date(now.getTime() + VN_OFFSET_MS).getUTCDay();
+  for (const s of SOURCES.filter((x) => x.remindDays.includes(todayVn))) {
     const snap = await db.doc(s.doc).get();
     const data = (snap.exists ? snap.data() : null) || {};
     let last: Date | null = null;
@@ -74,8 +80,8 @@ export async function runImportOverdueZalo(
   const dueLabel = `${WEEKDAY_VN[dueDay.getUTCDay()]} ${String(dueDay.getUTCDate()).padStart(2, '0')}/${String(dueDay.getUTCMonth() + 1).padStart(2, '0')}`;
   const lines = [
     '⚠️ CHƯA IMPORT DỮ LIỆU TỒN KHO',
-    `Chưa có bản cập nhật của ${dueLabel} (lịch import: thứ 2, 4, 6):`,
-    ...overdue.map(o => `• ${o.s.tab} – ${o.s.label} ${o.s.factory}: lần gần nhất ${fmtVn(o.last)}`),
+    `Chưa có bản cập nhật của ${dueLabel}:`,
+    ...overdue.map(o => `• ${o.s.tab} – ${o.s.label} ${o.s.factory} (lịch import: ${o.s.schedule}): lần gần nhất ${fmtVn(o.last)}`),
     '',
     'Vui lòng import bản mới. Bot nhắc lại lúc 9h, 12h, 15h, 17h hôm nay cho tới khi có bản cập nhật.'
   ];

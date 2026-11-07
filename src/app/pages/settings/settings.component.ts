@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
@@ -156,10 +157,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
     try {
       const token = await this.clientReloadService.requestReloadAll('SETTINGS_ADMIN');
-      alert(`Đã gửi lệnh làm mới (token #${token}).\nCác tab đang mở sẽ F5 trong vài giây.`);
+      appAlert(`Đã gửi lệnh làm mới (token #${token}).\nCác tab đang mở sẽ F5 trong vài giây.`);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      alert(`Không gửi được lệnh F5: ${msg}`);
+      appAlert(`Không gửi được lệnh F5: ${msg}`);
     } finally {
       this.isRequestingClientReload = false;
       this.cdr.markForCheck();
@@ -208,31 +209,31 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const useEmail = !!email;
 
     if (!employeeId) {
-      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
       return;
     }
     if (!fullName) {
-      alert('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
+      appAlert('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
       return;
     }
     if (!department) {
-      alert('Vui lòng chọn bộ phận.');
+      appAlert('Vui lòng chọn bộ phận.');
       return;
     }
     if (useEmail) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        alert('Email không hợp lệ.');
+        appAlert('Email không hợp lệ.');
         return;
       }
       if (!this.isAllowedRegistrationEmail(email)) {
-        alert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+        appAlert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
         return;
       }
     }
 
     const dup = this.firebaseUsers.some((u) => this.getEmployeeIdOnly(u) === employeeId);
     if (dup) {
-      alert(`Mã ${employeeId} đã có trong danh sách người dùng.`);
+      appAlert(`Mã ${employeeId} đã có trong danh sách người dùng.`);
       return;
     }
 
@@ -264,12 +265,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await this.refreshFirebaseUsers();
 
       if (useEmail) {
-        alert(
+        appAlert(
           `✅ Đã tạo tài khoản và gửi mật khẩu 6 số tới email:\n${email}\n\n` +
             `Người dùng đăng nhập app bằng ID ${employeeId} và mật khẩu trong thư (không nhập email ở màn đăng nhập).`
         );
       } else {
-        alert(
+        appAlert(
           `✅ Đã tạo tài khoản ${employeeId}.\n\n` +
             `Mật khẩu (6 số): ${password || '(xem trong Settings)'}\n\n` +
             `Người dùng đăng nhập bằng mã ASP + mật khẩu trên (không cần email).`
@@ -288,7 +289,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không đăng ký được: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -304,7 +305,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.createAccountEmployeeId);
     if (!employeeId) {
-      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0609 hoặc 0609).');
+      appAlert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0609 hoặc 0609).');
       return;
     }
 
@@ -323,14 +324,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
 
       await this.refreshFirebaseUsers();
-      alert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
+      appAlert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
     } catch (error: any) {
       console.error('❌ deleteAccountByEmployeeId:', error);
       const code = typeof error?.code === 'string' ? error.code : '';
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không xóa được tài khoản: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -347,11 +348,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     const email = (this.createAccountEmail || '').trim().toLowerCase();
     if (!email) {
-      alert('Vui lòng nhập email cần giải phóng vào ô Email đăng ký.');
+      appAlert('Vui lòng nhập email cần giải phóng vào ô Email đăng ký.');
       return;
     }
     if (!this.isAllowedRegistrationEmail(email)) {
-      alert('Email phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+      appAlert('Email phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
       return;
     }
 
@@ -367,12 +368,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const result: any = await firstValueFrom(
         this.fns.httpsCallable('adminReleaseRegistrationEmailFn')({ email })
       );
-      alert(`✅ ${result?.message || 'Đã giải phóng email.'}`);
+      appAlert(`✅ ${result?.message || 'Đã giải phóng email.'}`);
     } catch (error: any) {
       console.error('❌ releaseRegistrationEmail:', error);
       const code = typeof error?.code === 'string' ? error.code : '';
       const msg = (error?.message as string) || '';
-      alert('❌ Không giải phóng được email: ' + (code ? `${code} — ` : '') + (msg || '(không có chi tiết)'));
+      appAlert('❌ Không giải phóng được email: ' + (code ? `${code} — ` : '') + (msg || '(không có chi tiết)'));
     } finally {
       this.isReleasingRegistrationEmail = false;
       this.cdr.markForCheck();
@@ -432,7 +433,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (this.isImportingEmployees) return;
     const rows = this.importEmployeeRows.slice();
     if (!rows.length) {
-      alert('Chọn file Excel hoặc CSV có cột mã nhân viên và tên.');
+      appAlert('Chọn file Excel hoặc CSV có cột mã nhân viên và tên.');
       return;
     }
 
@@ -480,11 +481,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         created.length ? `\nMật khẩu là 4 số cuối mã:\n${created.slice(0, 30).join('\n')}${created.length > 30 ? '\n…' : ''}` : '',
         failed.length ? `\nLỗi:\n${failed.slice(0, 15).join('\n')}` : ''
       ].join('');
-      alert(detail);
+      appAlert(detail);
     } catch (error: any) {
       const msg = error?.message || error?.details || 'Import thất bại.';
       this.importEmployeesPreview = msg;
-      alert(msg);
+      appAlert(msg);
     } finally {
       this.isImportingEmployees = false;
       this.cdr.markForCheck();
@@ -658,7 +659,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async resetAccountPasswordToDefault(): Promise<void> {
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.resetAccountInput);
     if (!employeeId) {
-      alert('Vui lòng nhập mã tài khoản đúng dạng (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập mã tài khoản đúng dạng (VD: ASP0054 hoặc 0054).');
       return;
     }
 
@@ -688,7 +689,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
           this.firebaseUserPasswords[uid] = newPassword;
         }
 
-        alert(
+        appAlert(
           `✅ Mật khẩu mới của ${employeeId}: ${newPassword}\n\n` +
             (result?.zaloSent
               ? 'Đã gửi về Zalo ASP0106 để chuyển cho nhân viên.'
@@ -701,7 +702,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
         const uid = await this.resolveUidByAspEmployeeId(employeeId);
         if (!uid) {
-          alert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
+          appAlert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
           return;
         }
 
@@ -712,7 +713,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
           })
         );
         this.firebaseUserPasswords[uid] = newPassword;
-        alert(
+        appAlert(
           `✅ Mật khẩu mới của ${employeeId}: ${newPassword}\n\nGhi lại và báo cho nhân viên — hệ thống không lưu mật khẩu này.`
         );
       }
@@ -725,7 +726,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không reset được mật khẩu: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -755,7 +756,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
       const deleted = result?.deletedCount ?? 0;
       const sample = Array.isArray(result?.deletedUidsSample) ? result.deletedUidsSample : [];
-      alert(
+      appAlert(
         `✅ Đã xóa ${deleted} user khỏi Firebase Auth.\n` +
           (sample.length ? `Mẫu uid bị xóa: ${sample.slice(0, 5).join(', ')}` : '')
       );
@@ -764,7 +765,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       console.error('❌ cleanupAuthUsersNotInSettings:', error);
       const msg = (error?.message as string) || 'Có lỗi xảy ra khi xóa user.';
-      alert('❌ ' + msg);
+      appAlert('❌ ' + msg);
     } finally {
       this.isCleaningAuthUsers = false;
     }
@@ -1042,12 +1043,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
         delete this.firebaseUserTabPermissions[user.uid];
         
         // Show success message
-        alert(`✅ Đã xóa thành công user ${user.email}!`);
+        appAlert(`✅ Đã xóa thành công user ${user.email}!`);
         
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
-        alert(`❌ Có lỗi xảy ra khi xóa user ${user.email}:\n${error}`);
+        appAlert(`❌ Có lỗi xảy ra khi xóa user ${user.email}:\n${error}`);
       }
     }
   }
@@ -1503,12 +1504,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const isAdminAccount = (this.selectedUser.email || '').toLowerCase() === 'admin@asp.com';
 
     if (!isAdminAccount && !employeeId) {
-      alert('Vui lòng nhập ID đăng nhập ASP (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập ID đăng nhập ASP (VD: ASP0054 hoặc 0054).');
       return;
     }
 
     if (!email) {
-      alert('Email tài khoản (Firebase) không được để trống.');
+      appAlert('Email tài khoản (Firebase) không được để trống.');
       return;
     }
 
@@ -1592,7 +1593,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
       const granted = this.availableTabs.filter(t => tabPermissionsToSave[t.key]).map(t => t.name);
       const idLabel = employeeId || this.getEmployeeIdOnly(prev) || email;
-      alert(
+      appAlert(
         `✅ Đã lưu quyền cho ${idLabel}.` +
           (granted.length ? `\nTab được phép: ${granted.join(', ')}` : '\nChưa cấp tab nào (chờ duyệt).') +
           profileWarning
@@ -1601,7 +1602,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);
-      alert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
+      appAlert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
     }
   }
 
@@ -1624,7 +1625,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         delete this.firebaseUserTabPermissions[this.selectedUser.uid];
         
         // Show success message
-        alert(`✅ Đã xóa thành công user ${deletedEmail}!`);
+        appAlert(`✅ Đã xóa thành công user ${deletedEmail}!`);
         
         // Đóng modal
         this.closePermissionModal();
@@ -1632,7 +1633,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
-        alert(`❌ Có lỗi xảy ra khi xóa user ${this.selectedUser.email}:\n${error}`);
+        appAlert(`❌ Có lỗi xảy ra khi xóa user ${this.selectedUser.email}:\n${error}`);
       }
     }
   }
@@ -1685,7 +1686,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.generatedNewPassword = newPassword;
       this.firebaseUserPasswords[this.selectedUser.uid] = newPassword;
 
-      alert(`✅ Mật khẩu mới (6 số) cho ${this.selectedUser.email}: ${newPassword}`);
+      appAlert(`✅ Mật khẩu mới (6 số) cho ${this.selectedUser.email}: ${newPassword}`);
 
       this.isResettingPassword = false;
       this.changePasswordValue = '';
@@ -1696,7 +1697,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (anyErr?.message as string) || '';
       const details = anyErr?.details ? String(anyErr.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert('❌ Có lỗi xảy ra khi đổi password: ' + (code ? `${code} - ` : '') + (suffix || '(không có message chi tiết)'));
+      appAlert('❌ Có lỗi xảy ra khi đổi password: ' + (code ? `${code} - ` : '') + (suffix || '(không có message chi tiết)'));
     } finally {
       this.isResettingPassword = false;
     }
@@ -1728,7 +1729,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Lỗi khi so sánh mã nhân viên:', error);
-      alert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
+      appAlert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
     } finally {
       this.isComparingEmployees = false;
     }
@@ -1749,7 +1750,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
    */
   async cleanupSelectedEmployees(): Promise<void> {
     if (this.selectedRedundantEmployees.length === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất một mã nhân viên để xóa!');
+      appAlert('⚠️ Vui lòng chọn ít nhất một mã nhân viên để xóa!');
       return;
     }
 
@@ -1765,7 +1766,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       const result = await this.employeeCleanupService.cleanupRedundantEmployees(this.selectedRedundantEmployees);
       
-      alert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
+      appAlert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
             `❌ Lỗi: ${result.errors}\n\n` +
             `Chi tiết:\n${result.details.join('\n')}`);
       
@@ -1775,7 +1776,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Lỗi khi xóa mã nhân viên:', error);
-      alert('❌ Có lỗi xảy ra khi xóa mã nhân viên!');
+      appAlert('❌ Có lỗi xảy ra khi xóa mã nhân viên!');
     } finally {
       this.isCleaningUp = false;
     }
@@ -1786,7 +1787,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
    */
   async cleanupAllRedundantEmployees(): Promise<void> {
     if (!this.employeeComparisonResult || this.employeeComparisonResult.redundantEmployees.length === 0) {
-      alert('⚠️ Không có mã nhân viên dư thừa để xóa!');
+      appAlert('⚠️ Không có mã nhân viên dư thừa để xóa!');
       return;
     }
 

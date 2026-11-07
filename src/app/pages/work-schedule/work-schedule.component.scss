@@ -61,9 +61,9 @@
   gap: 6px;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   color: #1f2937;
   font-size: 13px;
   font-weight: 600;
@@ -143,8 +143,8 @@
   align-items: stretch;
 
   &__card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     padding: 10px 12px;
     min-width: 0;
@@ -209,9 +209,9 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .ws-matrix {
@@ -242,7 +242,7 @@
     z-index: 3;
     text-align: left !important;
     min-width: 180px;
-    background: #fff;
+    background: #FFFFFF;
     white-space: nowrap;
   }
 
@@ -291,9 +291,9 @@
 .ws-cell {
   width: 100%;
   min-height: 40px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   cursor: pointer;
   color: #1f6f6b;
   font-size: 16px;
@@ -327,7 +327,7 @@
     flex: 1;
     min-width: 0;
     height: 36px;
-    border: 1px solid #d1d5db;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
     padding: 0 8px;
     font-size: 13px;
@@ -344,7 +344,7 @@
 }
 
 .ws-card {
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid #e3e6ea;
   border-radius: 8px;
   padding: 16px 18px;

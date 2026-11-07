@@ -43,6 +43,10 @@ export interface TemLeSource {
   imd: string;
   /** i/tổng */
   bagFraction: string;
+  /** Tách từ bịch CL: gom thêm 1 bịch chẵn (lượng này) vào CL rồi mới tách (CL nhỏ hơn lượng cần). */
+  mergeFullQty?: number;
+  /** Tồn IMD chia hết Standard (không còn bịch lẻ thực tế) → CL đang ghi nhận là treo, cho tách bịch chẵn và thay CL mới. */
+  staleCl?: boolean;
 }
 
 export interface TemLeSplitLog {
@@ -134,15 +138,15 @@ export class TemLeClService {
             ? `Tem ${tag.tag} không còn là bịch CL hiện tại của IMD này (hiện là ${st.clTag}, còn ${st.clQty}).`
             : `Tem ${tag.tag} đã xuất hết — không tách được.`);
         }
-        sourceQty = Number(st.clQty) || 0;
+        sourceQty = round4((Number(st.clQty) || 0) + Math.max(0, Number(src.mergeFullQty) || 0));
         fromTag = st.clTag;
-      } else if (st?.clActive && TemLeClService.isSameBag(src.bagFraction, st.bagFraction)) {
+      } else if (st?.clActive && !src.staleCl && TemLeClService.isSameBag(src.bagFraction, st.bagFraction)) {
         // Tem cũ của chính bịch CL hiện tại (chưa dán tem CL mới) → tách theo lượng CL đang ghi nhận
         sourceQty = Number(st.clQty) || 0;
         fromTag = st.clTag;
       } else {
-        // Bịch chẵn: chỉ khi IMD không còn bịch CL
-        if (st?.clActive) {
+        // Bịch chẵn: chỉ khi IMD không còn bịch CL (trừ CL treo — tồn chia hết Standard)
+        if (st?.clActive && !src.staleCl) {
           throw new Error(`IMD này còn bịch ${st.clTag} (${st.clQty}). Xuất hết ${st.clTag} trước rồi mới tách bịch chẵn.`);
         }
         sourceQty = round4(Number(src.quantity) || 0);
@@ -180,7 +184,8 @@ export class TemLeClService {
         po: src.po,
         imd: src.imd,
         seq,
-        from: fromTag || 'CHẴN',
+        from: (fromTag || 'CHẴN') + (tag?.kind === 'CL' && Number(src.mergeFullQty) > 0 ? '+CHẴN' : ''),
+        ...(src.staleCl && st?.clActive ? { staleClReplaced: st.clTag, staleClQty: Number(st.clQty) || 0 } : {}),
         fromQty: sourceQty,
         tlTag,
         tlQty: splitQty,

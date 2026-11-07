@@ -1,0 +1,264 @@
+<div class="jit" *ngIf="!mobile">
+  <!-- ===== Danh sách LSX ===== -->
+  <ng-container *ngIf="!selected">
+    <div class="jit__bar">
+      <div class="jit__group">
+        <button type="button" class="jit-btn" (click)="goBack()"><i class="material-icons">arrow_back</i>Back</button>
+        <button type="button" class="jit-btn" (click)="goMenu()"><i class="material-icons">home</i>Menu</button>
+      </div>
+      <div class="jit__title">JIT — Gọi kho lấy hàng</div>
+      <div class="jit__group">
+        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ALL'" (click)="factorySel = 'ALL'">Tất cả</button>
+        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ASM1'" (click)="factorySel = 'ASM1'">ASM1</button>
+        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ASM3'" (click)="factorySel = 'ASM3'">ASM3</button>
+      </div>
+      <div class="jit__group jit__group--grow">
+        <select class="jit-select" [(ngModel)]="lineSel" title="Lọc theo Line nhận">
+          <option value="">Tất cả Line</option>
+          <option *ngFor="let l of lines" [value]="l">{{ l }}</option>
+        </select>
+        <input class="jit-search" type="search" [(ngModel)]="search" placeholder="Tìm LSX, mã TP, khách…">
+        <label class="jit-btn jit-btn--check"><input type="checkbox" [(ngModel)]="hideDone"> Ẩn Done</label>
+        <label class="jit-btn jit-btn--check" *ngIf="isKho" title="Hiện cả LSX đã ẩn để bỏ ẩn">
+          <input type="checkbox" [(ngModel)]="showHidden"> Hiện LSX đã ẩn ({{ hiddenCount }})</label>
+        <button type="button" class="jit-btn" (click)="load()" [disabled]="loading">
+          <i class="material-icons">{{ loading ? 'hourglass_top' : 'refresh' }}</i>Làm mới
+        </button>
+      </div>
+    </div>
+
+    <p class="jit__err" *ngIf="error">{{ error }}</p>
+
+    <div class="jit__wrap">
+      <table class="jit-table">
+        <thead>
+          <tr>
+            <th>Nhà máy</th>
+            <th>LSX</th>
+            <th>Mã TP</th>
+            <th class="n">SL</th>
+            <th>Khách</th>
+            <th>Line</th>
+            <th class="jit-sort" (click)="sortAsc = !sortAsc" title="Bấm để đổi thứ tự">Ngày nhận {{ sortAsc ? '▲' : '▼' }}</th>
+            <th>Tình trạng</th>
+            <th title="Mã TP từng chia JIT — Apply cách chia cho LSX này / Unapply bỏ chia">History</th>
+            <th *ngFor="let i of rounds" class="c">Lấy {{ i + 1 }}</th>
+            <th class="c">Gọi</th>
+            <th>Gọi lần sau</th>
+            <th class="c" *ngIf="isKho">Ẩn</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of viewRows; trackBy: trackRow" [class.is-done]="r.status === 'done'" [class.is-hidden]="r.state.hidden">
+            <td>{{ r.factory }}</td>
+            <td class="b">
+              <button type="button" class="jit-lsx" (click)="openLsx(r)" title="Mở LSX: sắp xếp đưa NVL lên line">{{ r.lsx }}</button>
+            </td>
+            <td>{{ r.productCode }}<small *ngIf="patternText(r)" class="jit-pat">{{ patternText(r) }}</small></td>
+            <td class="n">{{ r.quantity | number }}</td>
+            <td>{{ r.customer || '—' }}</td>
+            <td>{{ r.line || '—' }}</td>
+            <td>{{ r.deliveryDate ? (r.deliveryDate | date:'dd/MM/yyyy') : '—' }}</td>
+            <td>{{ statusText(r.status) }}</td>
+            <td class="jit-hist">
+              <span *ngIf="hasHistory(r)" class="jit-hist__txt" [title]="historyText(r)">{{ historyText(r) }}</span>
+              <button type="button" class="jit-call" *ngIf="hasHistory(r) && !planActive(r)" (click)="applyHistory(r)" [disabled]="r.busy">Apply</button>
+              <button type="button" class="jit-call" *ngIf="planActive(r)" (click)="unapplyHistory(r)" [disabled]="r.busy">Unapply</button>
+              <span *ngIf="!hasHistory(r) && !planActive(r)">—</span>
+            </td>
+            <td *ngFor="let i of rounds" class="c">
+              <input type="checkbox" class="jit-pick" [checked]="r.state.picks[i]" (change)="togglePick(r, i)" [title]="'Đã lấy lần ' + (i + 1)">
+            </td>
+            <td class="c">
+              <button type="button" class="jit-call" (click)="call(r)" [disabled]="r.busy">Gọi {{ nextRound(r) }}</button>
+              <small class="jit-last" *ngIf="lastCallText(r)">{{ r.state.calls.length }} lần · {{ lastCallText(r) }}</small>
+            </td>
+            <td class="jit-next">
+              <input type="datetime-local" [(ngModel)]="r.nextInput" (change)="setNext(r)">
+              <button type="button" class="jit-x" *ngIf="r.nextInput" (click)="clearNext(r)" title="Bỏ hẹn">×</button>
+            </td>
+            <td class="c" *ngIf="isKho">
+              <button type="button" class="jit-call" (click)="toggleHide(r)" [title]="r.state.hidden ? 'Bỏ ẩn LSX' : 'Ẩn LSX khỏi danh sách JIT'">{{ r.state.hidden ? 'Bỏ ẩn' : 'Ẩn' }}</button>
+            </td>
+          </tr>
+          <tr *ngIf="!loading && !viewRows.length"><td colspan="15" class="jit-empty">Không có LSX.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </ng-container>
+
+  <!-- ===== Trang của 1 LSX: sắp xếp đưa NVL lên line ===== -->
+  <ng-container *ngIf="selected as r">
+    <div class="jit__bar">
+      <div class="jit__group">
+        <button type="button" class="jit-btn" (click)="closeLsx()"><i class="material-icons">arrow_back</i>Back</button>
+        <button type="button" class="jit-btn" (click)="goMenu()"><i class="material-icons">home</i>Menu</button>
+      </div>
+      <div class="jit__title">{{ r.lsx }}</div>
+      <div class="jit__group jit__group--grow">
+        <button type="button" class="jit-btn" (click)="quickPlan(r, 'one')" [disabled]="!r.mats?.length">Tất cả Lần 1</button>
+        <button type="button" class="jit-btn" (click)="quickPlan(r, 2)" [disabled]="!r.mats?.length || !lsxHasKho(r)" title="Chia đều 2 lần — chỉ mã có tổng cuộn > 5">Chia đều 2 lần</button>
+        <button type="button" class="jit-btn" (click)="quickPlan(r, 3)" [disabled]="!r.mats?.length || !lsxHasKho(r)" title="Chia đều 3 lần — chỉ mã có tổng cuộn > 5">Chia đều 3 lần</button>
+        <button type="button" class="jit-btn jit-btn--on" (click)="savePlan(r)" [disabled]="r.planSaving || !r.mats?.length">
+          <i class="material-icons">save</i>{{ r.planSaving ? 'Đang lưu…' : (r.planDirty ? 'Lưu sắp xếp *' : 'Lưu sắp xếp') }}
+        </button>
+        <button type="button" class="jit-btn" (click)="call(r)" [disabled]="r.busy">
+          <i class="material-icons">campaign</i>Gọi lấy {{ nextRound(r) }}
+        </button>
+      </div>
+    </div>
+
+    <table class="jit-info">
+      <tr>
+        <th>Nhà máy</th><td>{{ r.factory }}</td>
+        <th>Mã TP</th><td>{{ r.productCode }}</td>
+        <th>SL</th><td>{{ r.quantity | number }}</td>
+        <th>Khách</th><td>{{ r.customer || '—' }}</td>
+        <th>Line</th><td>{{ r.line || '—' }}</td>
+        <th>Ngày nhận</th><td>{{ r.deliveryDate ? (r.deliveryDate | date:'dd/MM/yyyy') : '—' }}</td>
+        <th>Tình trạng</th><td>{{ statusText(r.status) }}</td>
+      </tr>
+      <tr>
+        <th>Đã lấy</th>
+        <td colspan="3">
+          <label *ngFor="let i of rounds" class="jit-info__pick">
+            <input type="checkbox" class="jit-pick" [checked]="r.state.picks[i]" (change)="togglePick(r, i)"> Lấy {{ i + 1 }}
+          </label>
+        </td>
+        <th>Đã gọi</th><td colspan="3">{{ r.state.calls.length }} lần{{ lastCallText(r) ? ' · gần nhất ' + lastCallText(r) : '' }}</td>
+        <th>Gọi lần sau</th>
+        <td colspan="3" class="jit-next">
+          <input type="datetime-local" [(ngModel)]="r.nextInput" (change)="setNext(r)">
+          <button type="button" class="jit-x" *ngIf="r.nextInput" (click)="clearNext(r)" title="Bỏ hẹn">×</button>
+        </td>
+        <th>Mẫu</th><td>{{ patternText(r) || (r.pattern?.planRatio ? 'Có tỷ lệ chia NVL' : '—') }}</td>
+      </tr>
+    </table>
+
+    <p class="jit-detail__msg" *ngIf="r.matLoading">Đang tải mã NVL…</p>
+    <p class="jit-detail__msg jit-detail__msg--err" *ngIf="r.matError">{{ r.matError }}</p>
+    <p class="jit-detail__msg jit-detail__msg--err" *ngIf="r.mats?.length && !lsxHasKho(r)">LSX chưa có Mã kho — chưa chia lượt nhận được (tất cả Lần 1).</p>
+    <p class="jit-detail__msg" *ngIf="r.mats?.length && lsxHasKho(r) && noKhoCount(r)">{{ noKhoCount(r) }} mã chưa có Mã kho — chỉ giao Lần 1.</p>
+    <p class="jit-detail__msg" *ngIf="r.mats && !r.mats.length && !r.matError">PXK không có mã NVL (ngoài mã R).</p>
+
+    <div class="jit__wrap" *ngIf="r.mats?.length">
+      <table class="jit-table jit-mats">
+        <thead>
+          <tr>
+            <th class="c" rowspan="2">#</th><th rowspan="2">Mã NVL</th><th rowspan="2">Tên vật tư</th><th rowspan="2">PO</th>
+            <th rowspan="2">Mã kho</th><th class="n" rowspan="2">Cần (PXK)</th><th class="n" rowspan="2">Đã xuất</th>
+            <th rowspan="2">ĐVT</th><th class="n" rowspan="2">Std</th><th class="n" rowspan="2">Tổng cuộn</th>
+            <th *ngFor="let i of rounds" class="c jit-grp" colspan="3">
+              Lần {{ i + 1 }}
+              <div class="jit-rdate">
+                <ng-container *ngIf="i > 0">
+                  +<input type="number" min="0" step="1" [ngModel]="roundDays(r)[i]" (change)="setRoundDays(r, i, $any($event.target).value)"
+                          title="Số ngày sau ngày nhận (Lần 1)"> ngày →
+                </ng-container>
+                <b>{{ roundDate(r, i) ? (roundDate(r, i) | date:'dd/MM/yyyy') : '—' }}</b>
+              </div>
+              <small>{{ roundTotalCount(r, i) }} mã · {{ roundRolls(r, i) }} cuộn</small>
+              <small *ngIf="signOf(r, i) as s" class="jit-sign" [title]="'Ký nhận ' + fmtTime(s.at)">Ký: {{ s.receivers.join(', ') }}</small>
+            </th>
+            <th class="n" rowspan="2">Đã chia</th>
+          </tr>
+          <tr class="jit-sub">
+            <ng-container *ngFor="let i of rounds">
+              <th class="c jit-grp-l">Chọn</th><th class="c">Cuộn</th><th class="c">Đã giao</th>
+            </ng-container>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let m of r.mats; let i = index">
+            <td class="c">{{ i + 1 }}</td>
+            <td class="b">{{ m.code }}</td>
+            <td class="jit-mat-name" [title]="m.name">{{ m.name || '—' }}</td>
+            <td>{{ m.po || '—' }}</td>
+            <td>{{ m.maKho || '—' }}</td>
+            <td class="n">{{ m.need | number:'1.0-4' }}</td>
+            <td class="n">{{ m.exported | number:'1.0-4' }}</td>
+            <td>{{ m.unit }}</td>
+            <td class="n" [title]="m.std > 0 ? '1 cuộn = ' + m.std : 'Chưa có Standard packing trong danh mục — tính 1 cuộn'">{{ m.std > 0 ? (m.std | number:'1.0-4') : '—' }}</td>
+            <td class="n b">{{ m.totalRolls }}</td>
+            <ng-container *ngFor="let k of rounds">
+              <td class="c jit-grp-l">
+                <input type="checkbox" class="jit-pick" [checked]="m.sel[k]" (change)="toggleSel(r, m, k)" [disabled]="k > 0 && !m.sel[k] && !canSplit(m)"
+                       [title]="k > 0 && !canSplit(m) ? 'Chưa có Mã kho — chỉ Lần 1' : 'Chọn lấy lần ' + (k + 1)">
+              </td>
+              <td class="jit-plan-cell" [title]="m.plan[k] > 0 ? ('= ' + m.plan[k] + ' ' + m.unit) : ''">
+                <input type="number" min="0" step="1" [ngModel]="m.sel[k] ? m.rolls[k] : null"
+                       (ngModelChange)="onRollsEdit(r, m, k, $event)" [disabled]="!m.sel[k]">
+              </td>
+              <td class="c">
+                <input type="checkbox" class="jit-pick" [checked]="m.dlv[k]" (change)="toggleDlv(r, m, k)"
+                       [disabled]="!m.sel[k]" [title]="'Kho đã giao lần ' + (k + 1)">
+              </td>
+            </ng-container>
+            <td class="n" [class.jit-plan-bad]="!planOk(m)">{{ rollSum(m) }}/{{ m.totalRolls }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </ng-container>
+</div>
+
+<!-- ===== Điện thoại: kho tick Đã giao + ký nhận bằng QR người nhận ===== -->
+<div class="jitm" *ngIf="mobile">
+  <div class="jitm__bar">
+    <button type="button" class="jit-btn" (click)="mBack()"><i class="material-icons">arrow_back</i>Back</button>
+    <button type="button" class="jit-btn" (click)="goMenu()"><i class="material-icons">home</i>Menu</button>
+    <div class="jitm__title">{{ mSel ? mSel.lsx : 'JIT — Giao hàng' }}</div>
+  </div>
+
+  <ng-container *ngIf="!mSel">
+    <div class="jitm__tools">
+      <input class="jit-search" type="search" [(ngModel)]="search" placeholder="Tìm LSX, mã TP…">
+      <button type="button" class="jit-btn" (click)="load()" [disabled]="loading"><i class="material-icons">refresh</i>Làm mới</button>
+    </div>
+    <p class="jit__err" *ngIf="error">{{ error }}</p>
+    <p class="jitm__empty" *ngIf="loading">Đang tải…</p>
+    <button type="button" class="jitm-card" *ngFor="let r of mobileRows; trackBy: trackRow" (click)="mOpen(r)">
+      <div class="jitm-card__top"><b>{{ r.lsx }}</b><span>{{ statusText(r.status) }}</span></div>
+      <div class="jitm-card__sub">{{ r.productCode }} · Line {{ r.line || '—' }} · {{ r.deliveryDate ? (r.deliveryDate | date:'dd/MM') : '—' }}</div>
+      <div class="jitm-card__rounds">
+        <span *ngFor="let k of mRoundsOf(r)" class="jitm-chip" [class.is-ok]="mRoundDone(r, k)">
+          Lần {{ k + 1 }}: {{ mDoneCount(r, k) }}/{{ mItems(r, k).length }}<ng-container *ngIf="signOf(r, k)"> · đã ký</ng-container>
+        </span>
+      </div>
+    </button>
+    <p class="jitm__empty" *ngIf="!loading && !mobileRows.length">Chưa có LSX đã lưu sắp xếp JIT.</p>
+  </ng-container>
+
+  <ng-container *ngIf="mSel as r">
+    <div class="jitm-tabs">
+      <button type="button" *ngFor="let k of mRoundsOf(r)" class="jitm-tab" [class.is-on]="mRound === k" (click)="mPickRound(k)">
+        Lần {{ k + 1 }}
+        <small>{{ roundDate(r, k) ? (roundDate(r, k) | date:'dd/MM') : '' }} · {{ mDoneCount(r, k) }}/{{ mItems(r, k).length }}</small>
+      </button>
+    </div>
+    <div class="jitm-list">
+      <label class="jitm-item" *ngFor="let it of mItems(r, mRound)" [class.is-ok]="!!it.p.dlv?.[mRound]">
+        <input type="checkbox" [checked]="!!it.p.dlv?.[mRound]" (change)="mToggle(r, it.key, mRound)">
+        <div class="jitm-item__body">
+          <div><b>{{ it.p.code }}</b> <span class="jitm-po">PO {{ it.p.po || '—' }}</span></div>
+          <div>{{ it.p.rolls?.[mRound] || 0 }} cuộn · {{ (it.p.q?.[mRound] || 0) | number:'1.0-4' }} {{ it.p.unit }}</div>
+          <small>{{ it.p.name }}</small>
+        </div>
+      </label>
+    </div>
+    <div class="jitm-sign">
+      <div class="jitm-sign__done" *ngIf="signOf(r, mRound) as s">Đã ký: {{ s.receivers.join(', ') }} · {{ fmtTime(s.at) }}</div>
+      <div class="jitm-sign__ids" *ngIf="signIds.length">
+        <span class="jitm-chip" *ngFor="let id of signIds; let i = index">{{ id }}
+          <button type="button" class="jitm-chip__x" (click)="removeSigner(i)">×</button></span>
+      </div>
+      <div class="jitm-sign__row">
+        <input class="jit-search" [(ngModel)]="signInput" (keydown.enter)="mAddInput()" placeholder="Quét / nhập mã người nhận">
+        <button type="button" class="jit-btn" (click)="mScan()"><i class="material-icons">qr_code_scanner</i>Quét QR</button>
+      </div>
+      <button type="button" class="jit-btn jit-btn--on jitm-sign__save" (click)="mSaveSign(r, mRound)" [disabled]="signSaving || !signIds.length">
+        <i class="material-icons">draw</i>{{ signSaving ? 'Đang lưu…' : 'Ký nhận Lần ' + (mRound + 1) + (signIds.length ? ' (' + signIds.length + ' người)' : '') }}
+      </button>
+    </div>
+  </ng-container>
+</div>

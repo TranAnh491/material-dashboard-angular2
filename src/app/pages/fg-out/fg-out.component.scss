@@ -1,3 +1,4 @@
+@use '../../shared/styles/excel-theme' as xl;
 // FG Out - Giao diện đơn giản, nền trắng viền đen
 $fg-font-family: 'Segoe UI', Arial, sans-serif;
 $fg-font-size-base: 13px;
@@ -60,8 +61,8 @@ tr.drag-over {
   min-width: 160px;
   max-height: 200px;
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid #ccc;
+  background: #FFFFFF;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
@@ -76,7 +77,7 @@ tr.drag-over {
   padding: 8px 12px;
   cursor: pointer;
   font-size: 13px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #8F8F89;
   &:last-child { border-bottom: none; }
   &:hover { background: #e3f2fd; }
 }
@@ -113,7 +114,7 @@ tr.drag-over {
 
   .modal-footer {
     padding: 10px 14px !important;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid #8F8F89;
     gap: 8px;
   }
 }
@@ -146,7 +147,7 @@ tr.drag-over {
   padding: 6px 10px;
   border: 1px solid #111;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 13px;
   color: #111;
   font-family: inherit;
@@ -178,7 +179,7 @@ tr.drag-over {
       height: 34px;
       border: 1px solid #111;
       border-radius: 4px;
-      background: #fff;
+      background: #FFFFFF;
       color: #111;
       font-size: 12px;
       font-weight: 600;
@@ -201,7 +202,7 @@ tr.drag-over {
   margin: 0;
   padding: 10px 12px;
   background: #f7f7f7;
-  border: 1px dashed #bbb;
+  border: 1px dashed #6B6B66;
   border-radius: 4px;
   font-size: 12px;
   line-height: 1.45;
@@ -236,7 +237,7 @@ tr.drag-over {
   flex-wrap: wrap;
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #8F8F89;
 }
 
 .btn-quick-range {
@@ -245,7 +246,7 @@ tr.drag-over {
   padding: 6px 10px;
   border: 1px solid #111;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #111;
   font-size: 12px;
   font-weight: 600;
@@ -332,7 +333,7 @@ tr.drag-over {
 
 // Shipment Grid Container
 .shipment-grid-container {
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   overflow: hidden;
 }
@@ -343,13 +344,13 @@ tr.drag-over {
   align-items: center;
   padding: 10px 15px;
   background: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #8F8F89;
   font-size: 13px;
   color: #666;
   
   .btn-refresh-shipments {
     background: transparent;
-    border: 1px solid #ddd;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     cursor: pointer;
     padding: 4px 8px;
@@ -387,8 +388,8 @@ tr.drag-over {
   justify-content: center;
   gap: 6px;
   padding: 15px 10px;
-  background: #ffffff;
-  border: 2px solid #e0e0e0;
+  background: #FFFFFF;
+  border: 2px solid #6B6B66;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -449,7 +450,7 @@ tr.drag-over {
     }
     
     .factory-badge {
-      background: #fff;
+      background: #FFFFFF;
       
       &.asm1 {
         color: #4caf50;
@@ -495,7 +496,7 @@ tr.drag-over {
   width: 100%;
   min-height: 200px;
   padding: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-family: monospace;
   font-size: 13px;
@@ -568,7 +569,7 @@ tr.drag-over {
   font-family: $fg-font-family;
   border: 1px solid #000000;
   border-radius: 4px;
-  background: #ffffff;
+  background: #FFFFFF;
   color: #000000;
 }
 .col-filter-input {
@@ -604,7 +605,7 @@ tr.drag-over {
 .excel-empty-row .excel-empty-cell {
   padding: 28px 16px !important;
   background: #fafafa;
-  border: 1px dashed #bbb;
+  border: 1px dashed #6B6B66;
 }
 
 .excel-empty {
@@ -645,7 +646,7 @@ tr.drag-over {
   padding: 6px 10px;
   font-size: $fg-font-size-base;
   font-family: $fg-font-family;
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid #000000;
   color: #000000;
   cursor: pointer;
@@ -681,8 +682,8 @@ tr.drag-over {
     justify-content: center;
     gap: 8px;
     padding: 20px 16px;
-    background: #fff;
-    border: 1px solid #ddd;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 2px;
     font-size: 13px;
     cursor: pointer;
@@ -830,7 +831,7 @@ tr.pallet-even:hover td {
   margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: #FFFFFF;
   position: absolute;
   top: 0;
   left: 0;
@@ -936,14 +937,14 @@ tr.pallet-even:hover td {
   
   tbody tr {
     transition: none;
-    background-color: #ffffff;
+    background-color: #FFFFFF;
     
     &:nth-child(even) {
       background-color: #f8f8f8;
     }
     
     &:nth-child(odd) {
-      background-color: #ffffff;
+      background-color: #FFFFFF;
     }
     
     &:hover {
@@ -1096,7 +1097,7 @@ tr.pallet-even:hover td {
 
 // Location cell styling (+40% so với 80×120px)
 .location-cell {
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   color: #000000;
   font-weight: normal;
   text-align: center;
@@ -1155,7 +1156,7 @@ tr.pallet-even:hover td {
 
 // Product type cell styling
 .product-type-cell {
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   text-align: center;
   min-width: 70px;
   max-width: 80px;
@@ -1188,7 +1189,7 @@ tr.pallet-even:hover td {
 
 // Excel-like container
   .excel-container {
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid #000000;
   border-radius: 0;
   overflow: hidden;
@@ -1198,7 +1199,7 @@ tr.pallet-even:hover td {
   margin: 0;
     
     .excel-header {
-    background: #ffffff;
+    background: #FFFFFF;
     border-bottom: 1px solid #000000;
     padding: 14px 18px;
     flex-shrink: 0;
@@ -1226,7 +1227,7 @@ tr.pallet-even:hover td {
     }
     
     &::-webkit-scrollbar-track {
-      background: #ffffff;
+      background: #FFFFFF;
     }
     
     &::-webkit-scrollbar-thumb {
@@ -1253,7 +1254,7 @@ tr.pallet-even:hover td {
 
 // Excel-like action buttons - Minimal
 .excel-actions {
-  background: #ffffff;
+  background: #FFFFFF;
   border-bottom: 1px solid #000000;
   
   .action-controls {
@@ -1270,7 +1271,7 @@ tr.pallet-even:hover td {
     height: 36px !important;
     padding: 8px 14px !important;
     border: 1px solid #000000 !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     font-weight: 500 !important;
     font-size: $fg-font-size-base !important;
@@ -1360,7 +1361,7 @@ tr.pallet-even:hover td {
     height: 36px !important;
     padding: 8px 10px !important;
     border: 1px solid #000000 !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     font-size: $fg-font-size-base !important;
     font-family: $fg-font-family !important;
@@ -1372,7 +1373,7 @@ tr.pallet-even:hover td {
       outline: 2px solid #1976d2 !important;
       outline-offset: -1px !important;
       border-color: #000000 !important;
-      background: #ffffff !important;
+      background: #FFFFFF !important;
     }
 
     &::placeholder {
@@ -1399,11 +1400,11 @@ mat-checkbox {
     border-color: #000000 !important;
     border-width: 1px !important;
     border-radius: 0 !important;
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
   }
   
   ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
     border-color: #000000 !important;
   }
   
@@ -1455,7 +1456,7 @@ mat-checkbox {
   
   &:focus {
     outline: none;
-    background: #ffffff;
+    background: #FFFFFF;
     border: 1px solid #000000;
   }
 }
@@ -1535,7 +1536,7 @@ mat-checkbox {
 .status-select {
   width: 100%;
   border: 1px solid #000000;
-  background: #ffffff;
+  background: #FFFFFF;
   color: #000000;
   font-size: 11px;
   padding: 2px 4px;
@@ -1551,7 +1552,7 @@ mat-checkbox {
 .editable-select {
   width: 100%;
   border: 1px solid #000000;
-  background: #ffffff;
+  background: #FFFFFF;
   color: #000000;
   font-size: 11px;
   padding: 2px 4px;
@@ -1650,7 +1651,7 @@ mat-checkbox {
   
   .modal-container {
     position: relative;
-    background: #ffffff;
+    background: #FFFFFF;
     border: 1px solid #000000;
     border-radius: 0;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
@@ -1730,12 +1731,12 @@ mat-checkbox {
             border-radius: 0;
             font-size: 12px;
             transition: none;
-            background: #ffffff;
+            background: #FFFFFF;
             
             &:focus {
               outline: none;
               border-color: #000000;
-              background: #ffffff;
+              background: #FFFFFF;
             }
             
             &:hover {
@@ -1783,7 +1784,7 @@ mat-checkbox {
 
 .batch-inv-inner-table th,
 .batch-inv-inner-table td {
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   padding: 10px 10px;
   font-size: 13.5px;
   white-space: nowrap;
@@ -1818,7 +1819,7 @@ mat-checkbox {
   position: sticky;
   left: 0;
   z-index: 3;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .batch-inv-inner-table th:nth-child(2),
@@ -1826,7 +1827,7 @@ mat-checkbox {
   position: sticky;
   left: 150px;
   z-index: 3;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .batch-inv-inner-table th:nth-child(1),
@@ -1886,7 +1887,7 @@ mat-checkbox {
         }
         
         &.btn-cancel {
-          background: #ffffff;
+          background: #FFFFFF;
           color: #000000;
           
           &:hover {
@@ -1966,7 +1967,7 @@ mat-checkbox {
     flex: 1;
     min-width: 180px;
     padding: 8px 12px;
-    border: 1px solid #ccc;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     font-size: 14px;
   }
@@ -1978,24 +1979,24 @@ mat-checkbox {
 }
 .history-table-wrap {
   overflow-x: auto;
-  border: 1px solid #ddd;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
 }
 .history-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  background: #fff;
+  background: #FFFFFF;
   thead th {
     background: #f2f2f2;
-    border: 1px solid #ddd;
+    border: 1px solid #6B6B66;
     padding: 10px 8px;
     text-align: center;
     font-weight: 600;
     white-space: nowrap;
   }
   tbody td {
-    border: 1px solid #ddd;
+    border: 1px solid #6B6B66;
     padding: 8px;
     vertical-align: middle;
   }
@@ -2041,7 +2042,7 @@ mat-checkbox {
   min-height: 55vh;
   overflow: auto;
   border: 1px solid #c0c0c0;
-  background: #fff;
+  background: #FFFFFF;
   -webkit-overflow-scrolling: touch;
   // Bảng kiểu Excel: ô lưới, header dính
   .excel-table {
@@ -2055,7 +2056,7 @@ mat-checkbox {
       box-shadow: 0 1px 0 #c0c0c0;
     }
     td {
-      border: 1px solid #d4d4d4;
+      border: 1px solid #6B6B66;
       padding: 0;
       vertical-align: middle;
     }
@@ -2072,7 +2073,7 @@ mat-checkbox {
       box-sizing: border-box;
       &:focus {
         outline: none;
-        background: #fff;
+        background: #FFFFFF;
         box-shadow: inset 0 0 0 2px #1a73e8;
       }
     }
@@ -2147,7 +2148,7 @@ mat-checkbox {
       border: 2px solid #000000;
       border-radius: 4px;
       font-size: 14px;
-      background: #ffffff;
+      background: #FFFFFF;
       color: #000000;
       
       &:focus {
@@ -2172,7 +2173,7 @@ mat-checkbox {
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
-      background: #ffffff;
+      background: #FFFFFF;
       
       &:hover {
         border-color: #333333;
@@ -2262,7 +2263,7 @@ mat-checkbox {
           border: 1px solid #000000;
           padding: 6px 8px;
           text-align: left;
-          background: #ffffff;
+          background: #FFFFFF;
           color: #000000;
         }
         
@@ -2284,11 +2285,11 @@ mat-checkbox {
 // PKL Import modal - giao diện đẹp, pro, không đổ bóng, không màu tím
 .modal-pkl-wrapper .modal-container.modal-pkl {
   box-shadow: none !important;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 2px;
   .modal-header {
     background: #1a1a1a;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     padding: 18px 24px;
     .modal-title {
       font-size: 15px;
@@ -2302,8 +2303,8 @@ mat-checkbox {
     background: #fafafa;
   }
   .modal-footer {
-    background: #fff;
-    border-top: 1px solid #e0e0e0;
+    background: #FFFFFF;
+    border-top: 1px solid #8F8F89;
     padding: 16px 24px;
   }
 }
@@ -2350,12 +2351,12 @@ mat-checkbox {
       color: #333;
     }
     .file-upload-area {
-      border: 2px dashed #ccc;
+      border: 2px dashed #6B6B66;
       border-radius: 2px;
       padding: 32px 24px;
       text-align: center;
       cursor: pointer;
-      background: #fff;
+      background: #FFFFFF;
       transition: border-color 0.15s, background 0.15s;
       &:hover {
         background: #f5f5f5;
@@ -2405,10 +2406,10 @@ mat-checkbox {
     .form-input {
       width: 100%;
       padding: 10px 14px;
-      border: 1px solid #ddd;
+      border: 1px solid #6B6B66;
       border-radius: 2px;
       font-size: 14px;
-      background: #fff;
+      background: #FFFFFF;
       color: #1a1a1a;
       &:focus {
         outline: none;
@@ -2422,9 +2423,9 @@ mat-checkbox {
 .pkl-preview-raw, .pkl-table-wrap {
   max-height: 280px;
   overflow: auto;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 2px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .pkl-preview-table {
@@ -2433,7 +2434,7 @@ mat-checkbox {
   font-size: 13px;
   font-family: $fg-font-family;
   th, td {
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     padding: 8px 10px;
     text-align: left;
   }
@@ -2464,7 +2465,7 @@ mat-checkbox {
 
 .pkl-mapping-table-wrap {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   padding: 10px 14px;
   margin-bottom: 14px;
@@ -2480,18 +2481,18 @@ mat-checkbox {
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
 
   strong { font-weight: 600; }
 
   &.mapped {
     border-color: #000;
-    background: #fff;
+    background: #FFFFFF;
   }
 
   &.unmapped {
-    border-color: #e2e8f0;
+    border-color: #6B6B66;
     background: #f1f5f9;
     color: #94a3b8;
   }
@@ -2542,7 +2543,7 @@ mat-checkbox {
   
   .custom-input {
     padding: 8px 12px;
-    border: 1px solid #ddd;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     background: white;
     font-size: 12px;
@@ -2781,7 +2782,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
   height: 34px !important;
   padding: 0 12px !important;
   border: 1px solid $fo-line-soft !important;
-  background: #fff !important;
+  background: #FFFFFF !important;
   color: $fo-fg !important;
   font-family: $fo-font !important;
   font-size: 13px !important;
@@ -2917,7 +2918,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
   padding: 6px 12px;
   border: 1px solid $fo-line-soft;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   min-width: 0;
 
   span { font-size: 11.5px; color: $fo-muted; white-space: nowrap; }
@@ -2954,7 +2955,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   border: 1px solid $fo-line-soft;
-  background: #fff;
+  background: #FFFFFF;
   color: $fo-fg;
   white-space: nowrap;
 
@@ -3015,7 +3016,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
   }
 
   tbody tr {
-    &:nth-child(even), &:nth-child(odd) { background-color: #fff; }
+    &:nth-child(even), &:nth-child(odd) { background-color: #FFFFFF; }
     &:hover { background: #F7F7F5; }
   }
 }
@@ -3032,7 +3033,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
 .col-filter-select {
   border: 1px solid $fo-line-soft !important;
   border-radius: 6px !important;
-  background: #fff !important;
+  background: #FFFFFF !important;
   color: $fo-fg !important;
   font-family: $fo-font !important;
   font-size: 12px !important;
@@ -3042,7 +3043,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
 
 .clear-filter-btn-small {
   border: 1px solid $fo-line-soft !important;
-  background: #fff !important;
+  background: #FFFFFF !important;
   color: $fo-muted !important;
   border-radius: 6px !important;
   &:hover { background: $fo-surface-2 !important; color: $fo-fg !important; }
@@ -3055,7 +3056,7 @@ $fo-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI
   border-radius: 4px;
 
   &:focus {
-    background: #fff;
+    background: #FFFFFF;
     box-shadow: inset 0 0 0 2px $fo-blue;
   }
   &::placeholder { color: #B5B7B0; font-style: normal; }
@@ -3134,7 +3135,7 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
   margin-right: 8px;
   border: 1px solid $fo-line-soft;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   color: $fo-blue-d;
   font-family: $fo-font;
   font-size: 12.5px;
@@ -3176,7 +3177,7 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
   position: fixed;
   z-index: 3000;
   min-width: 150px;
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid #c8c8c8;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   padding: 4px 0;
@@ -3207,10 +3208,10 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
 .excel-table td {
   min-width: 0 !important;
   max-width: none !important;
-  border: 1px solid #d4d4d4 !important;
+  border: 1px solid #6B6B66 !important;
   padding: 0 6px !important;
   height: 28px;
-  background: #fff;
+  background: #FFFFFF;
   color: #000 !important;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3231,8 +3232,8 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
 .excel-table thead tr.filter-row th { background: #fafafa !important; top: auto; position: static; }
 .excel-table tbody tr,
 .excel-table tbody tr:nth-child(even),
-.excel-table tbody tr:nth-child(odd) { background: #fff !important; }
-.excel-table tbody tr.detail-row.pallet-odd td { background: #fff !important; }
+.excel-table tbody tr:nth-child(odd) { background: #FFFFFF !important; }
+.excel-table tbody tr.detail-row.pallet-odd td { background: #FFFFFF !important; }
 .excel-table tbody tr.detail-row.pallet-even td { background: #f7f7f7 !important; }
 .excel-table tbody tr.detail-row:hover td { background: #eaf1fb !important; }
 .excel-table tbody tr.pallet-total-row td { background: #f1f1f1 !important; font-weight: 600; }
@@ -3246,7 +3247,7 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
   font-size: 13px;
   width: 100%;
 }
-.excel-table td .editable-input:focus { outline: 2px solid #1a73e8; outline-offset: -2px; background: #fff !important; }
+.excel-table td .editable-input:focus { outline: 2px solid #1a73e8; outline-offset: -2px; background: #FFFFFF !important; }
 .excel-table .cell-text { padding: 0 !important; line-height: 28px; min-height: 28px; }
 .excel-table .carton-warning { background: transparent !important; border: 0 !important; color: #c00; padding: 0 !important; font-size: 12px; }
 .excel-table .row-header { text-align: center; background: #f1f1f1 !important; color: #444 !important; }
@@ -3255,9 +3256,12 @@ tr.pallet-even:hover td { background-color: #E6EFFD !important; }
 /* Dải tổng hợp gọn, phẳng */
 .fo-summary .fo-stat,
 .fo-summary .fo-chip {
-  background: #fff !important;
-  border: 1px solid #d4d4d4 !important;
+  background: #FFFFFF !important;
+  border: 1px solid #6B6B66 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 .fo-summary .fo-stat--bad, .fo-summary .fo-chip--bad { color: #c00 !important; }
+
+/* Giao diện kiểu Excel đồng bộ với Quản lý NVL / Outbound (05/11/2026) */
+:host .main-content { @include xl.excel-theme; }

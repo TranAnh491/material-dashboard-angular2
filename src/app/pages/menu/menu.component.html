@@ -14,9 +14,10 @@
         <input
           type="text"
           class="search-input"
-          placeholder="Search menu or module..."
+          placeholder="Tìm tab · gõ mã NVL rồi Enter để tra tồn (Ctrl+K)"
           [ngModel]="searchTerm"
           (ngModelChange)="onSearchTermChange($event)"
+          (keydown.enter)="openGlobalSearch()"
         />
       </div>
     </div>
@@ -25,7 +26,7 @@
         <i class="material-icons">notifications</i>
         <span class="badge-dot" aria-hidden="true"></span>
       </button>
-      <button type="button" class="topbar-locale" title="Locale">VN</button>
+      <button type="button" class="topbar-locale" title="Ngôn ngữ / Language" (click)="toggleLang()">{{ lang === 'vi' ? 'VN' : 'EN' }}</button>
     </div>
   </div>
 

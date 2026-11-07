@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -411,7 +412,7 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
 
   printCustomerCodeLabel(entry: CustomerCodeEntry): void {
     if (!printCustomerCodeLabels([entry])) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+      appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
     }
   }
 
@@ -424,11 +425,11 @@ export class FgTpStockListComponent implements OnInit, OnDestroy {
   printAllCustomerCodeLabels(): void {
     const list = this.customerCodeCatalog;
     if (!list.length) {
-      alert('Không có khách hàng để in tem.');
+      appAlert('Không có khách hàng để in tem.');
       return;
     }
     if (!printCustomerCodeLabels(list)) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+      appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
     }
   }
 

@@ -21,6 +21,9 @@
     <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'storage'" (click)="setTab('storage')">
       Storage Standard
     </button>
+    <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'locRule'" (click)="setTab('locRule')">
+      Rule vị trí
+    </button>
     <button type="button" class="dv-tab" [class.dv-tab--active]="activeTab === 'weigh'" (click)="setTab('weigh')">
       Check lượng / Cân
       <span class="dv-weigh-badge" *ngIf="weighPending.length">{{ weighPending.length }}</span>
@@ -44,12 +47,17 @@
       </button>
       <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" [class.dv-btn--purple]="nvlOnlyWithStock"
               (click)="toggleNvlOnlyWithStock()" [disabled]="isNvlStockFilterLoading"
-              title="Chỉ hiển thị mã đang có tồn kho (ASM1 + ASM2)">
+              title="Chỉ hiện mã đang có tồn (ASM1 + ASM2), kèm số bag tồn — mã nhiều bag nhất lên đầu">
         <i class="material-icons">inventory_2</i>
-        <span>{{ isNvlStockFilterLoading ? 'Đang lọc...' : 'Chỉ có tồn' }}</span>
+        <span>{{ isNvlStockFilterLoading ? 'Đang tải tồn...' : 'Bag tồn kho' }}</span>
       </button>
 
       <div class="dv-bar__right">
+        <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="openWeekAdd()"
+                title="Scan QR hàng (hoặc gõ mã B + 6 số) → mã cần theo dõi Week; chi tiết Week nhập sau ở Materials">
+          <i class="material-icons">date_range</i>
+          <span>+Week</span>
+        </button>
         <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" [class.dv-btn--active]="showNvlAddForm"
                 (click)="toggleNvlAddForm()" title="Thêm dòng thủ công">
           <i class="material-icons">add</i>
@@ -63,6 +71,9 @@
           </button>
           <div class="dv-menu__list" *ngIf="openMenu === 'nvl-excel'">
             <div class="dv-menu__label">Danh mục NVL</div>
+            <button type="button" (click)="importNvlNewOnlyFromExcel()" [disabled]="isNvlImporting">
+              <i class="material-icons">playlist_add</i> Import danh mục NVL <small>file Mã vật tư / Tên vật tư / Đvt — thêm mã chưa có, điền tên cho mã đang trống tên</small>
+            </button>
             <button type="button" (click)="importNvlFromExcel()" [disabled]="isNvlImporting">
               <i class="material-icons">file_upload</i> Import NVL <small>Mã/Tên/ĐVT — cột A/D/E từ dòng 5</small>
             </button>
@@ -102,21 +113,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="dv-column-filters" *ngIf="showNvlColumnFilters">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialCode"
-             (ngModelChange)="applyNvlFilters()" placeholder="Mã NVL">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.materialName"
-             (ngModelChange)="applyNvlFilters()" placeholder="Tên">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unit"
-             (ngModelChange)="applyNvlFilters()" placeholder="ĐVT">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.unitWeight"
-             (ngModelChange)="applyNvlFilters()" placeholder="Trọng lượng">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.customer"
-             (ngModelChange)="applyNvlFilters()" placeholder="Khách hàng">
-      <input type="text" class="dv-input dv-col-filter" [(ngModel)]="nvlColumnFilters.requiredLocation"
-             (ngModelChange)="applyNvlFilters()" placeholder="Vị trí yêu cầu">
     </div>
 
     <div class="dv-add-row" *ngIf="showNvlAddForm">
@@ -162,28 +158,74 @@
       <table class="dv-catalog-table dv-catalog-table--lean dv-catalog-table--nvl2">
         <thead>
           <tr>
-            <th>Mã / Tên NVL</th>
+            <th>Mã NVL</th>
+            <th>Tên NVL</th>
             <th>ĐVT</th>
             <th title="Standard Packing — lượng 1 bag nguyên">Std Packing</th>
-            <th title="GW 1 bag nguyên (gram); dòng dưới = trọng lượng 1 đơn vị (GW bag ÷ Standard Packing)">GW bag (g)</th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots" title="Số bag đang tồn = mỗi lô làm tròn lên (tồn ÷ Standard Packing)">Bag tồn</th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots">Bag ASM1</th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots">Bag ASM2</th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots">Tồn kho</th>
+            <th title="GW 1 bag nguyên (gram)">GW bag (g)</th>
+            <th title="Trọng lượng 1 đơn vị = GW bag ÷ Standard Packing">Trọng lượng (g/đv)</th>
             <th title="Lượng trong 1 thùng — dùng tính số tem thùng">Lượng thùng</th>
             <th>Khách hàng</th>
-            <th title="DV Lưu trữ; dòng dưới = Vị trí yêu cầu">Lưu trữ</th>
-            <th title="Lock = khóa Standard Packing / Tên / ĐVT · Xuất thùng = cho quét Tem Thùng ở Outbound">Cài đặt</th>
-            <th></th>
+            <th>DV lưu trữ</th>
+            <th>Vị trí yêu cầu</th>
+            <th title="Khóa Standard Packing / Tên / ĐVT">Lock</th>
+            <th title="Cho phép quét Tem Thùng để xuất kho ở Outbound">Xuất thùng</th>
+            <th title="Mã cần theo dõi Week trên tem — chi tiết Week nhập ở Materials">Week</th>
+            <th>Sửa</th>
+            <th>Xóa</th>
+            <th title="Mã nhân viên người sửa gần nhất">ID</th>
+          </tr>
+          <tr class="dv-filter-row" *ngIf="showNvlColumnFilters">
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.materialCode" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.materialName" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.unit" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.standardPacking" (ngModelChange)="applyNvlFilters()" placeholder="vd >100" title="Số: >5, <1, 10-20 hoặc đúng số"></th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots"></th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots"></th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots"></th>
+            <th *ngIf="nvlOnlyWithStock && nvlStockLots"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.gwBag" (ngModelChange)="applyNvlFilters()" placeholder="vd >0" title="Số: >5, <1, 10-20 hoặc đúng số"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.unitWeight" (ngModelChange)="applyNvlFilters()" placeholder="vd <1" title="Số: >5, <1, 10-20 hoặc đúng số"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.cartonQty" (ngModelChange)="applyNvlFilters()" placeholder="vd >0" title="Số: >5, <1, 10-20 hoặc đúng số"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.customer" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.storageUnit" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.requiredLocation" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
+            <th>
+              <select class="dv-col-filter" [(ngModel)]="nvlColumnFilters.lock" (ngModelChange)="applyNvlFilters()">
+                <option value="">Tất cả</option><option value="yes">Có</option><option value="no">Không</option>
+              </select>
+            </th>
+            <th>
+              <select class="dv-col-filter" [(ngModel)]="nvlColumnFilters.carton" (ngModelChange)="applyNvlFilters()">
+                <option value="">Tất cả</option><option value="yes">Có</option><option value="no">Không</option>
+              </select>
+            </th>
+            <th>
+              <select class="dv-col-filter" [(ngModel)]="nvlColumnFilters.week" (ngModelChange)="applyNvlFilters()">
+                <option value="">Tất cả</option><option value="yes">Có</option><option value="no">Không</option>
+              </select>
+            </th>
+            <th colspan="2">
+              <button type="button" class="dv-filter-clear" *ngIf="activeFilterCount(nvlColumnFilters)" (click)="clearNvlColumnFilters()" title="Xóa tất cả ô lọc">Xóa lọc</button>
+            </th>
+            <th><input type="text" class="dv-col-filter" [(ngModel)]="nvlColumnFilters.editedBy" (ngModelChange)="applyNvlFilters()" placeholder="Lọc…"></th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of pagedNvlItems" [class.dv-row-editing]="isNvlEditing(row)">
-            <td class="dv-cell-main">
-              <button type="button" class="dv-code-link" (click)="startEditNvl(row)">{{ row.materialCode }}</button>
+            <td class="dv-cell-code"><button type="button" class="dv-code-link" (click)="startEditNvl(row)">{{ row.materialCode }}</button></td>
+            <td class="dv-cell-name" [title]="row.materialName">
               <ng-container *ngIf="isNvlEditing(row); else nvlNameView">
                 <input type="text" class="dv-input dv-input--cell" [(ngModel)]="nvlEditDraft!.materialName"
                        [disabled]="row.standardPackingLocked" placeholder="Tên NVL">
               </ng-container>
-              <ng-template #nvlNameView><span class="dv-cell-sub" [title]="row.materialName">{{ row.materialName || '—' }}</span></ng-template>
+              <ng-template #nvlNameView>{{ row.materialName || '—' }}</ng-template>
             </td>
-            <td>
+            <td class="dv-cell-center">
               <ng-container *ngIf="isNvlEditing(row); else nvlUnitView">
                 <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.unit"
                        [disabled]="row.standardPackingLocked">
@@ -192,25 +234,36 @@
             </td>
             <td class="dv-cell-number">
               <ng-container *ngIf="isNvlEditing(row); else nvlPackingInlineView">
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="nvlEditDraft!.standardPacking"
-                       [disabled]="row.standardPackingLocked" min="0">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="nvlEditDraft!.standardPacking"
+                       (change)="nvlEditDraft!.standardPacking = +rawNum($any($event.target).value)"
+                       [disabled]="row.standardPackingLocked">
               </ng-container>
               <ng-template #nvlPackingInlineView>
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="row.standardPacking"
-                       [disabled]="row.standardPackingLocked" min="0" (change)="updateNvlItem(row)">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="row.standardPacking"
+                       [disabled]="row.standardPackingLocked"
+                       (change)="row.standardPacking = +rawNum($any($event.target).value); updateNvlItem(row)">
               </ng-template>
             </td>
+            <ng-container *ngIf="nvlOnlyWithStock && nvlStockLots">
+              <ng-container *ngIf="nvlBagStock(row) as b">
+                <td class="dv-cell-number dv-cell-bags">
+                  <strong *ngIf="b.total !== null; else noStd">{{ b.total | number }}</strong>
+                  <ng-template #noStd><span class="dv-cell-warn" title="Chưa có Standard Packing — không tính được bag">?</span></ng-template>
+                </td>
+                <td class="dv-cell-number">{{ b.asm1 === null ? '—' : (b.asm1 | number) }}</td>
+                <td class="dv-cell-number">{{ b.asm2 === null ? '—' : (b.asm2 | number) }}</td>
+                <td class="dv-cell-number">{{ b.qty | number:'1.0-4' }}</td>
+              </ng-container>
+            </ng-container>
             <td class="dv-cell-number">
-              <input type="number" class="dv-input dv-input--cell dv-input--sm" [ngModel]="row.gwBag || null"
-                     (change)="updateNvlGwBag(row, $any($event.target).value)" min="0" placeholder="—"
+              <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="row.gwBag || null"
+                     (change)="updateNvlGwBag(row, rawNum($any($event.target).value))" placeholder="—"
                      title="GW 1 bag nguyên (gram)">
-              <span class="dv-cell-sub" *ngIf="nvlUnitWeightCalc(row) != null" title="Trọng lượng 1 đơn vị = GW bag ÷ Standard Packing">
-                {{ nvlUnitWeightCalc(row) | number:'1.0-4' }} g/{{ row.unit || 'đv' }}
-              </span>
             </td>
+            <td class="dv-cell-number">{{ nvlUnitWeightCalc(row) == null ? '' : (nvlUnitWeightCalc(row) | number:'1.0-4') }}</td>
             <td class="dv-cell-number">
-              <input type="number" class="dv-input dv-input--cell dv-input--sm" [ngModel]="row.cartonQty || null"
-                     (change)="updateNvlCartonQty(row, $any($event.target).value)" min="0" step="any" placeholder="—"
+              <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="row.cartonQty || null"
+                     (change)="updateNvlCartonQty(row, rawNum($any($event.target).value))" placeholder="—"
                      title="Lượng trong 1 thùng">
             </td>
             <td class="dv-cell-customers">
@@ -233,20 +286,19 @@
                       [title]="row.storageUnitSize ? 'Sửa DV Lưu trữ' : 'Chọn DV Lưu trữ'">
                 {{ getStorageUnitLabel(row.storageUnitSize) || '—' }}
               </button>
-              <span class="dv-cell-sub" *ngIf="row.requiredLocation" title="Vị trí yêu cầu">📍 {{ row.requiredLocation }}</span>
             </td>
-            <td class="dv-cell-flags">
-              <label title="Khóa Standard Packing / Tên / ĐVT">
-                <mat-slide-toggle color="primary" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)"></mat-slide-toggle>
-                <span>Lock</span>
-              </label>
-              <label title="Cho phép quét Tem Thùng để xuất kho ở Outbound">
-                <mat-slide-toggle color="primary" [checked]="row.allowExportByCarton" (change)="toggleNvlAllowExportByCarton(row)"></mat-slide-toggle>
-                <span>Xuất thùng</span>
-              </label>
+            <td>{{ row.requiredLocation || '—' }}</td>
+            <td class="dv-cell-center" title="Khóa Standard Packing / Tên / ĐVT">
+              <input type="checkbox" [checked]="row.standardPackingLocked" (change)="toggleNvlLock(row)">
             </td>
-            <td class="dv-actions">
-              <ng-container *ngIf="isNvlEditing(row); else nvlActionView">
+            <td class="dv-cell-center" title="Cho phép quét Tem Thùng để xuất kho ở Outbound">
+              <input type="checkbox" [checked]="row.allowExportByCarton" (change)="toggleNvlAllowExportByCarton(row)">
+            </td>
+            <td class="dv-cell-center" title="Mã cần theo dõi Week trên tem">
+              <input type="checkbox" [checked]="!!row.weekTracked" (change)="toggleNvlWeekTracked(row)">
+            </td>
+            <td class="dv-cell-center">
+              <ng-container *ngIf="isNvlEditing(row); else nvlEditBtn">
                 <button type="button" class="dv-icon-btn dv-icon-btn--save" (click)="saveEditNvl(row)" title="Lưu">
                   <i class="material-icons">check</i>
                 </button>
@@ -254,16 +306,18 @@
                   <i class="material-icons">close</i>
                 </button>
               </ng-container>
-              <ng-template #nvlActionView>
+              <ng-template #nvlEditBtn>
                 <button type="button" class="dv-icon-btn dv-icon-btn--edit" (click)="startEditNvl(row)" title="Sửa">
                   <i class="material-icons">edit</i>
                 </button>
-                <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteNvlItem(row)" title="Xóa">
-                  <i class="material-icons">delete_outline</i>
-                </button>
               </ng-template>
-              <span class="dv-cell-sub dv-cell-by" *ngIf="row.lastEditedBy" title="Người sửa gần nhất">{{ row.lastEditedBy }}</span>
             </td>
+            <td class="dv-cell-center">
+              <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteNvlItem(row)" title="Xóa">
+                <i class="material-icons">delete_outline</i>
+              </button>
+            </td>
+            <td class="dv-cell-center dv-cell-id">{{ row.lastEditedBy || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -404,26 +458,29 @@
         <table class="dv-catalog-table dv-catalog-table--lean dv-catalog-table--tp2">
           <thead>
             <tr>
-              <th>Mã vật tư / Mã KH</th>
+              <th>Mã vật tư</th>
+              <th>Mã S.Phẩm KH</th>
               <th>Tên vật tư</th>
               <th>Đvt</th>
               <th>Khách hàng</th>
               <th>K.Thước thùng (cm)</th>
-              <th title="Gross Weight / Net Weight">GW / NW</th>
-              <th title="SL SP/thùng (ENG) / Lượng Đóng Thùng (Kho — ưu tiên khi tính Carton ở FG In). Đỏ = lệch nhau.">SP/thùng · Đóng thùng</th>
-              <th></th>
+              <th>Gross Weight</th>
+              <th>Net Weight</th>
+              <th title="SL SP/thùng (ENG)">SL SP/thùng</th>
+              <th title="Lượng Đóng Thùng (Kho — ưu tiên khi tính Carton ở FG In). Đỏ = lệch SL SP/thùng.">Lượng Đóng Thùng</th>
+              <th title="Gửi mail báo lệch SL SP/thùng ≠ Lượng Đóng Thùng tới nhóm ENG">Gửi mail</th>
+              <th>Xóa</th>
+              <th title="Mã nhân viên người sửa gần nhất">ID</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let item of pagedTpItems" [class.dv-row-mismatch]="isTpRowMismatched(item)">
-              <td class="dv-cell-main">
-                <span class="dv-cell-code-strong">{{ item.materialCode }}</span>
-                <span class="dv-cell-sub">{{ item.customerCode || '—' }}</span>
-              </td>
-              <td>
+              <td class="dv-cell-code"><span class="dv-cell-code-strong">{{ item.materialCode }}</span></td>
+              <td class="dv-cell-code">{{ item.customerCode || '—' }}</td>
+              <td class="dv-cell-name">
                 <input type="text" class="dv-input dv-input--cell" [(ngModel)]="item.productName" (change)="updateTpItem(item)">
               </td>
-              <td>
+              <td class="dv-cell-center">
                 <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.unit" (change)="updateTpItem(item)">
               </td>
               <td>
@@ -432,26 +489,35 @@
               <td>
                 <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.cartonSize" (change)="updateTpItem(item)">
               </td>
-              <td class="dv-cell-pair">
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.grossWeight" (change)="updateTpItem(item)" placeholder="GW" title="Gross Weight">
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.netWeight" (change)="updateTpItem(item)" placeholder="NW" title="Net Weight">
+              <td class="dv-cell-number">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="item.grossWeight" title="Gross Weight"
+                       (change)="item.grossWeight = rawNum($any($event.target).value) || $any($event.target).value; updateTpItem(item)">
               </td>
-              <td class="dv-cell-pair">
-                <input type="text" class="dv-input dv-input--cell dv-input--sm" [(ngModel)]="item.standard" (change)="updateTpItem(item)" placeholder="SP/thùng" title="SL SP/thùng">
-                <input type="number" class="dv-input dv-input--cell dv-input--sm" min="0" [(ngModel)]="item.cartonPackingQty"
-                       (change)="updateTpCartonPackingQty(item)" placeholder="Đóng thùng" title="Lượng Đóng Thùng">
+              <td class="dv-cell-number">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="item.netWeight" title="Net Weight"
+                       (change)="item.netWeight = rawNum($any($event.target).value) || $any($event.target).value; updateTpItem(item)">
+              </td>
+              <td class="dv-cell-number dv-cell-pair">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="item.standard" title="SL SP/thùng"
+                       (change)="item.standard = rawNum($any($event.target).value) || $any($event.target).value; updateTpItem(item)">
+              </td>
+              <td class="dv-cell-number dv-cell-pair">
+                <input type="text" class="dv-input dv-input--cell dv-input--sm" [appThousand]="item.cartonPackingQty" placeholder="—" title="Lượng Đóng Thùng"
+                       (change)="item.cartonPackingQty = rawNum($any($event.target).value) === '' ? $any(null) : +rawNum($any($event.target).value); updateTpCartonPackingQty(item)">
+              </td>
+              <td class="dv-cell-center">
                 <button type="button" class="dv-btn dv-btn--sm dv-btn--mail" *ngIf="isTpRowMismatched(item)"
                         [disabled]="isTpMailSending(item)" (click)="sendTpMismatchMail(item)"
                         title="Gửi mail báo mã này lệch SL SP/thùng ≠ Lượng Đóng Thùng tới nhóm mail ENG">
                   <i class="material-icons">{{ isTpMailSending(item) ? 'hourglass_empty' : 'mail' }}</i>
                 </button>
               </td>
-              <td class="dv-actions">
+              <td class="dv-cell-center">
                 <button type="button" class="dv-icon-btn dv-icon-btn--danger" (click)="deleteTpItem(item)" title="Xóa">
                   <i class="material-icons">delete_outline</i>
                 </button>
-                <span class="dv-cell-sub dv-cell-by" *ngIf="item.lastEditedBy" title="Người sửa gần nhất">{{ item.lastEditedBy }}</span>
               </td>
+              <td class="dv-cell-center dv-cell-id">{{ item.lastEditedBy || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -460,6 +526,10 @@
   </section>
 
   <!-- ===== Storage Standard ===== -->
+  <section class="dv-panel" *ngIf="activeTab === 'locRule'">
+    <app-location-rule-panel></app-location-rule-panel>
+  </section>
+
   <section class="dv-panel" *ngIf="activeTab === 'storage'">
     <div class="dv-filter-bar">
       <div class="dv-search-bar">
@@ -819,4 +889,25 @@
     (closed)="closeStorageUnitPicker()"
     (confirmed)="onStorageUnitConfirmed($event)">
   </app-storage-unit-picker>
+</div>
+
+<!-- +Week: scan QR hàng / gõ mã B + 6 số → mã cần theo dõi Week -->
+<div class="dv-weekadd-overlay" *ngIf="showWeekAdd" (click)="closeWeekAdd()">
+  <div class="dv-weekadd" (click)="$event.stopPropagation()">
+    <div class="dv-weekadd__head">
+      <strong>+Week — mã cần theo dõi Week</strong>
+      <small>Scan QR hàng hoặc gõ mã (B + 6 số) rồi Enter. Chi tiết Week nhập sau ở Materials.</small>
+    </div>
+    <input id="weekAddInput" class="dv-weekadd__input" type="text" appScanBurst
+           [(ngModel)]="weekAddInput" (keyup.enter)="submitWeekAdd()"
+           [placeholder]="weekAddBusy ? 'Đang lưu…' : 'Scan QR / gõ mã VD B030019'" autocomplete="off" autocapitalize="characters">
+    <div class="dv-weekadd__log">
+      <div *ngFor="let g of weekAddLog" [class.is-err]="!g.ok">{{ g.text }}</div>
+      <div class="dv-weekadd__empty" *ngIf="!weekAddLog.length">Chưa thêm mã nào.</div>
+    </div>
+    <div class="dv-weekadd__foot">
+      <button type="button" class="dv-btn dv-btn--compact dv-btn--ghost" (click)="closeWeekAdd()" [disabled]="weekAddBusy">Đóng</button>
+      <button type="button" class="dv-btn dv-btn--compact dv-btn--primary" (click)="submitWeekAdd()" [disabled]="weekAddBusy || !weekAddInput.trim()">Thêm</button>
+    </div>
+  </div>
 </div>

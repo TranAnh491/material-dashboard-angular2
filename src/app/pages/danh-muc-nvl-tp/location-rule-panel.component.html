@@ -1,0 +1,131 @@
+<div class="lr">
+  <div class="lr-top">
+    <div class="lr-seg"><button type="button" class="on">ASM2</button></div>
+    <button type="button" class="lr-icon" (click)="loadAll()" [disabled]="isWarehouseRulesLoading" title="Tải lại">
+      <i class="material-icons" [class.lr-spin]="isWarehouseRulesLoading">refresh</i>
+    </button>
+    <span class="lr-note">
+      Rule vị trí <b>ASM2</b> — hiện <b>không chặn khi cất / scan</b> (từ 21/10/2026), chỉ dùng phân loại Kho Thường / Kho Mát trên Dashboard. Rule <b>ASM1</b> chạy theo <a href="#/j-warehouse">J-Warehouse → Sơ Đồ Lưu Trữ</a> (bật ô Sơ Đồ Lưu Trữ → Sửa).
+      IQC* / BOX-* không áp rule · Rule mã tự lưu · Vị trí bấm Lưu bên dưới
+    </span>
+    <span class="lr-loading" *ngIf="isWarehouseRulesLoading">Đang tải…</span>
+    <span class="lr-error" *ngIf="warehouseRulesLoadError">❌ {{ warehouseRulesLoadError }}</span>
+  </div>
+
+  <div class="rule-modal-grid">
+    <!-- Cột 1: Vị trí -->
+    <section class="rule-panel">
+      <header class="rule-panel__head">
+        <span class="rule-panel__title">Vị trí → Loại kho</span>
+        <span class="rule-panel__count">{{ locationWarehouseRows.length }}</span>
+        <input type="text" class="rule-panel__filter" [(ngModel)]="locationRuleFilter" placeholder="Lọc vị trí…" />
+      </header>
+      <div class="rule-panel__scroll">
+        <table class="rule-compact-table" *ngIf="filteredLocationWarehouseRows.length > 0">
+          <thead><tr><th>Vị trí</th><th>Loại kho</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let row of filteredLocationWarehouseRows; trackBy: trackByLocationWarehouseRow"
+                [class.rule-row--assigned]="!!row.warehouseType">
+              <td class="rule-cell-loc" [title]="row.viTri">{{ row.viTri }}</td>
+              <td>
+                <select class="rule-cell-select" [(ngModel)]="row.warehouseType">
+                  <option value="">—</option>
+                  <option *ngFor="let wh of warehouseTypeOptions" [value]="wh">{{ wh }}</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="rule-panel__empty" *ngIf="!isWarehouseRulesLoading && locationWarehouseRows.length === 0">Chưa có vị trí</div>
+        <div class="rule-panel__empty" *ngIf="locationWarehouseRows.length > 0 && filteredLocationWarehouseRows.length === 0">Không khớp bộ lọc</div>
+      </div>
+      <footer class="rule-panel__foot">
+        <button type="button" class="lr-save" (click)="saveWarehouseRules()" [disabled]="isWarehouseRulesSaving || isWarehouseRulesLoading">
+          <i class="material-icons">save</i> {{ isWarehouseRulesSaving ? 'Đang lưu…' : 'Lưu vị trí' }}
+        </button>
+      </footer>
+    </section>
+
+    <!-- Cột 2: B+3 / B+6 -->
+    <section class="rule-panel rule-panel--mat">
+      <header class="rule-panel__head">
+        <span class="rule-panel__title">B+3 / B+6 → Loại kho</span>
+        <span class="rule-panel__count">{{ materialPrefixRows.length }}</span>
+      </header>
+      <div class="rule-panel__add">
+        <input type="text" class="rule-inline-input" [(ngModel)]="newMaterialPrefixInput" maxlength="7"
+               placeholder="B034 / B034567" style="text-transform: uppercase" (keyup.enter)="addMaterialPrefixRuleRow()" />
+        <select class="rule-inline-select" [(ngModel)]="newMaterialPrefixWarehouse">
+          <option *ngFor="let wh of warehouseTypeOptions" [value]="wh">{{ wh }}</option>
+        </select>
+        <button type="button" class="rule-inline-btn" (click)="addMaterialPrefixRuleRow()" [disabled]="isMaterialPrefixRulesSaving" title="Thêm">
+          <i class="material-icons">add</i>
+        </button>
+      </div>
+      <div class="rule-panel__scroll">
+        <table class="rule-compact-table" *ngIf="materialPrefixRows.length > 0">
+          <thead><tr><th>Mã</th><th>Loại kho</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let row of materialPrefixRows; trackBy: trackByMaterialPrefixRow">
+              <td class="rule-cell-code">{{ row.materialPrefix }}</td>
+              <td>
+                <select class="rule-cell-select" [(ngModel)]="row.warehouseType"
+                        (ngModelChange)="onMaterialPrefixWarehouseChange(row.materialPrefix, $event)">
+                  <option *ngFor="let wh of warehouseTypeOptions" [value]="wh">{{ wh }}</option>
+                </select>
+              </td>
+              <td class="rule-cell-act">
+                <button type="button" class="rule-icon-btn rule-icon-btn--del" (click)="removeMaterialPrefixRuleRow(row.materialPrefix)" title="Xóa">
+                  <i class="material-icons">close</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="rule-panel__empty" *ngIf="!isWarehouseRulesLoading && materialPrefixRows.length === 0">Chưa có rule</div>
+      </div>
+    </section>
+
+    <!-- Cột 3: Rule cũ -->
+    <section class="rule-panel rule-panel--legacy">
+      <header class="rule-panel__head">
+        <span class="rule-panel__title">Mã → Vị trí (cũ)</span>
+        <span class="rule-panel__count">{{ rules.length }}</span>
+      </header>
+      <div class="rule-panel__add">
+        <input type="text" class="rule-inline-input rule-inline-input--code" [(ngModel)]="ruleMaterialCodeInput" maxlength="7"
+               placeholder="B034 / B037005" style="text-transform: uppercase" (keyup.enter)="upsertLegacyRuleFromInputs()" />
+        <input type="text" class="rule-inline-input rule-inline-input--dest" [(ngModel)]="ruleDestinationLocationInput"
+               placeholder="Z, K / FRIDGE" (keyup.enter)="upsertLegacyRuleFromInputs()" />
+        <button type="button" class="rule-inline-btn" (click)="upsertLegacyRuleFromInputs()" [disabled]="isLegacyRulesSaving"
+                [title]="editingLegacyRuleId ? 'Cập nhật' : 'Thêm'">
+          <i class="material-icons">{{ editingLegacyRuleId ? 'save' : 'add' }}</i>
+        </button>
+        <button type="button" class="rule-inline-btn rule-inline-btn--muted"
+                *ngIf="editingLegacyRuleId || ruleMaterialCodeInput || ruleDestinationLocationInput"
+                (click)="clearLegacyRuleForm()" [disabled]="isLegacyRulesSaving" title="Hủy">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="rule-panel__empty rule-panel__error" *ngIf="rulesLoadError">⚠️ {{ rulesLoadError }}</div>
+      <div class="rule-panel__scroll">
+        <table class="rule-compact-table" *ngIf="rules.length > 0">
+          <thead><tr><th>Mã</th><th>Vị trí đích</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of rules; trackBy: trackByLegacyRule" [class.rule-row--editing]="editingLegacyRuleId === r.id">
+              <td class="rule-cell-code">{{ r.materialCode }}</td>
+              <td class="rule-cell-dest" [title]="r.destinationLocationPrefixes.join(', ')">{{ r.destinationLocationPrefixes.join(', ') }}</td>
+              <td class="rule-cell-act">
+                <button type="button" class="rule-icon-btn" (click)="startEditLegacyRule(r)" title="Sửa"><i class="material-icons">edit</i></button>
+                <button type="button" class="rule-icon-btn rule-icon-btn--del" (click)="deleteLegacyRule(r)" [disabled]="isLegacyRulesSaving" title="Xóa">
+                  <i class="material-icons">delete</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="rule-panel__empty" *ngIf="!isWarehouseRulesLoading && rules.length === 0">Chưa có rule cũ</div>
+      </div>
+    </section>
+  </div>
+</div>

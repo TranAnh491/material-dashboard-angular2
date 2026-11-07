@@ -112,7 +112,7 @@ async function loadImportCacheInfo(db, factory, docId) {
     return { factory, fileName, updatedAt, importRows, daysSinceImport: ds, overdue };
 }
 function buildEmailSubject(overdueCount) {
-    return `[FG Overview] Cảnh báo: quá 1 ngày chưa import tồn kho (${overdueCount} nhà máy)`;
+    return `[FG Overview] Cảnh báo: chưa import tồn kho thứ 5 tuần này (${overdueCount} nhà máy)`;
 }
 function buildEmailHtml(now, items) {
     const rows = items

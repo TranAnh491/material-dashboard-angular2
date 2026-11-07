@@ -209,7 +209,8 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
   private async checkWorkOrderTransferStatus(lsx: string): Promise<boolean> {
     const norm = (s: string) => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
     const samePrefix = (a: string, b: string) => {
@@ -314,7 +315,8 @@ export class DeliveryScanFlowModalComponent implements OnInit, OnDestroy {
 
   private normLsx(s: string): string {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-    const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+    const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+    const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
     return m ? m[1].replace(/[-.]/g, '/') : t;
   }
 

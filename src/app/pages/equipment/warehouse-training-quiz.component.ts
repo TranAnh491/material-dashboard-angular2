@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -258,7 +259,7 @@ export class WarehouseTrainingQuizComponent implements OnInit {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert('Không tạo được file hình. Vui lòng thử lại.');
+      appAlert('Không tạo được file hình. Vui lòng thử lại.');
     } finally {
       this.isExporting = false;
       this.cdr.markForCheck();
@@ -389,10 +390,10 @@ export class WarehouseTrainingQuizComponent implements OnInit {
         window.open(record.downloadUrl, '_blank', 'noopener');
         return;
       }
-      alert('Không tìm thấy file hình trong bản ghi này.');
+      appAlert('Không tìm thấy file hình trong bản ghi này.');
     } catch (e) {
       console.error(e);
-      alert('Không tải được file hình. Vui lòng thử lại.');
+      appAlert('Không tải được file hình. Vui lòng thử lại.');
     }
   }
 
@@ -408,7 +409,7 @@ export class WarehouseTrainingQuizComponent implements OnInit {
       this.savedRecords = this.savedRecords.filter(r => r.id !== record.id);
     } catch (e) {
       console.error(e);
-      alert('Không xóa được bản ghi. Vui lòng thử lại.');
+      appAlert('Không xóa được bản ghi. Vui lòng thử lại.');
     } finally {
       this.deletingRecordId = '';
       this.cdr.markForCheck();
@@ -427,11 +428,11 @@ export class WarehouseTrainingQuizComponent implements OnInit {
 
     const section = this.activeSection;
     if (!this.isSectionCompleted(section)) {
-      alert(`Vui lòng làm đủ câu hỏi ở phần "${section.title}" trước khi hoàn thành.`);
+      appAlert(`Vui lòng làm đủ câu hỏi ở phần "${section.title}" trước khi hoàn thành.`);
       return;
     }
     if (!this.traineeSignature) {
-      alert('Vui lòng ký tên (Người được đào tạo) trước khi hoàn thành.');
+      appAlert('Vui lòng ký tên (Người được đào tạo) trước khi hoàn thành.');
       return;
     }
 
@@ -477,10 +478,10 @@ export class WarehouseTrainingQuizComponent implements OnInit {
         ...this.savedRecords
       ].slice(0, 50);
 
-      alert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
+      appAlert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
     } catch (e: any) {
       console.error(e);
-      alert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
+      appAlert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
     } finally {
       this.isExporting = false;
       this.cdr.markForCheck();

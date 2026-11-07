@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -99,7 +100,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
   private async saveDelivery(result: DeliveryScanFlowResult): Promise<void> {
     const lsx = (result.lsx || '').trim();
-    if (!lsx) { alert('LSX không hợp lệ.'); return; }
+    if (!lsx) { appAlert('LSX không hợp lệ.'); return; }
 
     const newLines = (result.pxkLines || []).map(r => ({
       materialCode: r.materialCode,
@@ -176,14 +177,14 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
         });
       }
 
-      alert('Đã lưu thành công.');
+      appAlert('Đã lưu thành công.');
       // Nếu đang search đúng LSX này thì refresh kết quả
       if (this.searchLsx.trim() === lsx) {
         await this.onSearchLsx();
       }
     } catch (error) {
       console.error('Error saving delivery:', error);
-      alert('Lỗi khi lưu: ' + (error as Error).message);
+      appAlert('Lỗi khi lưu: ' + (error as Error).message);
     }
   }
 
@@ -201,7 +202,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       ).get().toPromise();
 
       if (!snap || snap.empty) {
-        alert(`Không tìm thấy bản ghi nào cho LSX: ${lsxInput}`);
+        appAlert(`Không tìm thấy bản ghi nào cho LSX: ${lsxInput}`);
         return;
       }
 
@@ -209,10 +210,10 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       snap.docs.forEach(doc => batch.delete(doc.ref));
       await batch.commit();
 
-      alert(`Đã xóa ${snap.docs.length} bản ghi của LSX: ${lsxInput}`);
+      appAlert(`Đã xóa ${snap.docs.length} bản ghi của LSX: ${lsxInput}`);
       this.loadDeliveryHistory();
     } catch (error) {
-      alert('Lỗi khi xóa: ' + (error as Error).message);
+      appAlert('Lỗi khi xóa: ' + (error as Error).message);
     }
   }
 
@@ -228,7 +229,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       ).get().toPromise();
 
       if (!snap || snap.empty) {
-        alert(`Không tìm thấy dữ liệu cho LSX: ${lsxInput}`);
+        appAlert(`Không tìm thấy dữ liệu cho LSX: ${lsxInput}`);
         return;
       }
 
@@ -249,13 +250,13 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
       this.openPrintWindow(records, lsxInput);
     } catch (error) {
-      alert('Lỗi khi tải dữ liệu in: ' + (error as Error).message);
+      appAlert('Lỗi khi tải dữ liệu in: ' + (error as Error).message);
     }
   }
 
   private openPrintWindow(records: any[], lsx: string): void {
     const win = window.open('', '_blank', 'width=900,height=750');
-    if (!win) { alert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.'); return; }
+    if (!win) { appAlert('Trình duyệt chặn popup. Vui lòng cho phép popup để in.'); return; }
 
     let rowsHtml = '';
     records.forEach((rec, idx) => {
@@ -377,7 +378,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
 
     const match = monthInput.trim().match(/^(\d{4})-(\d{2})$/);
     if (!match) {
-      alert('Định dạng không hợp lệ. Vui lòng nhập dạng YYYY-MM (VD: 2026-02)');
+      appAlert('Định dạng không hợp lệ. Vui lòng nhập dạng YYYY-MM (VD: 2026-02)');
       return;
     }
 
@@ -394,7 +395,7 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       ).get().toPromise();
 
       if (!snap || snap.empty) {
-        alert(`Không có dữ liệu giao hàng trong tháng ${monthInput.trim()}`);
+        appAlert(`Không có dữ liệu giao hàng trong tháng ${monthInput.trim()}`);
         return;
       }
 
@@ -459,9 +460,9 @@ export class Rm1DeliveryComponent implements OnInit, OnDestroy {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      alert(`Đã tải về ${snap.docs.length} bản ghi của tháng ${monthInput.trim()}`);
+      appAlert(`Đã tải về ${snap.docs.length} bản ghi của tháng ${monthInput.trim()}`);
     } catch (error) {
-      alert('Lỗi khi tải dữ liệu: ' + (error as Error).message);
+      appAlert('Lỗi khi tải dữ liệu: ' + (error as Error).message);
     }
   }
 

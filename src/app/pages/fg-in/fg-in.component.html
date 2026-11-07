@@ -76,6 +76,7 @@
                [title]="material.materialCode + (material.poNumber ? ' · PO: ' + material.poNumber : '')">
             <span class="fg-m-zone-badge" *ngIf="getTempZoneBadge(material.location) as zone">{{ zone }}</span>
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta fg-m-card__meta--cust" *ngIf="getCustomerNameFromMapping(material.materialCode, material.customer) as cust">Khách: <strong>{{ cust }}</strong></span>
             <span class="fg-m-card__meta fg-m-card__meta--detail">PO: {{ material.poNumber || '—' }}</span>
             <span class="fg-m-card__meta fg-m-card__meta--detail">LSX: {{ material.lsx || '—' }}</span>
             <span class="fg-m-card__meta fg-m-card__meta--detail">LOT: {{ material.batchNumber || '—' }}</span>
@@ -109,6 +110,7 @@
                *ngFor="let material of getLockedWithoutLocationMaterials(); trackBy: trackByMaterial"
                (click)="openConfirmReceiptDialog(material)">
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta fg-m-card__meta--cust" *ngIf="getCustomerNameFromMapping(material.materialCode, material.customer) as cust">Khách: <strong>{{ cust }}</strong></span>
             <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
             <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
             <span class="fg-m-card__meta">SL: {{ material.quantity | number:'1.0-0' }}</span>
@@ -161,6 +163,7 @@
                *ngFor="let material of getMobileTempMaterials(); trackBy: trackByMaterial"
                (click)="openConfirmReceiptDialog(material)">
             <div class="fg-m-card__code">{{ material.materialCode }}</div>
+            <span class="fg-m-card__meta fg-m-card__meta--cust" *ngIf="getCustomerNameFromMapping(material.materialCode, material.customer) as cust">Khách: <strong>{{ cust }}</strong></span>
             <span class="fg-m-card__meta">PO: {{ material.poNumber || '—' }}</span>
             <span class="fg-m-card__meta">LSX: {{ material.lsx || '—' }}</span>
             <span class="fg-m-card__meta">LOT: {{ material.batchNumber || material.lot || '—' }}</span>
@@ -341,7 +344,7 @@
                      placeholder="Nhập ghi chú..."
                      [disabled]="!canEditMaterial(material)">
             </td>
-            <td>{{getCustomerNameFromMapping(material.materialCode)}}</td>
+            <td>{{getCustomerNameFromMapping(material.materialCode, material.customer)}}</td>
             <td class="status-cell" (click)="$event.stopPropagation()">
               <mat-checkbox [checked]="material.isReceived" 
                            (change)="updateLockStatus(material, $event.checked)" 

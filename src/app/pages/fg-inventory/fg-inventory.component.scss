@@ -1,3 +1,4 @@
+@use '../../shared/styles/excel-theme' as xl;
 // FG Inventory — blue enterprise UI (mockup)
 :host {
   display: block;
@@ -9,7 +10,7 @@
 
 $fgi-blue: #2563eb;
 $fgi-blue-dark: #1e3a5f;
-$fgi-border: #d1d5db;
+$fgi-border: #6B6B66;
 $fgi-text: #1f2937;
 $fgi-muted: #6b7280;
 $fgi-kk: #ec4899;
@@ -19,7 +20,7 @@ $fgi-kk: #ec4899;
   margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: #fff;
+  background: #FFFFFF;
   width: 100%;
 }
 
@@ -27,7 +28,7 @@ $fgi-kk: #ec4899;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #fff;
+  background: #FFFFFF;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: $fgi-text;
 }
@@ -39,7 +40,7 @@ $fgi-kk: #ec4899;
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #8F8F89;
   flex-shrink: 0;
   min-height: 52px;
   position: relative;
@@ -108,8 +109,8 @@ $fgi-kk: #ec4899;
   align-items: stretch;
   gap: 8px;
   padding: 8px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
+  border-bottom: 1px solid #8F8F89;
+  background: #FFFFFF;
   flex-shrink: 0;
 }
 
@@ -291,7 +292,7 @@ $fgi-kk: #ec4899;
   min-width: 150px;
   border: 1px solid $fgi-border;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   overflow: hidden;
 
   &--customer {
@@ -315,7 +316,7 @@ $fgi-kk: #ec4899;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   background: #f8fafc;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid #8F8F89;
   white-space: nowrap;
 }
 
@@ -386,7 +387,7 @@ $fgi-kk: #ec4899;
   font-weight: 500;
   font-size: 0.8125rem;
   white-space: nowrap;
-  background: #fff;
+  background: #FFFFFF;
   color: $fgi-text;
   line-height: 1;
   box-sizing: border-box;
@@ -517,7 +518,7 @@ $fgi-kk: #ec4899;
   min-height: 0;
   overflow: auto;
   margin: 8px 16px 0;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
 }
 
@@ -550,8 +551,8 @@ $fgi-kk: #ec4899;
   td {
     padding: 6px 8px;
     text-align: center;
-    border-bottom: 1px solid #e5e7eb;
-    border-right: 1px solid #f3f4f6;
+    border-bottom: 1px solid #8F8F89;
+    border-right: 1px solid #8F8F89;
     color: $fgi-text;
     vertical-align: middle;
     white-space: nowrap;
@@ -579,7 +580,7 @@ $fgi-kk: #ec4899;
   }
 
   tbody tr {
-    background: #fff;
+    background: #FFFFFF;
 
     &:nth-child(even) {
       background: #f9fafb;
@@ -605,12 +606,12 @@ $fgi-kk: #ec4899;
   width: 72px;
   max-width: 100%;
   height: 28px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   padding: 0 6px;
   font-size: 0.75rem;
   text-align: center;
-  background: #fff;
+  background: #FFFFFF;
   color: $fgi-text;
 
   &:focus {
@@ -673,7 +674,7 @@ $fgi-kk: #ec4899;
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   background: #f8fafc;
   color: #334155;
   border-radius: 6px;
@@ -728,7 +729,7 @@ $fgi-kk: #ec4899;
   font-size: 0.8rem;
 
   th, td {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #8F8F89;
     padding: 8px 6px;
     text-align: left;
     vertical-align: top;
@@ -767,7 +768,7 @@ $fgi-kk: #ec4899;
   padding: 8px 10px;
   background: #f8fafc;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 
   &__label {
     color: #64748b;
@@ -882,9 +883,9 @@ $fgi-kk: #ec4899;
   gap: 16px;
   flex-wrap: wrap;
   padding: 10px 16px 14px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #8F8F89;
   flex-shrink: 0;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .fgi-footer__info {
@@ -902,9 +903,9 @@ $fgi-kk: #ec4899;
   min-width: 32px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   color: $fgi-text;
   cursor: pointer;
   font-size: 0.8125rem;
@@ -942,7 +943,7 @@ $fgi-kk: #ec4899;
     border: 1px solid $fgi-border;
     border-radius: 6px;
     padding: 0 8px;
-    background: #fff;
+    background: #FFFFFF;
     font-size: 0.8125rem;
   }
 }
@@ -994,8 +995,8 @@ $fgi-kk: #ec4899;
 
   .modal-container {
     position: relative;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
     max-width: 400px;
@@ -1072,7 +1073,7 @@ $fgi-kk: #ec4899;
             border: 1px solid $fgi-border;
             border-radius: 6px;
             font-size: 12px;
-            background: #ffffff;
+            background: #FFFFFF;
 
             &:focus {
               outline: none;
@@ -1106,7 +1107,7 @@ $fgi-kk: #ec4899;
         }
 
         &.btn-cancel {
-          background: #ffffff;
+          background: #FFFFFF;
           color: $fgi-text;
 
           &:hover {
@@ -1245,7 +1246,7 @@ $fgi-kk: #ec4899;
         width: 100%;
         max-width: 280px;
         padding: 10px 12px;
-        border: 1px solid #ddd;
+        border: 1px solid #6B6B66;
         border-radius: 6px;
         font-size: 14px;
       }
@@ -1274,7 +1275,7 @@ $fgi-kk: #ec4899;
     .duplicate-batch-list {
       .duplicate-batch-group {
         margin-bottom: 20px;
-        border: 1px solid #e0e0e0;
+        border: 1px solid #6B6B66;
         border-radius: 8px;
         overflow: hidden;
       }
@@ -1300,7 +1301,7 @@ $fgi-kk: #ec4899;
         td {
           padding: 8px 12px;
           text-align: left;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #8F8F89;
         }
 
         th {
@@ -1350,9 +1351,9 @@ $fgi-kk: #ec4899;
         align-items: center;
         gap: 12px;
         padding: 14px 16px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid #6B6B66;
         border-radius: 8px;
-        background: #fff;
+        background: #FFFFFF;
         cursor: pointer;
         font-size: 14px;
         color: #333;
@@ -1362,7 +1363,7 @@ $fgi-kk: #ec4899;
 
         &:hover {
           background: #f8fafc;
-          border-color: #cbd5e1;
+          border-color: #6B6B66;
         }
 
         .material-icons {
@@ -1486,7 +1487,7 @@ $fgi-kk: #ec4899;
       border: 1px solid $fgi-border;
       border-radius: 6px;
       font-size: 13px;
-      background: #ffffff;
+      background: #FFFFFF;
 
       &:focus {
         outline: none;
@@ -1544,7 +1545,7 @@ $fgi-kk: #ec4899;
       padding: 0 4px;
       border: 1px solid $fgi-border;
       border-radius: 3px;
-      background: #ffffff;
+      background: #FFFFFF;
       font-size: 10px;
       cursor: pointer;
 
@@ -1600,7 +1601,7 @@ $fgi-kk: #ec4899;
     .form-input {
       width: 100%;
       padding: 10px 12px;
-      border: 1px solid #ddd;
+      border: 1px solid #6B6B66;
       border-radius: 4px;
       font-size: 14px;
 
@@ -1623,7 +1624,7 @@ $fgi-kk: #ec4899;
 
   .info-display {
     background: #f8f9fa;
-    border: 1px solid #e9ecef;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     padding: 12px;
     margin-bottom: 16px;
@@ -1709,7 +1710,7 @@ $fgi-kk: #ec4899;
 .location-report-table-wrap {
   max-height: 60vh;
   overflow-y: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
 }
 
@@ -1726,13 +1727,13 @@ $fgi-kk: #ec4899;
     padding: 8px 12px;
     font-weight: 700;
     color: #334155;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
     z-index: 1;
   }
 
   tbody td {
     padding: 7px 12px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid #8F8F89;
   }
 
   tbody tr:hover {
@@ -1765,7 +1766,7 @@ $fgi-kk: #ec4899;
 
 .add-ma-tp-notes {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   padding: 14px 16px;
   margin-bottom: 18px;
   font-size: 13px;
@@ -1806,7 +1807,7 @@ $fgi-kk: #ec4899;
     padding: 0 12px;
     border: 1px solid $fgi-border;
     border-radius: 6px;
-    background: #fff;
+    background: #FFFFFF;
     cursor: pointer;
     font-size: 0.8125rem;
   }
@@ -1849,7 +1850,7 @@ $fgi-kk: #ec4899;
 .import-rules-block {
   margin-bottom: 16px;
   padding: 12px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   background: #f8fafc;
 
@@ -1886,7 +1887,7 @@ $fgi-kk: #ec4899;
   margin-bottom: 8px;
 
   th, td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #6B6B66;
     padding: 5px 8px;
     text-align: left;
     vertical-align: top;
@@ -1915,7 +1916,7 @@ $fgi-kk: #ec4899;
   padding: 10px 12px;
   background: #f8fafc;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 }
 
 .fgi-pending-cell {
@@ -1972,7 +1973,7 @@ $fgi-kk: #ec4899;
   th, td {
     padding: 8px 10px;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
     white-space: nowrap;
   }
 
@@ -2024,11 +2025,11 @@ $fgi-kk: #ec4899;
 
 /* Report NVL ngoài line */
 .nlr-overlay { position: fixed; inset: 0; z-index: 10050; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
-.nlr { width: min(96vw, 1100px); max-height: 90vh; display: flex; flex-direction: column; background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.nlr__head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #E5E5E0; h3 { margin: 0; font-size: 16px; font-weight: 700; } }
+.nlr { width: min(96vw, 1100px); max-height: 90vh; display: flex; flex-direction: column; background: #FFFFFF; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.nlr__head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #8F8F89; h3 { margin: 0; font-size: 16px; font-weight: 700; } }
 .nlr__close { border: 0; background: none; font-size: 18px; cursor: pointer; }
 .nlr__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px;
-  select, input { height: 34px; border: 1px solid #C9C9C2; border-radius: 6px; padding: 0 8px; font-size: 13px; }
+  select, input { height: 34px; border: 1px solid #6B6B66; border-radius: 6px; padding: 0 8px; font-size: 13px; }
   input { min-width: 200px; } label { display: flex; align-items: center; gap: 6px; font-size: 13px; } }
 .nlr__meta { font-size: 12px; color: #555; margin-left: auto; }
 .nlr__note { margin: 0 16px 6px; font-size: 12px; color: #747770; }
@@ -2044,3 +2045,6 @@ $fgi-kk: #ec4899;
 .nlr__empty { text-align: center; color: #747770; padding: 16px; }
 
 #nlr-query { min-width: 340px; height: 38px; font-size: 14px; }
+
+/* Giao diện kiểu Excel đồng bộ với Quản lý NVL / Outbound (05/11/2026) */
+:host .main-content { @include xl.excel-theme; }

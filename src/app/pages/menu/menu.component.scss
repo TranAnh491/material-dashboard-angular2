@@ -2,8 +2,8 @@
 
 .menu-container {
   --bg: #f8fafc;
-  --surface: #ffffff;
-  --border: rgba(15, 23, 42, 0.10);
+  --surface: #FFFFFF;
+  --border: #6B6B66;
   --muted: rgba(15, 23, 42, 0.55);
   --text: rgba(15, 23, 42, 0.92);
   --radius: 14px;
@@ -92,7 +92,7 @@
   width: 100%;
   height: 38px;
   border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid #6B6B66;
   padding: 0 12px 0 40px;
   font-size: 12px;
   outline: none;
@@ -110,8 +110,8 @@
   width: 38px;
   height: 38px;
   border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: #ffffff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -139,8 +139,8 @@
   height: 38px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: #ffffff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
   font-size: 12px;
   font-weight: 800;
   color: rgba(15, 23, 42, 0.70);
@@ -248,13 +248,13 @@
 .menu-footer {
   margin-top: 30px;
   padding-top: 18px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-top: 1px solid #8F8F89;
   display: flex;
   justify-content: center;
 }
 
 .logout-btn {
-  background: #ffffff;
+  background: #FFFFFF;
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.25);
   border-radius: 999px;

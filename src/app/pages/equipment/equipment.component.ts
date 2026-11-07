@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
@@ -419,7 +420,7 @@ export class EquipmentComponent implements OnInit {
       window.open(url, '_blank');
       console.log(`Downloading WH-WI0005 ${part} document`);
     } else {
-      alert(this.isEnglish ? 
+      appAlert(this.isEnglish ? 
         'Document link not configured yet. Please contact administrator.' :
         'Liên kết tài liệu chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
     }
@@ -433,7 +434,7 @@ export class EquipmentComponent implements OnInit {
       window.open(documentUrl, '_blank');
       console.log('Opening WH-WI0005 Ver08 document');
     } else {
-      alert(this.isEnglish ? 
+      appAlert(this.isEnglish ? 
         'WH-WI0005 Ver08 document link not configured yet. Please contact administrator.' :
         'Liên kết tài liệu WH-WI0005 Ver08 chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
     }
@@ -507,7 +508,7 @@ export class EquipmentComponent implements OnInit {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert('Không tạo được file hình. Vui lòng thử lại.');
+      appAlert('Không tạo được file hình. Vui lòng thử lại.');
     } finally {
       this.isExportingTrainingForm = false;
       this.cdr.markForCheck();
@@ -619,7 +620,7 @@ export class EquipmentComponent implements OnInit {
   downloadTrainingFormSavedRecord(record: WarehouseTrainingFormSavedRecord): void {
     try {
       if (!record.imageDataUrl) {
-        alert('Không tìm thấy file hình trong bản ghi này.');
+        appAlert('Không tìm thấy file hình trong bản ghi này.');
         return;
       }
       const ext = record.imageDataUrl.startsWith('data:image/jpeg') ? 'jpg' : 'png';
@@ -630,7 +631,7 @@ export class EquipmentComponent implements OnInit {
       a.click();
     } catch (e) {
       console.error(e);
-      alert('Không tải được file hình. Vui lòng thử lại.');
+      appAlert('Không tải được file hình. Vui lòng thử lại.');
     }
   }
 
@@ -646,7 +647,7 @@ export class EquipmentComponent implements OnInit {
       this.trainingFormSavedRecords = this.trainingFormSavedRecords.filter(r => r.id !== record.id);
     } catch (e) {
       console.error(e);
-      alert('Không xóa được bản ghi. Vui lòng thử lại.');
+      appAlert('Không xóa được bản ghi. Vui lòng thử lại.');
     } finally {
       this.deletingTrainingFormRecordId = '';
       this.cdr.markForCheck();
@@ -664,18 +665,18 @@ export class EquipmentComponent implements OnInit {
     if (!el) return;
 
     if (!this.isJobTrainingComplete()) {
-      alert('Vui lòng đánh dấu Đạt/Chưa đạt cho tất cả mục đào tạo công việc.');
+      appAlert('Vui lòng đánh dấu Đạt/Chưa đạt cho tất cả mục đào tạo công việc.');
       return;
     }
     if (
       !this.warehouseTrainingForm.trainingCommitment.guided ||
       !this.warehouseTrainingForm.trainingCommitment.safetyRules
     ) {
-      alert('Vui lòng tick đủ 2 cam kết trong Box đào tạo.');
+      appAlert('Vui lòng tick đủ 2 cam kết trong Box đào tạo.');
       return;
     }
     if (!this.workerSignature) {
-      alert('Vui lòng ký tên Người lao động trước khi hoàn thành.');
+      appAlert('Vui lòng ký tên Người lao động trước khi hoàn thành.');
       return;
     }
 
@@ -716,10 +717,10 @@ export class EquipmentComponent implements OnInit {
       ].slice(0, 50);
 
       this.clearFormDraft();
-      alert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
+      appAlert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
     } catch (e: any) {
       console.error(e);
-      alert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
+      appAlert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
     } finally {
       this.isExportingTrainingForm = false;
       this.cdr.markForCheck();
@@ -916,7 +917,7 @@ private getWorkerSignCtx(): CanvasRenderingContext2D | null {
 
   async deleteEmployee(record: TrainingRecord) {
     if (!record.id) {
-      alert('Không thể xóa: Thiếu ID bản ghi');
+      appAlert('Không thể xóa: Thiếu ID bản ghi');
       return;
     }
 
@@ -942,18 +943,18 @@ private getWorkerSignCtx(): CanvasRenderingContext2D | null {
             await this.refreshReportData();
           }
         } else {
-          alert('Có lỗi xảy ra khi xóa bản ghi!\n\nVui lòng thử lại hoặc liên hệ quản trị viên nếu vấn đề vẫn tiếp tục.');
+          appAlert('Có lỗi xảy ra khi xóa bản ghi!\n\nVui lòng thử lại hoặc liên hệ quản trị viên nếu vấn đề vẫn tiếp tục.');
         }
       } catch (error) {
         console.error('Error deleting record:', error);
-        alert('Có lỗi xảy ra khi xóa bản ghi!');
+        appAlert('Có lỗi xảy ra khi xóa bản ghi!');
       }
     }
   }
 
   async downloadEmployeeReport(record: TrainingRecord) {
     if (!record.id) {
-      alert('Không thể tải file: Thiếu ID bản ghi');
+      appAlert('Không thể tải file: Thiếu ID bản ghi');
       return;
     }
 
@@ -961,7 +962,7 @@ private getWorkerSignCtx(): CanvasRenderingContext2D | null {
       // Get full record data from Firebase
       const fullRecord = await this.trainingReportService.getTrainingRecordById(record.id);
       if (!fullRecord) {
-        alert('Không tìm thấy dữ liệu chi tiết của bản ghi này!');
+        appAlert('Không tìm thấy dữ liệu chi tiết của bản ghi này!');
         return;
       }
 
@@ -991,7 +992,7 @@ private getWorkerSignCtx(): CanvasRenderingContext2D | null {
 
     } catch (error) {
       console.error('Error downloading employee report:', error);
-      alert('Có lỗi xảy ra khi tải file báo cáo!');
+      appAlert('Có lỗi xảy ra khi tải file báo cáo!');
     }
   }
 
@@ -1086,7 +1087,7 @@ private getWorkerSignCtx(): CanvasRenderingContext2D | null {
 
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Có lỗi xảy ra khi tạo file PDF!');
+      appAlert('Có lỗi xảy ra khi tạo file PDF!');
     }
   }
 

@@ -41,7 +41,6 @@ import { ComponentsModule } from '../../components/components.module';
 
 // Các component materials mới
 
-import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
 import { ScrapComponent } from '../../pages/scrap/scrap.component';
@@ -93,7 +92,6 @@ import { TruckScheduleSharedModule } from '../../pages/truck-schedule/truck-sche
   declarations: [
     MenuComponent,
     AccountComponent,
-    StockCheckComponent,
     IndexComponent,
     SxxkComponent,
     ScrapComponent,

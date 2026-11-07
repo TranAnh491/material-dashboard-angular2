@@ -2,36 +2,85 @@
 <div class="main-content">
   <div class="content-container">
     
-    <!-- Header -->
-    <div class="header-section">
-      <h2 class="page-title">
+    <!-- Thanh trên cùng: 1 hàng ngang — tên trang · tìm kiếm · Back · Về Menu · (Home của hệ thống) -->
+    <div class="fgc-topbar">
+      <h2 class="fgc-topbar__title">
         <img src="assets/img/shipcheck.png" alt="" class="page-title-icon">
         FG Check
       </h2>
+      <div class="fgc-topbar__search">
+        <i class="material-icons">search</i>
+        <input type="text"
+               placeholder="Tìm theo Shipment, Mã TP, Mã hàng, ID Check..."
+               [(ngModel)]="searchTerm"
+               (input)="onSearchChange($event)"
+               class="search-input-uppercase">
+        <button type="button"
+                class="fgc-tb-btn"
+                *ngIf="olderFgOffer || olderFgSearching"
+                (click)="searchOlderFgCheck()"
+                [disabled]="olderFgSearching">
+          {{ olderFgSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
+        </button>
+      </div>
+      <button class="fgc-tb-btn" type="button" (click)="goBack()" title="Quay lại">
+        <i class="material-icons">arrow_back</i>
+        <span>Back</span>
+      </button>
+      <button class="fgc-tb-btn" type="button" (click)="goToMenu()" title="Về Menu">
+        <i class="material-icons">grid_view</i>
+        <span>Về Menu</span>
+      </button>
     </div>
-    
+
     <!-- Action Buttons and Search -->
     <div class="action-section">
       <div class="action-buttons">
         <!-- Step 3: Scan Mã TP + Số lượng (hiển thị sau khi nhập shipment và pallet) -->
         <div class="scan-step-3" *ngIf="checkStep === 3">
-          <div class="scan-info-row">
-            <span class="scan-info-item">Shipment: <strong>{{scannedShipment}}</strong></span>
-            <span class="scan-info-item">Pallet: <strong>{{currentPalletNo}}</strong></span>
-            <span class="scan-info-item">Đã scan: <strong>{{getCurrentPalletScannedCarton()}}</strong> thùng, <strong>{{getCurrentPalletScannedQuantity()}}</strong> pcs</span>
+          <button type="button" class="fgc-focus-warn" *ngIf="!scanInputFocused" (click)="focusScanInput()">
+            <i class="material-icons">warning</i>
+            Chưa chọn ô scan — bấm vào đây (hoặc vào ô scan) để máy scan nhập đúng chỗ!
+          </button>
+          <div class="scan-info-row fgc-strip">
+            <div class="fgc-strip__cell"><i class="material-icons">local_shipping</i><div><small>Shipment</small><strong class="fgc-strip__hot">{{scannedShipment}}</strong></div></div>
+            <div class="fgc-strip__cell"><i class="material-icons">view_in_ar</i><div><small>Pallet</small><strong>{{currentPalletNo}}</strong></div></div>
+            <div class="fgc-strip__cell"><i class="material-icons">inventory_2</i><div><small>Đã scan</small><strong>{{getCurrentPalletScannedCarton()}} thùng, {{getCurrentPalletScannedQuantity()}} pcs</strong></div></div>
+            <div class="fgc-strip__cell" *ngIf="isTwoLabelMode"><i class="material-icons">label</i><div><small>Đang chờ</small><strong class="fgc-strip__hot">{{ axonePhase === 'internal' ? 'Tem nội bộ' : 'Tem khách' }}</strong></div></div>
+            <button type="button" class="fgc-rescan-btn" (mousedown)="$event.preventDefault()" (click)="rescanCurrentPallet()" [disabled]="palletRescanBusy"
+                    title="Scan sai: xóa toàn bộ dữ liệu đã scan của pallet này và scan lại từ đầu">
+              <i class="material-icons">restart_alt</i> Scan lại pallet
+            </button>
+            <span class="fgc-strip__badge">Đang kiểm tra</span>
           </div>
-          <div class="scan-inputs-row" *ngIf="checkMode === 'pn-qty-axone'">
-            <span class="scan-info-item axone-phase">
-              {{ axonePhase === 'internal' ? '1. Tem nội bộ' : '2. Tem khách' }}
+          <div class="scan-inputs-row" *ngIf="isTwoLabelMode">
+            <span class="scan-info-item axone-phase fgc-scan-title">
+              {{ axonePhase === 'internal' ? 'Scan tem nội bộ' : 'Scan tem khách' }}
+              <small>{{ axonePhase === 'internal' ? '(Mã TP | Số Pcs)' : (checkMode === 'pn-qty-fjxr' ? '(tem FJXR nhiều dòng)' : '') }}</small>
             </span>
+            <!-- Tem khách FJXR: ô nhiều dòng nhận nguyên tem (có xuống dòng) rồi đổ vào form mẫu -->
+            <textarea *ngIf="isFjxrCustomerPhase"
+                      #fjxrArea
+                      class="custom-input scan-axone-input fgc-big-input fgc-fjxr-area"
+                      rows="2"
+                      placeholder="Scan tem khách FJXR — cả tem sẽ vào form bên dưới"
+                      spellcheck="false"></textarea>
+            <button *ngIf="isFjxrCustomerPhase" type="button" class="custom-btn fgc-stop-btn" (mousedown)="$event.preventDefault()" (click)="stopFjxrReading()"
+                    title="Scan lộn tem: dừng, bỏ phần đã nhận, quét lại tem khách">
+              <i class="material-icons">stop_circle</i> Dừng
+            </button>
             <input type="text"
+                   *ngIf="!isFjxrCustomerPhase"
                    class="custom-input scan-axone-input fgc-big-input"
                    [(ngModel)]="currentScanInput"
-                   (keyup.enter)="onAxoneScan()"
-                   [placeholder]="axonePhase === 'internal' ? 'Scan tem nội bộ (MãTP|SốPcs|...)' : 'Scan tem khách'"
+                   (keyup.enter)="checkMode === 'pn-qty-fjxr' ? onFjxrScan() : onAxoneScan()"
+                   [placeholder]="axonePhase === 'internal' ? 'Scan tem nội bộ (MãTP|SốPcs|...)' : (checkMode === 'pn-qty-fjxr' ? 'Scan tem khách FJXR' : 'Scan tem khách')"
                    readonly
                    (focus)="$event.target.removeAttribute('readonly')"
                    (blur)="$event.target.setAttribute('readonly', 'readonly')">
+            <button class="custom-btn fgc-scan-btn" (click)="isFjxrCustomerPhase ? finishFjxrFromRaw() : (checkMode === 'pn-qty-fjxr' ? onFjxrScan() : onAxoneScan())" [disabled]="!isFjxrCustomerPhase && !currentScanInput">
+              <i class="material-icons">qr_code_scanner</i> Scan
+            </button>
             <span class="axone-status" *ngIf="axoneStatus" [class.axone-status--ok]="axoneStatusOk === true" [class.axone-status--ng]="axoneStatusOk === false">
               {{ axoneStatus }}
             </span>
@@ -44,7 +93,28 @@
               Hủy
             </button>
           </div>
-          <div class="scan-inputs-row" *ngIf="checkMode !== 'pn-qty-axone'">
+          <!-- Form mẫu tem khách FJXR: thấy rõ dòng nào vào form được, dòng nào không -->
+          <section class="fgc-card fgc-fjxr-form" *ngIf="checkMode === 'pn-qty-fjxr' && fjxrForm" [class.is-ok]="fjxrForm.ok" [class.is-ng]="!fjxrForm.ok">
+            <header>
+              <strong>Form tem khách FJXR</strong>
+              <span>Đọc được {{ fjxrForm.lineCount }} dòng (tem chuẩn 14 dòng)</span>
+              <span class="fgc-card__sum">{{ fjxrForm.ok ? '✓ Vào form đủ' : '✗ Có ô không vào được form' }}</span>
+            </header>
+            <div class="fgc-card__body">
+              <table>
+                <thead><tr><th>Dòng</th><th>Ô trong form</th><th>Giá trị trên tem</th><th>Kiểm tra</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let r of fjxrForm.rows" [class.is-need]="r.need" [class.is-ok]="r.ok === true" [class.is-ng]="r.ok === false">
+                    <td>{{ r.line }}</td>
+                    <td><strong>{{ r.label }}</strong><span *ngIf="r.need" class="fgc-fjxr-req">*</span></td>
+                    <td class="fgc-fjxr-val">{{ r.value || '— (trống)' }}</td>
+                    <td>{{ r.ok === true ? '✓ ' : (r.ok === false ? '✗ ' : '') }}{{ r.note }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <div class="scan-inputs-row" *ngIf="!isTwoLabelMode">
             <input type="text" 
                    class="custom-input scan-material-input fgc-big-input" 
                    [(ngModel)]="currentScanInput"
@@ -80,10 +150,6 @@
           </div>
           <!-- Bảng scan (máy tính) — giống Outbound -->
           <div class="fgc-board">
-            <div class="fgc-flash" [class.fgc-flash--ok]="scanFlash?.kind === 'ok'" [class.fgc-flash--err]="scanFlash?.kind === 'err'">
-              <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
-              <span>{{ scanFlash?.text || 'Sẵn sàng — scan tem' }}</span>
-            </div>
             <div class="fgc-meta">
               <div class="fgc-progress" *ngIf="fgScanProgress.length">
                 <span>{{ scannedShipment }}</span>
@@ -94,22 +160,21 @@
                 <i class="material-icons">download</i> Tải log shipment
               </button>
             </div>
-            <div class="fgc-id" *ngIf="scanIdentity">
-              <strong>{{ scanIdentity.code }}</strong>
-              <span>Mã KH {{ scanIdentity.customer || '—' }} · Pallet {{ scanIdentity.pallet }} · {{ scanIdentity.qty | number }}</span>
-              <div class="fgc-id__tags">
-                <span *ngFor="let t of scanIdentity.tags" class="fgc-tag fgc-tag--{{ t.tone }}">{{ t.text }}</span>
-              </div>
-            </div>
             <div class="fgc-cols">
-              <section class="fgc-card">
-                <header><strong>Tiến độ theo shipment</strong><span>{{ checkMode === 'pn' ? 'theo thùng' : 'theo pcs' }}</span></header>
-                <p class="fgc-card__empty" *ngIf="!fgScanProgress.length">Chưa có dữ liệu shipment.</p>
+              <!-- Trái: danh sách xuất của lô (shipment) — mã đã / chưa scan -->
+              <section class="fgc-card fgc-card--progress">
+                <header>
+                  <strong>Tiến độ theo shipment</strong>
+                  <span>{{ checkMode === 'pn' ? 'theo thùng' : 'theo pcs' }}</span>
+                  <span class="fgc-card__sum" *ngIf="fgScanProgress.length">{{ fgScanDoneCount }}/{{ fgScanProgress.length }} mã đủ · còn {{ fgScanProgress.length - fgScanDoneCount }} mã chưa đủ</span>
+                </header>
+                <p class="fgc-card__empty" *ngIf="!fgScanProgress.length">{{ fgShipmentLoadState === 'loading' ? 'Đang tải danh sách mã của shipment…' : 'Không tìm thấy dữ liệu xuất của shipment ' + scannedShipment + ' (kiểm tra số shipment hoặc tab Shipment).' }}</p>
                 <div class="fgc-card__body" *ngIf="fgScanProgress.length">
                   <table>
-                    <thead><tr><th>Mã TP</th><th class="n">Cần</th><th class="n">Đã check</th><th class="n">Còn</th></tr></thead>
+                    <thead><tr><th>Trạng thái</th><th>Mã TP</th><th class="n">Cần</th><th class="n">Đã check</th><th class="n">Còn</th></tr></thead>
                     <tbody>
-                      <tr *ngFor="let r of fgScanProgress" [class.is-done]="r.remain === 0" [class.is-over]="r.remain < 0" [class.is-active]="r.checked > 0 && r.remain > 0">
+                      <tr *ngFor="let r of fgScanProgress" [class.is-done]="r.remain === 0" [class.is-over]="r.remain < 0" [class.is-active]="r.checked > 0 && r.remain > 0" [class.is-none]="r.checked === 0">
+                        <td><span class="fgc-st fgc-st--{{ fgScanStatus(r) }}">{{ fgScanStatus(r) === 'done' ? '✓ Đủ' : fgScanStatus(r) === 'over' ? '! Vượt' : fgScanStatus(r) === 'doing' ? '◐ Đang scan' : '○ Chưa scan' }}</span></td>
                         <td><strong>{{ r.code }}</strong></td>
                         <td class="n">{{ r.need | number }}</td>
                         <td class="n">{{ r.checked | number }}</td>
@@ -119,23 +184,48 @@
                   </table>
                 </div>
               </section>
-              <section class="fgc-card">
-                <header><strong>Vừa scan</strong><span>{{ scannedItems.length }} lần</span></header>
-                <p class="fgc-card__empty" *ngIf="!scannedItems.length">Chưa scan.</p>
-                <div class="fgc-card__body" *ngIf="scannedItems.length">
-                  <table>
-                    <thead><tr><th>#</th><th>Mã TP</th><th>Mã KH</th><th class="n">Lượng</th></tr></thead>
-                    <tbody>
-                      <tr *ngFor="let it of scannedItemsNewestFirst; let i = index; trackBy: trackById">
-                        <td>{{ scannedItems.length - i }}</td>
-                        <td><strong>{{ it.materialCode }}</strong></td>
-                        <td>{{ it.customerCode || '—' }}</td>
-                        <td class="n">{{ it.quantity | number }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+              <!-- Phải: nội dung scan + hình ảnh tham khảo -->
+              <div class="fgc-right">
+                <section class="fgc-card fgc-card--scan">
+                  <header><strong>Nội dung scan</strong><span>{{ scannedItems.length }} lần</span></header>
+                          <div class="fgc-flash" [class.fgc-flash--ok]="scanFlash?.kind === 'ok'" [class.fgc-flash--err]="scanFlash?.kind === 'err'">
+                            <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+                            <span>{{ scanFlash?.text || 'Sẵn sàng — scan tem' }}</span>
+                          </div>
+                          <div class="fgc-id" *ngIf="scanIdentity">
+                            <strong>{{ scanIdentity.code }}</strong>
+                            <span>Mã KH {{ scanIdentity.customer || '—' }} · Pallet {{ scanIdentity.pallet }} · {{ scanIdentity.qty | number }}</span>
+                            <div class="fgc-id__tags">
+                              <span *ngFor="let t of scanIdentity.tags" class="fgc-tag fgc-tag--{{ t.tone }}">{{ t.text }}</span>
+                            </div>
+                          </div>
+                  <div class="fgc-card__body fgc-card__body--recent" *ngIf="scannedItems.length">
+                    <table>
+                      <thead><tr><th>#</th><th>Mã TP</th><th>Mã KH</th><th class="n">Lượng</th></tr></thead>
+                      <tbody>
+                        <tr *ngFor="let it of scannedItemsNewestFirst; let i = index; trackBy: trackById">
+                          <td>{{ scannedItems.length - i }}</td>
+                          <td><strong>{{ it.materialCode }}</strong></td>
+                          <td>{{ it.customerCode || '—' }}</td>
+                          <td class="n">{{ it.quantity | number }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="fgc-card__empty" *ngIf="!scannedItems.length">Chưa scan.</p>
+                </section>
+                <section class="fgc-card fgc-card--ref">
+                  <header><strong>Hình ảnh tham khảo</strong></header>
+                  <div class="fgc-ref">
+                    <img *ngIf="refImageScanCode && refImageByCode.get(refImageScanCode)" [src]="refImageByCode.get(refImageScanCode)" [alt]="refImageScanCode" class="fgc-ref__img" (click)="refImageViewer = { code: refImageScanCode, url: refImageByCode.get(refImageScanCode)! }; showRefImageDialog = true">
+                    <div *ngIf="!(refImageScanCode && refImageByCode.get(refImageScanCode))">
+                      <i class="material-icons">photo_camera</i>
+                      <div>{{ refImageScanCode ? 'Mã ' + refImageScanCode + ' chưa có hình' : 'Chưa có hình ảnh' }}</div>
+                      <small>Thêm hình ở More → Hình ảnh tham khảo</small>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
           </div>
         </div>
@@ -163,6 +253,10 @@
           <i class="material-icons">visibility</i>
           UNHIDE
         </button>
+        <button class="custom-btn btn-status-report" type="button" (click)="openStatusReport()" *ngIf="checkStep === 0">
+          <i class="material-icons">description</i>
+          Check Status
+        </button>
         <button class="custom-btn btn-shipment-check" type="button" (click)="openShipmentCheckDialog()" *ngIf="checkStep === 0">
           <i class="material-icons">local_shipping</i>
           Shipment Check
@@ -172,30 +266,8 @@
           <i class="material-icons">more_vert</i>
           More
         </button>
-        <button class="custom-btn" type="button" (click)="goBack()" title="Quay lại">
-          <i class="material-icons">arrow_back</i>
-          Back
-        </button>
-        <button class="custom-btn" type="button" (click)="goToMenu()" title="Về Menu">
-          <i class="material-icons">home</i>
-          Về Menu
-        </button>
       </div>
       
-      <div class="search-box">
-        <input type="text" 
-               placeholder="Tìm kiếm theo Shipment, Mã TP, Mã Hàng, ID Check..."
-               [(ngModel)]="searchTerm"
-               (input)="onSearchChange($event)"
-               class="custom-input search-input-uppercase">
-        <button type="button"
-                class="custom-btn"
-                *ngIf="olderFgOffer || olderFgSearching"
-                (click)="searchOlderFgCheck()"
-                [disabled]="olderFgSearching">
-          {{ olderFgSearching ? 'Đang tìm...' : 'Không thấy. Tìm cũ hơn' }}
-        </button>
-      </div>
     </div>
     
     <!-- Loading Indicator -->
@@ -282,10 +354,11 @@
                             [ngModel]="row.item.display?.checkTypeLabel"
                             (ngModelChange)="onCheckTypeChange(row.item, $event)"
                             [disabled]="row.item.isLocked"
-                            title="Thùng = Check Thùng, Lượng = Check Số lượng, Lượng Axone = đối chiếu 2 tem">
+                            title="Thùng = Check Thùng, Lượng = Check Số lượng, Lượng Axone / Lượng FJXR = đối chiếu 2 tem">
                       <option value="Thùng">Thùng</option>
                       <option value="Lượng">Lượng</option>
                       <option value="Lượng Axone">Lượng Axone</option>
+                      <option value="Lượng FJXR">Lượng FJXR</option>
                     </select>
                   </td>
                   <td class="notes-cell" [class.notes-warning]="row.item.display?.checkNote">
@@ -348,6 +421,10 @@
         <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn-qty-axone')">
           <i class="material-icons">compare_arrows</i>
           Check Lượng (Axone)
+        </button>
+        <button type="button" class="btn btn-check-mode" (click)="selectCheckMode('pn-qty-fjxr')">
+          <i class="material-icons">qr_code_scanner</i>
+          Check Lượng (FJXR)
         </button>
       </div>
     </div>
@@ -470,6 +547,73 @@
   </div>
 </div>
 
+<!-- Check Status: nhập lô → report check dạng notepad -->
+<div class="modal-overlay fgc-np-overlay" *ngIf="showStatusReport" (click)="closeStatusReport()">
+  <div class="fgc-np" (click)="$event.stopPropagation()">
+    <div class="fgc-np__title">
+      <i class="material-icons">description</i>
+      <span>{{ statusReportShipment ? 'FG_Check_Status_' + statusReportShipment + '.txt' : 'Untitled' }} - Notepad</span>
+      <button type="button" class="fgc-np__x" (click)="closeStatusReport()" title="Đóng">✕</button>
+    </div>
+    <div class="fgc-np__menu">
+      <label>Lô:
+        <input id="fgc-status-input" type="text" [(ngModel)]="statusReportInput" (keyup.enter)="buildStatusReport()"
+               placeholder="Nhập số lô / shipment" autocomplete="off" style="text-transform: uppercase;">
+      </label>
+      <button type="button" (click)="buildStatusReport()" [disabled]="statusReportLoading || !statusReportInput.trim()">
+        {{ statusReportLoading ? 'Đang đọc...' : 'Xem report' }}
+      </button>
+      <span class="fgc-np__sep"></span>
+      <button type="button" (click)="copyStatusReport()" [disabled]="!statusReportShipment">Copy</button>
+      <button type="button" (click)="downloadStatusReport()" [disabled]="!statusReportShipment">Tải .txt</button>
+      <button type="button" (click)="printStatusReport()" [disabled]="!statusReportShipment">In</button>
+    </div>
+    <textarea class="fgc-np__body" readonly spellcheck="false" wrap="off"
+              [value]="statusReportText || 'Nhập số lô ở trên rồi bấm Enter để xem report check.'"></textarea>
+    <div class="fgc-np__status">
+      <span>{{ statusReportShipment ? 'Lô ' + statusReportShipment : '' }}</span>
+      <span>UTF-8</span>
+      <span>Windows (CRLF)</span>
+    </div>
+  </div>
+</div>
+
+<!-- Popup pallet đã có dữ liệu scan: Scan lại (ghi đè) / Scan tiếp -->
+<div class="modal-overlay fgc-rescan-overlay" *ngIf="palletRescanPrompt as rp">
+  <div class="modal-container fgc-rescan-modal" (click)="$event.stopPropagation()">
+    <h3><i class="material-icons">warning</i> Pallet {{ rp.pallet }} đã được scan</h3>
+    <p class="fgc-rescan-sub">
+      Shipment <b>{{ rp.shipment }}</b> · {{ rp.rows.length }} mã · {{ rp.carton }} thùng · {{ rp.quantity | number }} pcs
+      <span *ngIf="rp.locked" class="fgc-rescan-lock">{{ rp.locked }} dòng đã Lock (đang ẩn)</span>
+    </p>
+    <div class="fgc-rescan-table">
+      <table>
+        <thead><tr><th>Mã TP</th><th>Mã hàng</th><th>Thùng</th><th>Pcs</th><th></th></tr></thead>
+        <tbody>
+          <tr *ngFor="let r of rp.rows">
+            <td>{{ r.materialCode }}</td>
+            <td>{{ r.customerCode || '—' }}</td>
+            <td>{{ r.carton }}</td>
+            <td>{{ r.quantity | number }}</td>
+            <td><i *ngIf="r.isLocked" class="material-icons" title="Đã Lock">lock</i></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="fgc-rescan-actions">
+      <button type="button" class="fgc-rescan-act is-danger" (click)="resolvePalletRescan('rescan')" [disabled]="palletRescanBusy">
+        <i class="material-icons">restart_alt</i>
+        <span><b>Scan lại</b><small>Xóa dữ liệu cũ của pallet, scan mới (ghi đè)</small></span>
+      </button>
+      <button type="button" class="fgc-rescan-act" (click)="resolvePalletRescan('continue')" [disabled]="palletRescanBusy">
+        <i class="material-icons">playlist_add</i>
+        <span><b>Scan tiếp</b><small>Giữ dữ liệu cũ, scan cộng thêm</small></span>
+      </button>
+      <button type="button" class="fgc-rescan-cancel" (click)="resolvePalletRescan('cancel')" [disabled]="palletRescanBusy">Hủy</button>
+    </div>
+  </div>
+</div>
+
 <!-- Popup xóa: quét mã quản lý (chỉ scan, không nhập tay) -->
 <div class="modal-overlay" 
      *ngIf="showDeleteConfirmPopup" 
@@ -521,6 +665,10 @@
         <i class="material-icons">local_shipping</i>
         <span>Tải Shipment Check (lịch sử quét pallet)</span>
       </button>
+      <button type="button" class="more-popup-item" (click)="openRefImageDialog()">
+        <i class="material-icons">photo_library</i>
+        <span>Hình ảnh tham khảo (theo Mã TP)</span>
+      </button>
       <button type="button" class="more-popup-item" (click)="loadItemsFromFirebase(); closeMorePopup()">
         <i class="material-icons">refresh</i>
         <span>Refresh</span>
@@ -542,6 +690,48 @@
         <span>Debug Shipment Data</span>
       </button>
     </div>
+  </div>
+</div>
+
+
+<!-- Hình ảnh tham khảo theo Mã TP (More → Hình ảnh) -->
+<div class="modal-overlay" *ngIf="showRefImageDialog" (click)="closeRefImageDialog()">
+  <div class="modal-container fgc-img-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 class="modal-title" style="margin: 0;"><i class="material-icons">photo_library</i> Hình ảnh tham khảo</h3>
+      <button class="close-btn" (click)="closeRefImageDialog()"><i class="material-icons">close</i></button>
+    </div>
+    <ng-container *ngIf="!refImageViewer; else imgViewer">
+      <div class="fgc-img-bar">
+        <div class="fgc-img-search"><i class="material-icons">search</i>
+          <input type="text" placeholder="Lọc theo Mã TP..." [(ngModel)]="refImageFilter" style="text-transform: uppercase;">
+        </div>
+        <input type="text" class="fgc-img-code" placeholder="Mã TP (nếu chỉ chọn 1 hình)" [(ngModel)]="refImageCodeInput" style="text-transform: uppercase;">
+        <label class="fgc-tb-btn fgc-img-upload">
+          <i class="material-icons">add_photo_alternate</i> Thêm hình
+          <input type="file" accept="image/*" multiple hidden (change)="onRefImagesPicked($event)">
+        </label>
+      </div>
+      <p class="fgc-img-hint">Tên file = Mã TP (vd <b>P002123_K003.jpg</b>) — có thể chọn nhiều hình cùng lúc. Hình trùng mã sẽ được ghi đè.</p>
+      <p class="fgc-img-busy" *ngIf="refImageBusy">{{ refImageBusy }}</p>
+      <p class="fgc-card__empty" *ngIf="refImagesLoading">Đang tải danh sách hình…</p>
+      <p class="fgc-card__empty" *ngIf="!refImagesLoading && !filteredRefImages.length">Chưa có hình nào{{ refImageFilter ? ' khớp bộ lọc' : '' }}.</p>
+      <div class="fgc-img-grid" *ngIf="filteredRefImages.length">
+        <figure class="fgc-img-tile" *ngFor="let img of filteredRefImages; trackBy: trackByCode">
+          <img [src]="img.url" [alt]="img.code" loading="lazy" (click)="refImageViewer = img">
+          <figcaption><span>{{ img.code }}</span>
+            <button type="button" title="Xóa hình" (click)="deleteRefImage(img)"><i class="material-icons">delete_outline</i></button>
+          </figcaption>
+        </figure>
+      </div>
+    </ng-container>
+    <ng-template #imgViewer>
+      <div class="fgc-img-view">
+        <button type="button" class="fgc-tb-btn" (click)="backToRefList()"><i class="material-icons">arrow_back</i> Danh sách</button>
+        <strong>{{ refImageViewer?.code }}</strong>
+        <img [src]="refImageViewer?.url" [alt]="refImageViewer?.code">
+      </div>
+    </ng-template>
   </div>
 </div>
 

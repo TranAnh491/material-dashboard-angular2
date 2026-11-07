@@ -113,7 +113,7 @@ export class AuditService {
     sustain: {
       title: 'Sustain Phase',
       titleVi: 'Giai đoạn duy trì',
-      color: 'rgb(168, 85, 247)',
+      color: 'rgba(52, 120, 246)',
       items: [
         { text: 'Awareness of operators/employees about 5S Sustain Phase', textVi: 'Nhận thức của nhân viên về giai đoạn Duy trì 5S' },
         { text: 'Presence of Defined work instruction on 5S Sustain Phase implementation', textVi: 'Có hướng dẫn làm việc xác định cho việc thực hiện giai đoạn Duy trì 5S' },

@@ -28,6 +28,17 @@ export class FilteredRoutesService {
     );
   }
 
+  /** Hàm kiểm tra 1 đường dẫn tab có được mở không (cùng quy tắc với sidebar) — cho trang Menu ẩn thẻ không có quyền. */
+  getPathAccessChecker(): Observable<(path: string) => boolean> {
+    return combineLatest([
+      this.tabPermissionService.getCurrentUserTabPermissions(),
+      this.rolePermissionService.getCurrentUserRole()
+    ]).pipe(
+      map(([permissions, userRole]) => (path: string) =>
+        this.hasAccessToRoute({ path } as RouteInfo, permissions || {}, userRole))
+    );
+  }
+
   // Lọc routes dựa trên permissions và vai trò
   private filterRoutesByPermissions(routes: RouteInfo[], permissions: { [key: string]: boolean }, userRole: string | null): RouteInfo[] {
     return routes.filter(route => {

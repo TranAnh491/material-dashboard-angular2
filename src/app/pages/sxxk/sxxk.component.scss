@@ -17,7 +17,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 6px;
   margin-bottom: 8px;
   box-shadow: 0 1px 4px rgba(0,0,0,.08);
@@ -59,7 +59,7 @@
 .sel {
   height: 30px;
   padding: 0 6px;
-  border: 1px solid #ccc;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 13px;
   background: #fafafa;
@@ -69,7 +69,7 @@
 .search-input {
   height: 30px;
   padding: 0 8px;
-  border: 1px solid #ccc;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 13px;
   min-width: 180px;
@@ -98,9 +98,9 @@
 .btn-import:hover  { background: #1565c0; }
 .btn-export  { background: #388e3c; color: #fff; }
 .btn-export:hover  { background: #2e7d32; }
-.btn-tpl     { background: #f0f0f0; color: #333; border: 1px solid #ccc; }
+.btn-tpl     { background: #f0f0f0; color: #333; border: 1px solid #6B6B66; }
 .btn-tpl:hover { background: #e0e0e0; }
-.btn-multi   { background: #5e35b1; color: #fff; cursor: pointer; }
+.btn-multi   { background: #2057B5; color: #fff; cursor: pointer; }
 .btn-multi:hover { background: #4527a0; }
 .btn-read    { background: #00897b; color: #fff; }
 .btn-read:hover { background: #00695c; }
@@ -144,7 +144,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 8px;
@@ -157,7 +157,7 @@
   gap: 4px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   background: #fafafa;
   color: #555;
@@ -212,7 +212,7 @@
   width: 100%;
   white-space: nowrap;
   font-size: 12px;
-  background: #fff;
+  background: #FFFFFF;
 
   th, td {
     border: 1px solid #c8c8c8;
@@ -248,7 +248,7 @@
 .g-nk        { background: #2e7d32; }
 .g-pn        { background: #00838f; }
 .g-px        { background: #e65100; }
-.g-tieu-huy  { background: #6a1b9a; }
+.g-tieu-huy  { background: #2057B5; }
 .g-ton-cuoi  { background: #37474f; }
 .g-bctk      { background: #880e4f; }
 .g-chenh     { background: #f9a825; }
@@ -260,14 +260,14 @@ thead .header-row {
   th.g-nk       { background: #c8e6c9; color: #1b5e20; }
   th.g-pn       { background: #b2ebf2; color: #006064; }
   th.g-px       { background: #ffe0b2; color: #bf360c; }
-  th.g-tieu-huy { background: #e1bee7; color: #4a148c; }
+  th.g-tieu-huy { background: #EAF2FF; color: #2057B5; }
   th.g-ton-cuoi { background: #cfd8dc; color: #263238; }
   th.g-bctk     { background: #fce4ec; color: #880e4f; }
 }
 
 /* kích thước cột */
 .col-stt  { min-width: 36px; text-align: center; color: #888; }
-.col-ma   { min-width: 110px; font-weight: 600; color: #1a237e; position: sticky; left: 0; background: #fff; z-index: 1; }
+.col-ma   { min-width: 110px; font-weight: 600; color: #1a237e; position: sticky; left: 0; background: #FFFFFF; z-index: 1; }
 .col-num  { min-width: 80px; text-align: right; }
 .col-action { min-width: 36px; text-align: center; }
 

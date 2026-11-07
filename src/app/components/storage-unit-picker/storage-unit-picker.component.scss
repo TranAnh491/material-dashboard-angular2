@@ -11,7 +11,7 @@
 
 .su-modal {
   width: min(780px, 100%);
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 14px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
   overflow: hidden;
@@ -23,7 +23,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 18px 20px 12px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #8F8F89;
 
   h3 {
     margin: 0;
@@ -122,9 +122,9 @@
 }
 
 .su-size-btn {
-  border: 2px solid #e2e8f0;
+  border: 2px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   padding: 10px 4px;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
@@ -161,7 +161,7 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 20px 18px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #8F8F89;
 }
 
 .su-btn {
@@ -174,8 +174,8 @@
 }
 
 .su-btn--ghost {
-  background: #fff;
-  border-color: #cbd5e1;
+  background: #FFFFFF;
+  border-color: #6B6B66;
   color: #334155;
 }
 

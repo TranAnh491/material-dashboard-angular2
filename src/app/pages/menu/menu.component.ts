@@ -1,9 +1,14 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, AfterViewInit, ElementRef, HostListener } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { DomTranslator } from '../../shared/dom-translator';
+import { LanguageService, AppLang } from '../../services/language.service';
+import { MENU_VI_EN } from './menu-i18n';
 import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { MobileDetectionService } from '../../services/mobile-detection.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { APP_TABS } from '../../routes/app-tabs';
+import { FilteredRoutesService } from '../../services/filtered-routes.service';
 
 @Component({
   selector: 'app-menu',
@@ -11,7 +16,14 @@ import { APP_TABS } from '../../routes/app-tabs';
   styleUrls: ['./menu.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class MenuComponent implements OnInit, OnDestroy {
+export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
+  lang: AppLang = 'vi';
+  private translator: DomTranslator | null = null;
+  private langSub?: Subscription;
+  private accessSub?: Subscription;
+  /** Quyền tab của tài khoản (Settings → quyền tab); null = đang đọc → chưa hiện thẻ nào. */
+  private canOpen: ((path: string) => boolean) | null = null;
+  private accessRev = 0;
   
   isMobile: boolean = false;
   searchTerm: string = '';
@@ -48,7 +60,7 @@ export class MenuComponent implements OnInit, OnDestroy {
   private readonly iconAccentByPath: Record<string, { bg: string; border: string; fg: string }> = {
     '/dashboard': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' },
     '/work-order-status': { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.18)', fg: '#ea580c' },
-    '/shipment': { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.18)', fg: '#7c3aed' },
+    '/shipment': { bg: 'rgba(52, 120, 246,0.10)', border: 'rgba(52, 120, 246,0.18)', fg: '#3478F6' },
     '/location': { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.18)', fg: '#e11d48' },
     '/rm1-delivery': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' }
   };
@@ -61,16 +73,41 @@ export class MenuComponent implements OnInit, OnDestroy {
     private authService: FirebaseAuthService,
     private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
-    private mobileDetection: MobileDetectionService
+    private mobileDetection: MobileDetectionService,
+    private languageService: LanguageService,
+    private host: ElementRef<HTMLElement>,
+    private filteredRoutes: FilteredRoutesService
   ) { }
 
   ngOnInit(): void {
     this.detectMobileDevice();
     this.buildTabViews();
     this.updateFiltered();
+    this.accessSub = this.filteredRoutes.getPathAccessChecker().subscribe((check) => {
+      this.canOpen = check;
+      this.accessRev += 1;
+      this.updateFiltered();
+    });
   }
 
-  ngOnDestroy(): void { }
+  ngAfterViewInit(): void {
+    this.translator = new DomTranslator(this.host.nativeElement, MENU_VI_EN);
+    this.langSub = this.languageService.lang$.subscribe(l => {
+      this.lang = l;
+      this.translator?.setLang(l);
+      this.cdr.markForCheck();
+    });
+  }
+
+  toggleLang(): void {
+    this.languageService.set(this.lang === 'vi' ? 'en' : 'vi');
+  }
+
+  ngOnDestroy(): void {
+    this.langSub?.unsubscribe();
+    this.accessSub?.unsubscribe();
+    this.translator?.destroy();
+  }
   
   @HostListener('window:resize', ['$event'])
   onResize(event: any): void {
@@ -88,6 +125,11 @@ export class MenuComponent implements OnInit, OnDestroy {
 
   private norm(s: unknown): string {
     return String(s ?? '').trim().toLowerCase();
+  }
+
+  /** Enter trong ô tìm → mở Tìm kiếm toàn app (tra tồn theo mã NVL, mở tab). */
+  openGlobalSearch(): void {
+    (window as any).openGlobalSearch?.(this.searchTerm.trim());
   }
 
   onSearchTermChange(value: string): void {
@@ -126,11 +168,19 @@ export class MenuComponent implements OnInit, OnDestroy {
 
   private updateFiltered(): void {
     const q = this.norm(this.searchTerm);
-    const key = `${this.isMobile ? 'm' : 'd'}|${q}`;
+    const key = `${this.isMobile ? 'm' : 'd'}|${q}|${this.accessRev}`;
     if (key === this.lastFilterKey) return;
     this.lastFilterKey = key;
 
-    const base = this.tabViews.filter(t => !this.isMobile || !this.isDesktopOnly(t.path));
+    // Trên điện thoại tab Quality đã dẫn thẳng tới màn quét Traceability → ẩn thẻ Traceability để khỏi trùng.
+    // Điện thoại: ẩn một số tab; Nhiệt độ + Quản lý thiết bị chuyển sang nhóm Admin.
+    const mobileHidden = ['/bag-history', '/scrap', '/xe-tai', '/tai-khoan', '/lich-lam-viec', '/qc-traceability'];
+    const mobileToAdmin = ['/nhiet-do', '/equipment-checklist'];
+    const base = this.tabViews
+      // Chỉ hiện thẻ tài khoản được cấp quyền (cùng quy tắc với sidebar / TabPermissionGuard)
+      .filter(t => !!this.canOpen && this.canOpen(t.path))
+      .filter(t => !this.isMobile || (!this.isDesktopOnly(t.path) && !mobileHidden.includes(t.path)))
+      .map(t => (this.isMobile && mobileToAdmin.includes(t.path) ? { ...t, category: 'Admin' } : t));
     const filtered = !q
       ? base
       : base.filter(t => this.norm(t.title).includes(q) || this.norm(t.path).includes(q) || this.norm(t.category).includes(q));

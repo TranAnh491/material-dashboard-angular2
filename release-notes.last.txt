@@ -1,5 +1,4 @@
-Quản lý thiết bị — Bỏ thanh bên, dùng thanh tab ngang; mở trang vào thẳng bảng kiểm tra; popup kiểm tra có nút Đạt / Không đạt lớn và nút "Tất cả Đạt"; lưu nhanh hơn.
-Quản lý thiết bị — Danh sách, Hạng mục, Nhân sự và Xóa thiết bị theo quyền Xóa trong Settings (bỏ mật khẩu chung).
-Training — Biểu mẫu đào tạo tự lưu bản nháp, tải lại trang không mất dữ liệu đang nhập.
-Bảo mật — Hệ thống không còn lưu mật khẩu; đặt lại mật khẩu dùng 6 số ngẫu nhiên, gửi về Zalo quản lý để chuyển cho nhân viên.
-Bảo mật — Chỉ quản trị viên được sửa mã nhân viên, quyền hạn và phân quyền tab.
+JIT: ẩn mã kho NVL_SX, NVL_KS khỏi sắp xếp giao
+JIT: mã chưa có Mã kho không chia lượt nhận được (chỉ Lần 1)
+JIT: thêm cột History — mã TP từng chia JIT, nút Apply / Unapply cho LSX
+JIT: giao diện điện thoại để kho tick Đã giao, ký nhận bằng quét QR người nhận

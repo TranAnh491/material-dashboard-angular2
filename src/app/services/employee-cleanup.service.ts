@@ -1,3 +1,4 @@
+import { appAlert } from '../shared/app-toast';
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Observable, forkJoin, of } from 'rxjs';
@@ -494,7 +495,7 @@ export class EmployeeCleanupService {
     if (!XLSX) {
       console.error('❌ XLSX library not found. Please include xlsx library.');
       console.log('Available window properties:', Object.keys(window).filter(key => key.toLowerCase().includes('xlsx')));
-      alert('❌ Không tìm thấy thư viện XLSX. Vui lòng thêm thư viện xlsx.');
+      appAlert('❌ Không tìm thấy thư viện XLSX. Vui lòng thêm thư viện xlsx.');
       return;
     }
     
@@ -527,7 +528,7 @@ export class EmployeeCleanupService {
       XLSX.writeFile(wb, filename);
       
       console.log('✅ Đã xuất báo cáo Excel:', filename);
-      alert(`✅ Đã tạo file Excel: ${filename}`);
+      appAlert(`✅ Đã tạo file Excel: ${filename}`);
       
     } catch (error) {
       console.error('❌ Lỗi khi tạo file Excel:', error);
@@ -573,11 +574,11 @@ export class EmployeeCleanupService {
       document.body.removeChild(link);
       
       console.log('✅ Đã tạo file CSV fallback');
-      alert('✅ Đã tạo file CSV (Excel không khả dụng)');
+      appAlert('✅ Đã tạo file CSV (Excel không khả dụng)');
       
     } catch (error) {
       console.error('❌ Lỗi khi tạo file CSV:', error);
-      alert('❌ Không thể tạo file báo cáo!');
+      appAlert('❌ Không thể tạo file báo cáo!');
     }
   }
 }

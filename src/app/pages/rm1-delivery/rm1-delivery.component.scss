@@ -14,7 +14,7 @@
 
 // --- Header ---
 .delivery-header {
-  background: #ffffff;
+  background: #FFFFFF;
   padding: 14px 16px;
   display: flex;
   justify-content: space-between;
@@ -22,7 +22,7 @@
   border-radius: 10px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   margin-bottom: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   gap: 12px;
 
   h2 {
@@ -100,9 +100,9 @@
     padding: 0 14px;
     height: 42px;
     min-width: 80px;
-    background: #ffffff;
+    background: #FFFFFF;
     color: #0f172a;
-    border: 1.5px solid #cbd5e1;
+    border: 1.5px solid #6B6B66;
     border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
@@ -112,7 +112,7 @@
     transition: background 0.15s, border-color 0.15s;
 
     .material-icons { font-size: 18px; }
-    &:hover, &:active { background: #f1f5f9; border-color: #94a3b8; }
+    &:hover, &:active { background: #6B6B66; border-color: #94a3b8; }
   }
 
   .search-input-wrap {
@@ -120,8 +120,8 @@
     min-width: 160px;
     display: flex;
     align-items: center;
-    background: #ffffff;
-    border: 1.5px solid #cbd5e1;
+    background: #FFFFFF;
+    border: 1.5px solid #6B6B66;
     border-radius: 8px;
     padding: 0 10px;
     height: 42px;
@@ -241,12 +241,12 @@
 
 // --- Scan section card ---
 .scan-section {
-  background: #ffffff;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 
   h3 {
     font-size: 14px;
@@ -277,7 +277,7 @@
       width: 100%;
       box-sizing: border-box;
       padding: 13px 14px;
-      border: 1.5px solid #cbd5e1;
+      border: 1.5px solid #6B6B66;
       border-radius: 8px;
       font-size: 15px;
       transition: border-color 0.2s;
@@ -335,7 +335,7 @@
     color: #64748b;
     background: #f8fafc;
     border-radius: 10px;
-    border: 1px dashed #cbd5e1;
+    border: 1px dashed #6B6B66;
 
     .material-icons {
       font-size: 40px;
@@ -367,7 +367,7 @@
       width: 100%;
       min-width: 420px; // Đủ để scroll ngang trên phone nhỏ
       border-collapse: collapse;
-      background: #ffffff;
+      background: #FFFFFF;
       border: 1px solid #000000;
       font-size: 13px;
 
@@ -388,7 +388,7 @@
         padding: 10px 10px;
         color: #000000;
         border: 1px solid #000000;
-        background: #ffffff;
+        background: #FFFFFF;
         word-break: break-word;
       }
 
@@ -441,9 +441,9 @@
 
   .reset-btn {
     width: 100%;
-    background: #ffffff;
+    background: #FFFFFF;
     color: #64748b;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #6B6B66;
     padding: 11px 20px;
     border-radius: 8px;
     cursor: pointer;
@@ -459,7 +459,7 @@
 
     &:hover, &:active {
       background: #f8fafc;
-      border-color: #cbd5e1;
+      border-color: #6B6B66;
       color: #475569;
     }
 
@@ -471,11 +471,11 @@
 // --- History section ---
 .history-section {
   margin-top: 20px;
-  background: #ffffff;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 
   h3 {
     font-size: 15px;
@@ -536,10 +536,10 @@
 }
 
 .record-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
   overflow: hidden;
-  background: #ffffff;
+  background: #FFFFFF;
 
   // Header: LSX + số thứ tự
   .record-header {
@@ -548,7 +548,7 @@
     justify-content: space-between;
     padding: 8px 12px;
     background: #f1f5f9;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
 
     .record-lsx {
       display: flex;
@@ -576,15 +576,15 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
 
     .info-box {
       padding: 8px 12px;
       display: flex;
       flex-direction: column;
       gap: 2px;
-      border-right: 1px solid #e2e8f0;
-      border-bottom: 1px solid #e2e8f0;
+      border-right: 1px solid #8F8F89;
+      border-bottom: 1px solid #8F8F89;
 
       &:nth-child(2n) { border-right: none; }
       &:nth-child(3), &:nth-child(4) { border-bottom: none; }
@@ -629,7 +629,7 @@
         font-weight: 700;
         color: #334155;
         text-align: left;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid #8F8F89;
         white-space: nowrap;
         font-size: 11px;
         text-transform: uppercase;
@@ -639,7 +639,7 @@
       tbody td {
         padding: 8px 10px;
         color: #1e293b;
-        border-bottom: 1px solid #f1f5f9;
+        border-bottom: 1px solid #8F8F89;
         font-size: 12px;
       }
 
@@ -676,7 +676,7 @@
       border-bottom: none;
 
       &:nth-child(3), &:nth-child(4) { border-bottom: none; }
-      &:nth-child(2) { border-right: 1px solid #e2e8f0; }
+      &:nth-child(2) { border-right: 1px solid #8F8F89; }
       &:nth-child(4) { border-right: none; }
     }
   }

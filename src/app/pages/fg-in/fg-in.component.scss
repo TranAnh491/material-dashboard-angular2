@@ -1,3 +1,4 @@
+@use '../../shared/styles/excel-theme' as xl;
 // FG In - Black & White Interface (Speed Optimized)
 :host {
   display: block;
@@ -12,7 +13,7 @@
   margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: #FFFFFF;
   position: absolute;
   top: 0;
   left: 0;
@@ -37,7 +38,7 @@
     position: sticky !important;
     top: 0 !important;
     z-index: 1000 !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
   }
   
   th, td {
@@ -54,7 +55,7 @@
   }
   
   th {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     font-weight: 600;
     font-size: 11px;
@@ -71,7 +72,7 @@
     text-align: center;
     
     &.row-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       color: #000000 !important;
       font-size: 11px;
       text-align: center;
@@ -103,14 +104,14 @@
   
   tbody tr {
     transition: none;
-    background-color: #ffffff;
+    background-color: #FFFFFF;
     
     &:nth-child(even) {
-      background-color: #ffffff;
+      background-color: #FFFFFF;
     }
     
     &:nth-child(odd) {
-      background-color: #ffffff;
+      background-color: #FFFFFF;
     }
     
     &:hover {
@@ -223,7 +224,7 @@
 
 // Excel-like container
 .excel-container {
-  background: #ffffff;
+  background: #FFFFFF;
   border: 1px solid #000000;
   border-radius: 0;
   overflow: hidden;
@@ -233,7 +234,7 @@
   margin: 0;
   
   .excel-header {
-    background: #ffffff;
+    background: #FFFFFF;
     border-bottom: 1px solid #000000;
     padding: 12px 16px;
     padding-right: 70px; // Space for home button
@@ -282,7 +283,7 @@
     }
     
     &::-webkit-scrollbar-track {
-      background: #ffffff;
+      background: #FFFFFF;
     }
     
     &::-webkit-scrollbar-thumb {
@@ -298,7 +299,7 @@
 
 // Excel-like action buttons - Minimal
 .excel-actions {
-  background: #ffffff;
+  background: #FFFFFF;
   border-bottom: 1px solid #000000;
   
   .action-controls {
@@ -315,7 +316,7 @@
     height: 32px !important;
     padding: 6px 12px !important;
     border: 1px solid #000000 !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     font-weight: 500 !important;
     font-size: 12px !important;
@@ -364,7 +365,7 @@
     height: 32px !important;
     padding: 6px 8px !important;
     border: 1px solid #000000 !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     font-size: 12px !important;
     border-radius: 0 !important;
@@ -378,7 +379,7 @@
     &:focus {
       outline: none !important;
       border-color: #000000 !important;
-      background: #ffffff !important;
+      background: #FFFFFF !important;
     }
     
     &.search-input-uppercase {
@@ -456,7 +457,7 @@
     list-style: none;
     border: 1px solid #000000;
     border-top: none;
-    background: #ffffff;
+    background: #FFFFFF;
     max-height: 220px;
     overflow-y: auto;
     z-index: 1100;
@@ -465,7 +466,7 @@
     li {
       padding: 8px 12px;
       cursor: pointer;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid #8F8F89;
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -513,11 +514,11 @@ mat-checkbox {
     border-color: #000000 !important;
     border-width: 1px !important;
     border-radius: 0 !important;
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
   }
   
   ::ng-deep .mat-checkbox:not(.mat-checkbox-checked) .mat-checkbox-frame {
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
     border-color: #000000 !important;
   }
   
@@ -569,7 +570,7 @@ mat-checkbox {
   
   &:focus {
     outline: none;
-    background: #ffffff;
+    background: #FFFFFF;
     border: 1px solid #000000;
   }
 }
@@ -693,7 +694,7 @@ mat-checkbox {
   .modal-container {
     position: relative;
     z-index: 1;
-    background: #ffffff;
+    background: #FFFFFF;
     border: 1px solid #000000;
     border-radius: 0;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
@@ -709,7 +710,7 @@ mat-checkbox {
     }
     
     .modal-header {
-      background: #ffffff;
+      background: #FFFFFF;
       color: #000000;
       border-bottom: 1px solid #000000;
       padding: 16px 20px;
@@ -753,7 +754,7 @@ mat-checkbox {
     
     .modal-body {
       padding: 20px;
-      background: #ffffff;
+      background: #FFFFFF;
       color: #000000;
       
       .date-inputs {
@@ -778,12 +779,12 @@ mat-checkbox {
             border-radius: 0;
             font-size: 12px;
             transition: none;
-            background: #ffffff;
+            background: #FFFFFF;
             
             &:focus {
               outline: none;
               border-color: #000000;
-              background: #ffffff;
+              background: #FFFFFF;
             }
             
             &:hover {
@@ -796,7 +797,7 @@ mat-checkbox {
     
     .modal-footer {
       padding: 16px 20px;
-      background: #ffffff;
+      background: #FFFFFF;
       border-top: 1px solid #000000;
       display: flex;
       justify-content: flex-end;
@@ -819,7 +820,7 @@ mat-checkbox {
         }
         
         &.btn-cancel {
-          background: #ffffff;
+          background: #FFFFFF;
           color: #000000;
           
           &:hover {
@@ -911,8 +912,8 @@ mat-checkbox {
     align-items: flex-start;
     gap: 12px;
     padding: 12px 14px;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 
@@ -968,8 +969,8 @@ mat-checkbox {
     gap: 12px;
     margin-bottom: 14px;
     padding: 12px 14px;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
   }
 
@@ -994,9 +995,9 @@ mat-checkbox {
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
-    background: #fff;
+    background: #FFFFFF;
     color: #334155;
     font-size: 12px;
     font-weight: 600;
@@ -1054,7 +1055,7 @@ mat-checkbox {
     padding: 0 12px;
     height: 38px;
     background: #f8fafc;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
 
     .material-icons {
@@ -1079,8 +1080,8 @@ mat-checkbox {
   .catalog-add-card {
     margin-bottom: 14px;
     padding: 14px 16px;
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     border-left: 4px solid #2563eb;
   }
@@ -1129,11 +1130,11 @@ mat-checkbox {
   .catalog-field-input {
     height: 38px;
     padding: 0 10px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
     font-size: 13px;
     color: #0f172a;
-    background: #fff;
+    background: #FFFFFF;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
     &:focus {
@@ -1170,8 +1171,8 @@ mat-checkbox {
   }
 
   .catalog-table-panel {
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     overflow: hidden;
   }
@@ -1183,7 +1184,7 @@ mat-checkbox {
     justify-content: space-between;
     gap: 8px;
     padding: 12px 14px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
     background: #f8fafc;
   }
 
@@ -1228,7 +1229,7 @@ mat-checkbox {
     }
 
     tbody tr {
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid #8F8F89;
       transition: background 0.12s ease;
 
       &:nth-child(even):not(.catalog-empty-row) {
@@ -1292,14 +1293,14 @@ mat-checkbox {
     transition: all 0.15s ease;
 
     &:hover {
-      border-color: #cbd5e1;
-      background: #fff;
+      border-color: #6B6B66;
+      background: #FFFFFF;
     }
 
     &:focus {
       outline: none;
       border-color: #2563eb;
-      background: #fff;
+      background: #FFFFFF;
       box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
     }
   }
@@ -1360,8 +1361,8 @@ mat-checkbox {
     justify-content: space-between;
     gap: 12px;
     padding: 12px 20px;
-    background: #fff;
-    border-top: 1px solid #e2e8f0;
+    background: #FFFFFF;
+    border-top: 1px solid #8F8F89;
   }
 
   .catalog-footer-count {
@@ -1410,7 +1411,7 @@ mat-checkbox {
     .help-section {
       margin-bottom: 20px;
       padding-bottom: 16px;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid #8F8F89;
       
       &:last-child {
         margin-bottom: 0;
@@ -1571,7 +1572,7 @@ mat-checkbox {
       gap: 10px;
       padding: 10px 12px;
       background: #f5f5f5;
-      border: 2px solid #e0e0e0;
+      border: 2px solid #6B6B66;
       cursor: pointer;
       transition: all 0.15s ease;
       
@@ -1704,7 +1705,7 @@ mat-checkbox {
           }
 
           &.editable {
-            background: #ffffff;
+            background: #FFFFFF;
             padding: 8px 12px;
             border-radius: 6px;
             border: 1px solid #ff9800;
@@ -1789,7 +1790,7 @@ mat-checkbox {
         padding: 8px 10px;
         border: 1px solid #ffcc80;
         border-radius: 8px;
-        background: #fff;
+        background: #FFFFFF;
         cursor: pointer;
 
         &.active {
@@ -1921,7 +1922,7 @@ mat-checkbox {
     .pallet-qr-section {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid #8F8F89;
 
       &__head {
         display: flex;
@@ -1944,7 +1945,7 @@ mat-checkbox {
         align-items: center;
         gap: 8px;
         padding: 4px 8px;
-        background: #ffffff;
+        background: #FFFFFF;
         border: 2px solid #2196f3;
         border-radius: 6px;
         margin-bottom: 10px;
@@ -2046,7 +2047,7 @@ mat-checkbox {
     .location-section {
       margin-top: 16px;
       padding-top: 16px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid #8F8F89;
 
       .location-section__head {
         display: flex;
@@ -2152,7 +2153,7 @@ mat-checkbox {
         align-items: center;
         gap: 8px;
         padding: 4px 8px;
-        background: #ffffff;
+        background: #FFFFFF;
         border: 2px solid #2196f3;
         border-radius: 6px;
         margin-bottom: 10px;
@@ -2334,8 +2335,8 @@ mat-checkbox {
   .modal-footer {
     position: sticky;
     bottom: 0;
-    background: #ffffff;
-    border-top: 1px solid #e0e0e0;
+    background: #FFFFFF;
+    border-top: 1px solid #8F8F89;
     padding: 12px 20px;
     flex-shrink: 0;
     z-index: 10;
@@ -2454,7 +2455,7 @@ mat-checkbox {
   padding: 40px 16px;
 
   .mobile-factory-modal-content {
-    background: #ffffff;
+    background: #FFFFFF;
     border: 1px solid #000000;
     padding: 16px 20px;
     min-width: 220px;
@@ -2474,7 +2475,7 @@ mat-checkbox {
 
       button {
         border: 1px solid #000000;
-        background: #ffffff;
+        background: #FFFFFF;
         color: #000000;
         font-size: 14px;
         padding: 6px 14px;
@@ -2558,7 +2559,7 @@ mat-checkbox {
 
       .factory-chip {
         border: 1px solid #000;
-        background: #fff;
+        background: #FFFFFF;
         color: #000;
         font-size: 11px;
         padding: 4px 8px;
@@ -2583,7 +2584,7 @@ mat-checkbox {
   }
   
   .pending-card {
-    background: #ffffff;
+    background: #FFFFFF;
     border: 2px solid #000000;
     padding: 16px;
     cursor: pointer;
@@ -3628,7 +3629,7 @@ mat-checkbox {
   }
   
   .custom-btn:hover {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
   }
   
   .custom-btn:active {
@@ -3645,7 +3646,7 @@ mat-checkbox {
   
   .confirm-field:hover {
     background: #f5f5f5;
-    border-color: #e0e0e0;
+    border-color: #6B6B66;
   }
   
   .confirm-field:active {
@@ -3949,9 +3950,9 @@ mat-checkbox {
     align-items: center;
     gap: 8px;
     padding: 20px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid #6B6B66;
     border-radius: 12px;
-    background: #fff;
+    background: #FFFFFF;
     cursor: pointer;
     transition: all 0.2s ease;
     
@@ -3987,7 +3988,7 @@ mat-checkbox {
 }
 
 .import-help-section {
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid #8F8F89;
   padding-top: 16px;
   
   .help-toggle-btn {
@@ -3995,7 +3996,7 @@ mat-checkbox {
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
     background: #f5f5f5;
     cursor: pointer;
@@ -4024,7 +4025,7 @@ mat-checkbox {
     padding: 16px;
     background: #f9f9f9;
     border-radius: 8px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     
     .help-title {
       display: flex;
@@ -4068,7 +4069,7 @@ mat-checkbox {
       font-size: 12px;
       color: #555;
       padding: 8px 12px;
-      background: #fff;
+      background: #FFFFFF;
       border-radius: 6px;
       margin-bottom: 8px;
       
@@ -4124,7 +4125,7 @@ body.fg-in-mobile-tab {
 }
 
 .modal-content {
-  background: #fff;
+  background: #FFFFFF;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
@@ -4138,7 +4139,7 @@ body.fg-in-mobile-tab {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
 
     h3 {
       margin: 0;
@@ -4181,7 +4182,7 @@ body.fg-in-mobile-tab {
   .factory-btn {
     padding: 12px 14px;
     border: 1px solid #333;
-    background: #fff;
+    background: #FFFFFF;
     color: #333;
     font-size: 14px;
     font-weight: 600;
@@ -4216,7 +4217,7 @@ body.fg-in-mobile-tab {
   justify-content: space-between;
   padding: 10px 12px 8px;
   padding-top: max(10px, env(safe-area-inset-top, 0px));
-  background: #fff;
+  background: #FFFFFF;
   border-bottom: 1px solid #e5e5ea;
   flex-shrink: 0;
   position: sticky;
@@ -4302,10 +4303,10 @@ body.fg-in-mobile-tab {
     width: 100%;
     padding: 10px 12px;
     padding-right: 36px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     border-radius: 10px;
     font-size: 14px;
-    background: #fff;
+    background: #FFFFFF;
 
     &:focus {
       outline: none;
@@ -4361,7 +4362,7 @@ body.fg-in-mobile-tab {
   padding: 0 10px;
   border: 2px solid #ffb74d;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   color: #e65100;
   font-size: 14px;
   font-weight: 800;
@@ -4388,7 +4389,7 @@ body.fg-in-mobile-tab {
 
 .fg-m-card {
   position: relative;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 14px;
   padding-right: 42px;
@@ -4488,7 +4489,7 @@ body.fg-in-mobile-tab {
   gap: 6px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #8F8F89;
   font-size: 12px;
   font-weight: 600;
   color: #1976d2;
@@ -4521,7 +4522,7 @@ body.fg-in-mobile-tab {
 .fg-m-bottomnav {
   display: flex;
   flex-shrink: 0;
-  background: #fff;
+  background: #FFFFFF;
   border-top: 1px solid #e5e5ea;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
@@ -4984,8 +4985,8 @@ body.fg-in-mobile-tab {
         flex-direction: row;
         flex-shrink: 0;
         z-index: 5;
-        background: #fff;
-        border-top: 1px solid #e0e0e0;
+        background: #FFFFFF;
+        border-top: 1px solid #8F8F89;
         gap: 10px;
         flex-shrink: 0;
 
@@ -5015,3 +5016,8 @@ body.fg-in-mobile-tab {
     z-index: 2100;
   }
 }
+/* Mobile: tên khách trên thẻ */
+.fg-m-card__meta--cust { color: #1d4ed8; strong { font-weight: 800; } }
+
+/* Giao diện kiểu Excel đồng bộ với Quản lý NVL / Outbound (05/11/2026) */
+:host .main-content:not(.fg-m-page) { @include xl.excel-theme; }

@@ -1,3 +1,0 @@
-Quản lý Nguyên Liệu — Tách thành trang riêng, không còn dùng chung với RM Inventory; RM Inventory mở nhẹ hơn.
-Sidebar — Hiện mục J Warehouse và Quản lý thiết bị cho tài khoản đã được cấp quyền.
-Dashboard trên điện thoại — Ẩn các module chỉ dùng trên máy tính, giống trang Menu.

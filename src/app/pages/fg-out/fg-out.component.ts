@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener, NgZone, inject } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, forkJoin, firstValueFrom, Subscription } from 'rxjs';
@@ -1210,9 +1211,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
               this.materials.splice(index, 1);
               this.applyFilters();
             }
-            alert('⚠️ Dòng này đã bị xóa trước đó. Đã tự động làm mới danh sách.');
+            appAlert('⚠️ Dòng này đã bị xóa trước đó. Đã tự động làm mới danh sách.');
           } else {
-            alert('❌ Không lưu được thay đổi lên Firebase. Vui lòng thử lại.');
+            appAlert('❌ Không lưu được thay đổi lên Firebase. Vui lòng thử lại.');
           }
         });
     } else {
@@ -1238,7 +1239,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error creating FG Out material in Firebase:', error);
-          alert('❌ Không lưu được dòng mới lên Firebase. Vui lòng thử lại.');
+          appAlert('❌ Không lưu được dòng mới lên Firebase. Vui lòng thử lại.');
         });
     }
   }
@@ -1487,7 +1488,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (material.approved) return;
     const shipment = String(material.shipment || '').trim();
     if (!shipment) {
-      alert('Vui lòng nhập/ chọn Shipment trước khi chọn Mã TP.');
+      appAlert('Vui lòng nhập/ chọn Shipment trước khi chọn Mã TP.');
       return;
     }
 
@@ -1807,6 +1808,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Delete material
   deleteMaterial(material: FgOutItem): void {
+    // Dòng đã duyệt đã trừ tồn TP → phải bỏ duyệt (trả lại tồn) rồi mới xóa, tránh lệch tồn.
+    if ((material as any).approved) {
+      appAlert('Dòng này đã duyệt (đã trừ tồn TP).\nBỏ tick Duyệt trước để trả lại tồn, rồi mới xóa.');
+      return;
+    }
+    if (material.id && !confirm(`Xóa dòng FG Out ${(material as any).materialCode || ''}${(material as any).batchNumber ? ' · batch ' + (material as any).batchNumber : ''}?`)) {
+      return;
+    }
     const removeLocally = () => {
       const index = this.materials.indexOf(material);
       if (index > -1) {
@@ -1827,7 +1836,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error deleting FG Out material from Firebase:', error);
-          alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại hoặc kiểm tra quyền xóa.');
+          appAlert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại hoặc kiểm tra quyền xóa.');
         });
     } else {
       // Chưa có id (chưa từng lưu lên Firebase) — chỉ cần bỏ khỏi bảng.
@@ -2055,7 +2064,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.lastEmptySearchAlert = sig;
 
     if (kind === 'lot') {
-      alert(
+      appAlert(
         `Không tìm thấy lô «${t}».\n\n` +
           `Kiểm tra lại mã lô (có cả phần trong ngoặc nếu có), ví dụ: 5492(4).\n` +
           `Hoặc mở «Lọc theo thời gian» rồi tìm lại.`
@@ -2063,10 +2072,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return;
     }
     if (kind === 'maTp') {
-      alert(`Không tìm thấy phiếu xuất cho mã TP «${t}».`);
+      appAlert(`Không tìm thấy phiếu xuất cho mã TP «${t}».`);
       return;
     }
-    alert(
+    appAlert(
       `Không tìm thấy kết quả cho «${t}».\n\n` +
         `Nếu đang tìm lô, hãy gõ đúng mã (vd: 5492(4)).`
     );
@@ -2360,7 +2369,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   searchHistory(): void {
     const code = (this.historyMaterialCode || '').trim().toUpperCase();
     if (!code) {
-      alert('Vui lòng nhập Mã TP');
+      appAlert('Vui lòng nhập Mã TP');
       return;
     }
     this.historyLoading = true;
@@ -2405,7 +2414,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
     }).catch(err => {
       console.error('History search error:', err);
-      alert('Lỗi tìm kiếm lịch sử: ' + (err?.message || err));
+      appAlert('Lỗi tìm kiếm lịch sử: ' + (err?.message || err));
     }).finally(() => {
       this.historyLoading = false;
     });
@@ -2591,7 +2600,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     event.preventDefault();
     const trimmed = (this.searchTerm || '').trim().toUpperCase();
     if (trimmed.length < 4) {
-      alert('Nhập ít nhất 4 ký tự để tìm (Shipment / Mã TP / Lô).');
+      appAlert('Nhập ít nhất 4 ký tự để tìm (Shipment / Mã TP / Lô).');
       return;
     }
     this.lastEmptySearchAlert = '';
@@ -2703,7 +2712,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.pklStep = 2;
     } catch (err) {
       console.error(err);
-      alert('Lỗi đọc file: ' + (err as Error).message);
+      appAlert('Lỗi đọc file: ' + (err as Error).message);
     }
   }
 
@@ -2751,7 +2760,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.pklBuildMappingDisplay(mapping);
     this.pklParsedItems = this.pklParseDataWithMapping(mapping);
     if (this.pklParsedItems.length === 0) {
-      alert('Không tìm thấy dữ liệu. Hãy kiểm tra lại dòng bắt đầu (header) ở Bước 2.\n\nGợi ý: Chọn đúng dòng chứa tên cột như "PART NO.", "Quantity", "ASP VN PN"...');
+      appAlert('Không tìm thấy dữ liệu. Hãy kiểm tra lại dòng bắt đầu (header) ở Bước 2.\n\nGợi ý: Chọn đúng dòng chứa tên cột như "PART NO.", "Quantity", "ASP VN PN"...');
     }
     this.pklStep = 3;
   }
@@ -2763,7 +2772,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.materials = [...this.materials, ...materials];
     this.applyFilters();
     this.saveMaterialsToFirebase(materials);
-    alert(`Đã import ${materials.length} dòng từ Packing List`);
+    appAlert(`Đã import ${materials.length} dòng từ Packing List`);
     this.closePKLImportModal();
   }
 
@@ -3013,11 +3022,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
       // Save to Firebase
       this.saveMaterialsToFirebase(materials);
       
-      alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
+      appAlert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -3201,7 +3210,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.xtpPreviewData = this.parseXTPData(data);
     } catch (error) {
       console.error('Error processing XTP file:', error);
-      alert(`❌ Lỗi khi đọc file XTP: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi đọc file XTP: ${error.message || error}`);
     }
   }
 
@@ -3268,7 +3277,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   importXTPData(): void {
     if (!this.canImportXTP()) {
-      alert('❌ Vui lòng nhập đầy đủ thông tin và chọn file XTP');
+      appAlert('❌ Vui lòng nhập đầy đủ thông tin và chọn file XTP');
       return;
     }
 
@@ -3320,7 +3329,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xtpPreviewData = [];
     this.showXTPDialog = false;
 
-    alert(`✅ Đã import thành công ${newMaterials.length} items từ phiếu XTP!`);
+    appAlert(`✅ Đã import thành công ${newMaterials.length} items từ phiếu XTP!`);
   }
 
   // Load available shipments for filter (từ dữ liệu đã load — không query full collection)
@@ -3375,7 +3384,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
 
       this.removeFromExportCollection(material);
-      alert('Cần refresh tồn kho ở FG Inventory');
+      appAlert('Cần refresh tồn kho ở FG Inventory');
 
       // Reset approvedAt để UI hiển thị đúng “ngày tick duyệt”
       material.approvedAt = undefined;
@@ -3452,7 +3461,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
     const processDocs = (matchingDocs: any[]) => {
       if (matchingDocs.length === 0) {
-        alert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
+        appAlert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
         return;
       }
 
@@ -3465,7 +3474,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
 
       if (totalAvailable < material.quantity) {
-        alert(`⚠️ Cảnh báo: Không đủ tồn kho!\nCó: ${totalAvailable}\nCần: ${material.quantity}`);
+        appAlert(`⚠️ Cảnh báo: Không đủ tồn kho!\nCó: ${totalAvailable}\nCần: ${material.quantity}`);
         return;
       }
 
@@ -3607,7 +3616,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error('❌ Error adding export record:', error);
-        alert(`❌ Lỗi khi lưu bản ghi xuất: ${error.message}`);
+        appAlert(`❌ Lỗi khi lưu bản ghi xuất: ${error.message}`);
       });
   }
 
@@ -3776,7 +3785,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Print selected shipment
   printSelectedShipment(): void {
     if (!this.selectedShipment) {
-      alert('Vui lòng chọn Shipment để in!');
+      appAlert('Vui lòng chọn Shipment để in!');
       return;
     }
     
@@ -3791,7 +3800,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const shipments = [...new Set(this.filteredMaterials.map(m => m.shipment).filter(s => s && s.trim()))];
     
     if (shipments.length === 0) {
-      alert('Không có shipment nào để in. Vui lòng tìm kiếm hoặc xem tất cả dữ liệu trước.');
+      appAlert('Không có shipment nào để in. Vui lòng tìm kiếm hoặc xem tất cả dữ liệu trước.');
       return;
     }
     
@@ -3808,7 +3817,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         this.selectedShipment = selected.trim();
         this.preparePrintData();
       } else if (selected) {
-        alert('Shipment không hợp lệ!');
+        appAlert('Shipment không hợp lệ!');
       }
     }
   }
@@ -4011,7 +4020,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const e = new Date(this.fgReportEndDate);
     e.setHours(23, 59, 59, 999);
     if (e < s) {
-      alert('Ngày kết thúc phải sau ngày bắt đầu.');
+      appAlert('Ngày kết thúc phải sau ngày bắt đầu.');
       return;
     }
     this.fgReportDownloading = true;
@@ -4024,7 +4033,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         .get()
         .toPromise();
       if (!snap || snap.empty) {
-        alert('Không có dữ liệu FG-OUT trong khoảng thời gian đã chọn.');
+        appAlert('Không có dữ liệu FG-OUT trong khoảng thời gian đã chọn.');
         return;
       }
       const rows: object[] = [];
@@ -4065,7 +4074,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const pad = (n: number) => String(n).padStart(2, '0');
       const fn = `FG_OUT_Report_${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}_${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}.xlsx`;
       XLSX.writeFile(wb, fn);
-      alert(`Đã tải ${rows.length} dòng FG-OUT Report.`);
+      appAlert(`Đã tải ${rows.length} dòng FG-OUT Report.`);
       this.closeFgOutReportDialog();
     } catch (err: any) {
       console.error('downloadFgOutReportExcel', err);
@@ -4073,7 +4082,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         err?.code === 'failed-precondition'
           ? 'Cần index Firestore cho fg-out (exportDate). Mở link trong Console.'
           : err?.message || 'Lỗi không xác định';
-      alert('Không tải được report: ' + msg);
+      appAlert('Không tải được report: ' + msg);
     } finally {
       this.fgReportDownloading = false;
       this.cdr.markForCheck();
@@ -4537,13 +4546,13 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Load danh sách hàng: lọc shipment từ tab Shipment + phân bổ FIFO từ FG Inventory
   loadInventoryForShipment(): void {
     if (!this.xuatKhoSelectedShipment) {
-      alert('⚠️ Vui lòng chọn shipment');
+      appAlert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
     const shipmentCode = this.xuatKhoSelectedShipment.trim();
     if (!shipmentCode) {
-      alert('⚠️ Vui lòng chọn shipment');
+      appAlert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
@@ -4568,7 +4577,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       const materialCodesNeeded = Array.from(demandByMaterial.keys());
       if (materialCodesNeeded.length === 0) {
-        alert('❌ Không tìm thấy dòng nào của shipment "' + shipmentCode + '" trong tab Shipment. Kiểm tra lại mã shipment.');
+        appAlert('❌ Không tìm thấy dòng nào của shipment "' + shipmentCode + '" trong tab Shipment. Kiểm tra lại mã shipment.');
         return;
       }
 
@@ -4707,7 +4716,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
           this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
         } else {
-          alert('❌ Không tìm thấy dòng hàng nào của shipment này.');
+          appAlert('❌ Không tìm thấy dòng hàng nào của shipment này.');
         }
       });
     });
@@ -4724,14 +4733,14 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const selectedItems = this.xuatKhoPreviewItems.filter(item => item.selected);
     
     if (selectedItems.length === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất một item để xuất kho');
+      appAlert('⚠️ Vui lòng chọn ít nhất một item để xuất kho');
       return;
     }
 
     // Kiểm tra số lượng xuất không vượt quá tồn (chỉ với dòng có inventoryId từ kho)
     const hasError = selectedItems.some(item => item.inventoryId && item.quantity > item.availableStock);
     if (hasError) {
-      alert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
+      appAlert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
       return;
     }
 
@@ -4801,7 +4810,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
         // Khi đã lưu hết
         if (savedCount === selectedItems.length) {
-          alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
+          appAlert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
           this.closeXuatKhoDialog();
           this.loadMaterialsFromFirebase();
           const exportedKeys = new Set(
@@ -4818,7 +4827,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }
       }).catch(error => {
         console.error('❌ Error creating FG Out record:', error);
-        alert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
+        appAlert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
       });
     });
   }

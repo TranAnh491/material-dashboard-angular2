@@ -7,6 +7,7 @@ import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 import { QRScannerModalComponent } from '../../components/qr-scanner-modal/qr-scanner-modal.component';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { LanguageService } from '../../services/language.service';
 
 @Component({
   selector: 'app-login',
@@ -59,7 +60,8 @@ export class LoginComponent implements OnInit {
     private snackBar: MatSnackBar,
     private router: Router,
     private fns: AngularFireFunctions,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private languageService: LanguageService
   ) {
     /** Đăng nhập: ASP + 4 số (ASP9999 cho xe tải) hoặc XETAI. */
     this.loginForm = this.fb.group({
@@ -501,5 +503,6 @@ export class LoginComponent implements OnInit {
     this.currentLanguage = lang;
     // Lưu ngôn ngữ vào localStorage để duy trì khi refresh
     localStorage.setItem('preferredLanguage', lang);
+    this.languageService.set(lang);
   }
 } 

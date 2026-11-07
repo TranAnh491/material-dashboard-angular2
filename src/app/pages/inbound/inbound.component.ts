@@ -1,4 +1,11 @@
+import { appAlert } from '../../shared/app-toast';
+import { inject } from '@angular/core';
+import { RolePermissionService } from '../../services/role-permission.service';
 import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, fmtRmQty, RM_QTY_DECIMALS_4 } from '../../services/rm-scan-qty.util';
+import { stripJ5Prefix } from '../../shared/location-prefix';
+import { autoKkFields, autoKkLog } from '../../shared/auto-kk';
+import { KkHistoryLogService } from '../../services/kk-history-log.service';
+import { WeekFormat, fmtDmy, isWeekTrackedCode, parseWeekCode, weekCodeLabel, weekCodeText } from '../../shared/week-code';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
@@ -76,6 +83,10 @@ export interface InboundMaterial {
   remarks: string;
   /** Bịch từ QR (i/tổng) khi scan IQC / nhận — hiển thị & ghi rm-bag-history */
   bagBatch?: string;
+  /** Week trên tem — chỉ nhập trên web (không có trong form import): 4 số theo weekFormat. */
+  week?: string;
+  /** YYWW (năm + tuần) hoặc MMYY (tháng + năm). */
+  weekFormat?: 'YYWW' | 'MMYY';
   hasQRGenerated?: boolean; // Track if QR code has been generated
   scannedQuantity?: number; // Số lượng đã scan (cộng dồn)
   /** Khóa từng tem đã quét: `${docId}::${phần4 QR}` — chặn quét trùng cùng mã/PO/IMD/bịch */
@@ -304,6 +315,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   ldvOtpBusy = false;
 
   constructor(
+    private kkLog: KkHistoryLogService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
@@ -369,7 +381,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       replaceUrl: true
     });
     this.loadMaterials();
-    void this.loadLdvMismatchPending();
+
   }
 
   ngOnInit(): void {
@@ -394,7 +406,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       if (this.isValidFactory(f) && f !== this.selectedFactory) {
         this.selectedFactory = f;
         this.loadMaterials();
-        void this.loadLdvMismatchPending();
+    
       }
     });
 
@@ -405,7 +417,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.statusFilter = 'pending';
 
     this.loadMaterials();
-    void this.loadLdvMismatchPending();
+
   }
 
   openDateRangePopover(ev?: Event): void {
@@ -527,6 +539,14 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   /** Một lần cho đến khi invalidate (sau import DMVT). */
   private async ensureDmvtCatalogLoaded(): Promise<void> {
+    if (!this.nvlCatalogNameMap.size) {
+      try {
+        const items = await this.nvlCatalogForNames.listAll();
+        this.nvlCatalogNameMap = new Map(items.filter((i) => i.materialName).map((i) => [i.materialCode, String(i.materialName).trim()]));
+      } catch (e) {
+        console.warn('Load NVL catalog names (TBHD) failed:', e);
+      }
+    }
     if (!this.dmvtCatalogLoadPromise) {
       this.dmvtCatalogLoadPromise = this.loadDmvtCatalogFromFirestore().catch(err => {
         this.dmvtCatalogLoadPromise = null;
@@ -546,12 +566,17 @@ export class InboundComponent implements OnInit, OnDestroy {
     return code.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1500) || '_';
   }
 
-  /** Lấy tên hàng từ danh mục DMVT theo mã */
+  /** Tên hàng: ưu tiên Danh mục NVL chính (tab Danh mục), thiếu mới lấy DMVT cũ (dmvt/ASM1). */
   getMaterialName(materialCode: string): string {
     if (!materialCode) return '';
     const key = materialCode.toString().trim().toUpperCase();
+    const main = this.nvlCatalogNameMap.get(key);
+    if (main && main.toUpperCase() !== key) return main;
     return this.dmvtCatalog[key]?.materialName ?? '';
   }
+
+  private nvlCatalogNameMap = new Map<string, string>();
+  private nvlCatalogForNames = inject(NvlCatalogFullService);
 
   /** Import file DMVT (danh mục vật tư): từ dòng 5, cột A = mã, D = tên, E = đơn vị. Lưu Firebase, ghi đè bản cũ. */
   importDMVTFromPopup(): void {
@@ -589,7 +614,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           items.push({ materialCode: materialCode.toUpperCase(), materialName, unit });
         }
         if (items.length === 0) {
-          alert('File không có dữ liệu hợp lệ từ dòng 5 (cột A: mã, D: tên, E: đơn vị).');
+          appAlert('File không có dữ liệu hợp lệ từ dòng 5 (cột A: mã, D: tên, E: đơn vị).');
           return;
         }
         const itemsColRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
@@ -618,10 +643,10 @@ export class InboundComponent implements OnInit, OnDestroy {
         await this.firestore.collection('dmvt').doc('ASM1').set({ updatedAt: new Date() }, { merge: true });
         this.invalidateDmvtCatalogCache();
         void this.ensureDmvtCatalogLoaded().catch(() => {});
-        alert(`Đã import DMVT: ${items.length} mã nguyên liệu. Danh mục cũ đã được ghi đè.`);
+        appAlert(`Đã import DMVT: ${items.length} mã nguyên liệu. Danh mục cũ đã được ghi đè.`);
       } catch (err) {
         console.error('Lỗi đọc/lưu file DMVT:', err);
-        alert(err?.message || 'Lỗi khi import DMVT. Kiểm tra file (dòng 5+, cột A, D, E).');
+        appAlert(err?.message || 'Lỗi khi import DMVT. Kiểm tra file (dòng 5+, cột A, D, E).');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -634,7 +659,12 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  /** Xóa hàng loạt (tất cả / theo lô): chỉ Admin / Quản lý. */
+  canBulkDelete = false;
+  private rolePerm = inject(RolePermissionService);
+
   private loadPermissions(): void {
+    this.rolePerm.isAdminOrManager().pipe(takeUntil(this.destroy$)).subscribe((ok) => (this.canBulkDelete = !!ok));
     this.afAuth.authState.pipe(takeUntil(this.destroy$)).subscribe(user => {
       if (user) {
         // Load user permissions for ASM1
@@ -699,6 +729,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       gwLdv,
       remarks: data?.remarks || '',
       bagBatch: data?.bagBatch || '',
+      week: data?.week || '',
+      weekFormat: data?.weekFormat === 'MMYY' ? 'MMYY' : (data?.week ? 'YYWW' : undefined),
       hasQRGenerated: data?.hasQRGenerated || false,
       scannedQuantity: data?.scannedQuantity || 0,
       scannedBagKeys: Array.isArray(data?.scannedBagKeys)
@@ -1153,6 +1185,29 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Add material to Inventory when received
+  /** Người nhập (để tự tick KK): NV của lô → NV đang nhập → tài khoản đăng nhập. */
+  private async inboundKkOperator(material: InboundMaterial): Promise<string> {
+    const fromLot = (material.employeeIds || []).find((x) => !!String(x || '').trim());
+    if (fromLot) return String(fromLot).trim().toUpperCase();
+    const cur = this.currentEmployeeIds.find((x) => !!String(x || '').trim());
+    if (cur) return String(cur).trim().toUpperCase();
+    try {
+      const user: any = await firstValueFrom(this.authService.currentUser);
+      return String(user?.employeeId || user?.email || 'inbound').trim().toUpperCase();
+    } catch {
+      return 'INBOUND';
+    }
+  }
+
+  private writeInboundKkLog(docId: string, m: InboundMaterial, imd: string, location: string, by: string, at: Date): void {
+    const log = autoKkLog({
+      inventoryDocId: docId, factory: this.selectedFactory, materialCode: m.materialCode, poNumber: m.poNumber,
+      batchNumber: imd, location, quantity: m.quantity, stock: m.quantity, unit: m.unit, by, at, source: 'inbound'
+    });
+    void this.firestore.collection('inventory-kk-history').add(log).catch((e) => console.warn('KK log (inbound)', e));
+    this.kkLog.enqueue(log);
+  }
+
   private addToInventory(material: InboundMaterial): void {
     // batchNumber trong inventory chỉ là ngày nhập: 26/08/2025 -> 26082025
     const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
@@ -1161,8 +1216,11 @@ export class InboundComponent implements OnInit, OnDestroy {
     // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
     // Nếu duplicate, thêm số thứ tự vào cuối batchNumber (01, 02, 03...)
     this.checkForDuplicateInInventory(material, inventoryBatchNumber)
-      .then(result => {
+      .then(async result => {
         const finalBatchNumber = result.sequenceNumber;
+        // Nhập kho = đã đếm thực tế → tự tick KK bởi người nhập
+        const kkBy = await this.inboundKkOperator(material);
+        const kkAt = new Date();
       
         // Vừa nhập kho: vị trí IQC, kho J (TRA giữ nguyên).
         const inventoryLocation = this.inboundReceiveLocation(material);
@@ -1189,8 +1247,11 @@ export class InboundComponent implements OnInit, OnDestroy {
           isReceived: true,
           notes: material.notes,
           rollsOrBags: material.rollsOrBags,
+          ...(this.lotStdFromInbound(material) > 0 ? { lotStandardPacking: this.lotStdFromInbound(material) } : {}),
           supplier: material.supplier,
           remarks: material.remarks,
+          ...(material.week ? { week: material.week, weekFormat: material.weekFormat || 'YYWW' } : {}),
+          ...autoKkFields(kkBy, kkAt, 'inbound'),
           source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
           iqcStatus: this.isInboundTraMaterial(material) ? 'Pass' : 'CHỜ KIỂM',
           createdAt: new Date(),
@@ -1199,6 +1260,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         
         // Add to inventory-materials collection (no notification)
         return this.firestore.collection('inventory-materials').add(inventoryMaterial).then(docRef => {
+          this.writeInboundKkLog(docRef.id, material, finalBatchNumber, inventoryLocation, kkBy, kkAt);
           const tb = totalBags;
           const bb = (material.bagBatch || '').trim();
           this.rmBagHistory.log({
@@ -1257,7 +1319,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.updateMaterial(material);
         
         // Show error to user
-        alert(`❌ Lỗi khi thêm vào inventory:\n\nMã hàng: ${material.materialCode}\nLỗi: ${error.message}`);
+        appAlert(`❌ Lỗi khi thêm vào inventory:\n\nMã hàng: ${material.materialCode}\nLỗi: ${error.message}`);
       });
   }
 
@@ -1288,8 +1350,10 @@ export class InboundComponent implements OnInit, OnDestroy {
           isReceived: true,
           notes: material.notes,
           rollsOrBags: material.rollsOrBags,
+          ...(this.lotStdFromInbound(material) > 0 ? { lotStandardPacking: this.lotStdFromInbound(material) } : {}),
           supplier: material.supplier,
           remarks: material.remarks,
+          ...(material.week ? { week: material.week, weekFormat: material.weekFormat || 'YYWW' } : {}),
           source: 'inbound',
           iqcStatus: 'CHỜ KIỂM',
           bagsPendingPhysicalScan: true,
@@ -1331,7 +1395,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.addToInventory(material);
       return Promise.resolve();
     }
-    return this.firestore.collection('inventory-materials').doc(docId).get().toPromise().then(snap => {
+    return this.firestore.collection('inventory-materials').doc(docId).get().toPromise().then(async snap => {
       if (!snap || !snap.exists) {
         console.warn('⚠️ Không tìm thấy inventory pre-scan, fallback addToInventory');
         this.addToInventory(material);
@@ -1342,7 +1406,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       const inventoryLocation = this.inboundReceiveLocation(material);
       const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
       const bb = (material.bagBatch || '').trim();
+      // Hoàn tất quét nhập = đã đếm thực tế → tự tick KK bởi người nhập
+      const kkBy = await this.inboundKkOperator(material);
+      const kkAt = new Date();
+      this.writeInboundKkLog(docId, material, imd, inventoryLocation, kkBy, kkAt);
       return this.firestore.collection('inventory-materials').doc(docId).update({
+        ...autoKkFields(kkBy, kkAt, 'inbound'),
         totalBags,
         openingBagsAtInit: totalBags, // số bag tồn đầu (lấy từ Inbound "số bịch")
         exportedBags: 0,
@@ -1450,33 +1519,84 @@ export class InboundComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Ghi Standard Packing lần đầu. Nếu đã có và khác lượng đơn vị thì không ghi đè, gửi mail lệch.
+  /**
+   * Standard của lô = LĐV phiếu nhập. Bỏ qua hàng trả (TRA) và LĐV vô lý (lớn hơn số lượng nhập) → 0 (dùng danh mục).
+   */
+  private lotStdFromInbound(material: InboundMaterial): number {
+    const ldv = Number(material.rollsOrBags) || 0;
+    const qty = Number(material.quantity) || 0;
+    if (!(ldv > 0) || !(qty > 0)) return 0;
+    if (material.batchNumber?.toUpperCase().startsWith('TRA')) return 0;
+    if (ldv > qty + 1e-9) return 0;
+    return ldv;
+  }
+
+  /**
+   * Danh mục tự lấy Standard mới nhất: chỉ khi lô có từ 2 bịch trở lên (số lượng ≥ 2 × LĐV) — khi đó LĐV chắc chắn là
+   * quy cách chuẩn của PO. Lô 1 bịch / lô lẻ, hàng trả (TRA), mã khóa Standard → không ghi đè.
+   * Đổi Standard: lưu lịch sử (standard-packing-history) + gửi mail báo (không cần duyệt).
+   */
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
-      if (!material.rollsOrBags || material.rollsOrBags <= 0) return;
-      // Hàng trả (batchNumber bắt đầu bằng TRA) không dùng để ghi đè Standard Packing —
-      // số lượng trả lại thường không phản ánh đúng lượng chẵn 1 bịch/cuộn gốc.
+      const ldv = Number(material.rollsOrBags) || 0;
+      const qty = Number(material.quantity) || 0;
+      if (!(ldv > 0)) return;
       if (material.batchNumber?.toUpperCase().startsWith('TRA')) return;
       const code = (material.materialCode || '').trim();
       if (!code) return;
-      const current = await this.getStandardPacking(code);
-      if (current > 0) {
-        if (!this.ldvEquals(current, material.rollsOrBags)) {
-          await this.notifyLdvMismatch(material, current);
-        }
-        return;
-      }
-      const standardPackingValue = material.rollsOrBags;
-      const payload = { materialCode: code, standardPacking: standardPackingValue, updatedAt: new Date() };
+      if (qty + 1e-9 < 2 * ldv) return;
+      const { std: current, locked } = await this.getStandardPackingInfo(code);
+      if (locked) return;
+      if (current > 0 && this.ldvEquals(current, ldv)) return;
+      const now = new Date();
+      const payload = { materialCode: code, standardPacking: ldv, updatedAt: now };
       await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
       await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
       void this.nvlCatalogFull.markRemoteChanged();
-      this.standardPackingCache.set(code, standardPackingValue);
+      this.standardPackingCache.set(code, ldv);
+      const changedBy = await this.currentUserCode();
+      await this.firestore.collection('standard-packing-history').add({
+        materialCode: code,
+        oldStandard: current,
+        newStandard: ldv,
+        poNumber: material.poNumber || '',
+        batchNumber: material.batchNumber || '',
+        factory: material.factory || this.selectedFactory || '',
+        quantity: qty,
+        inboundId: material.id || '',
+        changedBy,
+        source: 'inbound-auto',
+        changedAt: now
+      });
+      if (current > 0) {
+        await this.inboundLdvOtp.sendMismatchEmail({
+          materialCode: code,
+          poNumber: material.poNumber || '',
+          batchNumber: material.batchNumber || '',
+          factory: material.factory || this.selectedFactory || '',
+          rollsOrBags: ldv,
+          standardPacking: current,
+          reportedBy: changedBy,
+          autoUpdated: true
+        }).catch((e) => console.warn('Không gửi được mail đổi Standard', e));
+      }
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
     }
   }
-  
+
+  private async getStandardPackingInfo(materialCode: string): Promise<{ std: number; locked: boolean }> {
+    const code = materialCode.trim();
+    const [mat, cat] = await Promise.all([
+      this.firestore.collection('materials').doc(code).ref.get(),
+      this.firestore.collection('catalog').doc(code).ref.get()
+    ]);
+    const m = mat.exists ? (mat.data() as any) : {};
+    const c = cat.exists ? (cat.data() as any) : {};
+    const std = Number(m?.standardPacking) || Number(c?.standardPacking) || 0;
+    return { std, locked: m?.standardPackingLocked === true || c?.standardPackingLocked === true };
+  }
+
   private async updateUnitWeightFromInbound(material: InboundMaterial): Promise<void> {
     try {
       if (!material.unitWeight || material.unitWeight <= 0) return;
@@ -1634,7 +1754,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       await this.nvlCatalogFull.setGwBag(c, gw, by);
       if (gw) this.gwBagMap.set(c, gw); else this.gwBagMap.delete(c);
     } catch (e: any) {
-      alert('❌ Không lưu được GW bag: ' + (e?.message || e));
+      appAlert('❌ Không lưu được GW bag: ' + (e?.message || e));
     }
   }
 
@@ -1929,7 +2049,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   async openLabelReadingGuide(): Promise<void> {
     const win = window.open('', '_blank');
     if (!win) {
-      alert('Trình duyệt đang chặn cửa sổ mới. Hãy cho phép popup rồi mở lại Hướng dẫn đọc tem.');
+      appAlert('Trình duyệt đang chặn cửa sổ mới. Hãy cho phép popup rồi mở lại Hướng dẫn đọc tem.');
       return;
     }
     win.document.write('<!DOCTYPE html><title>Hướng Dẫn Đọc Tem Nguyên Liệu</title><p style="font-family:Arial,sans-serif;padding:24px">Đang tạo tem mẫu…</p>');
@@ -2188,7 +2308,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     if (this.hasStorageUnit(material)) return;
     const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
     if (!code) {
-      alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
+      appAlert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
       return;
     }
     this.storageUnitPickerMaterialCode = code;
@@ -2217,7 +2337,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.closeStorageUnitPicker();
     } catch (e) {
       console.error(e);
-      alert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
+      appAlert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
     } finally {
       this.isSavingStorageUnit = false;
     }
@@ -2563,7 +2683,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.applyFilters();
     } catch (e: any) {
       console.error(e);
-      alert(`❌ Lỗi nhập chưa scan: ${e?.message || e}`);
+      appAlert(`❌ Lỗi nhập chưa scan: ${e?.message || e}`);
     } finally {
       this.isLoading = false;
     }
@@ -2636,7 +2756,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.tbhdAcknowledgedBatches.add(batchNumber);
     } catch (e) {
       console.error('❌ Lưu xác nhận TBHD thất bại:', e);
-      alert('Không lưu được xác nhận TBHD. Thử lại.');
+      appAlert('Không lưu được xác nhận TBHD. Thử lại.');
     }
   }
 
@@ -2942,7 +3062,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     ];
     
     if (!allowedTypes.includes(file.type)) {
-      alert('❌ Chỉ hỗ trợ file Excel (.xlsx, .xls) hoặc CSV');
+      appAlert('❌ Chỉ hỗ trợ file Excel (.xlsx, .xls) hoặc CSV');
       return;
     }
     
@@ -2965,7 +3085,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         if (jsonData.length < 2) {
-          alert('❌ File không có dữ liệu hoặc format không đúng');
+          appAlert('❌ File không có dữ liệu hoặc format không đúng');
           this.isLoading = false;
           this.errorMessage = '';
           return;
@@ -3017,7 +3137,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         }
         
         if (materialsToAdd.length === 0) {
-          alert('❌ Không có dữ liệu hợp lệ để import');
+          appAlert('❌ Không có dữ liệu hợp lệ để import');
           this.isLoading = false;
           this.errorMessage = '';
           return;
@@ -3088,14 +3208,14 @@ export class InboundComponent implements OnInit, OnDestroy {
         
       } catch (error) {
         console.error('❌ Error processing file:', error);
-        alert(`❌ Lỗi xử lý file: ${error.message}`);
+        appAlert(`❌ Lỗi xử lý file: ${error.message}`);
         this.isLoading = false;
         this.errorMessage = '';
       }
     };
     
     reader.onerror = () => {
-      alert('❌ Lỗi đọc file');
+      appAlert('❌ Lỗi đọc file');
       this.isLoading = false;
       this.errorMessage = '';
     };
@@ -3322,19 +3442,19 @@ export class InboundComponent implements OnInit, OnDestroy {
         console.log(`  - Materials bị lỗi: ${errorCount}`);
         console.log(`  - Dòng bị skip (thiếu data): ${skippedRows ? skippedRows.length : 0}`);
         
-        alert(message);
+        appAlert(message);
         
         // 🔧 FIX: KHÔNG gọi addNewMaterialsToList() vì snapshotChanges() đã tự động load rồi
         // Nếu gọi thêm sẽ bị duplicate x2
         // this.addNewMaterialsToList(materials); // ← COMMENTED OUT
         console.log(`✅ Import completed. snapshotChanges() will auto-load new materials.`);
       } else {
-        alert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
+        appAlert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
       }
       
     } catch (error) {
       console.error('❌ Error adding materials to Firebase:', error);
-      alert(`❌ Lỗi import: ${error.message}`);
+      appAlert(`❌ Lỗi import: ${error.message}`);
     } finally {
       this.isLoading = false;
       this.errorMessage = '';
@@ -3371,6 +3491,104 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Material update methods
+  // ===== Week trên tem: popup chọn YYWW / MMYY rồi nhập 2 ô =====
+  weekPopup: { material: InboundMaterial; format: WeekFormat; a: string; b: string } | null = null;
+
+  weekLabelOf(m: InboundMaterial): string {
+    return weekCodeLabel(m.weekFormat || 'YYWW', m.week);
+  }
+
+  /** Mã theo dõi Week bật ở Danh mục NVL (+Week) — nạp 1 lần, vài lượt đọc. */
+  weekTrackedCodes: Set<string> | null = null;
+  private weekTrackedLoading = false;
+
+  /** Mã tick Week ở Danh mục NVL mà lô chưa nhập Week. */
+  weekMissing(m: InboundMaterial): boolean {
+    if (!this.weekTrackedCodes && !this.weekTrackedLoading) {
+      this.weekTrackedLoading = true;
+      void this.nvlCatalogFull.loadWeekTrackedCodes()
+        .then((s) => { this.weekTrackedCodes = s; })
+        .catch(() => { this.weekTrackedCodes = new Set(); });
+    }
+    return !m.week && isWeekTrackedCode(m.materialCode, this.weekTrackedCodes);
+  }
+
+  openWeekPopup(m: InboundMaterial): void {
+    if (!this.canEditMaterials) return;
+    const format: WeekFormat = m.weekFormat === 'MMYY' ? 'MMYY' : 'YYWW';
+    const v = String(m.week || '');
+    this.weekPopup = { material: m, format, a: v.slice(0, 2), b: v.slice(2, 4) };
+    setTimeout(() => (document.getElementById('weekPopupA') as HTMLInputElement | null)?.focus(), 60);
+  }
+
+  setWeekPopupFormat(f: WeekFormat): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.format = f;
+    this.weekPopup.a = '';
+    this.weekPopup.b = '';
+    setTimeout(() => (document.getElementById('weekPopupA') as HTMLInputElement | null)?.focus(), 30);
+  }
+
+  /** Gõ đủ 2 số ô đầu → nhảy sang ô sau. */
+  onWeekPopupA(v: string): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.a = String(v || '').replace(/\D/g, '').slice(0, 2);
+    if (this.weekPopup.a.length === 2) (document.getElementById('weekPopupB') as HTMLInputElement | null)?.focus();
+  }
+
+  onWeekPopupB(v: string): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.b = String(v || '').replace(/\D/g, '').slice(0, 2);
+  }
+
+  get weekPopupValue(): string {
+    const p = this.weekPopup;
+    if (!p) return '';
+    const a = p.a.padStart(2, '0');
+    const b = p.b.padStart(2, '0');
+    return p.a && p.b ? a + b : '';
+  }
+
+  get weekPopupPreview(): string {
+    const p = this.weekPopup;
+    if (!p || !this.weekPopupValue) return '';
+    const w = parseWeekCode(p.format, this.weekPopupValue);
+    if (!w) return p.format === 'YYWW' ? '⚠️ Tuần không hợp lệ (1–52/53)' : '⚠️ Tháng không hợp lệ (1–12)';
+    return `${weekCodeText(p.format, this.weekPopupValue)} · ${fmtDmy(w.start)} – ${fmtDmy(w.end)}`;
+  }
+
+  get weekPopupValid(): boolean {
+    const p = this.weekPopup;
+    return !!p && !!parseWeekCode(p.format, this.weekPopupValue);
+  }
+
+  closeWeekPopup(): void {
+    this.weekPopup = null;
+  }
+
+  saveWeekPopup(clear = false): void {
+    const p = this.weekPopup;
+    if (!p) return;
+    if (!clear && !this.weekPopupValid) return;
+    const m = p.material;
+    m.week = clear ? '' : this.weekPopupValue;
+    m.weekFormat = clear ? undefined : p.format;
+    this.weekPopup = null;
+    this.updateMaterial(m);
+    // Mã đã có Week → Danh mục NVL tự bật theo dõi Week
+    if (m.week) {
+      void this.nvlCatalogFull.ensureWeekTracked(m.materialCode).then(() => {
+        this.weekTrackedCodes?.add(String(m.materialCode || '').trim().toUpperCase());
+      }).catch((e) => console.warn('ensureWeekTracked', e));
+    }
+    // Đã nhận kho → Week sang dòng tồn (mục Week ở Quản lý NVL, kiểm soát Outbound)
+    if (m.linkedInventoryDocId) {
+      void this.firestore.collection('inventory-materials').doc(m.linkedInventoryDocId)
+        .update({ week: m.week || '', weekFormat: m.week ? m.weekFormat : null, updatedAt: new Date() })
+        .catch((e) => console.warn('Sync week → inventory', e));
+    }
+  }
+
   updateMaterial(material: InboundMaterial): void {
     if (!this.canEditMaterials) return;
 
@@ -3388,7 +3606,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       poNumber: material.poNumber,
       quantity: material.quantity,
       unit: material.unit,
-      location: material.location,
+      location: stripJ5Prefix(material.location),
       type: material.type,
       expiryDate: material.expiryDate,
       qualityCheck: material.qualityCheck,
@@ -3401,6 +3619,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       gwLdv: this.gwLdvForFirestore(material),
       remarks: material.remarks,
       bagBatch: material.bagBatch || '',
+      week: material.week || '',
+      weekFormat: material.week ? (material.weekFormat || 'YYWW') : null,
       cartonCount: Math.max(0, Math.floor(Number(material.cartonCount ?? 0))),
       cartonQty: Math.max(0, Number(material.cartonQty) || 0),
       storageUnitSize: material.storageUnitSize || null,
@@ -3475,14 +3695,14 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   // Delete all materials from inbound tab
   deleteAllMaterials(): void {
-    if (!this.canDeleteMaterials) {
-      this.errorMessage = 'Bạn không có quyền xóa materials';
+    if (!this.canDeleteMaterials || !this.canBulkDelete) {
+      appAlert('❌ Xóa tất cả chỉ dành cho Admin / Quản lý.');
       return;
     }
     
     const totalCount = this.materials.length;
     if (totalCount === 0) {
-      alert('Không có dữ liệu nào để xóa');
+      appAlert('Không có dữ liệu nào để xóa');
       return;
     }
     
@@ -3490,7 +3710,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     const materialsInInventory = this.materials.filter(m => m.isReceived);
     const materialsNotInInventory = this.materials.filter(m => !m.isReceived);
     
-    let warningMessage = `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ASM1?\n\n`;
+    let warningMessage = `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ${this.selectedFactory}?\n\n`;
     
     if (materialsInInventory.length > 0) {
       const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
@@ -3510,9 +3730,12 @@ export class InboundComponent implements OnInit, OnDestroy {
     warningMessage += `• Không thể hoàn tác!\n\n`;
     warningMessage += `Nhập "DELETE" để xác nhận:`;
     
-    const confirmed = confirm(warningMessage);
-    
-    if (!confirmed) return;
+    // Bắt gõ đúng DELETE (trước đây chỉ OK/Cancel — dễ bấm nhầm xóa hết)
+    const typed = prompt(warningMessage);
+    if (String(typed || '').trim().toUpperCase() !== 'DELETE') {
+      if (typed !== null) appAlert('Chưa xóa — phải gõ đúng chữ DELETE.');
+      return;
+    }
     
     // Show loading state
     this.isLoading = true;
@@ -3523,7 +3746,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     
     if (materialIds.length === 0) {
       this.isLoading = false;
-      alert('Không có materials nào để xóa');
+      appAlert('Không có materials nào để xóa');
       return;
     }
     
@@ -3548,7 +3771,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     
     Promise.all(deletePromises)
       .then(() => {
-        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ASM1`);
+        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ${this.selectedFactory}`);
         if (materialsInInventory.length > 0) {
           console.log(`ℹ️ Note: ${materialsInInventory.length} materials remain in inventory with received status`);
         }
@@ -3558,11 +3781,11 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.isLoading = false;
         
         // Show success message
-        let successMessage = `✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ASM1`;
+        let successMessage = `✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ${this.selectedFactory}`;
         if (materialsInInventory.length > 0) {
           successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại và không bị ảnh hưởng`;
         }
-        alert(successMessage);
+        appAlert(successMessage);
         
         // Close dropdown
         this.showMorePopup = false;
@@ -3575,7 +3798,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.errorMessage = `Lỗi xóa tất cả materials: ${error.message}`;
         this.isLoading = false;
         
-        alert(`❌ Lỗi xóa materials: ${error.message}`);
+        appAlert(`❌ Lỗi xóa materials: ${error.message}`);
       });
   }
   
@@ -3703,12 +3926,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     }
     if (!this.cartonLabelCount(material)) {
-      alert('Nhập "Lượng trong thùng" trước khi in tem thùng.');
+      appAlert('Nhập "Lượng trong thùng" trước khi in tem thùng.');
       return;
     }
     const allow = await this.ensureCartonAllowSet().catch(() => null);
     if (allow && !allow.has(code)) {
-      alert(`Mã ${code} chưa bật "Xuất thùng" trong Danh mục NVL — bật trước rồi mới in / scan tem thùng.`);
+      appAlert(`Mã ${code} chưa bật "Xuất thùng" trong Danh mục NVL — bật trước rồi mới in / scan tem thùng.`);
       return;
     }
     await this.printQRCode(material, true);
@@ -3788,7 +4011,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   private renderInboundQrLabelContainerHtml(qr: any): string {
     const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
     const labelType = String(qr.labelType || '');
-    const infoHtml =
+    let infoHtml =
       qr.kind === 'carton'
         ? this.buildInboundQrCartonLabelInfoSectionHtml(
             f,
@@ -3803,16 +4026,63 @@ export class InboundComponent implements OnInit, OnDestroy {
     const loc = this.formatInboundLabelHomeLoc(qr.homeLoc);
     const locHtml = loc ? `<div class="req-loc">${this.escapeInboundLabelHtml(loc)}</div>` : '';
     const hasIcon = qr.iconType ? ' has-icon' : '';
+    // NVL TRA là cuộn duy nhất trong kho → chấm tròn đen ở đầu dòng chữ cuối (góc trái dưới phần chữ, không đè QR)
+    if (qr.soleRoll) infoHtml = this.prependSoleRollDot(infoHtml);
+    const soleDotHtml = '';
     return `
-                    <div class="qr-container${hasIcon}">
+                    <div class="qr-container${hasIcon}" style="position:relative;">
                       <div class="qr-section">
                         <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
                       ${infoHtml}
                       ${iconHtml}
                       ${locHtml}
+                      ${soleDotHtml}
                     </div>
                   `;
+  }
+
+  /** Chèn chấm tròn đen vào đầu dòng chữ cuối cùng của tem (style inline để mọi mẫu in đều có). */
+  private prependSoleRollDot(infoHtml: string): string {
+    const dot = '<span class="sole-roll-dot" style="display:inline-block;width:2.4mm;height:2.4mm;border-radius:50%;background:#000;'
+      + 'margin-right:1mm;vertical-align:middle;flex:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>';
+    const i = infoHtml.lastIndexOf('<div class="info-row');
+    if (i < 0) return infoHtml + dot;
+    const j = infoHtml.indexOf('>', i);
+    return infoHtml.slice(0, j + 1) + dot + infoHtml.slice(j + 1);
+  }
+
+  /**
+   * NVL TRA: nếu lô trả chỉ 1 cuộn / bịch và trong kho (cùng nhà máy) không còn dòng tồn nào khác của mã này
+   * → đánh dấu tem "cuộn duy nhất" (in chấm tròn góc trái dưới).
+   */
+  private async markInboundSoleRollLabels(material: InboundMaterial, qrImages: any[]): Promise<void> {
+    try {
+      if (!this.isInboundTraMaterial(material)) return;
+      const bags = qrImages.filter((q) => q.kind !== 'carton');
+      if (bags.length !== 1) return;
+      const code = String(material.materialCode || '').trim();
+      if (!code) return;
+      const factory = material.factory || this.selectedFactory;
+      const snap = await this.firestore.firestore.collection('inventory-materials')
+        .where('materialCode', '==', code).get();
+      const lot = String(material.batchNumber || '').trim().toUpperCase();
+      const po = String(material.poNumber || '').trim().toUpperCase();
+      let otherStock = false;
+      snap.forEach((doc) => {
+        if (otherStock) return;
+        const d = doc.data() as any;
+        if (String(d.factory || '') !== factory) return;
+        // Bỏ qua chính lô TRA này (đã nhận kho thì có dòng tồn riêng)
+        if (String(d.batchNumber || '').trim().toUpperCase() === lot && String(d.poNumber || '').trim().toUpperCase() === po) return;
+        const opening = d.openingStock != null ? Number(d.openingStock) || 0 : 0;
+        const stock = opening + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+        if (stock > 1e-6) otherStock = true;
+      });
+      if (!otherStock) bags[0].soleRoll = true;
+    } catch (e) {
+      console.warn('[Inbound] markInboundSoleRollLabels failed', e);
+    }
   }
 
   /**
@@ -3933,7 +4203,7 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   async printQRCode(material: InboundMaterial, onlyCarton = false): Promise<void> {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
 
@@ -3941,7 +4211,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     const payloads = onlyCarton ? null : this.buildInboundQrLabelPayloads(material);
     const cartonPayloads = this.buildCartonLabelPayloads(material);
     if (!payloads && !cartonPayloads) {
-      alert(
+      appAlert(
         'Không tạo được tem. Kiểm tra:\n' +
         '• Tem bịch: lượng đơn vị > 0, số bịch ≥ 1, lượng nhập > (số bịch − 1) × lượng đơn vị\n' +
         '• Tem thùng: nhập Lượng trong thùng (cột sau Số bịch)'
@@ -4008,11 +4278,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       qrImages = [...qrImages, ...cartonEntries];
 
       if (qrImages.length === 0) {
-        alert('Không tạo được tem để in.');
+        appAlert('Không tạo được tem để in.');
         return;
       }
 
       await this.attachInboundLabelHomeLocs(qrImages);
+      await this.markInboundSoleRollLabels(material, qrImages);
 
       // Create print window with real QR codes
       const newWindow = window.open('', '_blank');
@@ -4380,7 +4651,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('Error generating QR codes:', error);
-      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+      appAlert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
 
@@ -4429,11 +4700,11 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   openPrintAllBatchModal(): void {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
     if (this.distinctBatchNumbersForPrint.length === 0) {
-      alert('Không có lô hàng trong khung ngày hiện tại.');
+      appAlert('Không có lô hàng trong khung ngày hiện tại.');
       return;
     }
     this.printAllBatchSelection = '';
@@ -4447,7 +4718,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   async confirmPrintAllBatchAndRun(): Promise<void> {
     const batchNumber = (this.printAllBatchSelection || '').trim();
     if (!batchNumber) {
-      alert('Vui lòng chọn lô hàng trước khi in.');
+      appAlert('Vui lòng chọn lô hàng trước khi in.');
       return;
     }
     this.showPrintAllBatchModal = false;
@@ -4481,14 +4752,14 @@ export class InboundComponent implements OnInit, OnDestroy {
 
     const items = this.filteredMaterials;
     if (items.length === 0) {
-      alert('Không có dữ liệu để in');
+      appAlert('Không có dữ liệu để in');
       return;
     }
 
     try {
       await this.ensureDmvtCatalogLoaded();
     } catch {
-      alert('Không tải được danh mục DMVT. Kiểm tra kết nối và thử lại.');
+      appAlert('Không tải được danh mục DMVT. Kiểm tra kết nối và thử lại.');
       return;
     }
 
@@ -4787,14 +5058,14 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   async executePrintAllQRCodesForBatch(batchNumber: string): Promise<void> {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
 
     const QRCode = await import('qrcode') as any;
     const bn = (batchNumber || '').trim();
     if (!bn) {
-      alert('Thiếu mã lô hàng.');
+      appAlert('Thiếu mã lô hàng.');
       return;
     }
 
@@ -4802,7 +5073,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       m => (m.batchNumber || '').trim() === bn
     );
     if (pool.length === 0) {
-      alert(`Không có dòng nào thuộc lô "${bn}" trong khung ngày hiện tại.`);
+      appAlert(`Không có dòng nào thuộc lô "${bn}" trong khung ngày hiện tại.`);
       return;
     }
 
@@ -4818,7 +5089,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     );
 
     if (printableMaterials.length === 0 && cartonMaterials.length === 0) {
-      alert(
+      appAlert(
         `Lô "${bn}" không có dòng nào đủ điều kiện:\n` +
           '• Tem bịch: lượng đơn vị, số bịch, lượng nhập theo quy tắc chia tem\n' +
           '• Tem thùng 57×32mm: nhập Số thùng ≥ 1 (cột sau Số bịch, QTY = 0)'
@@ -4933,9 +5204,17 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
 
       if (qrImages.length === 0) {
-        alert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
+        appAlert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
       } else {
       await this.attachInboundLabelHomeLocs(qrImages);
+      // NVL TRA: chấm tròn trên tem nếu là cuộn duy nhất trong kho
+      for (const m of printableMaterials) {
+        if (!this.isInboundTraMaterial(m)) continue;
+        const own = qrImages.filter((q: any) => q.kind !== 'carton'
+          && String(q.materialCode || '') === String(m.materialCode || '')
+          && String(q.poNumber || '') === String(m.poNumber || ''));
+        await this.markInboundSoleRollLabels(m, own);
+      }
 
       // Create print window with all QR codes
       const newWindow = window.open('', '_blank');
@@ -5304,13 +5583,13 @@ export class InboundComponent implements OnInit, OnDestroy {
         if (bagQrCount > 0) summaryParts.push(`${bagQrCount} tem bịch`);
         if (cartonLabelCount > 0) summaryParts.push(`${cartonLabelCount} tem thùng (QTY=0)`);
         if (summaryParts.length > 0) {
-          alert(`✅ Đã tạo: ${summaryParts.join(' + ')} trong một cửa sổ in.`);
+          appAlert(`✅ Đã tạo: ${summaryParts.join(' + ')} trong một cửa sổ in.`);
         }
       }
       }
     } catch (error) {
       console.error('Error generating all QR codes:', error);
-      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+      appAlert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
   
@@ -5322,7 +5601,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   addMaterial(): void {
     if (!this.canAddMaterials) {
-      alert('❌ Bạn không có quyền thêm material mới');
+      appAlert('❌ Bạn không có quyền thêm material mới');
       return;
     }
     
@@ -5360,12 +5639,12 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.materials.unshift(newMaterial);
         this.applyFilters();
         
-        alert('✅ Material mới đã được thêm thành công!');
+        appAlert('✅ Material mới đã được thêm thành công!');
       })
       .catch((error) => {
         console.error('❌ Error adding new material:', error);
         this.errorMessage = 'Lỗi thêm material mới: ' + error.message;
-        alert('❌ Lỗi thêm material mới: ' + error.message);
+        appAlert('❌ Lỗi thêm material mới: ' + error.message);
       });
   }
   
@@ -5477,12 +5756,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       
       let searchInfo = '';
       
-      alert(`✅ Đã xuất ${exportData.length} records ra file Excel\n📊 Bộ lọc: ${statusText}\n📝 Mô tả: ${description}${timeRangeInfo}${searchInfo}`);
+      appAlert(`✅ Đã xuất ${exportData.length} records ra file Excel\n📊 Bộ lọc: ${statusText}\n📝 Mô tả: ${description}${timeRangeInfo}${searchInfo}`);
       
     } catch (error) {
       console.error('❌ Export error:', error);
       this.errorMessage = 'Lỗi export: ' + error.message;
-      alert('Lỗi export: ' + error.message);
+      appAlert('Lỗi export: ' + error.message);
     }
   }
   
@@ -5528,7 +5807,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       const reportData = this.generateInboundReportData();
       
       if (reportData.length === 0) {
-        alert('Không có dữ liệu để tạo report!');
+        appAlert('Không có dữ liệu để tạo report!');
         return;
       }
       
@@ -5566,12 +5845,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ Report đã được tải xuống:', fileName);
-      alert(`Report đã được tải xuống: ${fileName}`);
+      appAlert(`Report đã được tải xuống: ${fileName}`);
       
     } catch (error: any) {
       console.error('❌ Lỗi tạo report:', error);
       this.errorMessage = 'Lỗi tạo report: ' + error.message;
-      alert('Lỗi tạo report: ' + error.message);
+      appAlert('Lỗi tạo report: ' + error.message);
     }
   }
 
@@ -5812,7 +6091,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     if (standard <= 0 || this.ldvEquals(standard, ldv)) return;
     const reportedBy = await this.currentUserCode();
     await this.saveLdvMismatchPending(material, standard, reportedBy);
-    void this.loadLdvMismatchPending();
+
     if (material.ldvMismatchMailedFor != null && this.ldvEquals(material.ldvMismatchMailedFor, ldv)) return;
     await this.inboundLdvOtp.sendMismatchEmail({
       materialCode: code,
@@ -6094,9 +6373,13 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.rollsOrBagsEditDraft = '';
     this.updateMaterial(m);
     if (next > 0) {
-      void this.notifyLdvMismatch(m).catch(err => {
-        console.error('Không gửi được mail lệch lượng đơn vị', err);
-      });
+      const lotStd = this.lotStdFromInbound(m);
+      if (m.linkedInventoryDocId && lotStd > 0) {
+        void this.firestore.collection('inventory-materials').doc(m.linkedInventoryDocId)
+          .update({ lotStandardPacking: lotStd, updatedAt: new Date() })
+          .catch(err => console.warn('Không cập nhật được Standard của lô', err));
+      }
+      void this.updateStandardPackingFromInbound(m);
     }
   }
 
@@ -6541,7 +6824,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         console.log(`  - isReceived: false (reverted)`);
         console.log(`  - target.checked: false (reverted)`);
         
-      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+      appAlert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
         console.log(`📢 Đã hiển thị alert lỗi cho người dùng`);
         console.log(`❌ Kết thúc xử lý onReceivedChange với lỗi cho ${material.materialCode}`);
         console.log(`  - Thời gian xử lý: ${duration}ms`);
@@ -6718,7 +7001,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       console.log(`  - Tổng materials: ${batchMaterials.length}`);
       console.log(`  - Materials đã nhận: ${batchMaterials.length}`);
       
-      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}${timeRangeInfo}${filterInfo}\n\n💡 Lưu ý: Materials đã nhận sẽ được ẩn khỏi bảng khi bộ lọc là "Chưa"`);
+      appAlert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}${timeRangeInfo}${filterInfo}\n\n💡 Lưu ý: Materials đã nhận sẽ được ẩn khỏi bảng khi bộ lọc là "Chưa"`);
       
       // Refresh the display để cập nhật theo bộ lọc hiện tại
       console.log(`🔄 Đang refresh display sau khi hoàn thành lô hàng...`);
@@ -6907,7 +7190,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('❌ Error starting camera scanner:', error);
-      alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+      appAlert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
       this.stopCameraMode();
     }
   }
@@ -7091,7 +7374,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     };
     const loc = isReturnBatch ? rawLoc : normalizeIqcLocation(rawLoc);
     if (!loc) {
-      alert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
+      appAlert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
       return;
     }
     this.inspectionCurrentLocation = loc;
@@ -7312,7 +7595,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }).catch((error) => {
         console.error('❌ Firebase update failed (carton):', error);
         apply(prevKeys, prevScannedQty, finalizePreScan ? wasReceived : false);
-        alert(`❌ Lỗi cập nhật: ${error.message}`);
+        appAlert(`❌ Lỗi cập nhật: ${error.message}`);
         this.scheduleApplyFilters();
       });
     } else {
@@ -7443,7 +7726,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('📦 Processing Inspection scan:', scannedCode);
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -7616,7 +7899,7 @@ export class InboundComponent implements OnInit, OnDestroy {
               }
               foundMaterial.scannedQuantity = currentScannedQty;
               foundMaterial.scannedBagKeys = prevBagKeys;
-              alert(`❌ Lỗi cập nhật: ${error.message}`);
+              appAlert(`❌ Lỗi cập nhật: ${error.message}`);
               this.scheduleApplyFilters();
             });
             
@@ -7813,15 +8096,15 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   async deleteByBatch(): Promise<void> {
     if (!this.batchToDelete || this.batchToDelete.trim() === '') {
-      alert('❌ Vui lòng nhập mã lô hàng');
+      appAlert('❌ Vui lòng nhập mã lô hàng');
       return;
     }
     
-    if (!this.canDeleteMaterials) {
-      alert('❌ Bạn không có quyền xóa materials');
+    if (!this.canDeleteMaterials || !this.canBulkDelete) {
+      appAlert('❌ Xóa theo lô chỉ dành cho Admin / Quản lý.');
       return;
     }
-    
+
     const batchNumber = this.batchToDelete.trim();
     
     // Find materials with the specified batch number
@@ -7830,7 +8113,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     );
     
     if (materialsToDelete.length === 0) {
-      alert(`❌ Không tìm thấy materials nào với lô hàng "${batchNumber}"`);
+      appAlert(`❌ Không tìm thấy materials nào với lô hàng "${batchNumber}"`);
       return;
     }
     
@@ -7888,11 +8171,11 @@ export class InboundComponent implements OnInit, OnDestroy {
       
       // Show success message
       let successMessage = `✅ Đã xóa thành công lô hàng "${batchNumber}"\n`;
-      successMessage += `📊 Xóa ${materialIds.length} materials từ tab Inbound ASM1`;
+      successMessage += `📊 Xóa ${materialIds.length} materials từ tab Inbound ${this.selectedFactory}`;
       if (materialsInInventory.length > 0) {
         successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại`;
       }
-      alert(successMessage);
+      appAlert(successMessage);
       
       // Close modal and reload data
       this.closeDeleteByBatchModal();
@@ -7900,7 +8183,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error(`❌ Error deleting batch ${batchNumber}:`, error);
-      alert(`❌ Lỗi xóa lô hàng: ${error.message}`);
+      appAlert(`❌ Lỗi xóa lô hàng: ${error.message}`);
     } finally {
       this.isLoading = false;
     }
@@ -7983,7 +8266,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('👤 Verifying QA employee - raw input:', scannedData);
 
     if (!scannedData) {
-      alert('⚠️ Vui lòng nhập mã nhân viên');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên');
       return;
     }
 
@@ -8016,7 +8299,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     } else {
       // Employee is not authorized
       console.log('❌ Employee not authorized for IQC:', employeeId);
-      alert(`❌ Nhân viên không có quyền thực hiện IQC!\n\nMã nhân viên: ${employeeId}\n\nChỉ các mã sau được phép:\n- ASP0106\n- ASP1752`);
+      appAlert(`❌ Nhân viên không có quyền thực hiện IQC!\n\nMã nhân viên: ${employeeId}\n\nChỉ các mã sau được phép:\n- ASP0106\n- ASP1752`);
       this.iqcScanInput = '';
     }
   }
@@ -8026,7 +8309,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('🔬 Processing IQC scan:', scannedCode);
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -8075,14 +8358,14 @@ export class InboundComponent implements OnInit, OnDestroy {
         poNumber: m.poNumber,
         internalBatch: m.internalBatch 
       })));
-      alert(`❌ Không tìm thấy material với mã: ${scannedCode}`);
+      appAlert(`❌ Không tìm thấy material với mã: ${scannedCode}`);
       this.iqcScanInput = '';
     }
   }
 
   async updateIQCStatus(status: string): Promise<void> {
     if (!this.scannedMaterial) {
-      alert('⚠️ Chưa scan material');
+      appAlert('⚠️ Chưa scan material');
       return;
     }
 
@@ -8091,7 +8374,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     try {
       const materialId = this.scannedMaterial.id;
       if (!materialId) {
-        alert('❌ Material không có ID');
+        appAlert('❌ Material không có ID');
         return;
       }
 
@@ -8127,7 +8410,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
 
       console.log(`✅ IQC status updated to: ${status}`);
-      alert(`✅ Đã cập nhật trạng thái IQC: ${status}${nextLoc ? ` · vị trí ${nextLoc}` : ''}`);
+      appAlert(`✅ Đã cập nhật trạng thái IQC: ${status}${nextLoc ? ` · vị trí ${nextLoc}` : ''}`);
 
       // Reset for next scan
       this.scannedMaterial = null;
@@ -8146,7 +8429,7 @@ export class InboundComponent implements OnInit, OnDestroy {
 
     } catch (error) {
       console.error('❌ Error updating IQC status:', error);
-      alert(`❌ Lỗi cập nhật trạng thái: ${error.message}`);
+      appAlert(`❌ Lỗi cập nhật trạng thái: ${error.message}`);
     }
   }
 
@@ -8220,7 +8503,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('👤 Verifying Return Goods employee - raw input:', scannedData);
 
     if (!scannedData) {
-      alert('⚠️ Vui lòng nhập mã nhân viên');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên');
       return;
     }
 
@@ -8245,7 +8528,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         }
       }, 100);
     } else {
-      alert('⚠️ Mã nhân viên phải có ít nhất 7 ký tự');
+      appAlert('⚠️ Mã nhân viên phải có ít nhất 7 ký tự');
       this.returnGoodsEmployeeInput = '';
     }
   }
@@ -8260,7 +8543,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     const scannedCode = this.returnGoodsQRInput.trim();
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -8373,7 +8656,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   /** Nhận toàn bộ dòng hàng trả (TRA) chưa nhận — chỉ sau khi quét mã nhân viên; không bắt buộc quét QR từng dòng. */
   async receiveReturnGoodsWithoutQrScan(): Promise<void> {
     if (!this.returnGoodsEmployeeVerified) {
-      alert('⚠️ Vui lòng xác thực nhân viên trước.');
+      appAlert('⚠️ Vui lòng xác thực nhân viên trước.');
       return;
     }
     const traPending = this.materials.filter(
@@ -8383,7 +8666,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         !m.isReceived
     );
     if (traPending.length === 0) {
-      alert('Không có dòng hàng trả (TRA) nào chờ nhận.');
+      appAlert('Không có dòng hàng trả (TRA) nào chờ nhận.');
       return;
     }
     if (!confirm(`Nhận ${traPending.length} dòng hàng trả (không quét QR)?`)) {

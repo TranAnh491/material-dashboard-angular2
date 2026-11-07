@@ -100,14 +100,7 @@
             More
           </button>
 
-          <button type="button"
-                  class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
-                  (click)="openLdvMismatchCatalog()"
-                  title="Mã có lượng đơn vị khác Standard Packing — quản lý duyệt thì Standard đổi theo">
-            <i class="material-icons">rule</i>
-            Danh mục lệch Standard
-            <span class="toolbar-tbhd-check-badge" *ngIf="ldvMismatchPendingCount > 0">{{ ldvMismatchPendingCount }}</span>
-          </button>
+          <!-- Danh mục lệch Standard: đã bỏ — Standard danh mục tự cập nhật theo lô mới nhất (≥ 2 bịch) -->
 
           <button type="button"
                   class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
@@ -392,6 +385,7 @@
             <th class="type-cell">LOẠI HÌNH</th>
             <th class="status-cell">STATUS</th>
             <th class="date-cell">HSD</th>
+            <th class="week-cell" title="Week — nhập tay trên web, không bắt buộc (không có trong form import)">WEEK</th>
             <th class="status-cell">KK</th>
             <th class="status-cell">ĐÃ NHẬN</th>
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
@@ -435,7 +429,9 @@
             </td>
             <td class="code-cell" 
                 [class.material-code-printed]="material.hasQRGenerated"
-                [class.material-received]="material.isReceived">
+                [class.material-received]="material.isReceived"
+                [class.code-cell--k100]="!!sxxkSuspectOf(material.materialCode)"
+                [attr.title]="sxxkSuspectOf(material.materialCode) ? sxxkSuspectTitle(material.materialCode) : null">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.materialCode" 
@@ -443,9 +439,6 @@
                      (change)="updateMaterial(material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa mã hàng'">
-              <span class="sxxk-k100-badge"
-                    *ngIf="sxxkSuspectOf(material.materialCode)"
-                    [title]="sxxkSuspectTitle(material.materialCode)">KIỂM 100%</span>
             </td>
             <td class="po-cell">
               <input type="text" 
@@ -495,6 +488,20 @@
                      (change)="onExpiryDateChange($event, material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa hạn sử dụng'">
+            </td>
+            <td class="week-cell">
+              <button type="button"
+                      class="week-btn"
+                      [class.week-btn--set]="!!material.week"
+                      [class.week-btn--missing]="weekMissing(material)"
+                      [disabled]="!canEditMaterials"
+                      (click)="openWeekPopup(material)"
+                      [title]="material.week ? ((material.weekFormat || 'YYWW') + ' ' + material.week + ' — bấm để sửa') : (weekMissing(material) ? 'Mã theo dõi Week — cần nhập' : 'Bấm để nhập Week (không bắt buộc)')">
+                <ng-container *ngIf="material.week; else weekEmpty">
+                  <small>{{ material.weekFormat || 'YYWW' }}</small>{{ weekLabelOf(material) }}
+                </ng-container>
+                <ng-template #weekEmpty>{{ weekMissing(material) ? 'Cần nhập' : '+' }}</ng-template>
+              </button>
             </td>
                          <td class="status-cell">
                <input type="checkbox" 
@@ -1648,3 +1655,43 @@
   (closed)="closeStorageUnitPicker()"
   (confirmed)="onStorageUnitConfirmed($event)">
 </app-storage-unit-picker>
+
+<!-- Popup nhập Week trên tem: YYWW (năm + tuần) / MMYY (tháng + năm) -->
+<div class="week-pop-overlay" *ngIf="weekPopup as wp" (click)="closeWeekPopup()">
+  <div class="week-pop" (click)="$event.stopPropagation()">
+    <div class="week-pop__head">
+      <strong>Week trên tem</strong>
+      <small>{{ wp.material.materialCode }} · PO {{ wp.material.poNumber || '—' }} · Lô {{ wp.material.batchNumber || '—' }}</small>
+    </div>
+    <div class="week-pop__fmt">
+      <button type="button" [class.on]="wp.format === 'YYWW'" (click)="setWeekPopupFormat('YYWW')">
+        <b>YYWW</b><small>Năm + Tuần</small>
+      </button>
+      <button type="button" [class.on]="wp.format === 'MMYY'" (click)="setWeekPopupFormat('MMYY')">
+        <b>MMYY</b><small>Tháng + Năm</small>
+      </button>
+    </div>
+    <div class="week-pop__inputs">
+      <label>
+        <span>{{ wp.format === 'YYWW' ? 'Năm (YY)' : 'Tháng (MM)' }}</span>
+        <input id="weekPopupA" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="wp.a" (ngModelChange)="onWeekPopupA($event)"
+               [placeholder]="wp.format === 'YYWW' ? '26' : '10'" autocomplete="off">
+      </label>
+      <label>
+        <span>{{ wp.format === 'YYWW' ? 'Tuần (WW)' : 'Năm (YY)' }}</span>
+        <input id="weekPopupB" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="wp.b" (ngModelChange)="onWeekPopupB($event)"
+               (keydown.enter)="saveWeekPopup()"
+               [placeholder]="wp.format === 'YYWW' ? '42' : '26'" autocomplete="off">
+      </label>
+    </div>
+    <p class="week-pop__preview" [class.bad]="weekPopupValue && !weekPopupValid">{{ weekPopupPreview || 'Nhập 2 ô để xem diễn giải' }}</p>
+    <div class="week-pop__foot">
+      <button type="button" class="ghost danger" *ngIf="wp.material.week" (click)="saveWeekPopup(true)">Xóa Week</button>
+      <span class="sp"></span>
+      <button type="button" class="ghost" (click)="closeWeekPopup()">Hủy</button>
+      <button type="button" class="primary" [disabled]="!weekPopupValid" (click)="saveWeekPopup()">Lưu</button>
+    </div>
+  </div>
+</div>

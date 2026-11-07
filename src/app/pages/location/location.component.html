@@ -1,4 +1,3 @@
-<app-tab-back-button variant="floating"></app-tab-back-button>
 <div class="main-content" [class.loc-m-page]="isMobile">
 
   <!-- Step 1: Scan employee ID -->
@@ -352,48 +351,70 @@
 
   <!-- Mobile shell -->
   <div class="loc-m" *ngIf="isMobile">
-    <header class="loc-m-header">
-      <div class="loc-m-header__left">
-        <span class="loc-m-factory" *ngIf="selectedFactory">{{ selectedFactory }}</span>
-        <h1 class="loc-m-title">Vị trí NVL</h1>
+    <header class="loc-x-header">
+      <div class="loc-x-header__left">
+        <span class="loc-x-factory" *ngIf="selectedFactory">{{ selectedFactory }}</span>
+        <h1 class="loc-x-title">Quản lý vị trí</h1>
+        <p class="loc-x-sub">Đổi vị trí nguyên vật liệu theo mã, vị trí, pallet</p>
       </div>
-      <div class="loc-m-header__right">
-        <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
-          <i class="material-icons">badge</i>{{ activeEmployeeId }}
+      <div class="loc-x-header__right">
+        <button type="button" class="loc-x-emp" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
+          <i class="material-icons">badge</i><span>{{ activeEmployeeId }}</span><i class="material-icons loc-x-emp__caret">expand_more</i>
         </button>
-        <button class="logout-btn" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất">
+        <button type="button" class="loc-x-back" (click)="goMobileMenu()" title="Về menu" aria-label="Về menu">
+          <i class="material-icons">arrow_back</i>
+        </button>
+        <button type="button" class="loc-x-logout" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất" aria-label="Đăng xuất">
           <i class="material-icons">logout</i>
         </button>
       </div>
     </header>
 
-    <div class="loc-m-body">
+    <div class="loc-m-body loc-x-body">
       <section class="loc-m-panel" *ngIf="mobileBottomTab === 'location'">
-        <div class="loc-m-actions">
-          <button type="button" class="store-material-btn mobile" (click)="openStoreMaterialModal()">
-            <i class="material-icons">qr_code_scanner</i>
-            Theo mã hàng
+        <!-- 3 thao tác chính -->
+        <div class="loc-x-cards">
+          <button type="button" class="loc-x-card loc-x-card--green" (click)="openStoreMaterialModal()">
+            <span class="loc-x-card__top"><i class="material-icons">qr_code_scanner</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
+            <strong>Theo mã hàng</strong>
+            <small>Scan mã, đổi vị trí từng mã</small>
+            <i class="material-icons loc-x-card__bg" aria-hidden="true">inventory</i>
           </button>
-          <button type="button" class="bulk-change-location-btn mobile" (click)="openBulkChangeLocationModal()">
-            <i class="material-icons">location_on</i>
-            Theo vị trí
+          <button type="button" class="loc-x-card loc-x-card--blue" (click)="openBulkChangeLocationModal()">
+            <span class="loc-x-card__top"><i class="material-icons">location_on</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
+            <strong>Theo vị trí</strong>
+            <small>Chuyển cả vị trí sang chỗ mới</small>
+            <i class="material-icons loc-x-card__bg" aria-hidden="true">apartment</i>
           </button>
-          <button type="button" class="bulk-change-pallet-btn mobile" (click)="openBulkChangeByPalletModal()">
-            <i class="material-icons">inventory_2</i>
-            Theo Pallet
+          <button type="button" class="loc-x-card loc-x-card--orange" (click)="openBulkChangeByPalletModal()">
+            <span class="loc-x-card__top"><i class="material-icons">inventory_2</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
+            <strong>Theo Pallet</strong>
+            <small>Đổi vị trí theo pallet</small>
+            <i class="material-icons loc-x-card__bg" aria-hidden="true">layers</i>
           </button>
         </div>
+        <button type="button" class="loc-x-card loc-x-card--purple loc-x-card--wide" (click)="openLocUpdModal()">
+          <span class="loc-x-card__top"><i class="material-icons">fact_check</i><i class="material-icons loc-x-card__go">chevron_right</i></span>
+          <strong>Cập nhật vị trí</strong>
+          <small>Scan vị trí → scan hết mã ở đó → DONE (đủ lượng tự tick KK)</small>
+          <i class="material-icons loc-x-card__bg" aria-hidden="true">fact_check</i>
+        </button>
 
-        <div class="search-box loc-m-search">
-          <input type="text"
-                 [placeholder]="isLoading ? 'Đang tải...' : 'Tìm kiếm vị trí'"
+        <!-- Tìm vị trí -->
+        <div class="loc-x-search">
+          <i class="material-icons">search</i>
+          <input type="text" #locXSearch appScanBurst
+                 [placeholder]="isLoading ? 'Đang tải...' : 'Tìm vị trí (vd R05-2)…'"
                  [(ngModel)]="searchTerm"
                  (input)="onSearchInput($event)"
                  (keyup)="onSearchKeyUp($event)"
-                 class="search-input"
-                 [disabled]="isLoading">
-          <button class="clear-search-btn" *ngIf="searchTerm" (click)="clearSearch()" type="button">
-            <i class="material-icons">clear</i>
+                 [disabled]="isLoading"
+                 autocomplete="off" autocapitalize="characters">
+          <button type="button" class="loc-x-search__clear" *ngIf="searchTerm" (click)="clearSearch()" aria-label="Xóa">
+            <i class="material-icons">close</i>
+          </button>
+          <button type="button" class="loc-x-search__scan" (click)="locXSearch.focus()" title="Đặt con trỏ để scan mã vị trí" aria-label="Scan vị trí">
+            <i class="material-icons">qr_code_scanner</i>
           </button>
         </div>
 
@@ -409,6 +430,41 @@
               <div class="material-code">{{ m.materialCode }}</div>
               <div class="material-factory" *ngIf="m.factoryInUse">Nhà máy sử dụng: {{ m.factoryInUse }}</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Ô tiện ích -->
+        <div class="loc-x-tiles">
+          <button type="button" class="loc-x-tile" (click)="openLockerFinder()">
+            <i class="material-icons">lock_open</i><span>Locker trống</span>
+          </button>
+          <button type="button" class="loc-x-tile" (click)="setMobileBottomTab('history')">
+            <span class="loc-x-tile__ico loc-x-tile__ico--blue"><i class="material-icons">history</i></span>
+            <span class="loc-x-tile__txt"><strong>Lịch sử</strong><small>Đổi vị trí gần nhất</small></span>
+            <i class="material-icons loc-x-tile__go">chevron_right</i>
+          </button>
+          <button type="button" class="loc-x-tile" (click)="locXSearch.focus()">
+            <span class="loc-x-tile__ico loc-x-tile__ico--amber"><i class="material-icons">place</i></span>
+            <span class="loc-x-tile__txt"><strong>Tra vị trí</strong><small>Xem mã đang ở vị trí</small></span>
+            <i class="material-icons loc-x-tile__go">chevron_right</i>
+          </button>
+          <button type="button" class="loc-x-tile" (click)="downloadLocUpdReport()" [disabled]="isDownloadingLocUpdReport">
+            <span class="loc-x-tile__ico loc-x-tile__ico--blue"><i class="material-icons">summarize</i></span>
+            <span class="loc-x-tile__txt"><strong>{{ isDownloadingLocUpdReport ? 'Đang tải…' : 'Report cập nhật vị trí' }}</strong><small>Mở tab mới: kệ nào, mã gì, mấy thùng</small></span>
+            <i class="material-icons loc-x-tile__go">open_in_new</i>
+          </button>
+        </div>
+
+        <!-- Tổng quan kho -->
+        <div class="loc-x-overview">
+          <div class="loc-x-overview__head">
+            <span><i class="material-icons">bar_chart</i>Tổng quan kho</span>
+            <span class="loc-x-overview__meta">{{ selectedFactory || '—' }} · {{ locMToday | date:'dd/MM/yyyy' }}</span>
+          </div>
+          <div class="loc-x-overview__stat">
+            <i class="material-icons">grid_view</i>
+            <strong>{{ filteredItems.length | number }}</strong>
+            <small>Tổng vị trí</small>
           </div>
         </div>
 
@@ -445,41 +501,86 @@
 
     </div>
 
-    <nav class="loc-m-bottomnav">
+    <nav class="loc-m-bottomnav loc-x-nav">
       <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'location'" (click)="setMobileBottomTab('location')">
-        <i class="material-icons">location_on</i><span>Materials</span>
+        <i class="material-icons">location_on</i><span>Vị trí</span>
       </button>
       <button type="button" class="loc-m-bottomnav__btn" [class.is-active]="mobileBottomTab === 'history'" (click)="setMobileBottomTab('history')">
-        <i class="material-icons">history</i><span>History</span>
+        <i class="material-icons">history</i><span>Lịch sử</span>
       </button>
-      <button type="button" class="loc-m-bottomnav__btn loc-m-bottomnav__btn--menu" (click)="goMobileMenu()">
-        <i class="material-icons">home</i><span>Menu</span>
+      <button type="button" class="loc-m-bottomnav__btn" (click)="openStoreMaterialModal()">
+        <i class="material-icons">qr_code_scanner</i><span>Scan</span>
+      </button>
+      <button type="button" class="loc-m-bottomnav__btn" (click)="openLocUpdModal()">
+        <i class="material-icons">fact_check</i><span>Cập nhật</span>
       </button>
     </nav>
   </div>
+
+  <!-- Cập nhật vị trí: màn hình scan dùng chung (cùng chức năng nút Kiểm kê ở Quản lý NVL) -->
+  <app-loc-upd-scan *ngIf="showLocUpdModal"
+                    title="Cập nhật vị trí"
+                    source="location"
+                    [factory]="selectedFactory"
+                    [operatorId]="activeEmployeeId"
+                    (done)="onLocUpdDone($event)"
+                    (closed)="showLocUpdModal = false"></app-loc-upd-scan>
+
 
   <!-- Excel-like Container (desktop) -->
   <div class="excel-container" *ngIf="!isMobile">
     <!-- Report Title -->
     <div class="excel-header">
-      <h4><i class="material-icons">inventory_2</i> MATERIALS MANAGEMENT</h4>
+      <h4><i class="material-icons">inventory_2</i> QUẢN LÝ VỊ TRÍ</h4>
     </div>
     
     <!-- Excel Actions -->
     <div class="excel-actions">
       <div class="action-controls-horizontal">
-        <!-- Desktop Controls -->
-        <div class="desktop-controls">
-          <!-- More Button with Dropdown -->
-          <div class="dropdown">
-            <button class="more-btn" (click)="toggleDropdown($event)">
-              <i class="material-icons">more_vert</i>
-              More
+        <!-- Desktop Controls: chia nhóm theo chức năng, mọi nút cùng kiểu -->
+        <div class="desktop-controls loc-tb">
+          <div class="loc-tb__group">
+            <span class="loc-tb__label">Đổi vị trí</span>
+            <button class="loc-tb__btn loc-tb__btn--green" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
+              <i class="material-icons">qr_code_scanner</i>Theo mã hàng
             </button>
+            <button class="loc-tb__btn loc-tb__btn--blue" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
+              <i class="material-icons">location_on</i>Theo vị trí
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--orange" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
+              <i class="material-icons">inventory_2</i>Theo Pallet
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--purple" (click)="openLocUpdModal()" title="Scan vị trí → scan hết tem mã ở vị trí đó → DONE (đủ lượng tự tick KK)">
+              <i class="material-icons">fact_check</i>Cập nhật vị trí
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--teal" (click)="openLockerFinder()" title="Tìm tủ Locker còn trống để cất (mỗi tủ tối đa 5 mã)">
+              <i class="material-icons">lock_open</i>Locker
+            </button>
+          </div>
+
+          <div class="loc-tb__group">
+            <span class="loc-tb__label">Báo cáo &amp; dữ liệu</span>
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="downloadLocUpdReport()" [disabled]="isDownloadingLocUpdReport" title="Report cập nhật vị trí — mở tab mới: ngày, người scan, mã, lượng, thùng, đủ/thiếu/thừa, vị trí">
+              <i class="material-icons">summarize</i>{{ isDownloadingLocUpdReport ? 'Đang tải…' : 'Report vị trí' }}
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="refreshData()" title="Làm mới dữ liệu">
+              <i class="material-icons">refresh</i>Làm mới
+            </button>
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="openCustomerModal()" title="Danh sách mã khách hàng">
+              <i class="material-icons">people</i>Customer
+            </button>
+            <div class="dropdown">
+              <button class="loc-tb__btn loc-tb__btn--ghost more-btn" (click)="toggleDropdown($event)" title="Import / Export / Template…">
+                <i class="material-icons">more_horiz</i>Khác
+              </button>
             <div class="dropdown-menu" [class.show]="isDropdownOpen">
               <a class="dropdown-item" href="javascript:void(0)" (click)="exportToExcel()">
                 <i class="material-icons">file_download</i>
                 Export to Excel
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="downloadLocUpdReport()">
+                <i class="material-icons">summarize</i>
+                Report cập nhật vị trí (kệ, mã, số thùng)
               </a>
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="javascript:void(0)" (click)="importLocations()">
@@ -500,9 +601,9 @@
                 Template mã khách hàng
               </a>
               <div class="dropdown-divider"></div>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="openRuleModal()">
+              <a class="dropdown-item" href="#/danh-muc-nvl-tp" title="Đã chuyển sang Danh mục → tab Rule vị trí">
                 <i class="material-icons">rule</i>
-                Rule (mã nguyên liệu -> vị trí)
+                Rule vị trí → Danh mục
               </a>
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="javascript:void(0)" (click)="openFGModal()">
@@ -510,56 +611,29 @@
                 FG
               </a>
               <div class="dropdown-divider"></div>
-              <a class="dropdown-item" href="javascript:void(0)" (click)="initializeSampleData()">
-                <i class="material-icons">add_circle</i>
-                Initialize Sample Data
-              </a>
+              <!-- "Initialize Sample Data" đã bỏ 05/11/2026: xóa toàn bộ danh mục vị trí, không hỏi xác nhận -->
               <a class="dropdown-item" href="javascript:void(0)" (click)="deleteAllLocations()" *ngIf="filteredItems.length > 0 && (activeEmployeeId === 'ASP0106' || activeEmployeeId === 'ASP0119')">
                 <i class="material-icons">delete_forever</i>
                 Xóa Tất Cả
               </a>
             </div>
+            </div>
           </div>
-          
-          <!-- Total Counter Box -->
-          <div class="total-counter-box">
-            <i class="material-icons">location_on</i>
-            <span>Tổng: {{ filteredItems.length }} vị trí</span>
-          </div>
-          
-          <!-- Action Buttons -->
-          <div class="action-buttons">
-            <!-- Employee badge (desktop) -->
-            <button class="emp-badge" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
+
+          <div class="loc-tb__group loc-tb__group--end">
+            <span class="loc-tb__chip"><i class="material-icons">location_on</i>{{ filteredItems.length }} vị trí</span>
+            <button class="loc-tb__chip loc-tb__chip--emp" *ngIf="activeEmployeeId" (click)="changeEmployee()" title="Đổi nhân viên">
               <i class="material-icons">badge</i>{{ activeEmployeeId }}
             </button>
-            <button class="logout-btn" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất">
-              <i class="material-icons">logout</i>
-              Đăng xuất
+            <button class="loc-tb__chip loc-tb__chip--out" *ngIf="activeEmployeeId" (click)="logout()" title="Đăng xuất">
+              <i class="material-icons">logout</i>Đăng xuất
             </button>
-            <button class="store-material-btn" (click)="openStoreMaterialModal()" title="Đổi vị trí theo SKU (scan mã hàng)">
-              <i class="material-icons">qr_code_scanner</i>
-              Theo mã hàng
-            </button>
-            <button class="bulk-change-location-btn" (click)="openBulkChangeLocationModal()" [title]="'Đổi vị trí hàng loạt — Location (' + (selectedFactory || '...') + ') - chỉ Scanner'">
-              <i class="material-icons">location_on</i>
-              Theo vị trí
-            </button>
-            <button class="bulk-change-pallet-btn" (click)="openBulkChangeByPalletModal()" [title]="'Đổi vị trí theo pallet — Location (' + (selectedFactory || '...') + ')'">
-              <i class="material-icons">inventory_2</i>
-              Theo Pallet
-            </button>
-            <button class="refresh-btn" (click)="refreshData()" title="Làm mới dữ liệu Materials">
-              <i class="material-icons">refresh</i>
-              Refresh
-            </button>
-            <button class="customer-btn" (click)="openCustomerModal()" title="Danh sách mã khách hàng">
-              <i class="material-icons">people</i>
-              Customer
+            <button class="loc-tb__btn loc-tb__btn--ghost" (click)="goBackPage()" title="Quay lại">
+              <i class="material-icons">arrow_back</i>Back
             </button>
           </div>
         </div>
-        
+
         <!-- Mobile Controls -->
         <div class="mobile-controls">
           <!-- Store Material Button -->
@@ -974,7 +1048,7 @@
               [(ngModel)]="bulkScanLocationInput"
               (keyup.enter)="processBulkAsm1Location()"
               placeholder="Scan hoặc nhập vị trí..."
-              class="scan-input"
+              class="scan-input" appScanBurst
               [disabled]="isBulkLoading">
             <button class="scan-btn" (click)="processBulkAsm1Location()" [disabled]="isBulkLoading || !bulkScanLocationInput.trim()">
               <i class="material-icons">{{ isBulkLoading ? 'hourglass_empty' : 'search' }}</i>
@@ -1000,7 +1074,7 @@
               [(ngModel)]="bulkScanPalletInput"
               (keyup.enter)="processBulkByPallet()"
               placeholder="Scan pallet..."
-              class="scan-input"
+              class="scan-input" appScanBurst
               [disabled]="isBulkLoading"
               autocomplete="off"
               spellcheck="false">
@@ -1110,7 +1184,7 @@
               [(ngModel)]="bulkNewLocationInput"
               (keyup.enter)="onBulkLocationEnter()"
               placeholder="Scan hoặc nhập vị trí mới..."
-              class="scan-input"
+              class="scan-input" appScanBurst
               [disabled]="isBulkLoading || skipBulkNewLocation">
             <button class="scan-btn" type="button"
                     (click)="bulkSource === 'pallet' ? confirmBulkChange() : focusBulkPalletInput()"
@@ -1137,7 +1211,7 @@
               [(ngModel)]="bulkNewPalletInput"
               (keyup.enter)="confirmBulkChange()"
               placeholder="Scan pallet mới..."
-              class="scan-input"
+              class="scan-input" appScanBurst
               [disabled]="isBulkLoading || skipBulkNewPallet">
             <button class="scan-btn" type="button" (click)="confirmBulkChange()" [disabled]="isBulkLoading || !canConfirmBulkTargets()" title="Xác nhận">
               <i class="material-icons">check</i>
@@ -1226,7 +1300,7 @@
             [(ngModel)]="storeMaterialQRInput"
             (keyup.enter)="processStoreMaterialQR()"
             placeholder="Quét hoặc nhập mã QR..."
-            class="scan-input"
+            class="scan-input" appScanBurst
             autofocus
             [disabled]="isSearchingMaterial">
           
@@ -1343,7 +1417,7 @@
                 [(ngModel)]="storeMaterialBatchQRInput"
                 (keyup.enter)="processStoreMaterialBatchQR()"
                 placeholder="Scan mã tiếp..."
-                class="scan-input"
+                class="scan-input" appScanBurst
                 [disabled]="isSearchingMaterial">
               <button
                 class="scan-btn scan-btn--sm"
@@ -1475,6 +1549,36 @@
 </div>
 
 <!-- Customer Modal -->
+<!-- Tìm tủ Locker còn trống -->
+<div class="modal-overlay" *ngIf="showLockerModal" (click)="closeLockerModal()">
+  <div class="modal-content locker-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h4><i class="material-icons">lock_open</i> Tủ Locker còn trống</h4>
+      <button class="close-btn" (click)="closeLockerModal()"><i class="material-icons">close</i></button>
+    </div>
+    <div class="modal-body locker-body">
+      <p class="locker-msg" *ngIf="lockerLoading">Đang đọc tồn kho các tủ…</p>
+      <p class="locker-msg locker-msg--err" *ngIf="!lockerLoading && lockerError">{{ lockerError }}</p>
+      <ng-container *ngIf="!lockerLoading && currentLocker as lk">
+        <div class="locker-card" [class.is-empty]="!lk.codes.length">
+          <small>Cất vào tủ</small>
+          <strong>{{ lk.locker }}</strong>
+          <span class="locker-count">{{ lk.codes.length ? ('Đang có ' + lk.codes.length + '/' + lockerMax + ' mã · còn ' + (lockerMax - lk.codes.length) + ' chỗ') : ('Tủ trống · tối đa ' + lockerMax + ' mã') }}</span>
+        </div>
+        <div class="locker-codes" *ngIf="lk.codes.length">
+          <small>Mã đang có trong tủ:</small>
+          <span class="locker-chip" *ngFor="let c of lk.codes">{{ c }}</span>
+        </div>
+        <p class="locker-hint">Gợi ý {{ lockerIndex + 1 }}/{{ lockerCandidates.length }} tủ còn chỗ · {{ lockerStats.empty }} tủ trống · {{ lockerStats.full }}/{{ lockerStats.total }} tủ đã đủ {{ lockerMax }} mã</p>
+      </ng-container>
+      <div class="locker-actions">
+        <button type="button" class="locker-btn" (click)="findLockers()" [disabled]="lockerLoading"><i class="material-icons">refresh</i>Tải lại</button>
+        <button type="button" class="locker-btn locker-btn--primary" (click)="nextLocker()" [disabled]="lockerLoading || lockerCandidates.length < 2"><i class="material-icons">skip_next</i>Không vừa · Tìm tiếp</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" *ngIf="showCustomerModal" (click)="closeCustomerModal()">
   <div class="modal-content customer-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -1585,7 +1689,7 @@
             [(ngModel)]="moveShelfCurrentLocation"
             (keyup.enter)="processMoveShelfLocation()"
             placeholder="Scan hoặc nhập vị trí..."
-            class="scan-input"
+            class="scan-input" appScanBurst
             [disabled]="isMoveShelfLoading">
           
           <button 
@@ -1667,7 +1771,7 @@
             [(ngModel)]="moveShelfNewLocation"
             (keyup.enter)="confirmMoveShelf()"
             placeholder="Scan hoặc nhập vị trí mới..."
-            class="scan-input"
+            class="scan-input" appScanBurst
             [disabled]="isMoveShelfLoading">
           
           <button 

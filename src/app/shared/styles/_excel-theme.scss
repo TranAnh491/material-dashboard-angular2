@@ -1,0 +1,85 @@
+// Giao diện kiểu Excel dùng chung (05/11/2026) — theo mẫu Danh mục NVL & TP / Quản lý nguyên liệu / Outbound.
+// Dùng: @use '../../shared/styles/excel-theme' as xl;  :host .vung-trang { @include xl.excel-theme; }
+// Chỉ đổi phần nhìn (màu, viền, cỡ, khoảng cách) — không đổi bố cục / logic.
+
+@mixin excel-theme {
+  background: #fff !important;
+  color: #111;
+  font-size: 13px;
+
+  // Bỏ trang trí
+  * { box-shadow: none !important; text-shadow: none !important; }
+
+  // Thẻ / khối → khung kẻ ô phẳng
+  .card, .card-body, .card-header, .content-card, .stats-card, .summary-card, .stat-card, .panel, .section-card {
+    border-radius: 0 !important;
+    background-image: none !important;
+  }
+  .card, .content-card, .stats-card, .summary-card, .stat-card, .panel, .section-card {
+    border: 1px solid var(--app-border, #d0d0d0) !important;
+    background-color: #fff !important;
+  }
+  .card-header { background: #fff !important; border-bottom: 1px solid var(--app-border, #d0d0d0) !important; padding: 8px 10px !important; }
+  .card-title, h1, h2, h3 { color: #111 !important; }
+
+  // Nút thanh công cụ: chữ nhật, cao 36px, viền xám, cùng tone
+  button:not(.mat-mdc-button-base):not(.close):not([class*="close"]):not([class*="-x"]) {
+    min-height: 36px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--app-border-strong, #b7b7b7) !important;
+    border-radius: 4px !important;
+    background: #fff !important;
+    background-image: none !important;
+    color: #111 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.2;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    .material-icons { font-size: 18px !important; color: inherit !important; vertical-align: middle; }
+    &:hover:not(:disabled) { background: #f2f2f2 !important; }
+    &:disabled { opacity: .5; }
+    &.active, &.is-active, &[class*="--active"], &[class*="--on"], &.selected { background: var(--app-active, #e3e3e3) !important; border-color: #7a7a7a !important; }
+  }
+  // Nút trong bảng: nhỏ, gọn theo dòng
+  table button:not(.mat-mdc-button-base) {
+    min-height: 24px !important;
+    height: 24px;
+    padding: 0 8px !important;
+    font-size: 12px !important;
+    .material-icons { font-size: 15px !important; }
+  }
+
+  // Ô nhập
+  input[type=text], input[type=search], input[type=number], input[type=date], input[type=datetime-local], select {
+    border: 1px solid var(--app-border-strong, #b7b7b7) !important;
+    border-radius: 3px !important;
+    background-color: #fff !important;
+    font-size: 13px;
+    color: #111;
+  }
+
+  // Bảng: kẻ ô, tiêu đề xám nhạt
+  table {
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    background: #fff;
+    th, td {
+      border: 1px solid var(--app-border, #d0d0d0) !important;
+      padding: 3px 6px !important;
+      font-size: 13px !important;
+      vertical-align: middle;
+    }
+    th {
+      background: var(--app-header-bg, #f2f2f2) !important;
+      color: #111 !important;
+      font-weight: 700 !important;
+      font-size: 12px !important;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      border-color: var(--app-border-strong, #b7b7b7) !important;
+    }
+    tbody tr:hover > td { background-color: var(--app-hover, #f7f9fc) !important; }
+  }
+}

@@ -1,0 +1,65 @@
+<!-- Dùng chung: "Cập nhật vị trí" (Location) / "Kiểm kê" (Quản lý NVL) -->
+<div class="loc-up">
+  <header class="loc-up__head">
+    <button type="button" class="loc-up__icon-btn" (click)="close()" [disabled]="saving" aria-label="Đóng">
+      <i class="material-icons">arrow_back</i>
+    </button>
+    <div class="loc-up__title">
+      <strong>{{ title }}</strong>
+      <small>{{ stepText }}</small>
+    </div>
+    <span class="loc-up__emp" *ngIf="operatorId">{{ operatorId }}</span>
+  </header>
+
+  <div class="loc-up__body">
+    <ng-container *ngIf="step === 'operator'">
+      <div class="loc-up__step-ico"><i class="material-icons">badge</i></div>
+      <p class="loc-up__hint">Scan / nhập <strong>mã nhân viên</strong> (ASP + 4 số)</p>
+      <input id="locUpdOperatorInput" class="loc-up__input" type="text" appScanBurst
+             [(ngModel)]="operatorInput" (keyup.enter)="onOperatorScan()"
+             placeholder="VD: ASP0106 rồi Enter" autocomplete="off" autocapitalize="characters">
+      <button type="button" class="loc-up__primary" (click)="onOperatorScan()" [disabled]="!operatorInput.trim()">Tiếp tục</button>
+    </ng-container>
+
+    <ng-container *ngIf="step === 'loc'">
+      <div class="loc-up__step-ico"><i class="material-icons">place</i></div>
+      <p class="loc-up__hint">Scan tem <strong>vị trí</strong> cần {{ source === 'kiem-ke' ? 'kiểm kê' : 'cập nhật' }}</p>
+      <input id="locUpdLocInput" class="loc-up__input" type="text" appScanBurst
+             [(ngModel)]="locInput" (keyup.enter)="onLocScan()"
+             placeholder="Scan / nhập vị trí rồi Enter" autocomplete="off" autocapitalize="characters">
+      <button type="button" class="loc-up__primary" (click)="onLocScan()" [disabled]="!locInput.trim()">Tiếp tục</button>
+    </ng-container>
+
+    <ng-container *ngIf="step === 'items'">
+      <div class="loc-up__loc">
+        <span>Vị trí</span>
+        <strong>{{ location }}</strong>
+        <button type="button" class="loc-up__link" (click)="changeLocation()" [disabled]="saving">Đổi</button>
+      </div>
+
+      <input id="locUpdItemInput" class="loc-up__input" type="text" appScanBurst
+             [(ngModel)]="itemInput" (keyup.enter)="onItemScan()" (blur)="keepFocus()"
+             [disabled]="saving"
+             [placeholder]="busy ? 'Đang đọc tồn…' : 'Scan tem mã hàng'" autocomplete="off" autocapitalize="characters">
+
+      <div class="loc-up__stats">
+        <span><b>{{ lines.length }}</b> dòng</span>
+        <span class="is-ok"><b>{{ enoughCount }}</b> đủ</span>
+        <span class="is-low"><b>{{ lines.length - enoughCount - overCount }}</b> thiếu</span>
+        <span class="is-over"><b>{{ overCount }}</b> thừa</span>
+      </div>
+
+      <!-- Không liệt kê mã đã quét: ô scan đứng yên, con trỏ luôn ở ô scan -->
+      <div class="loc-up__last" *ngIf="log[0] as g" [class.is-err]="!g.ok">{{ g.at | date:'HH:mm:ss' }} · {{ g.text }}</div>
+    </ng-container>
+  </div>
+
+  <footer class="loc-up__foot" *ngIf="step === 'items'">
+    <button type="button" class="loc-up__ghost" (click)="undoLast()" [disabled]="saving || !lines.length">
+      <i class="material-icons">undo</i> Hoàn tác
+    </button>
+    <button type="button" class="loc-up__done" (click)="finish()" [disabled]="saving || !lines.length">
+      <i class="material-icons">done_all</i> {{ saving ? 'Đang lưu…' : 'DONE' }}
+    </button>
+  </footer>
+</div>

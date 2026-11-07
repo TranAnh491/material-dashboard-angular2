@@ -14,6 +14,275 @@
       <i class="material-icons">calendar_month</i> Thống kê Nhập/Xuất</button>
     <button type="button" class="rpt-tab" [class.rpt-tab--on]="activeTab === 'docs'" (click)="setTab('docs')">
       <i class="material-icons">folder</i> Lưu tài liệu</button>
+    <button type="button" class="rpt-tab" [class.rpt-tab--on]="activeTab === 'plan'" (click)="setTab('plan')">
+      <i class="material-icons">inventory</i> Kế hoạch NVL</button>
+  </div>
+
+  <!-- ===== Kế hoạch NVL: tổng quan bag về / xuất, rủi ro tồn, bảng chi tiết ===== -->
+  <div class="rpt-plan" *ngIf="activeTab === 'plan'">
+    <div class="pl-bar">
+      <label class="rpt-btn rpt-docs__upload" [class.rpt-btn--busy]="planImporting">
+        <i class="material-icons" [class.rpt-spin]="planImporting">{{ planImporting ? 'sync' : 'upload_file' }}</i>
+        {{ planImporting ? 'Đang import…' : 'Import file' }}
+        <input type="file" accept=".xlsx,.xlsm,.xls" (change)="onPlanPicked($event)" [disabled]="planImporting" hidden>
+      </label>
+      <button type="button" class="rpt-icon-btn" (click)="loadPlan(); loadPlanStock(true)" [disabled]="planLoading || planStockLoading" title="Tải lại kế hoạch + tồn thực tế">
+        <i class="material-icons" [class.rpt-spin]="planLoading || planStockLoading">refresh</i></button>
+      <button type="button" class="rpt-icon-btn" (click)="exportPlan()" *ngIf="plan" [disabled]="!planView.length" title="Xuất Excel (theo bộ lọc bảng chi tiết)">
+        <i class="material-icons">download</i></button>
+      <div class="pl-meta" *ngIf="plan">
+        <strong [title]="plan.fileName">{{ plan.fileName }}</strong>
+        <span>Tồn file chốt {{ planStockDateLabel }} · {{ plan.rows.length | number }} mã · import {{ plan.uploadedBy || '—' }} {{ plan.uploadedAt ? (plan.uploadedAt | date:'dd/MM HH:mm') : '' }}</span>
+      </div>
+      <span class="pl-spacer"></span>
+      <ng-container *ngIf="plan">
+        <div class="rpt-seg" title="Mã cần follow = mã bắt đầu bằng B, trừ Tem / nhãn và Dây rút / Dây buộc (cable tie)">
+          <button type="button" [class.on]="planScope === 'key'" (click)="setPlanScope('key')">Mã B chính ({{ planKeyCount | number }})</button>
+          <button type="button" [class.on]="planScope === 'all'" (click)="setPlanScope('all')">Tất cả ({{ plan.rows.length | number }})</button>
+        </div>
+        <span class="pl-lbl">Tồn thực tế</span>
+        <div class="rpt-seg">
+          <button type="button" [class.on]="planFactory === 'all'" (click)="setPlanFactory('all')">Cả 2</button>
+          <button type="button" [class.on]="planFactory === 'ASM1'" (click)="setPlanFactory('ASM1')">ASM1</button>
+          <button type="button" [class.on]="planFactory === 'ASM2'" (click)="setPlanFactory('ASM2')">ASM2</button>
+        </div>
+        <div class="rpt-seg">
+          <button type="button" [class.on]="planGroup === 'month'" (click)="setPlanGroup('month')">Tháng</button>
+          <button type="button" [class.on]="planGroup === 'day'" (click)="setPlanGroup('day')">Ngày</button>
+        </div>
+        <div class="rpt-seg">
+          <button type="button" [class.on]="planUnit === 'bag'" (click)="planUnit = 'bag'">Bag</button>
+          <button type="button" [class.on]="planUnit === 'qty'" (click)="planUnit = 'qty'">Số lượng</button>
+        </div>
+      </ng-container>
+    </div>
+
+    <div class="rpt-docs__err" *ngIf="planError">{{ planError }}</div>
+    <div class="rpt-docs__err" *ngIf="planStockError">{{ planStockError }}</div>
+    <div class="rpt-docs__empty" *ngIf="planLoaded && !planLoading && !plan">
+      Chưa có kế hoạch — bấm <strong>Import file</strong> và chọn file "Total material request" (cần sheet SUM + BOM).</div>
+    <div class="pl-warn" *ngIf="plan?.warnings?.length" [title]="plan!.warnings.join('\n')">
+      <i class="material-icons">error_outline</i> {{ plan!.warnings.join(' · ') }}</div>
+
+    <ng-container *ngIf="plan && planKpi as k">
+      <!-- KPI -->
+      <div class="pl-kpis">
+        <div class="pl-kpi pl-kpi--in">
+          <span class="pl-kpi__l"><i class="material-icons">south</i> Bag về kho</span>
+          <span class="pl-kpi__v">{{ k.inBags | number }}</span>
+          <span class="pl-kpi__s">{{ k.inCodes | number }} mã cần về</span>
+        </div>
+        <div class="pl-kpi pl-kpi--out">
+          <span class="pl-kpi__l"><i class="material-icons">north</i> Bag xuất kho</span>
+          <span class="pl-kpi__v">{{ k.outBags | number }}</span>
+          <span class="pl-kpi__s">{{ k.outCodes | number }} mã cần xuất</span>
+        </div>
+        <div class="pl-kpi">
+          <span class="pl-kpi__l"><i class="material-icons">inventory_2</i> Mã dùng tồn kho</span>
+          <span class="pl-kpi__v">{{ k.stockUseCodes | number }}</span>
+          <span class="pl-kpi__s" *ngIf="!planStockLoading">{{ k.liveBags | number }} bag tồn thực tế ({{ planFactoryLabel }})</span>
+          <span class="pl-kpi__s" *ngIf="planStockLoading"><i class="material-icons rpt-spin">sync</i> đang đọc tồn…</span>
+        </div>
+        <button type="button" class="pl-kpi pl-kpi--high" (click)="setPlanFilter('risk'); planSideList = 'risk'" title="Lọc bảng chi tiết: mã rủi ro">
+          <span class="pl-kpi__l"><i class="material-icons">report</i> Rủi ro cao</span>
+          <span class="pl-kpi__v">{{ k.high | number }}</span>
+          <span class="pl-kpi__s">tồn thực tế không đủ / về trễ</span>
+        </button>
+        <button type="button" class="pl-kpi pl-kpi--mid" (click)="setPlanFilter('risk'); planSideList = 'risk'" title="Lọc bảng chi tiết: mã rủi ro">
+          <span class="pl-kpi__l"><i class="material-icons">warning</i> Rủi ro trung bình</span>
+          <span class="pl-kpi__v">{{ k.mid | number }}</span>
+          <span class="pl-kpi__s">tồn dư &lt; 10%</span>
+        </button>
+        <button type="button" class="pl-kpi" (click)="setPlanFilter('nosp')" title="Lọc bảng chi tiết: mã chưa có Standard Packing">
+          <span class="pl-kpi__l"><i class="material-icons">help_outline</i> Chưa có Std Packing</span>
+          <span class="pl-kpi__v">{{ k.noSp | number }}</span>
+          <span class="pl-kpi__s">không quy ra bag được</span>
+        </button>
+      </div>
+
+      <div class="pl-grid">
+        <!-- Biểu đồ bag theo kỳ -->
+        <section class="pl-panel">
+          <header class="pl-panel__h">
+            <h4>Bag về / xuất theo {{ planGroup === 'month' ? 'tháng' : 'mốc ngày' }}</h4>
+            <span class="pl-legend"><i class="pl-sw pl-sw--in"></i>Về kho <i class="pl-sw pl-sw--out"></i>Xuất kho</span>
+          </header>
+          <div class="pl-chart">
+            <div class="pl-chart__col" *ngFor="let p of planPeriods; let i = index"
+              [title]="p.label + '\nVề: ' + (planSummary[i].inBags | number) + ' bag (' + planSummary[i].inCodes + ' mã)\nXuất: ' + (planSummary[i].outBags | number) + ' bag (' + planSummary[i].outCodes + ' mã)' + (planSummary[i].negCodes ? '\nTồn âm: ' + planSummary[i].negCodes + ' mã' : '')">
+              <div class="pl-chart__bars">
+                <div class="pl-chart__bar pl-chart__bar--in" [style.height.%]="planSummary[i].inBags / planChartMax * 100">
+                  <span>{{ planSummary[i].inBags ? planShort(planSummary[i].inBags) : '' }}</span></div>
+                <div class="pl-chart__bar pl-chart__bar--out" [style.height.%]="planSummary[i].outBags / planChartMax * 100">
+                  <span>{{ planSummary[i].outBags ? planShort(planSummary[i].outBags) : '' }}</span></div>
+              </div>
+              <div class="pl-chart__x">{{ p.label }}</div>
+              <div class="pl-chart__n">{{ planSummary[i].inCodes }}↓ {{ planSummary[i].outCodes }}↑</div>
+              <div class="pl-chart__neg" *ngIf="planSummary[i].negCodes">{{ planSummary[i].negCodes }} âm</div>
+            </div>
+          </div>
+          <p class="pl-foot">Số dưới cột: số mã về ↓ / xuất ↑. Bag = làm tròn lên (số lượng ÷ Standard Packing) từng mốc ngày.</p>
+        </section>
+
+        <!-- Top mã về nhiều bag -->
+        <section class="pl-panel">
+          <header class="pl-panel__h"><h4>Top mã về kho nhiều bag</h4></header>
+          <div class="pl-list">
+            <button type="button" class="pl-item" *ngFor="let v of planTopIn; let i = index" (click)="focusPlanCode(v.row.code)" [title]="v.row.des">
+              <span class="pl-item__rank">{{ i + 1 }}</span>
+              <span class="pl-item__main">
+                <span class="pl-item__top"><strong>{{ v.row.code }}</strong><span class="pl-item__val">{{ v.inBagTotal | number }} bag</span></span>
+                <span class="pl-item__bar"><span class="pl-item__fill pl-item__fill--in" [style.width.%]="topInPct(v)"></span></span>
+                <span class="pl-item__sub">{{ v.row.des }}</span>
+                <span class="pl-item__sub">{{ planNum(v.inTotal) }} {{ v.row.unit }} · SP {{ v.sp | number }}</span>
+              </span>
+            </button>
+            <div class="rpt-docs__empty" *ngIf="!planTopIn.length">Không có mã nào cần về (hoặc chưa có Standard Packing).</div>
+          </div>
+        </section>
+
+        <!-- Rủi ro / mã dùng tồn -->
+        <section class="pl-panel">
+          <header class="pl-panel__h">
+            <div class="rpt-seg rpt-seg--sm">
+              <button type="button" [class.on]="planSideList === 'risk'" (click)="planSideList = 'risk'">Rủi ro thiếu ({{ planRiskList.length }})</button>
+              <button type="button" [class.on]="planSideList === 'stock'" (click)="planSideList = 'stock'">Dùng tồn nhiều</button>
+            </div>
+          </header>
+          <div class="pl-loading" *ngIf="planStockLoading"><i class="material-icons rpt-spin">sync</i> Đang đọc tồn thực tế…</div>
+          <div class="pl-list">
+            <button type="button" class="pl-item" *ngFor="let v of (planSideList === 'risk' ? planRiskList : planStockList)"
+              (click)="focusPlanCode(v.row.code)" [title]="v.row.des + (v.reasons.length ? '\n• ' + v.reasons.join('\n• ') : '')">
+              <span class="pl-badge" [class.pl-badge--high]="v.risk === 'high'" [class.pl-badge--mid]="v.risk === 'mid'">
+                {{ v.risk === 'high' ? 'Cao' : v.risk === 'mid' ? 'TB' : 'OK' }}</span>
+              <span class="pl-item__main">
+                <span class="pl-item__top">
+                  <strong>{{ v.row.code }}</strong>
+                  <span class="pl-item__val pl-neg" *ngIf="v.gap !== null && v.gap < -0.0005">thiếu {{ planQtyToUnit(v, -v.gap) }}</span>
+                  <span class="pl-item__val pl-neg" *ngIf="(v.gap === null || v.gap >= -0.0005) && v.minBal < -0.0005">âm {{ planQtyToUnit(v, -v.minBal) }}</span>
+                </span>
+                <span class="pl-item__bar" *ngIf="v.useFromStock > 0.0005"><span class="pl-item__fill"
+                  [class.pl-item__fill--bad]="v.risk === 'high'" [class.pl-item__fill--warn]="v.risk === 'mid'" [style.width.%]="coverPct(v)"></span></span>
+                <span class="pl-item__sub">
+                  Cần từ tồn {{ planQtyToUnit(v, v.useFromStock) }} · Tồn TT {{ planQtyToUnit(v, v.live) }}
+                  {{ planUnit === 'bag' && v.sp ? 'bag' : v.row.unit }}{{ v.firstNeed ? ' · cần từ ' + v.firstNeed : '' }}</span>
+                <span class="pl-item__sub">{{ v.row.des }}</span>
+              </span>
+            </button>
+            <div class="rpt-docs__empty" *ngIf="!(planSideList === 'risk' ? planRiskList : planStockList).length && !planStockLoading">Không có mã nào.</div>
+          </div>
+          <p class="pl-foot">Cần từ tồn = phần nhu cầu file không mua (lấy từ tồn {{ planStockDateLabel }}). So với tồn thực tế hôm nay ({{ planFactoryLabel }}).</p>
+        </section>
+
+        <!-- Tồn thấp sắp dùng hết -->
+        <section class="pl-panel pl-panel--focus">
+          <header class="pl-panel__h pl-panel__h--wrap">
+            <h4><i class="material-icons">priority_high</i> Tồn thấp sắp dùng hết ({{ planLowList.length }})</h4>
+            <span class="pl-th">Tồn &lt;
+              <input type="number" min="0" [(ngModel)]="planLowMax" (ngModelChange)="buildLowStockList()" title="Ngưỡng tồn (số lượng)">
+              · dùng ≥
+              <input type="number" min="0" max="999" [(ngModel)]="planLowPct" (ngModelChange)="buildLowStockList()" title="Ngưỡng % tồn sẽ dùng">%</span>
+          </header>
+          <div class="pl-loading" *ngIf="planStockLoading"><i class="material-icons rpt-spin">sync</i> Đang đọc tồn thực tế — tạm tính theo tồn file…</div>
+          <div class="pl-list">
+            <button type="button" class="pl-item" *ngFor="let v of planLowList" (click)="focusPlanCode(v.row.code)"
+              [title]="v.row.des + (v.reasons.length ? '\n• ' + v.reasons.join('\n• ') : '')">
+              <span class="pl-pct" [class.pl-pct--over]="v.usePct > 100">{{ v.usePct | number:'1.0-0' }}%</span>
+              <span class="pl-item__main">
+                <span class="pl-item__top">
+                  <strong>{{ v.row.code }}</strong>
+                  <span class="pl-item__val">còn {{ planNum(v.stockBase - v.useFromStock) || 0 }} {{ v.row.unit }}</span>
+                </span>
+                <span class="pl-item__bar"><span class="pl-item__fill" [class.pl-item__fill--bad]="v.usePct > 100"
+                  [class.pl-item__fill--warn]="v.usePct <= 100" [style.width.%]="v.usePct > 100 ? 100 : v.usePct"></span></span>
+                <span class="pl-item__sub">Tồn {{ planNum(v.stockBase) }} · dùng {{ planNum(v.useFromStock) }} {{ v.row.unit }}{{ v.firstNeed ? ' · từ ' + v.firstNeed : '' }}{{ v.sp ? ' · ' + v.liveBags + ' bag' : '' }}</span>
+                <span class="pl-item__sub">{{ v.row.des }}</span>
+              </span>
+            </button>
+            <div class="rpt-docs__empty" *ngIf="!planLowList.length">Không có mã nào theo ngưỡng này.</div>
+          </div>
+          <p class="pl-foot">Tồn = tồn thực tế hôm nay ({{ planFactoryLabel }}){{ planStockLoading || planStockError ? ', tạm dùng tồn file ' + planStockDateLabel : '' }}. Dùng = phần nhu cầu lấy từ tồn (không mua thêm). &gt;100% = tồn không đủ.</p>
+        </section>
+      </div>
+
+      <!-- Bảng chi tiết -->
+      <section class="pl-panel" id="rpt-plan-detail">
+        <header class="pl-panel__h pl-panel__h--wrap">
+          <h4>Bảng chi tiết</h4>
+          <input type="search" class="rpt-docs__q pl-q" [(ngModel)]="planQuery" (ngModelChange)="applyPlanFilter()"
+            placeholder="Tìm mã VT / mã CN / mô tả / mã FG…" autocomplete="off">
+          <div class="pl-chips">
+            <button type="button" [class.on]="planFilter === 'active'" (click)="setPlanFilter('active')">Có phát sinh</button>
+            <button type="button" [class.on]="planFilter === 'risk'" (click)="setPlanFilter('risk')">Rủi ro</button>
+            <button type="button" [class.on]="planFilter === 'neg'" (click)="setPlanFilter('neg')">Tồn âm cuối kỳ</button>
+            <button type="button" [class.on]="planFilter === 'nosp'" (click)="setPlanFilter('nosp')">Chưa có SP</button>
+            <button type="button" [class.on]="planFilter === 'all'" (click)="setPlanFilter('all')">Tất cả</button>
+          </div>
+          <div class="rpt-seg rpt-seg--sm">
+            <button type="button" [class.on]="planMode === 'both'" (click)="setPlanMode('both')">Về + Xuất</button>
+            <button type="button" [class.on]="planMode === 'in'" (click)="setPlanMode('in')">Về</button>
+            <button type="button" [class.on]="planMode === 'out'" (click)="setPlanMode('out')">Xuất</button>
+          </div>
+          <span class="rpt-plan__count">{{ planVisible.length | number }} / {{ planView.length | number }} mã · đơn vị: {{ planUnit === 'bag' ? 'bag (mã chưa có SP hiện số lượng, in nghiêng)' : 'số lượng' }}</span>
+        </header>
+
+        <div class="rpt-plan__scroll">
+          <table class="rpt-detail-table rpt-plan__table">
+            <thead>
+              <tr>
+                <th rowspan="2" class="rpt-plan__sticky">Mã VT</th>
+                <th rowspan="2">Mô tả</th>
+                <th rowspan="2">ĐVT</th>
+                <th rowspan="2" class="num">Std<br>Packing</th>
+                <th rowspan="2" class="num">Tồn file<br>{{ planStockDateLabel }}</th>
+                <th rowspan="2" class="num">Tồn TT<br>{{ planFactoryLabel }}</th>
+                <th rowspan="2" class="num">Cần từ<br>tồn</th>
+                <th rowspan="2">Rủi ro</th>
+                <th *ngFor="let p of planPeriods" class="rpt-plan__ph" [attr.colspan]="planMode === 'both' ? 2 : 1">{{ p.label }}</th>
+                <th rowspan="2" class="num" *ngIf="planMode !== 'out'">Tổng về</th>
+                <th rowspan="2" class="num" *ngIf="planMode !== 'in'">Tổng xuất</th>
+              </tr>
+              <tr>
+                <ng-container *ngFor="let p of planPeriods">
+                  <th class="num rpt-plan__in rpt-plan__pstart" *ngIf="planMode !== 'out'">Về</th>
+                  <th class="num rpt-plan__out" [class.rpt-plan__pstart]="planMode === 'out'" *ngIf="planMode !== 'in'">Xuất</th>
+                </ng-container>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let v of planVisible; trackBy: trackPlanRow" [class.pl-qty]="planUnit === 'bag' && !v.sp" [class.pl-minor]="!v.key"
+                [title]="v.key ? '' : 'Mã không quan trọng (không phải mã B, hoặc Tem / Dây rút / Dây buộc)'">
+                <td class="rpt-plan__sticky rpt-plan__code" [class.pl-neg]="v.risk === 'high'" [title]="v.row.fg ? 'FG: ' + v.row.fg : ''">
+                  {{ v.row.code }}
+                  <i class="material-icons rpt-caveat-icon" *ngIf="v.row.adjusted"
+                    title="Phân bổ xuất theo BOM lệch với Demand của SUM — đã co giãn cho khớp tổng">error_outline</i>
+                  <small *ngIf="v.row.cnCode">{{ v.row.cnCode }}</small>
+                </td>
+                <td class="rpt-plan__des" [title]="v.row.des">{{ v.row.des }}
+                  <small *ngIf="v.row.remark">{{ v.row.remark }}</small></td>
+                <td>{{ v.row.unit }}</td>
+                <td class="num">{{ v.sp ? (v.sp | number) : '—' }}</td>
+                <td class="num">{{ planQtyToUnit(v, v.row.stock) }}</td>
+                <td class="num">{{ v.live === null ? '…' : (planUnit === 'bag' && v.sp ? (v.liveBags | number) : planQtyToUnit(v, v.live)) }}</td>
+                <td class="num">{{ planNum(v.useFromStock) ? planQtyToUnit(v, v.useFromStock) : '' }}</td>
+                <td [title]="v.reasons.join('\n')">
+                  <span class="pl-badge" *ngIf="v.risk" [class.pl-badge--high]="v.risk === 'high'" [class.pl-badge--mid]="v.risk === 'mid'">
+                    {{ v.risk === 'high' ? 'Cao' : 'TB' }}</span></td>
+                <ng-container *ngFor="let p of planPeriods; let k = index">
+                  <td class="num rpt-plan__in rpt-plan__pstart" *ngIf="planMode !== 'out'">{{ planCell(v, 'in', k) }}</td>
+                  <td class="num rpt-plan__out" [class.rpt-plan__pstart]="planMode === 'out'" [class.pl-negcell]="v.bal[k] < -0.0005"
+                    [title]="'Tồn cuối kỳ (file): ' + planNum(v.bal[k])" *ngIf="planMode !== 'in'">{{ planCell(v, 'out', k) }}</td>
+                </ng-container>
+                <td class="num rpt-plan__in" *ngIf="planMode !== 'out'"><strong>{{ planUnit === 'bag' && v.sp ? (v.inBagTotal | number) : planNum(v.inTotal) }}</strong></td>
+                <td class="num rpt-plan__out" *ngIf="planMode !== 'in'"><strong>{{ planUnit === 'bag' && v.sp ? (v.outBagTotal | number) : planNum(v.outTotal) }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="rpt-btn rpt-btn--outline rpt-plan__more" *ngIf="planView.length > planLimit"
+          (click)="planLimit = planLimit + 300">Xem thêm ({{ planView.length - planLimit | number }} mã)</button>
+      </section>
+    </ng-container>
   </div>
 
   <!-- ===== Lưu tài liệu ===== -->
@@ -26,6 +295,10 @@
       <input type="search" class="rpt-docs__q" [(ngModel)]="docsQuery" placeholder="Tìm tên file / người lưu…" autocomplete="off">
       <button type="button" class="rpt-btn rpt-btn--outline" (click)="loadDocs()" [disabled]="docsLoading">
         <i class="material-icons" [class.rpt-spin]="docsLoading">refresh</i> Làm mới</button>
+      <button type="button" class="rpt-btn" *ngIf="docsSelected.size" (click)="downloadSelectedDocs()" [disabled]="docsBulkBusy">
+        <i class="material-icons" [class.rpt-spin]="docsBulkBusy">{{ docsBulkBusy ? 'sync' : 'download' }}</i>
+        {{ docsBulkBusy ? 'Đang tải ' + docsBulkDone + '/' + docsSelected.size : 'Tải về (' + docsSelected.size + ')' }}</button>
+      <button type="button" class="rpt-btn rpt-btn--outline" *ngIf="docsSelected.size && !docsBulkBusy" (click)="docsSelected.clear()">Bỏ chọn</button>
     </div>
     <p class="rpt-docs__hint">File lưu trên hệ thống (tối đa 50MB / file) — mở ở bất kỳ máy nào để tải về hoặc in.</p>
 
@@ -42,10 +315,12 @@
 
     <table class="rpt-detail-table rpt-docs__table" *ngIf="docsFiltered.length">
       <thead>
-        <tr><th>Tên file</th><th class="num">Dung lượng</th><th>Người lưu</th><th>Ngày lưu</th><th></th></tr>
+        <tr><th class="rpt-docs__chk"><input type="checkbox" [checked]="docsAllChecked" [indeterminate]="docsSelected.size > 0 && !docsAllChecked"
+              (change)="toggleAllDocs($any($event.target).checked)" title="Chọn tất cả"></th><th>Tên file</th><th class="num">Dung lượng</th><th>Người lưu</th><th>Ngày lưu</th><th></th></tr>
       </thead>
       <tbody>
-        <tr *ngFor="let d of docsFiltered">
+        <tr *ngFor="let d of docsFiltered" [class.rpt-docs__row--on]="docsSelected.has(d.id)">
+          <td class="rpt-docs__chk"><input type="checkbox" [checked]="docsSelected.has(d.id)" (change)="toggleDoc(d)"></td>
           <td class="rpt-docs__name"><i class="material-icons">{{ docIcon(d) }}</i> {{ d.name }}</td>
           <td class="num">{{ docSizeText(d.size) }}</td>
           <td>{{ d.uploadedBy || '—' }}</td>

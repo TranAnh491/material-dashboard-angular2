@@ -7,10 +7,10 @@
 
 .pl-page {
   --pl-bg: #f1f5f9;
-  --pl-surface: #ffffff;
+  --pl-surface: #FFFFFF;
   --pl-text: #0f172a;
   --pl-muted: #64748b;
-  --pl-border: rgba(15, 23, 42, 0.10);
+  --pl-border: #6B6B66;
   --pl-accent: #0f766e;
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   color: var(--pl-text);
@@ -41,7 +41,7 @@
     height: 34px;
     border-radius: 9px;
     border: 1px solid var(--pl-border);
-    background: #fff;
+    background: #FFFFFF;
     box-shadow: none;
   }
 
@@ -55,11 +55,11 @@
     background: #f8fafc !important;
     color: #64748b !important;
     font-weight: 700 !important;
-    border-color: rgba(15, 23, 42, 0.08) !important;
+    border-color: #6B6B66 !important;
   }
 
   .excel-table td {
-    border-color: rgba(15, 23, 42, 0.10) !important;
+    border-color: #6B6B66 !important;
     color: #0f172a;
   }
 }
@@ -67,14 +67,14 @@
 .more-popup-content {
   border-radius: 16px;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
 }
 
 .more-popup-header {
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
   color: #0f172a;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .more-popup-title {
@@ -90,7 +90,7 @@
   padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
-  background: #ffffff;
+  background: #FFFFFF;
   min-height: calc(100vh - 80px);
   
   // Ensure sidebar is visible
@@ -121,7 +121,7 @@
     text-transform: uppercase !important;
     background: #f8fafc !important;
     padding: 12px 9px !important;
-    border-color: rgba(15, 23, 42, 0.08) !important;
+    border-color: #6B6B66 !important;
   }
 
   /* Override tất cả shadow / bold do inline style */
@@ -141,8 +141,8 @@
 
   // Excel header styling
   .excel-header {
-    background: #ffffff !important;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.10) !important;
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #8F8F89 !important;
     padding: 14px 20px 12px;
     
     h4 {
@@ -170,7 +170,7 @@
           font-size: 10px !important;
         color: #64748b !important;
         background: #f8fafc !important;
-        border: 1px solid rgba(15, 23, 42, 0.08) !important;
+        border: 1px solid #6B6B66 !important;
         padding: 8px 4px !important;
         text-align: center !important;
         vertical-align: middle !important;
@@ -193,7 +193,7 @@
       font-weight: 500;
       border-radius: 8px;
       border: 2px solid #000000;
-      background: #ffffff;
+      background: #FFFFFF;
       color: #000000;
       transition: all 0.3s ease;
       display: flex;
@@ -222,7 +222,7 @@
       }
 
       &.active {
-        background: #ffffff;
+        background: #FFFFFF;
         color: #000000;
         border: 2px solid #000000;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -239,7 +239,7 @@
   .schedules-section {
     .schedules-container {
       .import-section {
-        background: #ffffff;
+        background: #FFFFFF;
         padding: 20px;
         border-radius: 8px;
         border: 2px solid #000000;
@@ -261,7 +261,7 @@
             align-items: center;
             gap: 8px;
             border: 2px solid #000000;
-            background: #ffffff;
+            background: #FFFFFF;
             color: #000000;
 
             mat-icon {
@@ -293,7 +293,7 @@
           align-items: center;
           margin-bottom: 20px;
           padding: 15px;
-          background: #ffffff;
+          background: #FFFFFF;
           color: #000000;
           border: 2px solid #000000;
           border-radius: 8px;
@@ -318,7 +318,7 @@
             gap: 10px;
 
             button {
-              background: #ffffff;
+              background: #FFFFFF;
               color: #000000;
               border: 2px solid #000000;
 
@@ -331,7 +331,7 @@
         }
 
         .table-container {
-          background: #ffffff;
+          background: #FFFFFF;
           border: 2px solid #000000;
           border-radius: 8px;
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -344,7 +344,7 @@
             min-width: 1600px;
             
             .header-cell {
-              background: #ffffff !important;
+              background: #FFFFFF !important;
               font-weight: 600;
               font-size: 13px;
               color: #000000 !important;
@@ -386,7 +386,7 @@
               border-bottom: 1px solid #000000;
               vertical-align: middle;
               white-space: nowrap;
-              background: #ffffff;
+              background: #FFFFFF;
               color: #000000;
               
               // Column widths dựa theo số thứ tự cột
@@ -469,7 +469,7 @@
 
   // Check Label Section
   .check-label-section {
-    background: #ffffff;
+    background: #FFFFFF;
     padding: 20px;
     border-radius: 8px;
     border: 2px solid #000000;
@@ -486,7 +486,7 @@
     width: 105mm;
     height: 148mm;
     position: relative;
-    background: #ffffff;
+    background: #FFFFFF;
     margin: 0 auto;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     border: 2px solid #000000;
@@ -549,8 +549,8 @@ body .print-label-container,
 html .print-label-container,
 .print-label-container {
   .excel-header {
-    background: #ffffff !important;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.10) !important;
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #8F8F89 !important;
     
     h4 {
       color: #0f172a !important;
@@ -561,15 +561,15 @@ html .print-label-container,
     thead th {
       background: #f9fafb !important;
       color: #000000 !important;
-      border-bottom: 1px solid #e5e7eb !important;
+      border-bottom: 1px solid #8F8F89 !important;
       font-size: 13px !important;
   text-align: center !important;
     }
 
     tbody td {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       color: #000000 !important;
-  border: 1px solid #e5e7eb !important;
+  border: 1px solid #6B6B66 !important;
       font-size: 13px !important;
     }
 
@@ -632,8 +632,8 @@ html .print-label-container,
   .excel-table textarea,
   .excel-table button {
     color: #000000 !important;
-    background: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
+    background: #FFFFFF !important;
+    border: 1px solid #6B6B66 !important;
   }
 
   // Ghi đè tất cả icons trong bảng
@@ -647,8 +647,8 @@ html .print-label-container,
   .excel-table .status-badge,
   .excel-table .badge {
     color: #000000 !important;
-    background: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
+    background: #FFFFFF !important;
+    border: 1px solid #6B6B66 !important;
   }
 }
 
@@ -702,7 +702,7 @@ html .print-label-container,
 
 :host ::ng-deep table th,
 :host ::ng-deep table td {
-  border-color: rgba(15, 23, 42, 0.10) !important;
+  border-color: #6B6B66 !important;
 }
 
 :host ::ng-deep table input,
@@ -749,7 +749,7 @@ html .print-label-container,
     color: #0f172a;
     padding: 20px;
     border-radius: 12px 12px 0 0;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+    border-bottom: 1px solid #8F8F89;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -785,7 +785,7 @@ html .print-label-container,
   
   .dialog-footer {
     padding: 16px 24px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #8F8F89;
     display: flex;
     justify-content: flex-end;
     gap: 12px;
@@ -808,7 +808,7 @@ html .print-label-container,
 .modal-content {
   background: white;
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
   max-width: 500px;
   width: 90%;
@@ -825,7 +825,7 @@ html .print-label-container,
     color: #0f172a;
     padding: 20px;
     border-radius: 16px 16px 0 0;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+    border-bottom: 1px solid #8F8F89;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -916,7 +916,7 @@ html .print-label-container,
     width: 100%;
     padding: 12px 16px;
     font-size: 16px;
-    border: 2px solid #d1d5db;
+    border: 2px solid #6B6B66;
     border-radius: 8px;
     margin-bottom: 12px;
     transition: all 0.2s;
@@ -962,7 +962,7 @@ html .print-label-container,
 
 .scanned-label-info {
   background: #f9fafb;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #6B6B66;
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
@@ -987,7 +987,7 @@ html .print-label-container,
       display: flex;
       justify-content: space-between;
       padding: 8px 0;
-      border-bottom: 1px solid #f3f4f6;
+      border-bottom: 1px solid #8F8F89;
       
       &:last-child {
         border-bottom: none;
@@ -1068,7 +1068,7 @@ html .print-label-container,
 
 .iqc-instructions {
     background: #f8fafc;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid #6B6B66;
   border-radius: 12px;
   padding: 16px;
   margin-top: 20px;
@@ -1119,7 +1119,7 @@ html .print-label-container,
   background: #f8fafc;
   color: #111827;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid #8F8F89;
   border-radius: 12px 12px 0 0;
   display: flex;
   align-items: center;
@@ -1158,14 +1158,14 @@ html .print-label-container,
   margin-bottom: 16px;
   padding: 12px 14px;
   background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 13px;
 }
 
 .status-history-table-wrap {
   overflow-x: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
 }
 
@@ -1177,7 +1177,7 @@ html .print-label-container,
   th,
   td {
     padding: 10px 12px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #8F8F89;
     text-align: left;
   }
 
@@ -1212,7 +1212,7 @@ html .print-label-container,
 }
 
 .status-history-group {
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1223,7 +1223,7 @@ html .print-label-container,
   font-size: 13px;
   font-weight: 700;
   color: #111827;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid #8F8F89;
 }
 
 .status-history-group-rows {
@@ -1238,7 +1238,7 @@ html .print-label-container,
   align-items: center;
   padding: 8px 12px;
   font-size: 12px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #8F8F89;
 
   &:last-child {
     border-bottom: none;
@@ -1286,7 +1286,7 @@ html .print-label-container,
   background: #f8fafc;
   color: #111827;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid #8F8F89;
   border-radius: 12px 12px 0 0;
   display: flex;
   align-items: center;
@@ -1325,7 +1325,7 @@ html .print-label-container,
   margin-bottom: 16px;
   padding: 12px 14px;
   background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 13px;
 }
@@ -1355,10 +1355,10 @@ html .print-label-container,
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   padding: 6px;
-  background: #fff;
+  background: #FFFFFF;
   min-width: 0;
 }
 
@@ -1378,9 +1378,9 @@ html .print-label-container,
 .tinh-trang-picker-btn {
   width: 100%;
   padding: 4px 3px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #111827;
   font-size: 10px;
   font-weight: 600;
@@ -1431,18 +1431,18 @@ html .print-label-container,
 .label-employee-gate-dialog {
   width: 100%;
   max-width: 400px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid #6B6B66;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
   overflow: hidden;
 }
 
 .label-employee-gate-header {
-  background: #ffffff;
+  background: #FFFFFF;
   padding: 20px 22px 14px;
   text-align: center;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  border-bottom: 1px solid #8F8F89;
 
   .material-icons {
     font-size: 36px;
@@ -1473,7 +1473,7 @@ html .print-label-container,
   width: 100%;
   box-sizing: border-box;
   padding: 12px 14px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
+  border: 1px solid #6B6B66;
   border-radius: 9px;
   font-size: 18px;
   font-weight: 700;
@@ -1504,9 +1504,9 @@ html .print-label-container,
 .label-employee-gate-btn {
   flex: 1;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid #6B6B66;
   border-radius: 9px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 14px;
   font-weight: 700;

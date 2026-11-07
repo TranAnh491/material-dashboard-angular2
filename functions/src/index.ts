@@ -266,6 +266,15 @@ export const notifyFridgeLocationZaloDaily = functions
     return result;
   });
 
+/** Phanh đọc bất thường: trình duyệt ghi read-guard-incidents → báo Zalo ASP0106 (tối đa 1 tin / 10 phút / trang). */
+export const notifyReadGuardIncidentZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .firestore.document('read-guard-incidents/{incidentId}')
+  .onCreate(async (snap, context) => {
+    const { notifyReadGuardIncident } = await import('./read-guard-zalo');
+    return notifyReadGuardIncident(admin.firestore(), context.params.incidentId, snap.data() || {});
+  });
+
 /** B037: báo ngay khi vị trí tồn kho đổi khỏi HOACHAT. */
 export const notifyFridgeWrongLocationZalo = functions
   .runWith({ secrets: [zaloBotToken] })
@@ -275,6 +284,46 @@ export const notifyFridgeWrongLocationZalo = functions
     const before = change.before.exists ? (change.before.data() as Record<string, unknown>) : null;
     const after = change.after.exists ? (change.after.data() as Record<string, unknown>) : null;
     return notifyFridgeLocationOnWrite(admin.firestore(), before, after);
+  });
+
+/** Tồn NVL âm (≤ -1): báo nhóm Zalo Kho kèm LSX + người scan các lần xuất gần nhất. */
+export const notifyNegativeStockZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .firestore.document('inventory-materials/{docId}')
+  .onWrite(async (change, context) => {
+    const { notifyNegativeStockOnWrite } = await import('./negative-stock-zalo');
+    const before = change.before.exists ? (change.before.data() as Record<string, unknown>) : null;
+    const after = change.after.exists ? (change.after.data() as Record<string, unknown>) : null;
+    return notifyNegativeStockOnWrite(admin.firestore(), context.params.docId, before, after);
+  });
+
+/** JIT: LSX đã chia nhiều lần giao mà chưa giao hết → mọi lần chuyển Done (scan giao hàng, tab…) đổi thành JIT. */
+export const enforceJitStatusOnWo = functions
+  .firestore.document('work-orders/{id}')
+  .onUpdate(async (change) => {
+    const after = change.after.data() || {};
+    const before = change.before.data() || {};
+    if (after['status'] !== 'done' || before['status'] === 'done') return;
+    if (!after['jitActive'] || after['jitDelivered']) return;
+    await change.after.ref.update({ status: 'jit', jitBlockedDoneAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+
+/** JIT (Production): nút Gọi / hẹn giờ → Zalo bot nhắn nhóm Kho lấy hàng cho LSX. */
+export const notifyJitCallZalo = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .firestore.document('jit-call-log/{id}')
+  .onCreate(async (snap) => {
+    const { onJitCallLogCreated } = await import('./jit-call-zalo');
+    return onJitCallLogCreated(admin.firestore(), snap.ref, snap.data() as Record<string, unknown>);
+  });
+
+/** JIT: mỗi 5 phút — LSX tới giờ hẹn gọi lần sau → tự gọi kho. */
+export const runJitScheduledCallsJob = functions
+  .pubsub.schedule('*/5 * * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runJitScheduledCalls } = await import('./jit-call-zalo');
+    await runJitScheduledCalls(admin.firestore());
   });
 
 /** Quản lý NVL: gửi file hướng dẫn Scan vào nhóm Zalo Kho. */
@@ -746,7 +795,8 @@ export const sendInboundLdvMismatchEmailFn = functions
         factory: typeof data?.factory === 'string' ? data.factory.trim().slice(0, 10) : '',
         rollsOrBags,
         standardPacking,
-        reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : ''
+        reportedBy: typeof data?.reportedBy === 'string' ? data.reportedBy.trim().slice(0, 80) : '',
+        autoUpdated: data?.autoUpdated === true
       });
       return { ok: true };
     } catch (e: unknown) {
@@ -768,7 +818,9 @@ export const requestWoPxkBypassOtpFn = functions
         lsx: typeof data?.lsx === 'string' ? data.lsx : '',
         requestedBy: typeof data?.requestedBy === 'string' ? data.requestedBy : '',
         nextStatus: typeof data?.nextStatus === 'string' ? data.nextStatus : '',
-        factory: typeof data?.factory === 'string' ? data.factory : ''
+        factory: typeof data?.factory === 'string' ? data.factory : '',
+        reason: typeof data?.reason === 'string' ? data.reason : '',
+        purpose: typeof data?.purpose === 'string' ? data.purpose : ''
       });
       return { ok: true };
     } catch (e: unknown) {
@@ -799,7 +851,7 @@ export const verifyWoPxkBypassOtpFn = functions
     }
     try {
       const { verifyWoPxkBypassOtp } = await import('./wo-pxk-bypass-otp');
-      return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx);
+      return await verifyWoPxkBypassOtp(admin.firestore(), code, lsx, typeof data?.purpose === 'string' ? data.purpose : '');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       throw new functions.https.HttpsError(
@@ -848,6 +900,33 @@ export const notifyReadyIqcWaitingFn = functions
           : 'internal',
         msg
       );
+    }
+  });
+
+/** Work Order: LSX Ready ở Line cần chụp hình (WHA/WHB/WHG/WHH, USB C) — Zalo riêng cho team soạn. */
+export const notifyReadyPhotoRequiredFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: Record<string, unknown>, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Cần đăng nhập.');
+    }
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') as string[] : []);
+    try {
+      const { notifyReadyPhotoRequired } = await import('./ready-photo-zalo');
+      const result = await notifyReadyPhotoRequired(admin.firestore(), {
+        lsx: str(data?.lsx),
+        line: str(data?.line),
+        factory: str(data?.factory),
+        productCode: str(data?.productCode),
+        team: str(data?.team),
+        names: list(data?.names),
+        memberIds: list(data?.memberIds)
+      });
+      return { ok: true, ...result };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new functions.https.HttpsError(msg.includes('Thiếu') ? 'failed-precondition' : 'internal', msg);
     }
   });
 
@@ -1036,12 +1115,13 @@ export const notifyPrintLabelLateItemsDaily = functions
   });
 
 /**
- * FG Overview: T2–T6 (Asia/Ho_Chi_Minh) — nếu quá 1 ngày chưa import tồn kho thì gửi email WH.
+ * FG Overview: import 1 tuần 1 lần vào thứ 5 — sáng thứ 6 (Asia/Ho_Chi_Minh) nếu chưa có bản import
+ * của thứ 5 (quá 1 ngày) thì gửi email WH.
  * Nguồn: `fg-overview-import-cache/current-asm1` và `current-asm2` (field `updatedAt`).
  */
 export const notifyFgOverviewMissingImportWeekdays = functions
   .runWith({ secrets: [emailPass] })
-  .pubsub.schedule('0 8 * * 1-5')
+  .pubsub.schedule('0 8 * * 5')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
     const { runFgOverviewImportNotify } = await import('./fg-overview-import-notify');
@@ -1049,12 +1129,13 @@ export const notifyFgOverviewMissingImportWeekdays = functions
   });
 
 /**
- * Thứ 3 / 5 / 7 lúc 9h, 12h, 15h, 17h: FG Overview (ASM1/ASM2) và Inventory Overview LinkQ (ASM1/ASM2)
- * chưa có bản import của thứ 2 / 4 / 6 hôm trước → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
+ * 9h, 12h, 15h, 17h: Inventory Overview LinkQ (ASM1/ASM2) chưa có bản import của thứ 2 / 4 / 6 hôm trước
+ * (nhắc thứ 3 / 5 / 7); FG Overview (ASM1/ASM2) chưa có bản import của thứ 5 (nhắc thứ 6)
+ * → nhắn Zalo nhóm Quản lý kho. Có bản mới thì tự hết nhắc.
  */
 export const notifyImportOverdueZalo = functions
   .runWith({ secrets: [zaloBotToken] })
-  .pubsub.schedule('0 9,12,15,17 * * 2,4,6')
+  .pubsub.schedule('0 9,12,15,17 * * 2,4,5,6')
   .timeZone('Asia/Ho_Chi_Minh')
   .onRun(async () => {
     const { runImportOverdueZalo } = await import('./import-overdue-zalo');
@@ -1720,6 +1801,19 @@ export const purgeInventoryHiddenDaily = functions
   .onRun(async () => {
     const { runInventoryHiddenPurgeJob } = await import('./inventory-hidden-purge');
     await runInventoryHiddenPurgeJob(admin.firestore());
+  });
+
+/**
+ * Xuất BS — mỗi ngày 07:00 (VN): dòng chưa xuất xong của phiếu import quá 30 ngày → tự xóa
+ * (done + deletedAt), gửi mail tổng hợp tới wh1–wh4.
+ */
+export const purgeStaleBsDaily = functions
+  .runWith({ secrets: [emailPass], timeoutSeconds: 300, memory: '512MB' })
+  .pubsub.schedule('0 7 * * *')
+  .timeZone('Asia/Ho_Chi_Minh')
+  .onRun(async () => {
+    const { runBsStalePurgeJob } = await import('./bs-stale-purge');
+    await runBsStalePurgeJob(admin.firestore());
   });
 
 /** Hình bag lẻ đã cân — xóa file Storage > 6 tháng, mỗi ngày 02:30 (VN). */

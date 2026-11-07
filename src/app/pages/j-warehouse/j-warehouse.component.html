@@ -2107,13 +2107,32 @@
             </div>
           </div>
           <div class="jw-zone-key jw-storage-key" *ngIf="warehouseSheet && infoPanelOpen && storageOverlay">
-            <h4 class="jw-zone-key__title">{{ drawModeLabel('luu-tru') }}</h4>
+            <div class="jw-storage-key__head">
+              <h4 class="jw-zone-key__title">{{ drawModeLabel('luu-tru') }}</h4>
+              <ng-container *ngIf="storagePlanReady && !storagePlanError">
+                <button type="button" class="jw-storage-key__btn" *ngIf="!storageEditing" (click)="startStorageEdit()"
+                        title="Sửa nhóm mã từng kệ — rule vị trí ASM1 chạy theo sơ đồ này">
+                  <i class="material-icons">edit</i> Sửa
+                </button>
+                <ng-container *ngIf="storageEditing">
+                  <button type="button" class="jw-storage-key__btn jw-storage-key__btn--save" (click)="saveStorageEdit()" [disabled]="storageSaving">
+                    <i class="material-icons">save</i> {{ storageSaving ? 'Đang lưu…' : 'Lưu' }}
+                  </button>
+                  <button type="button" class="jw-storage-key__btn" (click)="cancelStorageEdit()" [disabled]="storageSaving">Hủy</button>
+                </ng-container>
+              </ng-container>
+            </div>
+            <p class="jw-storage-key__hint" *ngIf="storageEditing">
+              Ghi đầu mã cách nhau dấu phẩy (VD: B018, R029). Rule vị trí ASM1: mã có đầu mã ghi ở kệ nào thì chỉ được cất ở kệ đó.
+            </p>
             <p class="jw-storage-sheet__status" *ngIf="!storagePlanReady">{{ t('storage.loading') }}</p>
             <p class="jw-storage-sheet__status" *ngIf="storagePlanError">{{ storagePlanError }}</p>
             <ul *ngIf="storagePlanReady">
               <li *ngFor="let row of storageShelfRows">
                 <span>{{ row.shelf }}</span>
-                <span>{{ row.groups }}</span>
+                <span *ngIf="!storageEditing">{{ row.groups }}</span>
+                <input *ngIf="storageEditing" type="text" class="jw-storage-key__input"
+                       [(ngModel)]="storageDraft[row.shelf]" placeholder="—">
               </li>
             </ul>
           </div>

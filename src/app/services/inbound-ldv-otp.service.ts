@@ -30,6 +30,8 @@ export class InboundLdvOtpService {
     rollsOrBags: number;
     standardPacking: number;
     reportedBy: string;
+    /** true = Standard danh mục đã tự cập nhật theo lô này (standardPacking = giá trị cũ). */
+    autoUpdated?: boolean;
   }): Promise<void> {
     const callable = this.fns.httpsCallable<typeof payload, { ok: boolean }>('sendInboundLdvMismatchEmailFn');
     await firstValueFrom(callable(payload));

@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx';
 export type AgingFactory = 'KZ' | 'LH';
 export type LedgerKind = 'N' | 'X';
 export type AgingFileKind = LedgerKind | 'aging' | 'ton';
+/** tp = Aging thành phẩm (theo lô) · nvl = Aging nguyên liệu (theo PO — cột lô mang số PO) */
+export type AgingMode = 'tp' | 'nvl';
 
 export const AGING_FACTORIES: AgingFactory[] = ['KZ', 'LH'];
 export const AGING_FACTORY_LABEL: Record<AgingFactory, string> = { KZ: 'ASM1 (KZ)', LH: 'ASM2 (LH)' };
@@ -14,6 +16,17 @@ export const AGING_FILE_KIND_LABEL: Record<AgingFileKind, string> = {
   aging: 'Báo cáo tuổi hàng',
   ton: 'Báo cáo tồn kho',
 };
+export const AGING_FILE_KIND_LABEL_NVL: Record<AgingFileKind, string> = {
+  N: 'Bảng kê nhập NVL',
+  X: 'Bảng kê xuất NVL',
+  aging: 'Báo cáo tuổi hàng NVL',
+  ton: 'Báo cáo tồn kho',
+};
+
+/** Số PO: viết hoa, bỏ khoảng trắng — dùng làm khóa so sánh của Aging NVL. */
+export function normPo(v: unknown): string {
+  return String(v ?? '').trim().toUpperCase().replace(/\s+/g, '');
+}
 
 /** Một dòng bảng kê nhập / xuất. q luôn dương theo file (xuất cũng dương), dấu do kind quyết định. */
 export interface LedgerRow {
@@ -237,17 +250,26 @@ function sheetAoa(wb: XLSX.WorkBook, name: string): unknown[][] {
 }
 
 /** Nhận diện và đọc 1 file: bảng kê nhập / xuất, báo cáo tuổi hàng, báo cáo tồn kho. */
-export function parseAgingWorkbook(wb: XLSX.WorkBook, fileName: string): ParsedAgingFile | null {
-  // 1) Báo cáo tuổi hàng: sheet có header SKU + Mã lô + Inbound Date
+export function parseAgingWorkbook(wb: XLSX.WorkBook, fileName: string, mode: AgingMode = 'tp'): ParsedAgingFile | null {
+  const nvl = mode === 'nvl';
+  // 1) Báo cáo tuổi hàng: sheet có header SKU + Mã lô (NVL: PO) + Inbound Date
   for (const name of wb.SheetNames) {
     const aoa = sheetAoa(wb, name);
-    const h = findHeaderRow(aoa, ['SKU', 'Mã lô', 'Inbound Date']);
+    let h = findHeaderRow(aoa, ['SKU', 'Mã lô', 'Inbound Date']);
+    if (nvl) {
+      for (const poName of ['PO', 'Số PO', 'PO No', 'PO number']) {
+        if (h >= 0) break;
+        h = findHeaderRow(aoa, ['SKU', poName, 'Inbound Date']);
+      }
+    }
     if (h < 0) continue;
     const ix = headerIndex(aoa[h]);
+    // NVL: so theo PO — ưu tiên cột PO, không có thì dùng cột Mã lô
+    const poCol = nvl ? ['PO', 'Số PO', 'PO No', 'PO number'].map(n => ix(n)).find(i => i >= 0) ?? -1 : -1;
     const c = {
-      sku: ix('SKU'), name: ix('Name'), unit: ix('Unit'), lot: ix('Mã lô'), wh: ix('WH'), inb: ix('Inbound Date'),
+      sku: ix('SKU'), name: ix('Name'), unit: ix('Unit'), lot: poCol >= 0 ? poCol : ix('Mã lô'), wh: ix('WH'), inb: ix('Inbound Date'),
       aging: ix('Aging'), qty: ix('ERP inventory'), price: ix('Unit Price'), value: ix('Value'), type: ix('Type of Aging'),
-      cus: ix('Cus'),
+      cus: ix('Cus') >= 0 ? ix('Cus') : ix('Customer'),
     };
     const rows: AgingRow[] = [];
     for (const r of aoa.slice(h + 1)) {
@@ -258,7 +280,7 @@ export function parseAgingWorkbook(wb: XLSX.WorkBook, fileName: string): ParsedA
         sku,
         name: String(r[c.name] ?? '').trim(),
         unit: String(r[c.unit] ?? '').trim(),
-        lot: normLot(r[c.lot]),
+        lot: nvl ? normPo(r[c.lot]) : normLot(r[c.lot]),
         wh: String(r[c.wh] ?? '').trim(),
         inb: toIsoDate(r[c.inb]),
         aging: agingRaw === '' || agingRaw == null ? null : num(agingRaw),
@@ -297,7 +319,9 @@ export function parseAgingWorkbook(wb: XLSX.WorkBook, fileName: string): ParsedA
       const d = toIsoDate(r[c.d]);
       if (!sku || !d) continue;
       rows.push({
-        d, ct: str(r, c.ct).toUpperCase(), no: str(r, c.no), sku, lot: normLot(r[c.lot]), wh: str(r, c.wh).toUpperCase(),
+        // NVL: khóa so sánh = Số PO (lưu vào trường lot để dùng chung logic đối chiếu)
+        d, ct: str(r, c.ct).toUpperCase(), no: str(r, c.no), sku,
+        lot: nvl ? normPo(str(r, c.po)) : normLot(r[c.lot]), wh: str(r, c.wh).toUpperCase(),
         q: num(r[c.q]), lsx: str(r, c.lsx), po: str(r, c.po), loai: str(r, c.loai).toUpperCase(), dt: str(r, c.dt),
         dg: str(r, c.dg).slice(0, 120), hq: str(r, c.hq), xnk: str(r, c.xnk),
         price: c.price >= 0 ? num(r[c.price]) : 0, amount: c.amount >= 0 ? num(r[c.amount]) : 0,

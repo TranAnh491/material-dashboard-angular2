@@ -4,6 +4,12 @@ import { Subject } from 'rxjs';
 import * as firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 
+/** Tồn từng lô (còn > 0) của 1 mã theo nhà máy. */
+export interface NvlStockLots {
+  asm1: number[];
+  asm2: number[];
+}
+
 export interface NvlCatalogItem {
   materialCode: string;
   materialName: string;
@@ -14,10 +20,14 @@ export interface NvlCatalogItem {
   gwBag?: number;
   /** Lượng trong 1 thùng — nhập ở Inbound (cột Lượng trong thùng) / Danh mục; dùng tính số tem thùng. */
   cartonQty?: number;
+  /** Số bộ phận của mã (2 / 3 / 4) — chọn ở Quản lý nguyên liệu, hiện khi scan Outbound. 0 = chưa chọn. */
+  boPhan?: number;
   standardPacking: number;
   standardPackingLocked: boolean;
   /** Cho phép quét Tem Thùng (tem thùng riêng, không phải QR thường) để xuất kho ở Outbound ASM1/ASM2. */
   allowExportByCarton: boolean;
+  /** Mã cần theo dõi Week trên tem (gán ở Danh mục NVL → +Week). */
+  weekTracked?: boolean;
   /** Mã thuộc danh sách MSD (Moisture Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
   isMsd: boolean;
   /** Mã thuộc danh sách ESD (Electrostatic Sensitive Device) — gán ở Inbound/Danh mục, hiển thị ở Materials ASM1/ASM2. */
@@ -79,6 +89,7 @@ export class NvlCatalogFullService {
   private cachedAt = 0;
   private cachedDateKey = '';
   private codesWithStockCache: Set<string> | null = null;
+  private stockLotsCache: Map<string, NvlStockLots> | null = null;
   /** Mốc server mà cache này đã đồng bộ tới (lưu cùng cache localStorage). */
   private syncTs = 0;
   private metaPromise: Promise<{ updatedAt: number; resetAt: number; deleted: Record<string, number> } | null> | null = null;
@@ -149,12 +160,33 @@ export class NvlCatalogFullService {
       }
     }
 
+    // Nhiều nơi gọi cùng lúc (vd. nhiều storage event) → dùng chung 1 lần đọc, không đọc cả danh mục N lần.
+    if (!this.fullReadPromise) {
+      this.fullReadPromise = this.readAllFromServer().finally(() => { this.fullReadPromise = null; });
+    }
+    return this.fullReadPromise;
+  }
+
+  private fullReadPromise: Promise<NvlCatalogItem[]> | null = null;
+
+  private async readAllFromServer(): Promise<NvlCatalogItem[]> {
     const meta = await this.readMeta(true).catch(() => null);
-    const snap = await this.firestore
-      .collection(this.collectionName, ref => ref.limit(10000))
-      .get()
-      .toPromise();
-    const items = (snap?.docs || []).map(doc => this.mapDoc(doc.id, doc.data() as Record<string, unknown>));
+    // Danh mục đã > 10.000 mã. Firestore chỉ cho tối đa 10.000 dòng / truy vấn → đọc theo trang.
+    const PAGE = 5000;
+    const docs: firebase.default.firestore.QueryDocumentSnapshot[] = [];
+    let last: firebase.default.firestore.QueryDocumentSnapshot | null = null;
+    for (let guard = 0; guard < 20; guard++) {
+      let q = this.firestore.firestore
+        .collection(this.collectionName)
+        .orderBy(firebase.default.firestore.FieldPath.documentId())
+        .limit(PAGE);
+      if (last) q = q.startAfter(last);
+      const page = await q.get();
+      docs.push(...page.docs);
+      if (page.size < PAGE) break;
+      last = page.docs[page.docs.length - 1];
+    }
+    const items = docs.map(doc => this.mapDoc(doc.id, doc.data() as Record<string, unknown>));
     items.sort((a, b) => a.materialCode.localeCompare(b.materialCode));
     this.clearPatches();
     this.syncTs = meta?.updatedAt || Date.now();
@@ -296,12 +328,23 @@ export class NvlCatalogFullService {
       const doc = q?.docs?.[0];
       if (!doc) return null;
       const item = this.mapDoc(doc.id, doc.data() as Record<string, unknown>);
-      this.patchCache(code, item);
+      this.refreshCachedItem(item);
       return item;
     }
     const item = this.mapDoc(snap.id, snap.data() as Record<string, unknown>);
-    this.patchCache(code, item);
+    this.refreshCachedItem(item);
     return item;
+  }
+
+  /**
+   * Đọc 1 mã chỉ làm mới RAM của tab này. Không ghi mốc localStorage / không bắn changed$:
+   * trước đây mỗi lần đọc (vd. PXK Check lượng đọc vài chục mã) bị coi như "vừa sửa", các tab khác
+   * nhận storage event rồi cùng lúc đọc lại cả danh mục ~10.000 mã → phanh đọc dữ liệu.
+   */
+  private refreshCachedItem(item: NvlCatalogItem): void {
+    if (!this.cachedItems || !item.materialCode) return;
+    const idx = this.cachedItems.findIndex(i => i.materialCode === item.materialCode);
+    if (idx >= 0) this.cachedItems[idx] = { ...this.cachedItems[idx], ...item };
   }
 
   private mapDoc(id: string, d: Record<string, unknown>): NvlCatalogItem {
@@ -312,9 +355,11 @@ export class NvlCatalogFullService {
       unitWeight: Number(d['unitWeight'] ?? d['unit_weight']) || 0,
       gwBag: Number(d['gwBag']) || 0,
       cartonQty: Number(d['cartonQty']) || 0,
+      boPhan: Number(d['boPhan']) || 0,
       standardPacking: Number(d['standardPacking']) || 0,
       standardPackingLocked: d['standardPackingLocked'] === true,
       allowExportByCarton: d['allowExportByCarton'] === true,
+      weekTracked: d['weekTracked'] === true,
       isMsd: d['isMsd'] === true,
       isEsd: d['isEsd'] === true,
       updatedAt: (d['updatedAt'] as any)?.toDate ? (d['updatedAt'] as any).toDate() : undefined,
@@ -500,7 +545,7 @@ export class NvlCatalogFullService {
 
   async update(
     materialCode: string,
-    changes: { materialName?: string; unit?: string; unitWeight?: number; gwBag?: number; cartonQty?: number; standardPacking?: number },
+    changes: { materialName?: string; unit?: string; unitWeight?: number; gwBag?: number; cartonQty?: number; standardPacking?: number; boPhan?: number },
     editedBy?: string
   ): Promise<void> {
     const code = this.normalizeCode(materialCode);
@@ -534,6 +579,11 @@ export class NvlCatalogFullService {
       const sp = Math.max(0, Number(changes.standardPacking) || 0);
       payload['standardPacking'] = sp;
       patch.standardPacking = sp;
+    }
+    if (changes.boPhan !== undefined) {
+      const bp = Math.max(0, Math.round(Number(changes.boPhan) || 0));
+      payload['boPhan'] = bp;
+      patch.boPhan = bp;
     }
     if (editedBy) {
       payload['lastEditedBy'] = editedBy;
@@ -574,6 +624,61 @@ export class NvlCatalogFullService {
     this.patchCache(code, { allowExportByCarton: allowed, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
   }
 
+  /** Bật / tắt theo dõi Week cho mã (chỉ ghi khi mã đã có trong danh mục). */
+  async setWeekTracked(materialCode: string, tracked: boolean, editedBy?: string): Promise<void> {
+    const code = this.normalizeCode(materialCode);
+    if (!code) return;
+    const payload: Record<string, unknown> = { weekTracked: tracked, updatedAt: new Date() };
+    if (editedBy) payload['lastEditedBy'] = editedBy;
+    await this.firestore.collection(this.collectionName).doc(code).set(payload, { merge: true });
+    await this.markRemoteChanged();
+    this.patchCache(code, { weekTracked: tracked, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
+    this.weekTrackedCache = null;
+  }
+
+  private weekTrackedCache: { at: number; set: Set<string> } | null = null;
+
+  /** Mã vừa có Week ở 1 lô → Danh mục tự bật theo dõi Week (bỏ qua nếu đã bật). */
+  async ensureWeekTracked(materialCode: string, editedBy?: string): Promise<void> {
+    const code = this.normalizeCode(materialCode);
+    if (!code) return;
+    const set = await this.loadWeekTrackedCodes().catch(() => null);
+    if (set?.has(code)) return;
+    // update (không set merge): mã chưa có trong danh mục thì bỏ qua, không tạo dòng danh mục rỗng
+    const payload: Record<string, unknown> = { weekTracked: true, updatedAt: new Date() };
+    if (editedBy) payload['lastEditedBy'] = editedBy;
+    try {
+      await this.firestore.firestore.collection(this.collectionName).doc(code).update(payload);
+    } catch (e: any) {
+      if (e?.code !== 'not-found') throw e;
+      // Doc danh mục không đặt id = mã → tìm theo trường materialCode
+      const q = await this.firestore.firestore.collection(this.collectionName).where('materialCode', '==', code).limit(1).get();
+      if (q.empty) return;
+      await q.docs[0].ref.update(payload);
+    }
+    await this.markRemoteChanged();
+    this.patchCache(code, { weekTracked: true, ...(editedBy ? { lastEditedBy: editedBy } : {}) });
+    set?.add(code);
+  }
+
+  /**
+   * Mã đang theo dõi Week (Danh mục NVL → +Week). Truy vấn riêng chỉ lấy mã có cờ — vài lượt đọc,
+   * không đọc lại cả danh mục. Cache 10 phút trong phiên.
+   */
+  async loadWeekTrackedCodes(force = false): Promise<Set<string>> {
+    if (!force && this.weekTrackedCache && Date.now() - this.weekTrackedCache.at < 10 * 60 * 1000) {
+      return this.weekTrackedCache.set;
+    }
+    const snap = await this.firestore.firestore.collection(this.collectionName).where('weekTracked', '==', true).get();
+    const set = new Set<string>();
+    snap.forEach((d) => {
+      const c = this.normalizeCode(String((d.data() as any)?.materialCode || d.id));
+      if (c) set.add(c);
+    });
+    this.weekTrackedCache = { at: Date.now(), set };
+    return set;
+  }
+
   /**
    * Tập mã được phép quét Tem Thùng để xuất kho — dùng ở Outbound ASM1/ASM2, load 1 lần từ cache
    * dùng chung (listAll, TTL 6 tiếng), không tạo thêm lượt đọc Firestore mỗi lần scan.
@@ -598,6 +703,17 @@ export class NvlCatalogFullService {
    */
   async loadCodesWithStock(forceRefresh = false): Promise<Set<string>> {
     if (!forceRefresh && this.codesWithStockCache) return this.codesWithStockCache;
+    const lots = await this.loadStockLotsByCode(forceRefresh);
+    this.codesWithStockCache = new Set(lots.keys());
+    return this.codesWithStockCache;
+  }
+
+  /**
+   * Tồn từng lô (dòng `inventory-materials` còn tồn > 0) theo mã, tách ASM1 / ASM2 — để tính số bag
+   * (mỗi lô = làm tròn lên tồn ÷ Standard Packing). Đọc 1 lần theo phiên, cache trong bộ nhớ.
+   */
+  async loadStockLotsByCode(forceRefresh = false): Promise<Map<string, NvlStockLots>> {
+    if (!forceRefresh && this.stockLotsCache) return this.stockLotsCache;
 
     const factories: Array<'ASM1' | 'ASM2'> = ['ASM1', 'ASM2'];
     const snaps = await Promise.all(
@@ -609,8 +725,9 @@ export class NvlCatalogFullService {
       )
     );
 
-    const codes = new Set<string>();
-    for (const snap of snaps) {
+    const out = new Map<string, NvlStockLots>();
+    snaps.forEach((snap, i) => {
+      const key = factories[i] === 'ASM1' ? 'asm1' : 'asm2';
       for (const doc of snap?.docs || []) {
         const d = doc.data() as Record<string, unknown>;
         const code = this.normalizeCode(String(d['materialCode'] || ''));
@@ -619,13 +736,16 @@ export class NvlCatalogFullService {
         const quantity = Number(d['quantity']) || 0;
         const exported = Number(d['exported']) || 0;
         const xt = Number(d['xt']) || 0;
-        const stock = openingStock + quantity - exported - xt;
-        if (stock > 0) codes.add(code);
+        const stock = Math.round((openingStock + quantity - exported - xt) * 10000) / 10000;
+        if (!(stock > 0)) continue;
+        const cur = out.get(code) || { asm1: [], asm2: [] };
+        cur[key].push(stock);
+        out.set(code, cur);
       }
-    }
+    });
 
-    this.codesWithStockCache = codes;
-    return codes;
+    this.stockLotsCache = out;
+    return out;
   }
 
   /**
@@ -791,6 +911,92 @@ export class NvlCatalogFullService {
    * KHÔNG đụng tới Standard Packing / Lock / Xuất thùng — các cột đó do Kho tự quản lý riêng
    * (chỉ sửa tay hoặc qua các hành động chuyên biệt khác), độc lập với import danh mục gốc này.
    */
+  /**
+   * Import danh mục NVL từ file hệ thống (cột Mã vật tư / Tên vật tư / Đvt):
+   * Thêm mã chưa có; mã đã có thì CHỈ điền Tên (và ĐVT) khi trên web đang trống / tên = mã —
+   * không sửa bất cứ gì khác của mã đã có. Đọc lại toàn bộ danh mục từ server trước khi ghi.
+   */
+  async addMissingFromRows(
+    rows: Array<{ materialCode: string; materialName: string; unit: string }>
+  ): Promise<{ added: string[]; named: string[]; existing: number; uniqueInFile: number }> {
+    const byCode = new Map<string, { materialName: string; unit: string }>();
+    for (const r of rows) {
+      const code = this.normalizeCode(r.materialCode);
+      if (!code || byCode.has(code)) continue;
+      byCode.set(code, { materialName: (r.materialName || '').trim(), unit: (r.unit || '').trim() });
+    }
+    const uniqueInFile = byCode.size;
+    if (!uniqueInFile) return { added: [], named: [], existing: 0, uniqueInFile: 0 };
+
+    const db = this.firestore.firestore;
+    const existingCodes = new Set<string>();
+    /** Mã đã có nhưng thiếu tên (trống hoặc tên = mã): code → { doc id, ĐVT hiện tại } */
+    const noName = new Map<string, { id: string; unit: string }>();
+    const snap = await db.collection(this.collectionName).get();
+    snap.forEach((d) => {
+      const data = d.data() as any;
+      const idCode = this.normalizeCode(d.id);
+      const c = this.normalizeCode(data?.materialCode) || idCode;
+      existingCodes.add(idCode);
+      existingCodes.add(c);
+      const name = String(data?.materialName || '').trim();
+      if (!name || name.toUpperCase() === c) noName.set(c, { id: d.id, unit: String(data?.unit || '').trim() });
+    });
+
+    // Điền tên cho mã đã có nhưng chưa có tên (chỉ field Tên, ĐVT nếu đang trống)
+    const named: string[] = [];
+    const nameWrites: Array<{ id: string; code: string; payload: Record<string, unknown>; patch: Partial<NvlCatalogItem> }> = [];
+    noName.forEach((cur, code) => {
+      const info = byCode.get(code);
+      const name = (info?.materialName || '').trim();
+      if (!name || name.toUpperCase() === code) return;
+      const payload: Record<string, unknown> = { materialName: name, updatedAt: new Date() };
+      const patch: Partial<NvlCatalogItem> = { materialName: name };
+      if (!cur.unit && info?.unit) {
+        payload['unit'] = info.unit;
+        patch.unit = info.unit;
+      }
+      nameWrites.push({ id: cur.id, code, payload, patch });
+      named.push(code);
+    });
+    for (let i = 0; i < nameWrites.length; i += 450) {
+      const batch = db.batch();
+      for (const w of nameWrites.slice(i, i + 450)) {
+        batch.update(db.collection(this.collectionName).doc(w.id), w.payload);
+        this.patchCache(w.code, w.patch);
+      }
+      await batch.commit();
+    }
+
+    const newCodes = [...byCode.keys()].filter((c) => !existingCodes.has(c));
+    let idx = 0;
+    while (idx < newCodes.length) {
+      const batch = db.batch();
+      const chunk = newCodes.slice(idx, idx + 450);
+      for (const code of chunk) {
+        const info = byCode.get(code)!;
+        const materialName = info.materialName || code;
+        const unit = info.unit || 'PCS';
+        const doc = {
+          materialCode: code,
+          materialName,
+          unit,
+          standardPacking: 0,
+          standardPackingLocked: false,
+          allowExportByCarton: false,
+          isMsd: false,
+          isEsd: false
+        };
+        batch.set(db.collection(this.collectionName).doc(code), { ...doc, createdAt: new Date(), updatedAt: new Date() });
+        this.patchCache(code, doc);
+      }
+      await batch.commit();
+      idx += chunk.length;
+    }
+    if (newCodes.length || named.length) await this.markRemoteChanged();
+    return { added: newCodes, named, existing: uniqueInFile - newCodes.length, uniqueInFile };
+  }
+
   async importCatalogFromRows(
     rows: Array<{ materialCode: string; materialName: string; unit: string }>
   ): Promise<{ added: number; updated: number; skipped: number; uniqueInFile: number }> {

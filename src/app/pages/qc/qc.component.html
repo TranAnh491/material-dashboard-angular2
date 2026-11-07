@@ -742,18 +742,43 @@
       </div>
       <div class="material-check-results" *ngIf="materialCheckRows.length > 0">
         <h4 class="section-title"><i class="material-icons">inventory_2</i> Kết quả ({{ materialCheckRows.length }} dòng kho)</h4>
+        <div class="material-check-item">
+          <div class="material-check-item__code">{{ materialCheckRows[0].materialCode }}</div>
+          <div class="material-check-item__name">{{ materialCheckRows[0].materialName || '(chưa có tên hàng)' }}</div>
+        </div>
+        <!-- Mobile: thẻ từng dòng, có tên hàng + số có dấu phẩy -->
+        <div class="material-check-cards">
+          <div class="material-check-card" *ngFor="let row of materialCheckRows">
+            <div class="material-check-card__top">
+              <span class="material-check-card__po">PO {{ row.poNumber || '—' }}</span>
+              <span class="status-badge" [ngClass]="getIQCStatusClass(row.iqcStatus || 'CHỜ KIỂM')">{{ getStatusLabel(row.iqcStatus) }}</span>
+            </div>
+            <div class="material-check-card__name">{{ row.materialName || '—' }}</div>
+            <div class="material-check-card__grid">
+              <span>Lô / IMD</span><b>{{ row.imdLabel || row.batchNumber || '—' }}</b>
+              <span>Vị trí</span><b>{{ row.location || '—' }}</b>
+              <span>Lượng nhập</span><b>{{ (row.quantity || 0) | number:'1.0-4':'en-US' }} {{ row.unit }}</b>
+              <span>Tồn kho</span><b>{{ (row.stock || 0) | number:'1.0-4':'en-US' }} {{ row.unit }}</b>
+              <span>Người kiểm</span><b>{{ row.qcCheckedBy?.trim() ? row.qcCheckedBy : '—' }}</b>
+              <span>Thời gian</span><b>{{ row.qcCheckedAt ? (row.qcCheckedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</b>
+            </div>
+          </div>
+        </div>
         <div class="material-check-table-wrap">
           <table class="material-check-table">
             <thead>
               <tr>
-                <th>PO</th><th>Lô / IMD</th><th>Vị trí</th><th>Tình trạng IQC</th><th>Người kiểm</th><th>Thời gian kiểm</th>
+                <th>PO</th><th>Tên hàng</th><th>Lô / IMD</th><th>Vị trí</th><th class="num">Lượng nhập</th><th class="num">Tồn kho</th><th>Tình trạng IQC</th><th>Người kiểm</th><th>Thời gian kiểm</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let row of materialCheckRows">
                 <td>{{ row.poNumber || '—' }}</td>
+                <td>{{ row.materialName || '—' }}</td>
                 <td>{{ row.imdLabel || row.batchNumber || '—' }}</td>
                 <td>{{ row.location || '—' }}</td>
+                <td class="num">{{ (row.quantity || 0) | number:'1.0-4':'en-US' }}</td>
+                <td class="num">{{ (row.stock || 0) | number:'1.0-4':'en-US' }}</td>
                 <td><span class="status-badge" [ngClass]="getIQCStatusClass(row.iqcStatus || 'CHỜ KIỂM')">{{ getStatusLabel(row.iqcStatus) }}</span></td>
                 <td>{{ row.qcCheckedBy?.trim() ? row.qcCheckedBy : '—' }}</td>
                 <td>{{ row.qcCheckedAt ? (row.qcCheckedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>

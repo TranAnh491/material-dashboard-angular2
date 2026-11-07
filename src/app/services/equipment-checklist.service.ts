@@ -45,12 +45,25 @@ export class EquipmentChecklistService {
   async listEquipment(): Promise<Equipment[]> {
     const snap = await this.firestore.collection(EQUIPMENT_COL).get().toPromise();
     const rows = (snap?.docs || []).map(d => d.data() as Equipment);
-    return rows.sort((a, b) =>
-      a.categoryId.localeCompare(b.categoryId)
-      || a.subcategoryId.localeCompare(b.subcategoryId)
-      || a.stt - b.stt
-      || a.managementCode.localeCompare(b.managementCode, 'vi')
-    );
+    return rows.sort(compareEquipment);
+  }
+
+  /** Chuyển nhiều thiết bị sang một nhóm con, xếp nối tiếp cuối nhóm (stt bắt đầu từ sttStart). */
+  async moveEquipmentGroup(equipmentIds: string[], categoryId: string, subcategoryId: string, sttStart: number): Promise<void> {
+    const db = this.firestore.firestore;
+    const now = new Date().toISOString();
+    for (let i = 0; i < equipmentIds.length; i += 400) {
+      const batch = db.batch();
+      equipmentIds.slice(i, i + 400).forEach((id, k) => {
+        batch.update(db.collection(EQUIPMENT_COL).doc(docId(id)), {
+          categoryId,
+          subcategoryId,
+          stt: sttStart + i + k,
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+    }
   }
 
   /** Nạp danh mục ban đầu. Máy đã có thì giữ nguyên, không ghi đè. */
@@ -70,7 +83,8 @@ export class EquipmentChecklistService {
     return missing.length;
   }
 
-  async saveEquipment(row: Equipment, isNew: boolean): Promise<void> {
+  /** Ghi thiết bị; trả về bản đã lưu để màn hình cập nhật tại chỗ, không phải tải lại cả danh sách. */
+  async saveEquipment(row: Equipment, isNew: boolean): Promise<Equipment> {
     const code = row.managementCode.trim();
     if (!code || !row.equipmentName.trim()) {
       throw new Error('Thiết bị cần có tên và mã số quản lý.');
@@ -78,9 +92,12 @@ export class EquipmentChecklistService {
     const equipmentId = (row.equipmentId || code).trim();
     const id = docId(equipmentId);
     const ref = this.firestore.collection(EQUIPMENT_COL).doc(id);
-    const existing = await ref.get().toPromise();
-    if (isNew && existing?.exists) {
-      throw new Error(`Mã ${code} đã có trong danh mục thiết bị.`);
+    // Chỉ thiết bị mới cần đọc trước để chặn trùng mã; sửa thiết bị đã có thì ghi thẳng (merge giữ createdAt cũ).
+    if (isNew) {
+      const existing = await ref.get().toPromise();
+      if (existing?.exists) {
+        throw new Error(`Mã ${code} đã có trong danh mục thiết bị.`);
+      }
     }
     const now = new Date().toISOString();
     const payload: Equipment = {
@@ -92,9 +109,11 @@ export class EquipmentChecklistService {
       responsibleEmployeeId: blankToNull(row.responsibleEmployeeId),
       stt: Number(row.stt) || 0,
       updatedAt: now,
-      createdAt: existing?.exists ? (existing.data() as Equipment).createdAt || now : now
+      createdAt: isNew ? now : row.createdAt
     };
-    await ref.set(stripEmpty(payload), { merge: true });
+    const saved = stripEmpty(payload);
+    await ref.set(saved, { merge: true });
+    return saved;
   }
 
   /** Xóa thiết bị và các lần kiểm tra. Mã đã xóa không được nạp lại từ danh mục gốc. */
@@ -367,11 +386,32 @@ export class EquipmentChecklistService {
         })
       ]);
     });
+    // Ô ký cuối file: Người lập · Người kiểm tra · Người phê duyệt
+    const signRow = aoa.length + 2;
+    aoa.push([], []);
+    aoa.push(['', 'Người lập', '', 'Người kiểm tra', '', '', 'Người phê duyệt']);
+    aoa.push(['', '(Ký, ghi rõ họ tên)', '', '(Ký, ghi rõ họ tên)', '', '', '(Ký, ghi rõ họ tên)']);
+    aoa.push([], [], [], []);
+    aoa.push(['', 'Họ tên: ....................', '', 'Họ tên: ....................', '', '', 'Họ tên: ....................']);
+    aoa.push(['', `Ngày: ..../..../${year}`, '', `Ngày: ..../..../${year}`, '', '', `Ngày: ..../..../${year}`]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = [
+      ...(ws['!merges'] || []),
+      { s: { r: signRow, c: 3 }, e: { r: signRow, c: 5 } },
+      { s: { r: signRow + 1, c: 3 }, e: { r: signRow + 1, c: 5 } }
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
     XLSX.writeFile(wb, `equipment-checklist-${year}-${String(month).padStart(2, '0')}.xlsx`);
   }
+}
+
+/** Thứ tự hiển thị: nhóm lớn, nhóm con, STT, mã. */
+export function compareEquipment(a: Equipment, b: Equipment): number {
+  return a.categoryId.localeCompare(b.categoryId)
+    || a.subcategoryId.localeCompare(b.subcategoryId)
+    || a.stt - b.stt
+    || a.managementCode.localeCompare(b.managementCode, 'vi');
 }
 
 export function daysOfMonth(year: number, month: number): number[] {

@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -315,10 +316,10 @@ export class PrintLabelComponent implements OnInit {
         { merge: true }
       );
       this.lateEmailText = emails.join('\n');
-      alert('Đã lưu danh sách mail.');
+      appAlert('Đã lưu danh sách mail.');
     } catch (e) {
       console.error('saveLateNotificationEmails:', e);
-      alert('Không lưu được danh sách mail.');
+      appAlert('Không lưu được danh sách mail.');
     } finally {
       this.lateEmailsSaving = false;
     }
@@ -336,23 +337,23 @@ export class PrintLabelComponent implements OnInit {
       >('sendPrintLabelLateNotifyManualFn');
       const data = await firstValueFrom(fn({}));
       if (!data?.ok) {
-        alert('Không xác định được kết quả từ server.');
+        appAlert('Không xác định được kết quả từ server.');
         return;
       }
       if (data.recipientCount === 0) {
-        alert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
+        appAlert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
         return;
       }
       if (data.sent) {
-        alert(`Đã gửi mail cảnh báo. Số mã trễ: ${data.lateCount}, số người nhận: ${data.recipientCount}.`);
+        appAlert(`Đã gửi mail cảnh báo. Số mã trễ: ${data.lateCount}, số người nhận: ${data.recipientCount}.`);
       } else if (data.lateCount === 0) {
-        alert(`Không có mã trễ kế hoạch (chưa Done + quá ngày nhận KH). Đã cấu hình ${data.recipientCount} email.`);
+        appAlert(`Không có mã trễ kế hoạch (chưa Done + quá ngày nhận KH). Đã cấu hình ${data.recipientCount} email.`);
       } else {
-        alert(`Đã xử lý. sent=${data.sent}, lateCount=${data.lateCount}, recipientCount=${data.recipientCount}.`);
+        appAlert(`Đã xử lý. sent=${data.sent}, lateCount=${data.lateCount}, recipientCount=${data.recipientCount}.`);
       }
     } catch (e: any) {
       const msg = e?.message || String(e);
-      alert(`Lỗi: ${msg}`);
+      appAlert(`Lỗi: ${msg}`);
     } finally {
       this.lateNotifyManualRunning = false;
     }
@@ -429,7 +430,7 @@ export class PrintLabelComponent implements OnInit {
       this.printerCatalog = unique;
     } catch (e: any) {
       console.error('❌ savePrinterCatalog:', e);
-      alert('❌ Không lưu được danh mục Người in.');
+      appAlert('❌ Không lưu được danh mục Người in.');
     } finally {
       this.printerCatalogSaving = false;
     }
@@ -501,7 +502,7 @@ export class PrintLabelComponent implements OnInit {
       return;
     }
     if (this.isLockedTinhTrang(name)) {
-      alert('Không thêm được "Pass", "NG", "Done" — các trạng thái này do IQC quản lý.');
+      appAlert('Không thêm được "Pass", "NG", "Done" — các trạng thái này do IQC quản lý.');
       return;
     }
     const next = Array.from(new Set([...this.tinhTrangCatalog, name])).sort((a, b) => a.localeCompare(b, 'vi'));
@@ -516,7 +517,7 @@ export class PrintLabelComponent implements OnInit {
     }
     const next = this.tinhTrangCatalog.filter(x => x !== n);
     if (next.length === 0) {
-      alert('Phải giữ ít nhất một tình trạng trong danh mục.');
+      appAlert('Phải giữ ít nhất một tình trạng trong danh mục.');
       return;
     }
     await this.saveTinhTrangCatalog(next);
@@ -531,7 +532,7 @@ export class PrintLabelComponent implements OnInit {
       const cleaned = next.map(x => this.normalizeTinhTrangName(x)).filter(Boolean);
       const unique = Array.from(new Set(cleaned)).sort((a, b) => a.localeCompare(b, 'vi'));
       if (unique.length === 0) {
-        alert('Phải có ít nhất một tình trạng.');
+        appAlert('Phải có ít nhất một tình trạng.');
         return;
       }
       await this.firestore.doc(this.TINH_TRANG_CATALOG_DOC).set(
@@ -541,7 +542,7 @@ export class PrintLabelComponent implements OnInit {
       this.tinhTrangCatalog = unique;
     } catch (e: any) {
       console.error('❌ saveTinhTrangCatalog:', e);
-      alert('❌ Không lưu được danh mục Tình trạng.');
+      appAlert('❌ Không lưu được danh mục Tình trạng.');
     } finally {
       this.tinhTrangCatalogSaving = false;
     }
@@ -607,7 +608,7 @@ export class PrintLabelComponent implements OnInit {
         console.log('📊 Cleaned Excel data:', cleanedData);
         
         if (cleanedData.length === 0) {
-          alert('❌ Không có dữ liệu hợp lệ trong file Excel!\n\nVui lòng kiểm tra:\n- File có đúng format không\n- Có dữ liệu trong các dòng không\n- Cột "MaTem" có dữ liệu không');
+          appAlert('❌ Không có dữ liệu hợp lệ trong file Excel!\n\nVui lòng kiểm tra:\n- File có đúng format không\n- Có dữ liệu trong các dòng không\n- Cột "MaTem" có dữ liệu không');
           return;
         }
         
@@ -615,11 +616,11 @@ export class PrintLabelComponent implements OnInit {
         await this.saveToFirebase(cleanedData);
         
         const message = `✅ Successfully imported ${cleanedData.length} new records from ${file.name}!\n\n📊 New: ${cleanedData.length} records\n📊 Total: ${this.scheduleData.length} records`;
-        alert(message);
+        appAlert(message);
         
       } catch (error) {
         console.error('❌ Error importing file:', error);
-        alert('❌ Error importing file: ' + error.message);
+        appAlert('❌ Error importing file: ' + error.message);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -918,7 +919,7 @@ export class PrintLabelComponent implements OnInit {
       this.firebaseSaved = true;
       console.log(`✅ Saved ${dataToSave.length} records to Firebase (${doneItems.length} Done items moved to separate collection) - Batch: ${String(batchNumber).padStart(3, '0')}`);
       
-      alert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${dataToSave.length} bản ghi (Batch: ${String(batchNumber).padStart(3, '0')})\n📦 Mã Done: ${doneItems.length} đã chuyển sang collection riêng\n🔄 Đã thêm: ${data.length} bản ghi mới vào ${existingData.length} bản ghi cũ`);
+      appAlert(`✅ Đã lưu thành công!\n\n📊 Tổng cộng: ${dataToSave.length} bản ghi (Batch: ${String(batchNumber).padStart(3, '0')})\n📦 Mã Done: ${doneItems.length} đã chuyển sang collection riêng\n🔄 Đã thêm: ${data.length} bản ghi mới vào ${existingData.length} bản ghi cũ`);
       
       // Reload data from Firebase to display all merged records
       console.log('🔄 Reloading data from Firebase to display all records...');
@@ -1134,12 +1135,12 @@ export class PrintLabelComponent implements OnInit {
           this.scheduleData = this.sortScheduleItems(allNotDoneItems);
           await this.saveToFirebaseDirect(this.scheduleData);
           
-          alert(`✅ Đã khôi phục ${lostCount} mã bị mất!\n\n` +
+          appAlert(`✅ Đã khôi phục ${lostCount} mã bị mất!\n\n` +
                 `📊 Tổng cộng: ${this.scheduleData.length} mã chưa Done`);
         }
       } else {
         console.log('✅ Không có dữ liệu chưa Done bị mất');
-        alert(`✅ Không có dữ liệu chưa Done bị mất!\n\n` +
+        appAlert(`✅ Không có dữ liệu chưa Done bị mất!\n\n` +
               `📊 Hiện tại: ${this.scheduleData.length} mã\n` +
               `📊 Tổng cộng: ${allNotDoneItems.length} mã chưa Done\n` +
               `📊 Tổng tất cả: ${totalItems} mã (bao gồm Done)`);
@@ -1147,7 +1148,7 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Lỗi khi tìm kiếm dữ liệu:', error);
-      alert('❌ Lỗi khi tìm kiếm dữ liệu!');
+      appAlert('❌ Lỗi khi tìm kiếm dữ liệu!');
     }
   }
 
@@ -1223,7 +1224,7 @@ export class PrintLabelComponent implements OnInit {
         .map(([status, count]) => `${status}: ${count}`)
         .join('\n');
       
-      alert(`📊 TẤT CẢ MÃ TRONG FIREBASE:\n\n` +
+      appAlert(`📊 TẤT CẢ MÃ TRONG FIREBASE:\n\n` +
             `📊 Tổng cộng: ${totalItems} mã\n` +
             `📊 Mã Done: ${doneItems.length} mã\n` +
             `📊 Mã chưa Done: ${notDoneItems.length} mã\n` +
@@ -1233,7 +1234,7 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Lỗi khi tìm kiếm dữ liệu:', error);
-      alert('❌ Lỗi khi tìm kiếm dữ liệu!');
+      appAlert('❌ Lỗi khi tìm kiếm dữ liệu!');
     }
   }
 
@@ -1294,7 +1295,7 @@ export class PrintLabelComponent implements OnInit {
   // Xóa các mã trùng lặp
   async removeDuplicateItems(): Promise<void> {
     if (this.scheduleData.length === 0) {
-      alert('Không có dữ liệu để kiểm tra trùng lặp!');
+      appAlert('Không có dữ liệu để kiểm tra trùng lặp!');
       return;
     }
 
@@ -1350,7 +1351,7 @@ export class PrintLabelComponent implements OnInit {
     });
 
     if (duplicates.length === 0) {
-      alert('✅ Không có mã trùng lặp nào được tìm thấy!');
+      appAlert('✅ Không có mã trùng lặp nào được tìm thấy!');
       return;
     }
 
@@ -1367,7 +1368,7 @@ export class PrintLabelComponent implements OnInit {
       // Lưu vào Firebase (không tách mã Done khi xóa trùng)
       await this.saveToFirebaseDirect(this.scheduleData);
       
-      alert(`✅ Đã xóa ${duplicates.length} mã trùng lặp!\n\n` +
+      appAlert(`✅ Đã xóa ${duplicates.length} mã trùng lặp!\n\n` +
             `📊 Trước: ${this.scheduleData.length + duplicates.length} mã\n` +
             `📊 Sau: ${this.scheduleData.length} mã`);
       
@@ -1493,7 +1494,7 @@ export class PrintLabelComponent implements OnInit {
       const isCorrect = testBatch1 !== testBatch2 && testBatch2 !== testBatch3;
       console.log(`🧪 Logic correct: ${isCorrect ? '✅ YES' : '❌ NO'}`);
       
-      alert(`🧪 BATCH GENERATION TEST:\n\n` +
+      appAlert(`🧪 BATCH GENERATION TEST:\n\n` +
             `📊 Current max batch: ${maxBatchNumber}\n` +
             `📊 Next batch: ${finalBatchNumber}\n` +
             `📊 Same file test:\n` +
@@ -1505,7 +1506,7 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Error testing batch generation:', error);
-      alert('❌ Lỗi khi test batch generation!');
+      appAlert('❌ Lỗi khi test batch generation!');
     }
   }
 
@@ -1532,13 +1533,13 @@ export class PrintLabelComponent implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     
-    alert('Excel template file downloaded successfully!');
+    appAlert('Excel template file downloaded successfully!');
   }
 
   // Export functionality
   exportExcel(): void {
     if (this.scheduleData.length === 0) {
-      alert('No data to export');
+      appAlert('No data to export');
       return;
     }
 
@@ -1584,7 +1585,7 @@ export class PrintLabelComponent implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     
-    alert(`Exported ${currentData.length} records for ${monthName} successfully!`);
+    appAlert(`Exported ${currentData.length} records for ${monthName} successfully!`);
   }
 
   // Delete functionality
@@ -1609,7 +1610,7 @@ export class PrintLabelComponent implements OnInit {
           this.deleteDataByMonth(month, currentYear);
         }
       } else {
-        alert('Vui lòng chọn tháng từ 1 đến 12!');
+        appAlert('Vui lòng chọn tháng từ 1 đến 12!');
       }
     }
   }
@@ -1630,7 +1631,7 @@ export class PrintLabelComponent implements OnInit {
       const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
-        alert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
+        appAlert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
         return;
       }
       
@@ -1685,15 +1686,15 @@ export class PrintLabelComponent implements OnInit {
         await batch.commit();
         console.log(`✅ Deleted ${deletedCount} documents with ${totalItemsDeleted} total items for ${month}/${year}`);
         console.log('📄 Deleted documents:', documentsToDelete);
-        alert(`✅ Đã xóa thành công!\n\n- ${deletedCount} documents\n- ${totalItemsDeleted} bản ghi\n- Tháng ${month}/${year}`);
+        appAlert(`✅ Đã xóa thành công!\n\n- ${deletedCount} documents\n- ${totalItemsDeleted} bản ghi\n- Tháng ${month}/${year}`);
         this.loadDataFromFirebase();
       } else {
-        alert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
+        appAlert(`ℹ️ Không tìm thấy dữ liệu nào của tháng ${month}/${year}!`);
       }
       
     } catch (error) {
       console.error('❌ Error deleting data by month:', error);
-      alert(`❌ Lỗi khi xóa dữ liệu: ${error.message}`);
+      appAlert(`❌ Lỗi khi xóa dữ liệu: ${error.message}`);
     }
   }
 
@@ -1705,7 +1706,7 @@ export class PrintLabelComponent implements OnInit {
       const snapshot = await this.firestore.collection('print-schedules').get().toPromise();
       
       if (!snapshot || snapshot.empty) {
-        alert('ℹ️ Không có dữ liệu nào để xóa!');
+        appAlert('ℹ️ Không có dữ liệu nào để xóa!');
         return;
       }
       
@@ -1733,7 +1734,7 @@ export class PrintLabelComponent implements OnInit {
       
       console.log(`✅ Deleted ${snapshot.docs.length} documents with ${totalItems} total items`);
       console.log('📄 Deleted documents:', documentsToDelete);
-      alert(`✅ Đã xóa thành công!\n\n- ${snapshot.docs.length} documents\n- ${totalItems} bản ghi\n\nBây giờ bạn có thể import dữ liệu mới.`);
+      appAlert(`✅ Đã xóa thành công!\n\n- ${snapshot.docs.length} documents\n- ${totalItems} bản ghi\n\nBây giờ bạn có thể import dữ liệu mới.`);
       
       this.scheduleData = [];
       
@@ -1743,7 +1744,7 @@ export class PrintLabelComponent implements OnInit {
       
     } catch (error) {
       console.error('❌ Error deleting current data:', error);
-      alert(`❌ Lỗi khi xóa dữ liệu hiện tại: ${error.message}`);
+      appAlert(`❌ Lỗi khi xóa dữ liệu hiện tại: ${error.message}`);
     }
   }
 
@@ -2134,14 +2135,14 @@ export class PrintLabelComponent implements OnInit {
       // Nếu có nhiều hơn 100 mã Done, thông báo
       if (allDoneItems.length > 100) {
         const remainingCount = allDoneItems.length - 100;
-        alert(`📦 Đã load 100 mã Done gần nhất!\n\n` +
+        appAlert(`📦 Đã load 100 mã Done gần nhất!\n\n` +
               `⚠️ Còn ${remainingCount} mã Done khác.\n` +
               `💡 Sử dụng nút Download để tải xuống tất cả mã Done (Excel)`);
       }
       
     } catch (error) {
       console.error('❌ Error loading Done items:', error);
-      alert('❌ Lỗi khi load mã Done!');
+      appAlert('❌ Lỗi khi load mã Done!');
     }
   }
 
@@ -2180,7 +2181,7 @@ export class PrintLabelComponent implements OnInit {
       }
       
       if (allDoneItems.length === 0) {
-        alert('Không có mã Done nào để tải xuống!');
+        appAlert('Không có mã Done nào để tải xuống!');
       return;
     }
       
@@ -2227,11 +2228,11 @@ export class PrintLabelComponent implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     
-    alert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
+    appAlert(`Đã tải xuống ${doneItems.length} mã đã hoàn thành (Done) thành công!`);
       
     } catch (error) {
       console.error('❌ Error loading Done items for export:', error);
-      alert('❌ Lỗi khi tải xuống mã Done!');
+      appAlert('❌ Lỗi khi tải xuống mã Done!');
     }
   }
 
@@ -2488,7 +2489,7 @@ export class PrintLabelComponent implements OnInit {
       return { ...base, background: '#f44336', color: 'white', cursor: 'not-allowed' };
     }
     if (s === 'done') {
-      return { ...base, background: '#9c27b0', color: 'white', cursor: 'default' };
+      return { ...base, background: '#3478F6', color: 'white', cursor: 'default' };
     }
     if (s === 'iqc') {
       return { ...base, background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9' };
@@ -2525,7 +2526,7 @@ export class PrintLabelComponent implements OnInit {
     }
     const empId = this.loggedInEmployeeId;
     if (!empId) {
-      alert('⚠️ Không xác định được mã ASP đăng nhập — chưa ghi Người in.');
+      appAlert('⚠️ Không xác định được mã ASP đăng nhập — chưa ghi Người in.');
       return;
     }
     item.nguoiIn = empId;
@@ -2554,7 +2555,7 @@ export class PrintLabelComponent implements OnInit {
         this.refreshDisplayedScheduleItems();
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
-        alert(`❌ Không lưu được tình trạng: ${msg}`);
+        appAlert(`❌ Không lưu được tình trạng: ${msg}`);
         this.loadDataFromFirebase();
       }
     });
@@ -2759,7 +2760,7 @@ export class PrintLabelComponent implements OnInit {
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error('❌ Error saving nguoiIn:', error);
-        alert(`❌ Không lưu được Người in: ${msg}`);
+        appAlert(`❌ Không lưu được Người in: ${msg}`);
         this.loadDataFromFirebase();
       }
     });
@@ -2882,13 +2883,13 @@ export class PrintLabelComponent implements OnInit {
     try {
       const count = await this.bulkAssignNguoiInForIqcToday('Thủy');
       this.markIqcThuyBulkRanToday();
-      alert(`Đã gán Người in "Thủy" cho ${count} mã IQC hôm nay.`);
+      appAlert(`Đã gán Người in "Thủy" cho ${count} mã IQC hôm nay.`);
       if (count > 0) {
         this.loadDataFromFirebase();
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      alert(`❌ Không gán được Người in: ${msg}`);
+      appAlert(`❌ Không gán được Người in: ${msg}`);
     } finally {
       this.iqcNguoiInBulkRunning = false;
     }
@@ -2993,7 +2994,7 @@ export class PrintLabelComponent implements OnInit {
         console.log(`✅ Saved field "${fieldName}" for ${item.maTem}`);
       } catch (error: any) {
         console.error(`❌ Error saving field "${fieldName}":`, error);
-        alert(`❌ Không lưu được thay đổi (${fieldName}): ${error?.message || error}`);
+        appAlert(`❌ Không lưu được thay đổi (${fieldName}): ${error?.message || error}`);
         this.loadDataFromFirebase();
       }
     });
@@ -3018,7 +3019,7 @@ export class PrintLabelComponent implements OnInit {
       try {
         await this.persistScheduleItemUpdate(item);
       } catch (error: any) {
-        alert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
+        appAlert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
         this.loadDataFromFirebase();
       }
     });
@@ -3032,7 +3033,7 @@ export class PrintLabelComponent implements OnInit {
         try {
           await this.persistScheduleItemUpdate(item);
         } catch (error: any) {
-          alert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
+          appAlert(`❌ Không lưu được ghi chú: ${error?.message || error}`);
           this.loadDataFromFirebase();
         }
       });
@@ -3201,12 +3202,12 @@ export class PrintLabelComponent implements OnInit {
         
         if (allExpectedVisible && noDoneItems) {
           console.log('✅ SUCCESS: Done items hiding is working correctly!');
-          alert('✅ SUCCESS: Done items hiding is working correctly!\n\n' +
+          appAlert('✅ SUCCESS: Done items hiding is working correctly!\n\n' +
                 `Visible items: ${actualVisible.join(', ')}\n` +
                 'Done items are properly hidden from the list.');
         } else {
           console.log('❌ FAILED: Done items hiding is not working correctly!');
-          alert('❌ FAILED: Done items hiding is not working correctly!\n\n' +
+          appAlert('❌ FAILED: Done items hiding is not working correctly!\n\n' +
                 `Expected visible: ${expectedVisible.join(', ')}\n` +
                 `Actual visible: ${actualVisible.join(', ')}\n` +
                 `Contains Done items: ${!noDoneItems}`);
@@ -3214,7 +3215,7 @@ export class PrintLabelComponent implements OnInit {
       }, 1000);
     }, 2000);
     
-    alert('🧪 Test Done items hiding started!\n\n' +
+    appAlert('🧪 Test Done items hiding started!\n\n' +
           'Created 4 test records:\n' +
           '- DONE001 (Done) - should be HIDDEN\n' +
           '- PENDING001 (Chờ in) - should be VISIBLE\n' +
@@ -3288,7 +3289,7 @@ export class PrintLabelComponent implements OnInit {
       this.loadDataFromFirebase();
     }, 2000);
     
-    alert('🧪 Test import functionality started!\n\n- Created 2 sample records\n- Saving to Firebase...\n- Will load data in 2 seconds\n\nCheck console for details.');
+    appAlert('🧪 Test import functionality started!\n\n- Created 2 sample records\n- Saving to Firebase...\n- Will load data in 2 seconds\n\nCheck console for details.');
   }
 
   // Method to check Firebase data and clear all data
@@ -3301,7 +3302,7 @@ export class PrintLabelComponent implements OnInit {
       
       if (!snapshot || snapshot.empty) {
         console.log('📊 Firebase collection "print-schedules" is empty');
-        alert('📊 Firebase collection "print-schedules" is empty - No data to clear');
+        appAlert('📊 Firebase collection "print-schedules" is empty - No data to clear');
         return;
       }
 
@@ -3370,7 +3371,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         await batch.commit();
         
         console.log('✅ Successfully cleared all Firebase data');
-        alert(`✅ Đã xóa thành công tất cả dữ liệu Firebase!\n\n- Đã xóa ${snapshot.docs.length} documents\n- Đã xóa ${totalItems} items\n\nBây giờ bạn có thể import dữ liệu mới.`);
+        appAlert(`✅ Đã xóa thành công tất cả dữ liệu Firebase!\n\n- Đã xóa ${snapshot.docs.length} documents\n- Đã xóa ${totalItems} items\n\nBây giờ bạn có thể import dữ liệu mới.`);
         
         // Clear local data
         this.scheduleData = [];
@@ -3381,12 +3382,12 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         
       } else {
         console.log('❌ User cancelled data clearing');
-        alert('❌ Đã hủy việc xóa dữ liệu');
+        appAlert('❌ Đã hủy việc xóa dữ liệu');
       }
       
     } catch (error) {
       console.error('❌ Error checking/clearing Firebase data:', error);
-      alert(`❌ Lỗi khi kiểm tra/xóa dữ liệu Firebase: ${error.message}`);
+      appAlert(`❌ Lỗi khi kiểm tra/xóa dữ liệu Firebase: ${error.message}`);
     }
   }
 
@@ -3406,7 +3407,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         .filter(item => (item.tinhTrang || '').toString().trim() === 'Chờ in');
 
       if (!items.length) {
-        alert('⚠️ Không có dòng nào có tình trạng "Chờ in" để in.');
+        appAlert('⚠️ Không có dòng nào có tình trạng "Chờ in" để in.');
         return;
       }
 
@@ -3452,13 +3453,13 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       }
 
       if (!labelHtmlParts.length) {
-        alert('⚠️ Không có dữ liệu tem hợp lệ để in.');
+        appAlert('⚠️ Không có dữ liệu tem hợp lệ để in.');
         return;
       }
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
+        appAlert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
         return;
       }
 
@@ -3530,7 +3531,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
 
     } catch (error: any) {
       console.error('❌ Error batch printing QR labels:', error);
-      alert(`❌ Lỗi khi in hàng loạt: ${error?.message || error}`);
+      appAlert(`❌ Lỗi khi in hàng loạt: ${error?.message || error}`);
     }
   }
   
@@ -3538,7 +3539,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     console.log('🖨️ Printing QR label for:', item);
 
     if (!item.maTem) {
-      alert('⚠️ Mã tem không tồn tại!');
+      appAlert('⚠️ Mã tem không tồn tại!');
       return;
     }
     
@@ -3744,11 +3745,11 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
         
         console.log('✅ QR label printed successfully');
       } else {
-        alert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
+        appAlert('❌ Không thể mở cửa sổ in. Vui lòng kiểm tra popup blocker.');
       }
     } catch (error) {
       console.error('❌ Error printing QR label:', error);
-      alert(`❌ Lỗi khi in tem QR: ${error.message}`);
+      appAlert(`❌ Lỗi khi in tem QR: ${error.message}`);
     }
   }
 
@@ -3786,7 +3787,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     console.log('🔬 Verifying QA employee');
     
     if (!this.iqcScanInput || this.iqcScanInput.trim() === '') {
-      alert('⚠️ Vui lòng nhập mã nhân viên!');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên!');
       return;
     }
 
@@ -3797,7 +3798,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     console.log('🔍 Extracted employee ID:', scannedEmployeeId);
 
     if (!/^ASP\d{4}$/.test(scannedEmployeeId)) {
-      alert('Mã nhân viên không đúng. Quét mã ASP + 4 số.');
+      appAlert('Mã nhân viên không đúng. Quét mã ASP + 4 số.');
       this.iqcScanInput = '';
       return;
     }
@@ -3819,7 +3820,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       }, 300);
     } else {
       console.log('❌ Employee not authorized:', scannedEmployeeId);
-      alert(`Nhân viên ${scannedEmployeeId} không được quét IQC. Chỉ nhân viên bộ phận Kho (WH) hoặc QA.`);
+      appAlert(`Nhân viên ${scannedEmployeeId} không được quét IQC. Chỉ nhân viên bộ phận Kho (WH) hoặc QA.`);
       this.iqcScanInput = '';
     }
   }
@@ -3843,7 +3844,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     console.log('🔬 Processing IQC scan');
     
     if (!this.iqcScanInput || this.iqcScanInput.trim() === '') {
-      alert('⚠️ Vui lòng quét mã QR!');
+      appAlert('⚠️ Vui lòng quét mã QR!');
       return;
     }
 
@@ -3890,7 +3891,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       this.iqcScanInput = '';
     } else {
       console.log('❌ Label not found');
-      alert(`❌ Không tìm thấy tem với mã: ${maTem}`);
+      appAlert(`❌ Không tìm thấy tem với mã: ${maTem}`);
       this.iqcScanInput = '';
     }
   }
@@ -3899,7 +3900,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
     console.log('🔬 Updating IQC status to:', status);
     
     if (!this.scannedLabel) {
-      alert('⚠️ Không có tem nào được quét!');
+      appAlert('⚠️ Không có tem nào được quét!');
       return;
     }
 
@@ -3954,7 +3955,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
           console.warn('⚠️ No print-schedules document found');
         }
 
-        alert(`✅ Đã cập nhật trạng thái "${status}" cho tem ${this.scannedLabel.maTem}`);
+        appAlert(`✅ Đã cập nhật trạng thái "${status}" cho tem ${this.scannedLabel.maTem}`);
         
         // Reset for next scan
         this.scannedLabel = null;
@@ -3971,11 +3972,11 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
           }
         }, 300);
       } else {
-        alert('❌ Không tìm thấy tem trong danh sách!');
+        appAlert('❌ Không tìm thấy tem trong danh sách!');
       }
     } catch (error) {
       console.error('❌ Error updating IQC status:', error);
-      alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
+      appAlert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
     }
   }
 
@@ -4018,7 +4019,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
    */
   exportToExcel(data: ScheduleItem[], fileNamePrefix: string): void {
     if (!data || data.length === 0) {
-      alert('⚠️ Không có dữ liệu để xuất!');
+      appAlert('⚠️ Không có dữ liệu để xuất!');
       return;
     }
 
@@ -4067,10 +4068,10 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       XLSX.writeFile(workbook, fileName);
 
       console.log(`✅ Exported ${data.length} items to ${fileName}`);
-      alert(`✅ Đã xuất ${data.length} dòng dữ liệu!\n\nFile: ${fileName}`);
+      appAlert(`✅ Đã xuất ${data.length} dòng dữ liệu!\n\nFile: ${fileName}`);
     } catch (error) {
       console.error('❌ Error exporting to Excel:', error);
-      alert('❌ Lỗi khi xuất file Excel!');
+      appAlert('❌ Lỗi khi xuất file Excel!');
     }
   }
 
@@ -4079,7 +4080,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
    */
   async updateStatusToDone(item: ScheduleItem): Promise<void> {
     if (item.tinhTrang !== 'Pass') {
-      alert('⚠️ Chỉ có thể chuyển từ Pass sang Done!');
+      appAlert('⚠️ Chỉ có thể chuyển từ Pass sang Done!');
       return;
     }
 
@@ -4114,7 +4115,7 @@ Hành động này KHÔNG THỂ HOÀN TÁC!`;
       console.log(`✅ Đã chuyển tem ${item.maTem} từ Pass sang Done`);
     } catch (error) {
       console.error('❌ Error updating status to Done:', error);
-      alert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
+      appAlert(`❌ Lỗi khi cập nhật trạng thái: ${error.message}`);
       // Revert local change on error
       item.tinhTrang = 'Pass';
     }

@@ -57,3 +57,6 @@ package-lock.json
 
 # Local Netlify folder
 .netlify
+
+# Bản sao lưu dữ liệu chạy tay (chứa dữ liệu kho thật — không commit)
+/backups

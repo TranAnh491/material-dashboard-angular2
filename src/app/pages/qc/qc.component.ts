@@ -1,4 +1,9 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { appAlert } from '../../shared/app-toast';
+import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef } from '@angular/core';
+import { DomTranslator } from '../../shared/dom-translator';
+import { QC_VI_EN } from './qc-i18n';
+import { MobileDetectionService } from '../../services/mobile-detection.service';
+import { LanguageService } from '../../services/language.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -47,6 +52,11 @@ export interface MaterialCheckRow {
   id: string;
   materialCode: string;
   materialName?: string;
+  unit?: string;
+  /** Lượng nhập */
+  quantity?: number;
+  /** Tồn = tồn đầu + nhập - xuất - XT */
+  stock?: number;
   poNumber: string;
   batchNumber: string;
   location: string;
@@ -61,7 +71,9 @@ export interface MaterialCheckRow {
   templateUrl: './qc.component.html',
   styleUrls: ['./qc.component.scss']
 })
-export class QCComponent implements OnInit, OnDestroy {
+export class QCComponent implements OnInit, OnDestroy, AfterViewInit {
+  lang: 'vi' | 'en' = 'vi';
+  private translator: DomTranslator | null = null;
   materials: InventoryMaterial[] = [];
   filteredMaterials: InventoryMaterial[] = [];
   isLoading: boolean = false;
@@ -333,9 +345,20 @@ export class QCComponent implements OnInit, OnDestroy {
     private fns: AngularFireFunctions,
     private rmBagHistory: RmBagHistoryService,
     private outboundQcRule: OutboundQcRuleService,
-    private location: Location
+    private location: Location,
+    private host: ElementRef<HTMLElement>,
+    private languageService: LanguageService,
+    private mobileDetection: MobileDetectionService
   ) {}
-  
+
+  ngAfterViewInit(): void {
+    this.translator = new DomTranslator(this.host.nativeElement, QC_VI_EN);
+    this.languageService.lang$.pipe(takeUntil(this.destroy$)).subscribe(l => {
+      this.lang = l;
+      this.translator?.setLang(l);
+    });
+  }
+
   get monthlyTotal(): number {
     return this.monthlyPassCount + this.monthlyNgCount + this.monthlyLockCount;
   }
@@ -495,6 +518,11 @@ export class QCComponent implements OnInit, OnDestroy {
   }
   
   ngOnInit(): void {
+    // Điện thoại: tab QC chỉ để quét tem xem tình trạng / thông tin mã hàng → dùng màn Traceability gọn.
+    if (this.mobileDetection.isMobileOrTablet()) {
+      void this.router.navigate(['/qc-traceability'], { replaceUrl: true });
+      return;
+    }
     console.log('📦 QC Component initialized - ready for scanning');
     this.initBoxDateRanges();
     
@@ -857,6 +885,7 @@ export class QCComponent implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    this.translator?.destroy();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -1159,7 +1188,7 @@ export class QCComponent implements OnInit, OnDestroy {
   openIQCModal(): void {
     // Gate IQC button by "Quyền" rule
     if (!this.iqcButtonEnabledForCurrentEmployee) {
-      alert('⛔ Bạn chưa được bật quyền IQC. Vào More → Quyền để bật/tắt theo mã nhân viên.');
+      appAlert('⛔ Bạn chưa được bật quyền IQC. Vào More → Quyền để bật/tắt theo mã nhân viên.');
       return;
     }
     // 🔧 FIX: Kiểm tra currentEmployeeId khi mở modal
@@ -1173,7 +1202,7 @@ export class QCComponent implements OnInit, OnDestroy {
         this.isEmployeeVerified = true;
         console.log('✅ Restored employee from localStorage when opening IQC modal');
       } else {
-        alert('⚠️ Vui lòng xác thực nhân viên trước khi kiểm!');
+        appAlert('⚠️ Vui lòng xác thực nhân viên trước khi kiểm!');
         this.showEmployeeModal = true;
         return;
       }
@@ -1311,7 +1340,7 @@ export class QCComponent implements OnInit, OnDestroy {
     }
     const parts = raw.split('|');
     if (parts.length < 4) {
-      alert('❌ Pass lẻ: QR cần đúng định dạng MaterialCode|PO|Quantity|IMD (có số bịch).');
+      appAlert('❌ Pass lẻ: QR cần đúng định dạng MaterialCode|PO|Quantity|IMD (có số bịch).');
       this.iqcPassLeScanInput = '';
       return;
     }
@@ -1320,14 +1349,14 @@ export class QCComponent implements OnInit, OnDestroy {
     const part4 = parts[3].trim();
     const parsed = this.rmBagHistory.parseQrPart4(part4);
     if (!parsed.bagFractionLabel) {
-      alert(
+      appAlert(
         '❌ Pass lẻ: phần IMD phải có số bịch dạng DDMMYYYY-số/tổng (VD: 01012026-3/10).'
       );
       this.iqcPassLeScanInput = '';
       return;
     }
     if (!this.materialQrMatchesScannedLine(this.scannedMaterial, materialCode, poNumber, parsed.imdKey)) {
-      alert('❌ QR không khớp mã hàng / PO / IMD của dòng đang mở trong IQC.');
+      appAlert('❌ QR không khớp mã hàng / PO / IMD của dòng đang mở trong IQC.');
       this.iqcPassLeScanInput = '';
       return;
     }
@@ -1340,14 +1369,14 @@ export class QCComponent implements OnInit, OnDestroy {
       numerator < 1 ||
       denominator < 1
     ) {
-      alert('❌ Không đọc được số bịch từ tem.');
+      appAlert('❌ Không đọc được số bịch từ tem.');
       this.iqcPassLeScanInput = '';
       return;
     }
     if (this.iqcPassLeBagEntries.length > 0) {
       const d0 = this.iqcPassLeBagEntries[0].denominator;
       if (denominator !== d0) {
-        alert(`❌ Các tem phải cùng tổng bịch (đang dùng /${d0}).`);
+        appAlert(`❌ Các tem phải cùng tổng bịch (đang dùng /${d0}).`);
         this.iqcPassLeScanInput = '';
         return;
       }
@@ -1357,7 +1386,7 @@ export class QCComponent implements OnInit, OnDestroy {
         ? String(parsed.bagNumberDisplay).trim()
         : parsed.bagFractionLabel;
     if (this.iqcPassLeBagEntries.some(e => e.displayKey === displayKey)) {
-      alert('⚠️ Bịch này đã có trong danh sách đã pass.');
+      appAlert('⚠️ Bịch này đã có trong danh sách đã pass.');
       this.iqcPassLeScanInput = '';
       return;
     }
@@ -1386,7 +1415,7 @@ export class QCComponent implements OnInit, OnDestroy {
         this.currentEmployeeName = savedEmployeeName;
         this.isEmployeeVerified = true;
       } else {
-        alert('⚠️ Vui lòng xác thực nhân viên trước khi tra cứu.');
+        appAlert('⚠️ Vui lòng xác thực nhân viên trước khi tra cứu.');
         this.showEmployeeModal = true;
         return;
       }
@@ -1450,6 +1479,9 @@ export class QCComponent implements OnInit, OnDestroy {
       id: doc.id,
       materialCode: mat.materialCode,
       materialName: mat.materialName,
+      unit: mat.unit,
+      quantity: Number(mat.quantity) || 0,
+      stock: (Number(mat.openingStock) || 0) + (Number(mat.quantity) || 0) - (Number(mat.exported) || 0) - (Number(mat.xt) || 0),
       poNumber: mat.poNumber,
       batchNumber: mat.batchNumber,
       location: mat.location,
@@ -1580,7 +1612,7 @@ export class QCComponent implements OnInit, OnDestroy {
     // Parse QR code format: MaterialCode|PO|Quantity|IMD
     const parts = scannedCode.split('|');
     if (parts.length < 4) {
-      alert('❌ Mã QR không hợp lệ. Định dạng: MaterialCode|PO|Quantity|IMD');
+      appAlert('❌ Mã QR không hợp lệ. Định dạng: MaterialCode|PO|Quantity|IMD');
       this.iqcScanInput = '';
       return;
     }
@@ -1657,7 +1689,7 @@ export class QCComponent implements OnInit, OnDestroy {
       ).get().toPromise();
       
       if (!querySnapshot || querySnapshot.empty) {
-        alert(`❌ Không tìm thấy mã hàng trong database\n\nMã QR: ${this.iqcScanInput}\n\nĐã tìm với:\n- Mã hàng: ${materialCode}\n- PO: ${poNumber}\n- IMD: ${scannedIMD}\n\nVui lòng kiểm tra lại mã QR code.`);
+        appAlert(`❌ Không tìm thấy mã hàng trong database\n\nMã QR: ${this.iqcScanInput}\n\nĐã tìm với:\n- Mã hàng: ${materialCode}\n- PO: ${poNumber}\n- IMD: ${scannedIMD}\n\nVui lòng kiểm tra lại mã QR code.`);
         this.iqcScanInput = '';
         this.scannedMaterial = null;
         return;
@@ -1733,13 +1765,13 @@ export class QCComponent implements OnInit, OnDestroy {
         this.iqcScanInput = '';
         console.log('✅ Found material in Firestore:', foundMaterial);
       } else {
-        alert(`❌ Không tìm thấy mã hàng với IMD khớp\n\nMã QR: ${this.iqcScanInput}\n\nĐã tìm với:\n- Mã hàng: ${materialCode}\n- PO: ${poNumber}\n- IMD: ${scannedIMD}\n\nVui lòng kiểm tra lại mã QR code.`);
+        appAlert(`❌ Không tìm thấy mã hàng với IMD khớp\n\nMã QR: ${this.iqcScanInput}\n\nĐã tìm với:\n- Mã hàng: ${materialCode}\n- PO: ${poNumber}\n- IMD: ${scannedIMD}\n\nVui lòng kiểm tra lại mã QR code.`);
         this.iqcScanInput = '';
         this.scannedMaterial = null;
       }
     } catch (error) {
       console.error('❌ Error searching in Firestore:', error);
-      alert(`❌ Lỗi khi tìm kiếm trong database\n\nLỗi: ${error}\n\nVui lòng thử lại hoặc kiểm tra kết nối Firestore.`);
+      appAlert(`❌ Lỗi khi tìm kiếm trong database\n\nLỗi: ${error}\n\nVui lòng thử lại hoặc kiểm tra kết nối Firestore.`);
       this.iqcScanInput = '';
       this.scannedMaterial = null;
     }
@@ -1752,14 +1784,14 @@ export class QCComponent implements OnInit, OnDestroy {
     
     // 🔧 FIX: Kiểm tra currentEmployeeId trước khi update
     if (!this.currentEmployeeId || this.currentEmployeeId.trim() === '') {
-      alert('❌ Lỗi: Không tìm thấy mã nhân viên!\n\nVui lòng xác thực lại nhân viên trước khi kiểm.');
+      appAlert('❌ Lỗi: Không tìm thấy mã nhân viên!\n\nVui lòng xác thực lại nhân viên trước khi kiểm.');
       console.error('❌ currentEmployeeId is empty:', this.currentEmployeeId);
       return;
     }
     
     const materialId = this.scannedMaterial.id;
     if (!materialId) {
-      alert('❌ Không tìm thấy ID của material');
+      appAlert('❌ Không tìm thấy ID của material');
       return;
     }
     
@@ -1768,7 +1800,7 @@ export class QCComponent implements OnInit, OnDestroy {
     let statusToUpdate = this.selectedIQCStatus;
     if (wantsPassLePartial) {
       if (this.iqcPassLeBagEntries.length === 0) {
-        alert(
+        appAlert(
           'Pass lẻ: vui lòng quét ít nhất một tem bịch.\nTem phải có phần IMD dạng DDMMYYYY-số/tổng (VD: 01012026-2/10).'
         );
         return;
@@ -1940,7 +1972,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.updateLocalCounts(materialToUpdate.iqcStatus || 'CHỜ KIỂM', materialToUpdate);
       
       // Hiển thị lỗi
-      alert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nVui lòng thử lại.`);
+      appAlert(`❌ Lỗi khi cập nhật trạng thái IQC!\n\nVui lòng thử lại.`);
     });
   }
 
@@ -2089,7 +2121,7 @@ export class QCComponent implements OnInit, OnDestroy {
   // Verify employee before accessing QC tab
   async verifyEmployee(): Promise<void> {
     if (!this.employeeScanInput.trim()) {
-      alert('⚠️ Vui lòng nhập mã nhân viên');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên');
       return;
     }
     
@@ -2139,7 +2171,7 @@ export class QCComponent implements OnInit, OnDestroy {
       // Load priority state from backend so icons/count are correct ngay sau khi xác thực
       this.loadQcPriorityFromBackend();
     } else {
-      alert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nVui lòng cấp quyền tab Quality trong Settings.`);
+      appAlert(`❌ Nhân viên ${employeeId} không có quyền truy cập tab QC.\n\nVui lòng cấp quyền tab Quality trong Settings.`);
       this.employeeScanInput = '';
     }
   }
@@ -2808,10 +2840,10 @@ export class QCComponent implements OnInit, OnDestroy {
         { merge: true }
       );
       this.holdEmailText = emails.join('\n');
-      alert('Đã lưu danh sách mail.');
+      appAlert('Đã lưu danh sách mail.');
     } catch (e) {
       console.error('saveHoldNotificationEmails:', e);
-      alert('Không lưu được danh sách mail.');
+      appAlert('Không lưu được danh sách mail.');
     } finally {
       this.holdEmailsSaving = false;
     }
@@ -2835,23 +2867,23 @@ export class QCComponent implements OnInit, OnDestroy {
       >('sendPutawayHoldWeeklyEmailManualFn');
       const data = await firstValueFrom(fn({}));
       if (!data?.ok) {
-        alert('Không xác định được kết quả từ server.');
+        appAlert('Không xác định được kết quả từ server.');
         return;
       }
       if (data.recipientCount === 0) {
-        alert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
+        appAlert('Chưa cấu hình email nhận (lưu danh sách mail trước).');
         return;
       }
       if (data.sent) {
-        alert(
+        appAlert(
           `Đã gửi mail báo cáo Hold.\nMã hàng Hold: ${data.holdMaterialCount}\nSKU Hold: ${data.holdSkuCount}\nNgười nhận: ${data.recipientCount}`
         );
       } else {
-        alert(`Đã xử lý. sent=${data.sent}, recipientCount=${data.recipientCount}.`);
+        appAlert(`Đã xử lý. sent=${data.sent}, recipientCount=${data.recipientCount}.`);
       }
     } catch (e: any) {
       const msg = e?.message || String(e);
-      alert(`Lỗi: ${msg}`);
+      appAlert(`Lỗi: ${msg}`);
     } finally {
       this.holdNotifyManualRunning = false;
     }
@@ -2886,7 +2918,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.showOutboundQcRuleModal = false;
     } catch (e) {
       console.error(e);
-      alert('❌ Không lưu được QC rule.');
+      appAlert('❌ Không lưu được QC rule.');
     } finally {
       this.outboundQcRuleSaving = false;
     }
@@ -2922,7 +2954,7 @@ export class QCComponent implements OnInit, OnDestroy {
   async submitIqcPermissionToggle(): Promise<void> {
     const emp = this.normalizeAspEmployeeId(this.iqcPermInputEmployeeId);
     if (!/^ASP\d{4}$/.test(emp)) {
-      alert('❌ Mã nhân viên không đúng. Nhập dạng ASP + 4 số (VD: ASP0106) hoặc chỉ 4 số.');
+      appAlert('❌ Mã nhân viên không đúng. Nhập dạng ASP + 4 số (VD: ASP0106) hoặc chỉ 4 số.');
       return;
     }
     this.iqcPermBusy = true;
@@ -2939,14 +2971,14 @@ export class QCComponent implements OnInit, OnDestroy {
       if ((this.currentEmployeeId || '').trim().toUpperCase() === emp) {
         this.iqcButtonEnabledForCurrentEmployee = this.iqcPermToggleValue === true;
       }
-      alert(`✅ Đã ${this.iqcPermToggleValue ? 'BẬT' : 'TẮT'} quyền IQC cho ${emp}`);
+      appAlert(`✅ Đã ${this.iqcPermToggleValue ? 'BẬT' : 'TẮT'} quyền IQC cho ${emp}`);
       // Refresh list
       await this.loadIqcPermissionList();
       this.iqcPermShowAddRow = false;
       this.iqcPermInputEmployeeId = '';
     } catch (e) {
       console.error('❌ Failed to set IQC permission:', e);
-      alert('❌ Không lưu được quyền IQC. Kiểm tra kết nối hoặc Firestore Rules.');
+      appAlert('❌ Không lưu được quyền IQC. Kiểm tra kết nối hoặc Firestore Rules.');
     } finally {
       this.iqcPermBusy = false;
     }
@@ -3023,7 +3055,7 @@ export class QCComponent implements OnInit, OnDestroy {
     } catch (e) {
       row.enabled = !next; // revert
       console.warn('❌ Failed to toggle IQC permission:', e);
-      alert('❌ Không cập nhật được quyền IQC. Vui lòng thử lại.');
+      appAlert('❌ Không cập nhật được quyền IQC. Vui lòng thử lại.');
     }
   }
 
@@ -3493,7 +3525,7 @@ export class QCComponent implements OnInit, OnDestroy {
 
     const found = this.pendingConfirmMaterials.find(m => m.id === item.id);
     if (!found) {
-      alert('Không tìm thấy mã để cập nhật trạng thái.');
+      appAlert('Không tìm thấy mã để cập nhật trạng thái.');
       return;
     }
 
@@ -3651,7 +3683,7 @@ export class QCComponent implements OnInit, OnDestroy {
   
   async downloadMonthlyReport(): Promise<void> {
     if (!this.selectedMonth || !this.selectedYear) {
-      alert('Vui lòng chọn tháng và năm');
+      appAlert('Vui lòng chọn tháng và năm');
       return;
     }
     
@@ -3673,7 +3705,7 @@ export class QCComponent implements OnInit, OnDestroy {
       ).get().toPromise();
       
       if (!snapshot || snapshot.empty) {
-        alert('Không có dữ liệu kiểm trong tháng này');
+        appAlert('Không có dữ liệu kiểm trong tháng này');
         this.isLoadingReport = false;
         return;
       }
@@ -3720,7 +3752,7 @@ export class QCComponent implements OnInit, OnDestroy {
         });
       
       if (reportData.length === 0) {
-        alert('Không có dữ liệu kiểm trong tháng này');
+        appAlert('Không có dữ liệu kiểm trong tháng này');
         this.isLoadingReport = false;
         return;
       }
@@ -3758,13 +3790,13 @@ export class QCComponent implements OnInit, OnDestroy {
         this.closeDownloadModal();
       }).catch(error => {
         console.error('❌ Error exporting Excel:', error);
-        alert('Lỗi khi xuất file Excel');
+        appAlert('Lỗi khi xuất file Excel');
         this.isLoadingReport = false;
       });
       
     } catch (error) {
       console.error('❌ Error loading monthly report:', error);
-      alert('Lỗi khi tải dữ liệu');
+      appAlert('Lỗi khi tải dữ liệu');
       this.isLoadingReport = false;
     }
   }
@@ -3826,7 +3858,7 @@ export class QCComponent implements OnInit, OnDestroy {
       this.isLoadingReport = false;
     } catch (error) {
       console.error('❌ Error loading QC report:', error);
-      alert('❌ Lỗi khi tải báo cáo kiểm');
+      appAlert('❌ Lỗi khi tải báo cáo kiểm');
       this.isLoadingReport = false;
     }
   }
@@ -3834,7 +3866,7 @@ export class QCComponent implements OnInit, OnDestroy {
   // Download QC Report as Excel
   downloadQCReport(): void {
     if (this.qcReports.length === 0) {
-      alert('⚠️ Không có dữ liệu để xuất báo cáo');
+      appAlert('⚠️ Không có dữ liệu để xuất báo cáo');
       return;
     }
     
@@ -3877,11 +3909,11 @@ export class QCComponent implements OnInit, OnDestroy {
         console.log(`✅ QC Report downloaded: ${fileName}`);
       }).catch(error => {
         console.error('❌ Error importing XLSX:', error);
-        alert('❌ Lỗi khi xuất báo cáo Excel. Vui lòng thử lại.');
+        appAlert('❌ Lỗi khi xuất báo cáo Excel. Vui lòng thử lại.');
       });
     } catch (error) {
       console.error('❌ Error downloading QC report:', error);
-      alert('❌ Lỗi khi tải báo cáo');
+      appAlert('❌ Lỗi khi tải báo cáo');
     }
   }
   
@@ -3955,7 +3987,7 @@ export class QCComponent implements OnInit, OnDestroy {
       console.log(`✅ Loaded productivity report: ${this.productivityRows.length} nhân viên`);
     } catch (error) {
       console.error('❌ Error loading productivity report:', error);
-      alert('❌ Lỗi khi tải báo cáo năng suất');
+      appAlert('❌ Lỗi khi tải báo cáo năng suất');
     } finally {
       this.isLoadingProductivity = false;
     }
@@ -3963,7 +3995,7 @@ export class QCComponent implements OnInit, OnDestroy {
 
   downloadProductivityExcel(): void {
     if (!this.productivityRows.length) {
-      alert('⚠️ Không có dữ liệu để tải');
+      appAlert('⚠️ Không có dữ liệu để tải');
       return;
     }
     import('xlsx')
@@ -3985,7 +4017,7 @@ export class QCComponent implements OnInit, OnDestroy {
       })
       .catch((e) => {
         console.error('downloadProductivityExcel error', e);
-        alert('❌ Lỗi khi xuất Excel.');
+        appAlert('❌ Lỗi khi xuất Excel.');
       });
   }
 
@@ -4177,7 +4209,7 @@ export class QCComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('❌ Error loading pending QC materials:', error);
-      alert('❌ Lỗi khi tải danh sách mã hàng chờ kiểm');
+      appAlert('❌ Lỗi khi tải danh sách mã hàng chờ kiểm');
       if (showPopup) {
         this.isLoadingReport = false;
       } else {
@@ -4253,7 +4285,7 @@ export class QCComponent implements OnInit, OnDestroy {
 
     const items = this.iqcHistoryResults || [];
     if (!items.length) {
-      alert('Không có dữ liệu để in');
+      appAlert('Không có dữ liệu để in');
       return;
     }
 
@@ -4297,7 +4329,7 @@ export class QCComponent implements OnInit, OnDestroy {
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      appAlert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
       return;
     }
 
@@ -4394,11 +4426,11 @@ export class QCComponent implements OnInit, OnDestroy {
     const poNumber = String(item?.poNumber || '').trim();
     const imd = String(item?.batchNumber || '').trim();
     if (!materialCode || !poNumber || !imd) {
-      alert('Thiếu dữ liệu (Mã hàng / PO / Lô hàng) — không mở được popup Lấy Mẫu.');
+      appAlert('Thiếu dữ liệu (Mã hàng / PO / Lô hàng) — không mở được popup Lấy Mẫu.');
       return;
     }
     if (this.isSampleTakenRow(item)) {
-      alert(`Mã ${materialCode} / PO ${poNumber} / Lô ${imd} đã lấy mẫu tại ${this.selectedFactory} — không nhập lại.`);
+      appAlert(`Mã ${materialCode} / PO ${poNumber} / Lô ${imd} đã lấy mẫu tại ${this.selectedFactory} — không nhập lại.`);
       return;
     }
 
@@ -4675,7 +4707,7 @@ export class QCComponent implements OnInit, OnDestroy {
   }): void {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng cho phép popup!');
       return;
     }
 
@@ -4840,13 +4872,13 @@ export class QCComponent implements OnInit, OnDestroy {
 
   async loadSampleCatalogByMonth(): Promise<void> {
     if (!this.sampleCatalogYear || !this.sampleCatalogMonth) {
-      alert('Vui lòng chọn tháng và năm');
+      appAlert('Vui lòng chọn tháng và năm');
       return;
     }
     const y = parseInt(this.sampleCatalogYear, 10);
     const m = parseInt(this.sampleCatalogMonth, 10);
     if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
-      alert('Tháng/năm không hợp lệ');
+      appAlert('Tháng/năm không hợp lệ');
       return;
     }
     const monthKey = y * 100 + m;
@@ -4881,7 +4913,7 @@ export class QCComponent implements OnInit, OnDestroy {
         .sort((a: any, b: any) => (Number(a?.stt || 0) || 0) - (Number(b?.stt || 0) || 0));
     } catch (e) {
       console.error('loadSampleCatalogByMonth error', e);
-      alert('Không tải được danh mục Lấy Mẫu.');
+      appAlert('Không tải được danh mục Lấy Mẫu.');
       this.sampleCatalogRows = [];
     } finally {
       this.isLoadingSampleCatalog = false;
@@ -4890,12 +4922,12 @@ export class QCComponent implements OnInit, OnDestroy {
 
   downloadSampleCatalogExcel(): void {
     if (!this.sampleCatalogYear || !this.sampleCatalogMonth) {
-      alert('Vui lòng chọn tháng và năm');
+      appAlert('Vui lòng chọn tháng và năm');
       return;
     }
     const rows = this.sampleCatalogRows || [];
     if (!rows.length) {
-      alert('Không có dữ liệu để tải');
+      appAlert('Không có dữ liệu để tải');
       return;
     }
 
@@ -4950,7 +4982,7 @@ export class QCComponent implements OnInit, OnDestroy {
       })
       .catch((e) => {
         console.error('downloadSampleCatalogExcel error', e);
-        alert('Lỗi khi xuất Excel.');
+        appAlert('Lỗi khi xuất Excel.');
       });
   }
 
@@ -4968,7 +5000,7 @@ export class QCComponent implements OnInit, OnDestroy {
       );
     } catch (e) {
       console.error('saveSampleCatalogPxk error', e);
-      alert('Không lưu được PXK. Vui lòng thử lại.');
+      appAlert('Không lưu được PXK. Vui lòng thử lại.');
     }
   }
 
@@ -5097,7 +5129,7 @@ export class QCComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('❌ Error loading pending confirm materials:', error);
-      alert('❌ Lỗi khi tải danh sách mã hàng chờ xác nhận');
+      appAlert('❌ Lỗi khi tải danh sách mã hàng chờ xác nhận');
       if (showPopup) {
         this.isLoadingReport = false;
       } else {

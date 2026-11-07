@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -19,7 +20,7 @@ import { ActivatedRoute, ActivatedRouteSnapshot, Router } from '@angular/router'
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { Subscription } from 'rxjs';
 import { KkCatalogService } from '../../services/kk-catalog.service';
-import { shelfGroupText, SHELF_SPLITS } from '../materials/shelf-group-catalog';
+import { shelfGroupText, shelfGroupRows, normalizeShelfGroups, SHELF_SPLITS } from '../materials/shelf-group-catalog';
 import type { JWarehouseRack3dComponent } from './j-warehouse-rack-3d.component';
 export interface JwBlock {
   /** VD: R11 hoặc S01-1 (kho mát) */
@@ -1337,7 +1338,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     event?.preventDefault();
     if (!this.canEditCctv) return;
     if (cam.required) {
-      alert(this.t('cctv.requiredLocked'));
+      appAlert(this.t('cctv.requiredLocked'));
       return;
     }
     if (!confirm(this.t('cctv.deleteConfirm', { id: cam.id, bldg: cam.building.toUpperCase() }))) return;
@@ -2721,6 +2722,57 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
   private storageShelfById: Record<string, string> = {};
   private storageZoneById: Record<string, string> = {};
   private storagePlanSeq = 0;
+  /** Sửa Sơ đồ lưu trữ ngay trên J-Warehouse (kk-shelf-group-map/layout) — rule vị trí ASM1 đọc bảng này. */
+  storageEditing = false;
+  storageSaving = false;
+  storageDraft: Record<string, string> = {};
+
+  startStorageEdit(): void {
+    this.storageDraft = {};
+    for (const row of this.storageShelfRows) this.storageDraft[row.shelf] = row.groups;
+    this.storageEditing = true;
+  }
+
+  cancelStorageEdit(): void {
+    this.storageEditing = false;
+    this.storageDraft = {};
+  }
+
+  async saveStorageEdit(): Promise<void> {
+    if (this.storageSaving) return;
+    const changed: Record<string, string> = {};
+    for (const row of this.storageShelfRows) {
+      const next = normalizeShelfGroups(this.storageDraft[row.shelf] ?? '');
+      if (next !== normalizeShelfGroups(row.groups)) changed[row.shelf] = next;
+    }
+    if (!Object.keys(changed).length) {
+      this.cancelStorageEdit();
+      return;
+    }
+    this.storageSaving = true;
+    this.cdr.markForCheck();
+    try {
+      const ref = this.firestore.collection('kk-shelf-group-map').doc('layout');
+      const snap = await ref.get().toPromise();
+      const raw = (snap?.data() as { shelves?: unknown } | undefined)?.shelves;
+      // Kệ chưa có bản lưu đang hiện theo mặc định → ghi lại mặc định đó để không bị mất khi lưu cả bảng
+      const shelves: Record<string, string> = Object.fromEntries(
+        shelfGroupRows(raw && typeof raw === 'object' ? raw as Record<string, string> : null).map((r) => [r.shelf, r.groups])
+      );
+      Object.assign(shelves, changed);
+      await ref.set({ shelves, updatedAt: new Date() });
+      await this.kk.loadShelfMap();
+      this.storageEditing = false;
+      this.storageDraft = {};
+      await this.loadStoragePlan();
+    } catch (e) {
+      console.error('saveStorageEdit', e);
+      appAlert('Không lưu được Sơ đồ lưu trữ: ' + ((e as Error)?.message || e));
+    } finally {
+      this.storageSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
 
   /** Mặc định chỉ xem J5; có thể bật xem thêm J4 (nằm sát J5, phía vách C) */
   buildingView: JwBuildingView = 'j5';
@@ -2835,7 +2887,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     } catch (err) {
       console.error('[JWarehouse] Không tải được mô hình 3D', err);
       this.show3D = false;
-      alert('❌ Không tải được mô hình 3D. Vui lòng kiểm tra mạng và thử lại.');
+      appAlert('❌ Không tải được mô hình 3D. Vui lòng kiểm tra mạng và thử lại.');
     } finally {
       this.rack3dLoading = false;
       this.cdr.markForCheck();
@@ -5211,7 +5263,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       })
       .catch((e) => {
         console.error('[JWarehouse] previewDrawing failed', e);
-        alert(this.t('alert.exportError'));
+        appAlert(this.t('alert.exportError'));
       })
       .finally(() => {
         this.isDownloading = false;
@@ -5238,7 +5290,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     if (this.show3D) {
       const ok = this.rack3dComponentRef?.instance?.downloadPng(`j-warehouse-3d-${this.lang}.png`);
-      if (!ok) alert(this.t('alert.exportError'));
+      if (!ok) appAlert(this.t('alert.exportError'));
       return;
     }
     if (this.isDownloading) return;
@@ -5254,7 +5306,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       })
       .catch((e) => {
         console.error('[JWarehouse] downloadDrawing failed', e);
-        alert(this.t('alert.exportError'));
+        appAlert(this.t('alert.exportError'));
       })
       .finally(() => {
         this.isDownloading = false;
@@ -5673,7 +5725,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (this.viewOnly) return;
     if (!this.selectedBlock) return;
     if (this.selectedPallet) {
-      alert(this.t('alert.slotHasPallet'));
+      appAlert(this.t('alert.slotHasPallet'));
       return;
     }
     this.showScanInput = true;
@@ -5693,19 +5745,19 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
     if (!code) return;
 
     if (!/^P\d{4}$/.test(code)) {
-      alert(this.t('alert.invalidPallet'));
+      appAlert(this.t('alert.invalidPallet'));
       return;
     }
 
     const slot = this.selectedSlotCode;
     if (this.palletAt(slot)) {
-      alert(this.t('alert.slotOnePallet'));
+      appAlert(this.t('alert.slotOnePallet'));
       return;
     }
 
     const duplicateSlot = this.findSlotByPallet(code);
     if (duplicateSlot) {
-      alert(this.t('alert.palletDuplicate', { code, slot: duplicateSlot }));
+      appAlert(this.t('alert.palletDuplicate', { code, slot: duplicateSlot }));
       return;
     }
 
@@ -5725,11 +5777,11 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
 
       const synced = await this.syncInventoryForPallet(code, slot);
       if (synced === 0) {
-        alert(this.t('alert.palletSavedNoInv', { code, slot }));
+        appAlert(this.t('alert.palletSavedNoInv', { code, slot }));
       }
     } catch (e) {
       console.error('[JWarehouse] submitScanPallet failed', e);
-      alert(this.t('alert.savePalletFail'));
+      appAlert(this.t('alert.savePalletFail'));
     } finally {
       this.isSavingPallet = false;
       this.cdr.markForCheck();
@@ -5753,7 +5805,7 @@ export class JWarehouseComponent implements OnInit, OnDestroy {
       if (this.show3D) this.syncRack3dInputs();
     } catch (e) {
       console.error('[JWarehouse] clearSelectedPallet failed', e);
-      alert(this.t('alert.clearPalletFail'));
+      appAlert(this.t('alert.clearPalletFail'));
     } finally {
       this.isClearingPallet = false;
       this.cdr.markForCheck();

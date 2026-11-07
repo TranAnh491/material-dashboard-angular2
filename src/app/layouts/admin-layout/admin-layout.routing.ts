@@ -4,7 +4,6 @@ import { Routes } from '@angular/router';
 
 
 
-import { StockCheckComponent } from '../../pages/stock-check/stock-check.component';
 
 import { IndexComponent } from '../../pages/index/index.component';
 import { SxxkComponent } from '../../pages/sxxk/sxxk.component';
@@ -42,7 +41,9 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'danh-muc-nvl-tp',      loadChildren: () => import('../../pages/danh-muc-nvl-tp/danh-muc-nvl-tp-page.module').then(m => m.DanhMucNvlTpPageModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'outbound',             loadChildren: () => import('../../pages/outbound/outbound.module').then(m => m.OutboundModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'jit',                  loadChildren: () => import('../../pages/jit/jit.module').then(m => m.JitModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pd-control',           loadChildren: () => import('../../pages/pd-control/pd-control.module').then(m => m.PdControlModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'kk-vi-tri',            loadChildren: () => import('../../pages/kk-vi-tri/kk-vi-tri.module').then(m => m.KkViTriModule), canActivate: [AuthGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'j-warehouse', loadChildren: () => import('../../pages/j-warehouse/j-warehouse.module').then(m => m.JWarehousePageModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true, preloadDelay: 3000 } },
   { path: 'fg-in',                loadChildren: () => import('../../pages/fg-in/fg-in.module').then(m => m.FgInModule), canActivate: [AuthGuard, TabPermissionGuard] },
@@ -52,6 +53,8 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'fg-inventory',         loadChildren: () => import('../../pages/fg-inventory/fg-inventory.module').then(m => m.FGInventoryModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'fg-overview',          loadChildren: () => import('../../pages/fg-overview/fg-overview.module').then(m => m.FgOverviewModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'aging-report',         loadChildren: () => import('../../pages/aging-report/aging-report.module').then(m => m.AgingReportModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  // Aging Report NVL: dùng chung trang Aging (chế độ NVL — so theo PO, dữ liệu lưu riêng aging-nvl-*)
+  { path: 'aging-report-nvl',     loadChildren: () => import('../../pages/aging-report/aging-report.module').then(m => m.AgingReportModule), canActivate: [AuthGuard, TabPermissionGuard], data: { agingMode: 'nvl' } },
   { path: 'fg-location',          loadChildren: () => import('../../pages/fg-location/fg-location.module').then(m => m.FgLocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pallet-id',            loadChildren: () => import('../../pages/pallet-id/pallet-id.module').then(m => m.PalletIdModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
@@ -64,7 +67,6 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'shipment',             loadChildren: () => import('../../pages/shipment/shipment.module').then(m => m.ShipmentModule), canActivate: [AuthGuard, TabPermissionGuard] },
 
 
-  { path: 'stock-check',          component: StockCheckComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'sxxk',                component: SxxkComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'scrap',               component: ScrapComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'qc',                   loadChildren: () => import('../../pages/qc/qc-page.module').then(m => m.QcPageModule), canActivate: [AuthGuard, TabPermissionGuard] },

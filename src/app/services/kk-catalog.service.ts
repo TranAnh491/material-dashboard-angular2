@@ -25,6 +25,22 @@ export interface KkCatalogEntry {
  * Danh mục KK — map Nhóm mã (B + 6 số, ví dụ B001680) → Loại hàng.
  * Import Excel (cột Nhóm mã, Loại hàng) từ More → Danh mục KK.
  */
+/**
+ * Kệ ép cứng theo đầu mã (04/11/2026):
+ * - mã đầu A → kệ R01;
+ * - mã tem B030, B031, B041, B042 → kệ lưu tem S20;
+ * - mã nhựa B011, B013, B014 → kệ R16.
+ * Chỉ áp ASM1 (rule vị trí theo sơ đồ kho J) — không đụng ASM2.
+ */
+export function forcedShelvesForCode(materialCode: string | null | undefined): string[] {
+  const c = String(materialCode || '').trim().toUpperCase();
+  if (!c) return [];
+  if (c.startsWith('A')) return ['R01'];
+  if (/^B0(30|31|41|42)/.test(c)) return ['S20'];
+  if (/^B01[134]/.test(c)) return ['R16'];
+  return [];
+}
+
 @Injectable({ providedIn: 'root' })
 export class KkCatalogService {
   readonly collectionName = 'kk-catalog';
@@ -193,6 +209,17 @@ export class KkCatalogService {
 
   /** Đầu mã (B018, R029…) → các kệ ghi trong Danh mục dãy kệ, R trước S. */
   private shelfMapByPrefix: Map<string, string[]> | null = null;
+
+  /**
+   * Kệ được ghi cho mã này trên Sơ đồ lưu trữ (J-Warehouse / Danh mục dãy kệ), theo đầu mã B018 / R029.
+   * [] = sơ đồ chưa ghi mã này (hoặc chưa nạp).
+   */
+  shelvesOnStorageMap(materialCode: string): string[] {
+    const forced = forcedShelvesForCode(materialCode);
+    if (forced.length) return forced;
+    const head = /^([BR]\d{3})/.exec(String(materialCode || '').trim().toUpperCase());
+    return head ? [...(this.shelfMapByPrefix?.get(head[1]) || [])] : [];
+  }
 
   /** Nạp lại bảng dãy kệ (gọi sau khi lưu Danh mục dãy kệ). */
   async loadShelfMap(): Promise<void> {
