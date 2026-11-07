@@ -1,34 +1,141 @@
 <div class="jit" *ngIf="!mobile">
   <!-- ===== Danh sách LSX ===== -->
   <ng-container *ngIf="!selected">
-    <div class="jit__bar">
-      <div class="jit__group">
+    <!-- Header -->
+    <div class="jk-head">
+      <div class="jk-head__nav">
         <button type="button" class="jit-btn" (click)="goBack()"><i class="material-icons">arrow_back</i>Back</button>
         <button type="button" class="jit-btn" (click)="goMenu()"><i class="material-icons">home</i>Menu</button>
       </div>
-      <div class="jit__title">JIT — Gọi kho lấy hàng</div>
-      <div class="jit__group">
-        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ALL'" (click)="factorySel = 'ALL'">Tất cả</button>
-        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ASM1'" (click)="factorySel = 'ASM1'">ASM1</button>
-        <button type="button" class="jit-btn" [class.jit-btn--on]="factorySel === 'ASM3'" (click)="factorySel = 'ASM3'">ASM3</button>
+      <img src="assets/img/logo.png" alt="Airspeed" class="jk-head__logo">
+      <div class="jk-head__title">JIT – Raw Material Call Delivery <span>(NVL Kanban)</span></div>
+      <div class="jk-head__right">
+        <div class="jk-range" title="Lọc theo ngày nhận">
+          <i class="material-icons">calendar_today</i>
+          <input type="date" [(ngModel)]="dateFrom" [max]="dateTo || null" aria-label="Từ ngày">
+          <span>–</span>
+          <input type="date" [(ngModel)]="dateTo" [min]="dateFrom || null" aria-label="Đến ngày">
+          <button type="button" class="jk-range__x" *ngIf="dateFrom || dateTo" (click)="dateFrom = ''; dateTo = ''" title="Bỏ lọc ngày">×</button>
+        </div>
+        <button type="button" class="jk-icon-btn" (click)="showHelp = true" title="Ý nghĩa các cột / tình trạng"><i class="material-icons">help_outline</i></button>
       </div>
-      <div class="jit__group jit__group--grow">
-        <select class="jit-select" [(ngModel)]="lineSel" title="Lọc theo Line nhận">
-          <option value="">Tất cả Line</option>
-          <option *ngFor="let l of lines" [value]="l">{{ l }}</option>
-        </select>
-        <input class="jit-search" type="search" [(ngModel)]="search" placeholder="Tìm LSX, mã TP, khách…">
-        <label class="jit-btn jit-btn--check"><input type="checkbox" [(ngModel)]="hideDone"> Ẩn Done</label>
-        <label class="jit-btn jit-btn--check" *ngIf="isKho" title="Hiện cả LSX đã ẩn để bỏ ẩn">
-          <input type="checkbox" [(ngModel)]="showHidden"> Hiện LSX đã ẩn ({{ hiddenCount }})</label>
-        <button type="button" class="jit-btn" (click)="load()" [disabled]="loading">
-          <i class="material-icons">{{ loading ? 'hourglass_top' : 'refresh' }}</i>Làm mới
+    </div>
+
+    <!-- Ô số liệu (bấm để lọc theo cột) -->
+    <div class="jk-stats">
+      <button type="button" class="jk-stat jk-stat--total" [class.is-on]="!statusSel" (click)="statusSel = ''" title="Tất cả LSX">
+        <span class="jk-stat__ic"><i class="material-icons">lan</i></span>
+        <span class="jk-stat__txt"><span class="jk-stat__lbl">Total LSX</span><b>{{ stats.total | number }}</b></span>
+      </button>
+      <button type="button" *ngFor="let c of cols" class="jk-stat jk-stat--{{ c.key }}" [class.is-on]="statusSel === c.key"
+              (click)="toggleStatusSel(c.key)" [title]="'Lọc cột ' + c.label + ' (' + c.statuses + ')'">
+        <span class="jk-stat__ic"><i class="material-icons">{{ c.icon }}</i></span>
+        <span class="jk-stat__txt"><span class="jk-stat__lbl">{{ c.label }}</span><b>{{ colCount(c.key) | number }}</b></span>
+      </button>
+      <div class="jk-stat jk-stat--otd" title="On-Time Delivery: LSX Done trước hết ngày nhận / tổng LSX Done (trong bộ lọc hiện tại)">
+        <span class="jk-ring" [style.--p]="stats.otd ?? 0" [class.is-good]="(stats.otd ?? 0) >= 95">
+          <span>{{ stats.otd == null ? '—' : stats.otd + '%' }}</span>
+        </span>
+        <span class="jk-stat__txt"><b class="jk-otd__t">OTD (NVL)</b><span class="jk-stat__lbl">Target ≥ 95% · {{ stats.otdBase }} LSX</span></span>
+      </div>
+    </div>
+
+    <!-- Thanh lọc -->
+    <div class="jk-bar">
+      <div class="jk-seg">
+        <button type="button" [class.is-on]="view === 'kanban'" (click)="setView('kanban')"><i class="material-icons">space_dashboard</i>Kanban</button>
+        <button type="button" [class.is-on]="view === 'list'" (click)="setView('list')"><i class="material-icons">view_list</i>List</button>
+      </div>
+      <div class="jk-search">
+        <i class="material-icons">search</i>
+        <input type="search" [(ngModel)]="search" placeholder="Search LSX, Mã TP, Khách…">
+      </div>
+      <select class="jk-sel" [(ngModel)]="factorySel" title="Nhà máy">
+        <option value="ALL">Nhà máy (All)</option>
+        <option value="ASM1">ASM1</option>
+        <option value="ASM3">ASM3</option>
+      </select>
+      <select class="jk-sel" [(ngModel)]="customerSel" title="Khách hàng">
+        <option value="">Khách hàng (All)</option>
+        <option *ngFor="let c of customers" [value]="c">{{ c }}</option>
+      </select>
+      <select class="jk-sel" [(ngModel)]="lineSel" title="Line nhận">
+        <option value="">Line (All)</option>
+        <option *ngFor="let l of lines" [value]="l">{{ l }}</option>
+      </select>
+      <select class="jk-sel" [(ngModel)]="statusSel" title="Tình trạng">
+        <option value="">Tình trạng (All)</option>
+        <option *ngFor="let c of cols" [value]="c.key">{{ c.label }}</option>
+      </select>
+      <div class="jk-more" (click)="$event.stopPropagation()">
+        <button type="button" class="jit-btn" [class.jit-btn--on]="showMoreFilters" (click)="showMoreFilters = !showMoreFilters">
+          <i class="material-icons">filter_alt</i>More Filters<span class="jk-badge" *ngIf="activeFilterCount">{{ activeFilterCount }}</span>
         </button>
+        <div class="jk-more__panel" *ngIf="showMoreFilters">
+          <label><input type="checkbox" [(ngModel)]="hideDone"> Ẩn Done (chế độ List)</label>
+          <label *ngIf="isKho"><input type="checkbox" [(ngModel)]="showHidden"> Hiện LSX đã ẩn ({{ hiddenCount }})</label>
+          <label><input type="checkbox" [ngModel]="!sortAsc" (ngModelChange)="sortAsc = !$event"> Ngày nhận mới nhất trước</label>
+        </div>
       </div>
+      <button type="button" class="jit-btn jk-square" (click)="load()" [disabled]="loading" title="Làm mới">
+        <i class="material-icons" [class.jk-spin]="loading">refresh</i>
+      </button>
+      <button type="button" class="jit-btn jk-primary" (click)="openCreate()" title="Gọi kho lấy hàng cho 1 LSX">
+        <i class="material-icons">add</i>Tạo Lệnh Gọi
+      </button>
     </div>
 
     <p class="jit__err" *ngIf="error">{{ error }}</p>
 
+    <!-- ===== Kanban ===== -->
+    <div class="jk-board" *ngIf="view === 'kanban'">
+      <section *ngFor="let b of board" class="jk-col jk-col--{{ b.col.key }}">
+        <header class="jk-col__head">
+          <i class="material-icons">{{ b.col.icon }}</i>
+          <span class="jk-col__name">{{ b.col.label }}</span>
+          <span class="jk-col__count">{{ b.rows.length }}</span>
+        </header>
+        <div class="jk-col__body">
+          <article *ngFor="let r of visibleCards(b); trackBy: trackRow" class="jk-card" [class.is-hidden]="r.state.hidden">
+            <div class="jk-card__top">
+              <button type="button" class="jk-card__lsx" (click)="openLsx(r)" title="Mở LSX: sắp xếp đưa NVL lên line">{{ r.lsx }}</button>
+              <span class="jk-chip">{{ r.factory }}</span>
+              <div class="jk-menu">
+                <button type="button" class="jk-menu__btn" (click)="toggleMenu(r, $event)" title="Thao tác"><i class="material-icons">more_vert</i></button>
+                <div class="jk-menu__panel" *ngIf="menuFor === r.woId" (click)="$event.stopPropagation()">
+                  <button type="button" (click)="menuFor = null; openLsx(r)"><i class="material-icons">open_in_new</i>Mở LSX / sắp xếp NVL</button>
+                  <button type="button" (click)="menuFor = null; call(r)" [disabled]="r.busy"><i class="material-icons">campaign</i>Gọi lấy lần {{ nextRound(r) }}</button>
+                  <label *ngFor="let i of rounds"><input type="checkbox" [checked]="r.state.picks[i]" (change)="togglePick(r, i)"> Đã lấy lần {{ i + 1 }}</label>
+                  <button type="button" *ngIf="isKho" (click)="menuFor = null; toggleHide(r)"><i class="material-icons">{{ r.state.hidden ? 'visibility' : 'visibility_off' }}</i>{{ r.state.hidden ? 'Bỏ ẩn LSX' : 'Ẩn LSX' }}</button>
+                </div>
+              </div>
+            </div>
+            <div class="jk-card__row"><i class="material-icons">inventory_2</i><span>{{ r.productCode || '—' }}</span></div>
+            <div class="jk-card__row"><i class="material-icons">person_outline</i><span>{{ r.customer || '—' }}</span><span class="jk-card__line" *ngIf="r.line">{{ r.line }}</span></div>
+            <div class="jk-card__row"><i class="material-icons">widgets</i><span>{{ r.quantity | number }}</span>
+              <span class="jk-card__calls" *ngIf="r.state.calls.length || pickCount(r)" [title]="lastCallText(r) ? 'Gọi gần nhất ' + lastCallText(r) : ''">
+                Gọi {{ r.state.calls.length }} · Lấy {{ pickCount(r) }}/{{ rounds.length }}
+              </span>
+            </div>
+            <div class="jk-card__row jk-card__foot">
+              <i class="material-icons">calendar_today</i>
+              <span>{{ r.deliveryDate ? (r.deliveryDate | date:'dd/MM/yyyy') : '—' }}</span>
+              <span class="jk-status jk-status--{{ b.col.key }}" [class.jk-status--delay]="r.status === 'delay'">
+                <i class="material-icons" *ngIf="b.col.key === 'delivering' || b.col.key === 'completed'">{{ b.col.key === 'delivering' ? 'local_shipping' : 'check' }}</i>{{ b.col.key === 'waiting' ? statusText(r.status || 'waiting') : (r.status === 'ready-iqc' || r.status === 'jit' ? statusText(r.status) : b.col.label) }}
+              </span>
+            </div>
+            <div class="jk-card__next" *ngIf="nextCallText(r) as n"><i class="material-icons">schedule</i>Gọi lần sau {{ n }}</div>
+          </article>
+          <p class="jk-empty" *ngIf="!b.rows.length && !loading">Không có LSX</p>
+        </div>
+        <button type="button" class="jk-col__more" *ngIf="b.rows.length > colPage && !expandedCols.has(b.col.key)" (click)="expandCol(b.col.key)">
+          + {{ b.rows.length - colPage }} more
+        </button>
+      </section>
+    </div>
+
+    <!-- ===== List (bảng cũ) ===== -->
+    <ng-container *ngIf="view === 'list'">
     <div class="jit__wrap">
       <table class="jit-table">
         <thead>
@@ -84,6 +191,48 @@
           <tr *ngIf="!loading && !viewRows.length"><td colspan="15" class="jit-empty">Không có LSX.</td></tr>
         </tbody>
       </table>
+    </div>
+    </ng-container>
+
+    <!-- Status Flow -->
+    <div class="jk-flow">
+      <b>Status Flow:</b>
+      <ng-container *ngFor="let c of cols; let last = last">
+        <span class="jk-status jk-status--{{ c.key }}" [title]="c.statuses"><i class="material-icons">{{ c.icon }}</i>{{ c.label }}</span>
+        <i class="material-icons jk-flow__arrow" *ngIf="!last">arrow_forward</i>
+      </ng-container>
+      <span class="jk-flow__upd" *ngIf="lastUpdate"><i class="material-icons">sync</i>Last Update: {{ lastUpdate | date:'dd/MM/yyyy HH:mm' }}</span>
+    </div>
+
+    <!-- Tạo lệnh gọi -->
+    <div class="jk-overlay" *ngIf="showCreate" (click)="showCreate = false">
+      <div class="jk-dialog jit-create" (click)="$event.stopPropagation()">
+        <div class="jk-dialog__head"><b>Tạo lệnh gọi kho</b><button type="button" class="jk-icon-btn" (click)="showCreate = false"><i class="material-icons">close</i></button></div>
+        <p class="jk-dialog__hint">Nhập / quét LSX — Zalo bot nhắn nhóm Kho lấy hàng lần kế tiếp.</p>
+        <input type="text" list="jk-lsx-list" [(ngModel)]="createLsx" (keydown.enter)="submitCreate()" placeholder="VD: KZLSX1126/0145" autocomplete="off">
+        <datalist id="jk-lsx-list">
+          <option *ngFor="let r of callableRows" [value]="r.lsx">{{ r.productCode }} · {{ statusText(r.status) }}</option>
+        </datalist>
+        <div class="jk-dialog__actions">
+          <button type="button" class="jit-btn" (click)="showCreate = false">Hủy</button>
+          <button type="button" class="jit-btn jk-primary" (click)="submitCreate()" [disabled]="!createLsx.trim()"><i class="material-icons">campaign</i>Gọi</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Giải thích cột -->
+    <div class="jk-overlay" *ngIf="showHelp" (click)="showHelp = false">
+      <div class="jk-dialog" (click)="$event.stopPropagation()">
+        <div class="jk-dialog__head"><b>Các cột Kanban</b><button type="button" class="jk-icon-btn" (click)="showHelp = false"><i class="material-icons">close</i></button></div>
+        <table class="xl-table jk-help">
+          <thead><tr><th>Cột</th><th>Gồm tình trạng Work Order</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let c of cols"><td><span class="jk-status jk-status--{{ c.key }}"><i class="material-icons">{{ c.icon }}</i>{{ c.label }}</span></td><td>{{ c.statuses }}</td></tr>
+          </tbody>
+        </table>
+        <p class="jk-dialog__hint">Tình trạng đổi ở tab Work Order. Bấm số LSX để mở trang sắp xếp NVL; nút ⋮ trên thẻ để Gọi kho, tick Đã lấy, Ẩn LSX.
+          OTD = LSX Done trước hết ngày nhận / tổng LSX Done.</p>
+      </div>
     </div>
   </ng-container>
 

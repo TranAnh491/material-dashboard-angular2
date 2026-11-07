@@ -357,6 +357,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   // Scan QR -> Chọn trạng thái dialog (sau khi scan LSX)
   showScanStatusSelectDialog: boolean = false;
+  /** Popup giải thích ý nghĩa từng tình trạng (bấm tiêu đề cột Tình trạng). */
+  showStatusInfo = false;
+  readonly statusInfoRows: { value: string; label: string; meaning: string; rule: string }[] = [
+    { value: 'waiting', label: 'Waiting', meaning: 'LSX mới nhận / import, kho chưa bắt đầu soạn NVL.', rule: 'Chọn được bất kỳ lúc nào.' },
+    { value: 'kitting', label: 'Kitting', meaning: 'Kho đang soạn NVL cho LSX. Ghi lại giờ bắt đầu soạn.', rule: 'Chỉ chọn khi đang Waiting. Xuất thiếu (Partial) cũng đưa LSX về Kitting để soạn tiếp phần còn treo.' },
+    { value: 'ready', label: 'Ready', meaning: 'Đã soạn xong, NVL sẵn sàng giao Line. Ghi giờ Ready, chốt Standard packing; Line cần chụp hình → báo Zalo team soạn.', rule: 'Chỉ chọn khi đang Kitting. Phải qua kiểm tra cân PXK.' },
+    { value: 'ready-iqc', label: 'Ready-IQC', meaning: 'Đã soạn nhưng còn mã NVL chờ IQC kiểm. Gửi Zalo danh sách mã chờ IQC.', rule: 'Chọn được bất kỳ lúc nào.' },
+    { value: 'transfer', label: 'Transfer', meaning: 'Đã chuyển NVL cho Line / xưởng.', rule: 'Chỉ chọn khi đang Ready. LSX bị thiếu cần OTP Zalo nhóm Quản lý kho.' },
+    { value: 'done', label: 'Done', meaning: 'LSX hoàn tất, đã giao đủ.', rule: 'Phải qua kiểm tra cân PXK. LSX bị thiếu cần OTP Zalo. LSX chia nhiều lần giao (JIT) chưa giao hết sẽ tự chuyển sang JIT.' },
+    { value: 'jit', label: 'JIT', meaning: 'LSX chia nhiều lần giao, kho chưa giao hết.', rule: 'Tick Đã giao đủ các lần ở trang JIT thì tự chuyển Done.' },
+    { value: 'delay', label: 'Delay', meaning: 'LSX bị hoãn / trễ, chưa soạn hoặc chưa giao được. Đếm riêng ở ô Delay và Dashboard.', rule: 'Chọn được bất kỳ lúc nào.' },
+  ];
   scanStatusSelectWorkOrder: WorkOrder | null = null;
 
   // Popup "status changed" after scanning

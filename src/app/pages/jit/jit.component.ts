@@ -74,6 +74,8 @@ interface JitRow {
   line: string;
   status: string;
   deliveryDate: Date | null;
+  /** Giờ chuyển Done (Work Order) — tính OTD */
+  doneAt?: Date | null;
   createdMs: number;
   /** Standard chốt lúc Ready (Work Order) */
   stdSnapshot?: Record<string, number>;
@@ -109,6 +111,20 @@ export const JIT_ROUNDS = 3;
 /** Full trang (bỏ lề / footer layout) — dùng chung class với Lịch làm việc */
 const BODY_CLASS = 'ws-fullscreen-layout';
 
+/** Cột Kanban — gom tình trạng Work Order thành 5 bước. */
+export type JitColKey = 'waiting' | 'kitting' | 'ready' | 'delivering' | 'completed';
+interface JitCol { key: JitColKey; label: string; icon: string; statuses: string }
+const JIT_COLS: JitCol[] = [
+  { key: 'waiting', label: 'Waiting', icon: 'hourglass_empty', statuses: 'Waiting, Delay, chưa chọn' },
+  { key: 'kitting', label: 'Kitting', icon: 'build', statuses: 'Kitting' },
+  { key: 'ready', label: 'Ready', icon: 'check', statuses: 'Ready, Ready-IQC' },
+  { key: 'delivering', label: 'Delivering', icon: 'local_shipping', statuses: 'Transfer, JIT (đang giao các lần)' },
+  { key: 'completed', label: 'Completed', icon: 'done_all', statuses: 'Done' },
+];
+/** Số thẻ hiện mỗi cột trước khi bấm "+ N more" */
+const COL_PAGE = 20;
+const VIEW_KEY = 'jit-view';
+
 @Component({
   selector: 'app-jit',
   templateUrl: './jit.component.html',
@@ -126,6 +142,25 @@ export class JitComponent implements OnInit, OnDestroy {
   /** Kho: hiện cả LSX đã ẩn (để bỏ ẩn) */
   showHidden = false;
   search = '';
+  /** Kanban (mặc định) / List (bảng cũ) */
+  view: 'kanban' | 'list' = 'kanban';
+  customerSel = '';
+  /** Lọc theo cột Kanban ('' = tất cả) */
+  statusSel: '' | JitColKey = '';
+  /** Khoảng ngày nhận (yyyy-mm-dd, '' = không lọc) */
+  dateFrom = '';
+  dateTo = '';
+  showMoreFilters = false;
+  showHelp = false;
+  showCreate = false;
+  createLsx = '';
+  /** Thẻ đang mở menu ⋮ */
+  menuFor: string | null = null;
+  /** Cột đã bấm "+ N more" */
+  expandedCols = new Set<JitColKey>();
+  lastUpdate: Date | null = null;
+  readonly cols = JIT_COLS;
+  readonly colPage = COL_PAGE;
   loading = false;
   error = '';
   rows: JitRow[] = [];
@@ -163,6 +198,7 @@ export class JitComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     document.body.classList.add(BODY_CLASS);
+    try { if (localStorage.getItem(VIEW_KEY) === 'list') this.view = 'list'; } catch { /* bỏ qua */ }
     try {
       const u = await this.afAuth.currentUser;
       this.userName = String(u?.displayName || u?.email || '').split('@')[0].toUpperCase();
@@ -245,7 +281,7 @@ export class JitComponent implements OnInit, OnDestroy {
           rows.push({
             woId: doc.id, lsx, productCode, factory: this.jitFactoryOf(w),
             quantity: Number(w.quantity) || 0, customer: String(w.customer || ''), line: String(w.productionLine || ''),
-            status, deliveryDate: this.toDate(w.deliveryDate), createdMs, state, stdSnapshot: w.stdSnapshot || undefined,
+            status, deliveryDate: this.toDate(w.deliveryDate), doneAt: this.toDate(w.doneAt), createdMs, state, stdSnapshot: w.stdSnapshot || undefined,
             pattern: this.patterns.get(productCode) || null,
             nextInput: this.toInput(this.toDate(state.nextCallAt)), busy: false
           });
@@ -253,6 +289,7 @@ export class JitComponent implements OnInit, OnDestroy {
       }
       rows.sort((a, b) => (a.deliveryDate?.getTime() || 9e15) - (b.deliveryDate?.getTime() || 9e15) || b.createdMs - a.createdMs);
       this.rows = rows;
+      this.lastUpdate = new Date();
     } catch (e: any) {
       this.error = 'Không tải được LSX: ' + (e?.message || e);
     } finally {
@@ -261,14 +298,159 @@ export class JitComponent implements OnInit, OnDestroy {
     }
   }
 
-  get viewRows(): JitRow[] {
+  /** Lọc chung cho Kanban + List (nhà máy, Line, khách, ngày nhận, tìm, ẩn). */
+  private baseFilter(r: JitRow): boolean {
     const q = this.search.trim().toUpperCase();
-    const out = this.rows.filter((r) =>
-      (this.factorySel === 'ALL' || r.factory.toUpperCase() === this.factorySel)
+    const t = r.deliveryDate?.getTime();
+    const from = this.dateFrom ? new Date(this.dateFrom + 'T00:00:00').getTime() : null;
+    const to = this.dateTo ? new Date(this.dateTo + 'T23:59:59').getTime() : null;
+    return (this.factorySel === 'ALL' || r.factory.toUpperCase() === this.factorySel)
       && (!this.lineSel || r.line === this.lineSel)
-      && (!this.hideDone || r.status !== 'done')
+      && (!this.customerSel || r.customer === this.customerSel)
+      && (from == null || (t != null && t >= from))
+      && (to == null || (t != null && t <= to))
       && (!r.state.hidden || (this.isKho && this.showHidden))
-      && (!q || r.lsx.toUpperCase().includes(q) || r.productCode.includes(q) || r.customer.toUpperCase().includes(q)));
+      && (!q || r.lsx.toUpperCase().includes(q) || r.productCode.includes(q) || r.customer.toUpperCase().includes(q));
+  }
+
+  /** Tình trạng Work Order → cột Kanban. */
+  colOf(r: JitRow): JitColKey {
+    switch (r.status) {
+      case 'kitting': return 'kitting';
+      case 'ready': case 'ready-iqc': return 'ready';
+      case 'transfer': case 'jit': return 'delivering';
+      case 'done': return 'completed';
+      default: return 'waiting';
+    }
+  }
+
+  /** Bump khi sửa dữ liệu tại chỗ (ẩn LSX…) để Kanban tính lại. */
+  private boardRev = 0;
+  private boardKey = '';
+  private boardCache: { col: JitCol; rows: JitRow[] }[] = [];
+  private statsCache = { total: 0, otd: null as number | null, otdBase: 0 };
+
+  /** Dữ liệu Kanban — chỉ tính lại khi bộ lọc / dữ liệu đổi (không tính lại mỗi lần vẽ). */
+  get board(): { col: JitCol; rows: JitRow[] }[] {
+    const key = [this.rows.length, this.lastUpdate?.getTime(), this.boardRev, this.factorySel, this.lineSel, this.customerSel,
+      this.dateFrom, this.dateTo, this.search, this.showHidden, this.statusSel, this.sortAsc].join('|');
+    if (key === this.boardKey) return this.boardCache;
+    this.boardKey = key;
+    const base = this.rows.filter((r) => this.baseFilter(r));
+    const dir = this.sortAsc ? 1 : -1;
+    const by = (a: JitRow, b: JitRow) =>
+      dir * ((a.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)) - (b.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)))
+      || a.lsx.localeCompare(b.lsx);
+    const all = JIT_COLS.map((col) => ({ col, rows: base.filter((r) => this.colOf(r) === col.key).sort(by) }));
+    // Completed: mới xong lên đầu
+    const done = all.find((b) => b.col.key === 'completed');
+    if (done) done.rows.sort((a, b) => (b.doneAt?.getTime() || 0) - (a.doneAt?.getTime() || 0));
+    this.boardCache = all.filter((b) => !this.statusSel || b.col.key === this.statusSel);
+    this.colCounts = new Map(all.map((b) => [b.col.key, b.rows.length]));
+    // OTD: LSX Done có ngày nhận + giờ Done, xong trước hết ngày nhận
+    const doneRows = base.filter((r) => r.status === 'done' && r.deliveryDate && r.doneAt);
+    const onTime = doneRows.filter((r) => {
+      const end = new Date(r.deliveryDate!);
+      end.setHours(23, 59, 59, 999);
+      return r.doneAt!.getTime() <= end.getTime();
+    }).length;
+    this.statsCache = {
+      total: base.length,
+      otd: doneRows.length ? Math.round((onTime / doneRows.length) * 100) : null,
+      otdBase: doneRows.length,
+    };
+    return this.boardCache;
+  }
+
+  private colCounts = new Map<JitColKey, number>();
+
+  get stats() { void this.board; return this.statsCache; }
+
+  /** Số LSX mỗi cột (không phụ thuộc lọc Tình trạng — để ô số liệu luôn đủ). */
+  colCount(key: JitColKey): number {
+    void this.board;
+    return this.colCounts.get(key) ?? 0;
+  }
+
+  visibleCards(b: { col: JitCol; rows: JitRow[] }): JitRow[] {
+    return this.expandedCols.has(b.col.key) ? b.rows : b.rows.slice(0, COL_PAGE);
+  }
+
+  expandCol(key: JitColKey): void { this.expandedCols.add(key); }
+
+  setView(v: 'kanban' | 'list'): void {
+    this.view = v;
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* bỏ qua */ }
+  }
+
+  /** Bấm ô số liệu → lọc theo cột (bấm lại để bỏ lọc). */
+  toggleStatusSel(key: JitColKey): void {
+    this.statusSel = this.statusSel === key ? '' : key;
+  }
+
+  get customers(): string[] {
+    return [...new Set(this.rows.map((r) => r.customer).filter(Boolean))].sort();
+  }
+
+  /** Số tuỳ chọn đang bật trong More Filters (khác mặc định). */
+  get activeFilterCount(): number {
+    return (this.hideDone ? 0 : 1) + (this.showHidden ? 1 : 0) + (this.sortAsc ? 0 : 1);
+  }
+
+  /** LSX chưa Done — gợi ý cho ô Tạo lệnh gọi. */
+  get callableRows(): JitRow[] {
+    return this.rows.filter((r) => r.status !== 'done' && !r.state.hidden);
+  }
+
+  openCreate(): void {
+    this.createLsx = '';
+    this.showCreate = true;
+    setTimeout(() => (document.querySelector('.jit-create input') as HTMLInputElement | null)?.focus(), 0);
+  }
+
+  async submitCreate(): Promise<void> {
+    const q = this.createLsx.trim().toUpperCase().replace(/\s/g, '');
+    if (!q) return;
+    const r = this.rows.find((x) => x.lsx.toUpperCase().replace(/\s/g, '') === q);
+    if (!r) { appAlert(`Không tìm thấy LSX ${q} trong danh sách JIT.`); return; }
+    this.showCreate = false;
+    await this.call(r);
+  }
+
+  toggleMenu(r: JitRow, ev: Event): void {
+    ev.stopPropagation();
+    this.menuFor = this.menuFor === r.woId ? null : r.woId;
+  }
+
+  @HostListener('document:click')
+  closeMenus(): void {
+    if (this.menuFor) this.menuFor = null;
+    if (this.showMoreFilters) this.showMoreFilters = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  onEsc(): void {
+    this.menuFor = null;
+    this.showMoreFilters = false;
+    this.showHelp = false;
+    this.showCreate = false;
+  }
+
+  pickCount(r: JitRow): number {
+    return r.state.picks.filter(Boolean).length;
+  }
+
+  nextCallText(r: JitRow): string {
+    const d = this.toDate(r.state.nextCallAt);
+    if (!d || d.getTime() < Date.now()) return '';
+    return d.toLocaleString('vi-VN', { hour12: false, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  get viewRows(): JitRow[] {
+    const out = this.rows.filter((r) =>
+      this.baseFilter(r)
+      && (!this.hideDone || r.status !== 'done')
+      && (!this.statusSel || this.colOf(r) === this.statusSel));
     const dir = this.sortAsc ? 1 : -1;
     return out.sort((a, b) =>
       dir * ((a.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)) - (b.deliveryDate?.getTime() ?? (this.sortAsc ? 9e15 : 0)))
@@ -291,6 +473,7 @@ export class JitComponent implements OnInit, OnDestroy {
     try {
       await this.stateRef(r).set({ ...this.baseFields(r), hidden, hiddenBy: this.userName, hiddenAt: new Date() }, { merge: true });
       r.state.hidden = hidden;
+      this.boardRev++;
     } catch (e: any) {
       appAlert('Không lưu được: ' + (e?.message || e));
     } finally {

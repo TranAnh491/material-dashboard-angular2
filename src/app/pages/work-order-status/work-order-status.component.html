@@ -976,7 +976,7 @@
                           <th>NVL thiếu</th>
                           <th>Người soạn</th>
                           <th>Số Mã</th>
-                          <th>Tình trạng</th>
+                          <th class="wo-th-info" (click)="showStatusInfo = true" title="Bấm để xem ý nghĩa từng tình trạng">Tình trạng<i class="material-icons wo-th-info__ic">info_outline</i></th>
                           <th>Đủ/Thiếu</th>
                           <th>Ngày nhận thông tin</th>
                         </tr>
@@ -1452,6 +1452,33 @@
             <mat-icon>close</mat-icon> Hủy
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ý nghĩa cột Tình trạng (bấm tiêu đề cột) -->
+  <div class="time-range-dialog-overlay" *ngIf="showStatusInfo" (click)="showStatusInfo = false">
+    <div class="time-range-dialog wo-status-info" (click)="$event.stopPropagation()">
+      <div class="dialog-header">
+        <h4><i class="material-icons" style="vertical-align:middle;margin-right:6px;">info_outline</i> Ý nghĩa cột Tình trạng</h4>
+        <button mat-icon-button type="button" (click)="showStatusInfo = false" title="Đóng">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p class="wo-status-info__flow">Luồng chuẩn: <b>Waiting → Kitting → Ready → Transfer → Done</b></p>
+        <table class="xl-table wo-status-info__table">
+          <thead>
+            <tr><th>Tình trạng</th><th>Ý nghĩa</th><th>Điều kiện chọn</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of statusInfoRows">
+              <td class="wo-status-info__name">{{ r.label }}</td>
+              <td>{{ r.meaning }}</td>
+              <td>{{ r.rule }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

@@ -5581,3 +5581,28 @@ textarea.mat-input-element {
 
 /* JIT: đã chia nhiều lần giao, chưa giao hết */
 .status-jit { background-color: #fff3e0; &:hover { background-color: #ffe0b2; } }
+
+
+/* ---- Tiêu đề cột Tình trạng: bấm để xem ý nghĩa ---- */
+.wo-table th.wo-th-info {
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.wo-table th.wo-th-info:hover { text-decoration: underline; }
+.wo-th-info__ic {
+  font-size: 14px !important;
+  vertical-align: middle;
+  margin-left: 3px;
+  color: #64748b;
+}
+
+.wo-status-info {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.wo-status-info__flow { margin: 0 0 10px; font-size: 13px; }
+.wo-status-info__table { width: 100%; }
+.wo-status-info__table td { vertical-align: top; text-align: left; line-height: 1.4; }
+.wo-status-info__name { font-weight: 700; white-space: nowrap; }
