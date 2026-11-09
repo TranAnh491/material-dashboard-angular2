@@ -2071,31 +2071,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Load FG Inventory cache - realtime (deprecated, giữ lại để tương thích)
-  loadFGInventoryCache(): void {
-    const fgInventory$ = this.firestore.collection('fg-inventory').snapshotChanges();
-    fgInventory$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(fgInventoryActions => {
-        this.fgInventoryCache.clear();
-
-        fgInventoryActions.forEach(action => {
-          const data = action.payload.doc.data() as any;
-          const materialCodeRaw = (data.materialCode || data.maTP || '').toString();
-          const materialCode = materialCodeRaw.trim().toUpperCase();
-          if (!materialCode) return;
-
-          const ton = Number(
-            data.ton ??
-            data.stock ??
-            ((Number(data.tonDau) || 0) + (Number(data.nhap) || 0) - (Number(data.xuat) || 0))
-          ) || 0;
-
-          const cur = this.fgInventoryCache.get(materialCode) || 0;
-          this.fgInventoryCache.set(materialCode, cur + ton);
-        });
-      });
-  }
 
   // Get inventory for material code from FG Inventory cache
   getInventory(materialCode: string): number {

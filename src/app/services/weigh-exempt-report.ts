@@ -50,6 +50,18 @@ export function needsWeigh(code: string | null | undefined, exempt?: Set<string>
  */
 export const TEM_LE_NO_WEIGH_DEFAULT: string[] = ['B030', 'B034', 'B036', 'B041', 'B042'];
 
+/**
+ * Danh mục đếm tồn (Outbound): đầu mã / mã phải ĐẾM bag CL lẻ cuối cùng khi tổng tồn mã < 5000.
+ * Quản lý ở Danh mục NVL/TP → tab Check lượng / Cân → "Đếm tồn bag CL" (app-settings/cl-count-prefixes).
+ */
+export const CL_COUNT_PREFIXES_DEFAULT: string[] = ['B009', 'B016', 'B019', 'B020', 'B021'];
+
+/** Mã thuộc danh sách đầu mã / mã đầy đủ. */
+export function matchesPrefixList(code: string | null | undefined, list: string[] | null | undefined): boolean {
+  const c = String(code || '').trim().toUpperCase();
+  return !!c && (list || []).some((p) => !!p && c.startsWith(String(p).trim().toUpperCase()));
+}
+
 export function temLeMustWeigh(
   code: string | null | undefined,
   exempt?: Set<string> | null,

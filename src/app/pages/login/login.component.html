@@ -1,70 +1,59 @@
-<div class="login-container">
-  <!-- Warehouse Background Elements -->
-  <div class="warehouse-elements">
-    <!-- Robot Arms -->
-    <div class="robot-arm"></div>
-    <div class="robot-arm"></div>
-    <div class="robot-arm"></div>
-    <div class="robot-arm"></div>
-    
-    <!-- Warehouse Shelves -->
-    <div class="warehouse-shelf"></div>
-    <div class="warehouse-shelf"></div>
-    <div class="warehouse-shelf"></div>
-    <div class="warehouse-shelf"></div>
-    
-    <!-- AI Data Streams -->
-    <div class="ai-stream"></div>
-    <div class="ai-stream"></div>
-    <div class="ai-stream"></div>
-    <div class="ai-stream"></div>
-    
-    <!-- Tech Particles -->
-    <div class="tech-particle"></div>
-    <div class="tech-particle"></div>
-    <div class="tech-particle"></div>
-    <div class="tech-particle"></div>
-  </div>
-  
-  <!-- Language Selection -->
-  <div class="language-selector">
-    <button mat-icon-button 
-            [class.active]="currentLanguage === 'en'" 
-            (click)="setLanguage('en')" 
-            class="lang-btn">
-      <span class="flag">🇬🇧</span>
-      <span class="lang-text">English</span>
-    </button>
-    <button mat-icon-button 
-            [class.active]="currentLanguage === 'vi'" 
-            (click)="setLanguage('vi')" 
-            class="lang-btn">
-      <span class="flag">🇻🇳</span>
-      <span class="lang-text">Tiếng Việt</span>
-    </button>
+<div class="lg">
+  <!-- Nền: từ ngoài vũ trụ nhìn về Hệ Mặt Trời (chỉ trang trí) -->
+  <div class="lg-sky" aria-hidden="true">
+    <div class="lg-stars lg-stars--1"></div>
+    <div class="lg-stars lg-stars--2"></div>
+    <div class="lg-stars lg-stars--3"></div>
+    <div class="lg-ss">
+      <div class="lg-ss__plane">
+        <div class="lg-orb lg-orb--mercury"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--venus"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--earth"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--mars"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--belt"></div>
+        <div class="lg-orb lg-orb--jupiter"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--saturn"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--uranus"><i class="lg-pl"></i></div>
+        <div class="lg-orb lg-orb--neptune"><i class="lg-pl"></i></div>
+      </div>
+      <div class="lg-sun"></div>
+    </div>
   </div>
 
-  <div class="login-card">
-    <div class="login-header">
-      <h2>{{ isSignup ? (currentLanguage === 'en' ? 'Sign Up' : 'Đăng ký') : (currentLanguage === 'en' ? 'Login' : 'Đăng nhập') }}</h2>
-      <p *ngIf="!isSignup">{{ currentLanguage === 'en' ? 'Login to system' : 'Đăng nhập vào hệ thống' }}</p>
-      <p *ngIf="isSignup" class="signup-hint">{{ currentLanguage === 'en' ? 'ASP login ID, your full name, department and email. A 6-digit password will be sent to your email. Login uses ASP ID + password, not email.' : 'ID đăng nhập (ASP + 4 số), họ tên, bộ phận và email. Mật khẩu 6 số gửi qua mail. Đăng nhập app bằng mã ASP + mật khẩu — không nhập email ở màn đăng nhập.' }}</p>
+  <!-- Ngôn ngữ -->
+  <div class="lg-lang" role="group" aria-label="Language">
+    <button type="button" [class.is-on]="currentLanguage === 'vi'" (click)="setLanguage('vi')">VI</button>
+    <button type="button" [class.is-on]="currentLanguage === 'en'" (click)="setLanguage('en')">EN</button>
+  </div>
+
+  <main class="lg-main">
+    <div class="lg-brand">
+      <img src="assets/img/logo.png" alt="" class="lg-brand__logo">
+      <span>Airspeed Warehouse</span>
     </div>
 
-    <!-- Login Form -->
-    <form [formGroup]="loginForm" autocomplete="off" (ngSubmit)="onLogin()" *ngIf="!isSignup">
-      <div class="login-autofill-decoy" aria-hidden="true">
-        <input type="text" tabindex="-1" autocomplete="username">
-        <input type="password" tabindex="-1" autocomplete="current-password">
-      </div>
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Employee ID (ASP + 4 digits)' : 'Mã nhân viên (ASP + 4 số)' }}</mat-label>
-          <input matInput formControlName="employeeId"
-                 class="login-id-input"
+    <section class="lg-card">
+      <header class="lg-head">
+        <h1>{{ isSignup ? (currentLanguage === 'en' ? 'Create account' : 'Đăng ký tài khoản') : (currentLanguage === 'en' ? 'Welcome back' : 'Đăng nhập') }}</h1>
+        <p *ngIf="!isSignup">{{ currentLanguage === 'en' ? 'Sign in with your employee ID.' : 'Dùng mã nhân viên và mật khẩu của bạn.' }}</p>
+        <p *ngIf="isSignup">{{ currentLanguage === 'en' ? 'A 6-digit password will be sent to your company email. Sign in with ASP ID + password.' : 'Mật khẩu 6 số gửi về email công ty. Đăng nhập bằng mã ASP + mật khẩu.' }}</p>
+      </header>
+
+      <!-- Đăng nhập -->
+      <form [formGroup]="loginForm" autocomplete="off" (ngSubmit)="onLogin()" *ngIf="!isSignup" class="lg-form">
+        <div class="login-autofill-decoy" aria-hidden="true">
+          <input type="text" tabindex="-1" autocomplete="username">
+          <input type="password" tabindex="-1" autocomplete="current-password">
+        </div>
+
+        <label class="lg-field">
+          <span class="lg-label">{{ currentLanguage === 'en' ? 'Employee ID' : 'Mã nhân viên' }}</span>
+          <input formControlName="employeeId"
+                 class="lg-input login-id-input"
                  type="text"
                  name="wh_operator"
                  id="wh_operator"
+                 placeholder="ASP0000"
                  autocomplete="off"
                  autocapitalize="none"
                  autocorrect="off"
@@ -74,22 +63,21 @@
                  data-bwignore="true"
                  data-form-type="other"
                  readonly
+                 [class.is-invalid]="loginForm.get('employeeId')?.invalid && loginForm.get('employeeId')?.touched"
                  (focus)="unlockLoginAutofill($event)"
                  (input)="onEmployeeIdInput($event, 'login')">
-          <mat-error *ngIf="loginForm.get('employeeId')?.hasError('required')">
-            {{ currentLanguage === 'en' ? 'This field is required' : 'Bắt buộc nhập' }}
-          </mat-error>
-          <mat-error *ngIf="loginForm.get('employeeId')?.hasError('pattern')">
-            {{ currentLanguage === 'en' ? 'Enter ASP + 4 digits' : 'Nhập ASP + 4 số' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          <span class="lg-error" *ngIf="loginForm.get('employeeId')?.touched && loginForm.get('employeeId')?.hasError('required')">
+            {{ currentLanguage === 'en' ? 'Required' : 'Bắt buộc nhập' }}
+          </span>
+          <span class="lg-error" *ngIf="loginForm.get('employeeId')?.touched && loginForm.get('employeeId')?.hasError('pattern')">
+            {{ currentLanguage === 'en' ? 'ASP + 4 digits' : 'Nhập ASP + 4 số' }}
+          </span>
+        </label>
 
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Password' : 'Mật khẩu' }}</mat-label>
-          <input matInput formControlName="password"
-                 class="login-password-input"
+        <label class="lg-field">
+          <span class="lg-label">{{ currentLanguage === 'en' ? 'Password' : 'Mật khẩu' }}</span>
+          <input formControlName="password"
+                 class="lg-input login-password-input"
                  type="text"
                  name="wh_access"
                  id="wh_access"
@@ -102,117 +90,113 @@
                  data-bwignore="true"
                  data-form-type="other"
                  readonly
+                 [class.is-invalid]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched"
                  (focus)="unlockLoginAutofill($event)"
                  [placeholder]="currentLanguage === 'en' ? 'Enter password' : 'Nhập mật khẩu'">
-          <mat-error *ngIf="loginForm.get('password')?.hasError('required')">
+          <span class="lg-error" *ngIf="loginForm.get('password')?.touched && loginForm.get('password')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Password is required' : 'Mật khẩu là bắt buộc' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          </span>
+        </label>
 
-      <button mat-raised-button color="primary" type="submit" 
-              [disabled]="loginForm.invalid || loading" class="full-width">
-        <mat-spinner diameter="20" *ngIf="loading"></mat-spinner>
-        <span *ngIf="!loading">{{ currentLanguage === 'en' ? 'Login' : 'Đăng nhập' }}</span>
-      </button>
-
-      <div class="login-scan">
-        <button mat-stroked-button type="button" (click)="openLoginCamera()" [disabled]="loading">
-          {{ currentLanguage === 'en' ? 'Camera' : 'Camera' }}
+        <button type="submit" class="lg-btn lg-btn--primary" [disabled]="loginForm.invalid || loading">
+          <span class="lg-spinner" *ngIf="loading" aria-hidden="true"></span>
+          <span>{{ loading ? (currentLanguage === 'en' ? 'Signing in…' : 'Đang đăng nhập…') : (currentLanguage === 'en' ? 'Sign in' : 'Đăng nhập') }}</span>
         </button>
-        <button mat-stroked-button type="button" (click)="armLoginScanner()" [disabled]="loading">
-          {{ currentLanguage === 'en' ? 'Scanner' : 'Máy scan' }}
-        </button>
-        <input #loginScanInput
-               *ngIf="scanReady"
-               class="login-scan-input"
-               type="text"
-               autocomplete="off"
-               autocapitalize="none"
-               autocorrect="off"
-               spellcheck="false"
-               (keydown.enter)="onLoginScanEnter($event)">
-      </div>
-    </form>
 
-    <!-- Signup Form -->
-    <form [formGroup]="signupForm" (ngSubmit)="onSignup()" *ngIf="isSignup">
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Login ID (ASP + 4 digits)' : 'ID đăng nhập (ASP + 4 số)' }}</mat-label>
-          <input matInput formControlName="employeeId" 
-                 class="employee-id-input"
+        <div class="lg-divider"><span>{{ currentLanguage === 'en' ? 'or scan your card' : 'hoặc quét thẻ nhân viên' }}</span></div>
+
+        <div class="lg-scan login-scan">
+          <button type="button" class="lg-btn lg-btn--ghost" (click)="openLoginCamera()" [disabled]="loading">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.4-2h5l1.4 2h1.6A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            Camera
+          </button>
+          <button type="button" class="lg-btn lg-btn--ghost" [class.is-armed]="scanReady" (click)="armLoginScanner()" [disabled]="loading">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4H7M17 4h1.5A1.5 1.5 0 0 1 20 5.5V7M20 17v1.5a1.5 1.5 0 0 1-1.5 1.5H17M7 20H5.5A1.5 1.5 0 0 1 4 18.5V17M8 9v6M11 9v6M14 9v6M17 9v6"/></svg>
+            {{ scanReady ? (currentLanguage === 'en' ? 'Waiting…' : 'Đang chờ quét') : (currentLanguage === 'en' ? 'Scanner' : 'Máy scan') }}
+          </button>
+          <input #loginScanInput
+                 *ngIf="scanReady"
+                 class="login-scan-input"
+                 [placeholder]="currentLanguage === 'en' ? 'Scan your card here…' : 'Quét thẻ nhân viên vào đây…'"
+                 type="text"
+                 autocomplete="off"
+                 autocapitalize="none"
+                 autocorrect="off"
+                 spellcheck="false"
+                 (keydown.enter)="onLoginScanEnter($event)">
+        </div>
+      </form>
+
+      <!-- Đăng ký -->
+      <form [formGroup]="signupForm" (ngSubmit)="onSignup()" *ngIf="isSignup" class="lg-form">
+        <label class="lg-field">
+          <span class="lg-label">{{ currentLanguage === 'en' ? 'Login ID (ASP + 4 digits)' : 'ID đăng nhập (ASP + 4 số)' }}</span>
+          <input formControlName="employeeId" class="lg-input employee-id-input"
+                 [class.is-invalid]="signupForm.get('employeeId')?.invalid && signupForm.get('employeeId')?.touched"
                  (input)="onEmployeeIdInput($event, 'signup')"
                  [placeholder]="currentLanguage === 'en' ? 'e.g. ASP0704' : 'VD: ASP0704'">
-          <mat-error *ngIf="signupForm.get('employeeId')?.hasError('required')">
+          <span class="lg-error" *ngIf="signupForm.get('employeeId')?.touched && signupForm.get('employeeId')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Login ID is required' : 'Bắt buộc nhập ID đăng nhập' }}
-          </mat-error>
-          <mat-error *ngIf="signupForm.get('employeeId')?.hasError('pattern')">
-            {{ currentLanguage === 'en' ? 'Must be ASP + 4 digits (e.g. ASP0001)' : 'Phải là ASP + 4 số (VD: ASP0001)' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          </span>
+          <span class="lg-error" *ngIf="signupForm.get('employeeId')?.touched && signupForm.get('employeeId')?.hasError('pattern')">
+            {{ currentLanguage === 'en' ? 'Must be ASP + 4 digits' : 'Phải là ASP + 4 số (VD: ASP0001)' }}
+          </span>
+        </label>
 
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Full name' : 'Họ tên' }}</mat-label>
-          <input matInput formControlName="fullName" autocomplete="name"
-                 [placeholder]="currentLanguage === 'en' ? 'Your full name (not the ASP code)' : 'Họ tên thật (khác mã ASP)'">
-          <mat-error *ngIf="signupForm.get('fullName')?.hasError('required')">
+        <label class="lg-field">
+          <span class="lg-label">{{ currentLanguage === 'en' ? 'Full name' : 'Họ tên' }}</span>
+          <input formControlName="fullName" class="lg-input" autocomplete="name"
+                 [class.is-invalid]="signupForm.get('fullName')?.invalid && signupForm.get('fullName')?.touched"
+                 [placeholder]="currentLanguage === 'en' ? 'Your full name' : 'Họ tên thật (khác mã ASP)'">
+          <span class="lg-error" *ngIf="signupForm.get('fullName')?.touched && signupForm.get('fullName')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Full name is required' : 'Bắt buộc nhập họ tên' }}
-          </mat-error>
-          <mat-error *ngIf="signupForm.get('fullName')?.hasError('minlength')">
+          </span>
+          <span class="lg-error" *ngIf="signupForm.get('fullName')?.touched && signupForm.get('fullName')?.hasError('minlength')">
             {{ currentLanguage === 'en' ? 'Name too short' : 'Họ tên quá ngắn' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          </span>
+        </label>
 
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Department' : 'Bộ phận' }}</mat-label>
-          <mat-select formControlName="department" 
-                     [placeholder]="currentLanguage === 'en' ? 'Select department' : 'Chọn bộ phận'">
-            <mat-option value="WH">WH</mat-option>
-            <mat-option value="QA">QA</mat-option>
-            <mat-option value="ENG">ENG</mat-option>
-            <mat-option value="PLAN">PLAN</mat-option>
-            <mat-option value="PD">PD</mat-option>
-            <mat-option value="CS">CS</mat-option>
-            <mat-option value="ACC">ACC</mat-option>
-          </mat-select>
-          <mat-error *ngIf="signupForm.get('department')?.hasError('required')">
+        <label class="lg-field">
+          <span class="lg-label">{{ currentLanguage === 'en' ? 'Department' : 'Bộ phận' }}</span>
+          <select formControlName="department" class="lg-input lg-select"
+                  [class.is-invalid]="signupForm.get('department')?.invalid && signupForm.get('department')?.touched">
+            <option value="" disabled>{{ currentLanguage === 'en' ? 'Select department' : 'Chọn bộ phận' }}</option>
+            <option value="WH">WH</option>
+            <option value="QA">QA</option>
+            <option value="ENG">ENG</option>
+            <option value="PLAN">PLAN</option>
+            <option value="PD">PD</option>
+            <option value="CS">CS</option>
+            <option value="ACC">ACC</option>
+          </select>
+          <span class="lg-error" *ngIf="signupForm.get('department')?.touched && signupForm.get('department')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Department is required' : 'Bộ phận là bắt buộc' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          </span>
+        </label>
 
-      <div class="form-group">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>{{ currentLanguage === 'en' ? 'Email' : 'Email' }}</mat-label>
-          <input matInput formControlName="email" type="email" autocomplete="email"
-                 [placeholder]="currentLanguage === 'en' ? 'Email to receive login password' : 'Email nhận mật khẩu đăng nhập'">
-          <mat-error *ngIf="signupForm.get('email')?.hasError('required')">
+        <label class="lg-field">
+          <span class="lg-label">Email</span>
+          <input formControlName="email" class="lg-input" type="email" autocomplete="email"
+                 [class.is-invalid]="signupForm.get('email')?.invalid && signupForm.get('email')?.touched"
+                 [placeholder]="currentLanguage === 'en' ? 'name@airspeedmfgvn.com' : 'ten@airspeedmfgvn.com'">
+          <span class="lg-error" *ngIf="signupForm.get('email')?.touched && signupForm.get('email')?.hasError('required')">
             {{ currentLanguage === 'en' ? 'Email is required' : 'Email là bắt buộc' }}
-          </mat-error>
-          <mat-error *ngIf="signupForm.get('email')?.hasError('pattern')">
+          </span>
+          <span class="lg-error" *ngIf="signupForm.get('email')?.touched && signupForm.get('email')?.hasError('pattern')">
             {{ currentLanguage === 'en' ? 'Use @airspeedmfgvn.com or @airspeedmfg.com' : 'Chỉ dùng email @airspeedmfgvn.com hoặc @airspeedmfg.com' }}
-          </mat-error>
-        </mat-form-field>
-      </div>
+          </span>
+        </label>
 
-      <button mat-raised-button color="primary" type="submit" 
-              [disabled]="signupForm.invalid || loading" class="full-width">
-        <mat-spinner diameter="20" *ngIf="loading"></mat-spinner>
-        <span *ngIf="!loading">{{ currentLanguage === 'en' ? 'Sign Up' : 'Đăng ký' }}</span>
-      </button>
-    </form>
+        <button type="submit" class="lg-btn lg-btn--primary" [disabled]="signupForm.invalid || loading">
+          <span class="lg-spinner" *ngIf="loading" aria-hidden="true"></span>
+          <span>{{ loading ? (currentLanguage === 'en' ? 'Creating…' : 'Đang đăng ký…') : (currentLanguage === 'en' ? 'Create account' : 'Đăng ký') }}</span>
+        </button>
+      </form>
+    </section>
 
-    <div class="login-footer">
-      <button mat-button (click)="toggleMode()" [disabled]="loading">
-        {{ isSignup ? 
-           (currentLanguage === 'en' ? 'Already have an account? Login' : 'Đã có tài khoản? Đăng nhập') : 
-           (currentLanguage === 'en' ? 'Don\'t have an account? Sign Up' : 'Chưa có tài khoản? Đăng ký') }}
-      </button>
-    </div>
-  </div>
-</div> 
+    <button type="button" class="lg-switch" (click)="toggleMode()" [disabled]="loading">
+      <ng-container *ngIf="!isSignup">{{ currentLanguage === 'en' ? 'No account yet?' : 'Chưa có tài khoản?' }} <b>{{ currentLanguage === 'en' ? 'Sign up' : 'Đăng ký' }}</b></ng-container>
+      <ng-container *ngIf="isSignup">{{ currentLanguage === 'en' ? 'Already have an account?' : 'Đã có tài khoản?' }} <b>{{ currentLanguage === 'en' ? 'Sign in' : 'Đăng nhập' }}</b></ng-container>
+    </button>
+  </main>
+</div>

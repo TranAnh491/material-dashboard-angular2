@@ -1779,7 +1779,7 @@
       <h3>📷 Chụp hình bag {{ tlPhoto.tag }} — {{ tlPhoto.code }}</h3>
       <button type="button" class="wx__x" (click)="cancelTlPhoto()" [disabled]="tlPhoto.busy">✕</button>
     </div>
-    <p class="tl-photo__sub">PO {{ tlPhoto.po || '—' }}{{ tlPhoto.imd ? ' · IMD ' + tlPhoto.imd : '' }} · Bắt buộc chụp hình bag TL (thấy rõ tem) trước khi xuất.</p>
+    <p class="tl-photo__sub">PO {{ tlPhoto.po || '—' }}{{ tlPhoto.imd ? ' · IMD ' + tlPhoto.imd : '' }} · Bắt buộc chụp hình bag (thấy rõ tem) trước khi xuất.</p>
     <div class="tl-photo__view">
       <video #tlPhotoVideo [hidden]="!!tlPhoto.photo" autoplay playsinline muted></video>
       <img *ngIf="tlPhoto.preview" [src]="tlPhoto.preview" alt="Hình bag TL">

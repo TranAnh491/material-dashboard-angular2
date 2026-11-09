@@ -8733,7 +8733,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     var r = byIdx[String(idx)];
     if (!r) return;
     if (!(r.standard > 0)) {
-      appAlert('Mã ' + r.materialCode + ' chưa có Standard trong danh mục NVL. Không tách được cuộn chẵn / lẻ.');
+      alert('Mã ' + r.materialCode + ' chưa có Standard trong danh mục NVL. Không tách được cuộn chẵn / lẻ.');
       return;
     }
     current = r;
@@ -8787,7 +8787,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     var err = document.getElementById('pxkWErr');
     err.textContent = '';
     if (!reason) { err.textContent = 'Nhập lý do báo cáo.'; return; }
-    if (!window.opener || window.opener.closed) { appAlert('Không gửi được vì trang Work Order đã đóng.'); return; }
+    if (!window.opener || window.opener.closed) { alert('Không gửi được vì trang Work Order đã đóng.'); return; }
     document.getElementById('pxkWReportSend').disabled = true;
     window.opener.postMessage({
       type: 'pxk-weight-check-report',
@@ -8805,7 +8805,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!(full > 0)) { err.textContent = 'Nhập trọng lượng chẵn cuộn (gram).'; return; }
     if (current.oddQty > 0 && !(odd > 0)) { err.textContent = 'Nhập trọng lượng lẻ (gram).'; return; }
     err.textContent = '';
-    if (!window.opener || window.opener.closed) { appAlert('Không lưu được vì trang Work Order đã đóng.'); return; }
+    if (!window.opener || window.opener.closed) { alert('Không lưu được vì trang Work Order đã đóng.'); return; }
     document.getElementById('pxkWSave').disabled = true;
     window.opener.postMessage({
       type: 'pxk-weight-check-save',

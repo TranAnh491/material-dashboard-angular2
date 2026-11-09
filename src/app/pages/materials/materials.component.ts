@@ -490,6 +490,8 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkWarnClearPending = '';
   /** Lọc theo LinkQ: '' = tất cả, 'yes' = mã có trong LinkQ, 'no' = không có. */
   kkTypeLinkQFilter = '';
+  /** Lọc theo màu mã: '' | 'red' (Kiểm 100%) | 'orange' (Kế hoạch NVL — xài hết) | 'any' (đỏ hoặc cam) */
+  kkTypeCodeToneFilter = '';
   /** Lọc trạng thái KK: '' tất cả · 'done' đã KK · 'todo' chưa KK. */
   kkTypeKkFilter: '' | 'done' | 'done-short' | 'todo' = '';
   /** Lọc cột chênh lệch (Web − LinkQ − PXK): '' tất cả · bad |diff|>1 · ok · pos · neg. */
@@ -503,6 +505,19 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
   kkTypeFilterWh: '' | KkWarehouse = '';
   kkTypeFilterRolls = '';
   kkTypeSortQtyDesc = false;
+  /** Ô chọn Sắp xếp: '' | 'qty' | 'rolls' | 'kk' (3 kiểu loại trừ nhau). */
+  get kkTypeSortMode(): string {
+    return this.kkTypeSortQtyDesc ? 'qty' : this.kkTypeSortRollsDesc ? 'rolls' : this.kkTypeSortKkTimeDesc ? 'kk' : '';
+  }
+  set kkTypeSortMode(v: string) {
+    this.kkTypeSortQtyDesc = v === 'qty';
+    this.kkTypeSortRollsDesc = v === 'rolls';
+    this.kkTypeSortKkTimeDesc = v === 'kk';
+    this.kkTypeDetailSig = '';
+    this.onKkTypeSortChanged();
+  }
+  /** Quản lý NVL ghi đè: về trang 1 khi đổi kiểu sắp xếp. */
+  protected onKkTypeSortChanged(): void { }
   /** Chi tiết box: dòng nhiều cuộn nhất lên đầu. */
   kkTypeSortRollsDesc = false;
   /** Chi tiết box: mã vừa tick KK mới nhất lên đầu. */
@@ -689,7 +704,9 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
    * nhà máy hoặc đổi view đều quét lại tới 10k doc từ mạng — đây là nguyên nhân chính
    * khiến phần Kiểm tra KK load chậm.
    */
-  protected kkInvSnapCache = new Map<string, { docs: any[]; ts: number }>();
+  /** Dùng chung (static): mở lại tab trong 90s không phải đọc lại ~10k dòng tồn. Tick KK vẫn vá trực tiếp vào cache. */
+  private static readonly KK_INV_SNAP_SHARED = new Map<string, { docs: any[]; ts: number }>();
+  protected kkInvSnapCache = MaterialsComponent.KK_INV_SNAP_SHARED;
   private static readonly KK_INV_SNAP_TTL_MS = 90_000;
 
   /** Đầu mã không hiển thị / không kiểm KK — lấy từ Matrix (rule kkExcludedPrefixes). */
@@ -8345,6 +8362,7 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.kkTypeInnerQuery,
       this.kkTypeWarnFilter,
       this.kkTypeLinkQFilter,
+      this.kkTypeCodeToneFilter,
       this.kkTypeKkFilter,
       this.kkTypeDiffFilter,
       this.kkPendingPxk ? this.kkPendingPxk.size : 0,
@@ -8427,6 +8445,14 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.kkTypeLinkQFilter && this.kkTypeLinkQMap) {
       const want = this.kkTypeLinkQFilter === 'yes';
       rows = rows.filter((m) => this.kkTypeLinkQMap!.has(this.normalizeTieuHuyCode(m.materialCode)) === want);
+    }
+    if (this.kkTypeCodeToneFilter) {
+      const f = this.kkTypeCodeToneFilter;
+      rows = rows.filter((m) => {
+        const red = this.isK100(m.materialCode);
+        const orange = !red && this.isPlanUsedUp(m.materialCode);
+        return f === 'red' ? red : f === 'orange' ? orange : red || orange;
+      });
     }
     if (this.kkTypeKkFilter === 'done') rows = rows.filter((m) => this.isKkFlagOn(m.kkChecked));
     else if (this.kkTypeKkFilter === 'done-short') rows = rows.filter((m) => this.isKkTickedScanShort(m));
@@ -9238,6 +9264,15 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       this.invAdjustBusyId = null;
       this.cdr.detectChanges();
     }
+  }
+
+  /** Mã "xài hết" theo Kế hoạch NVL (tab Report) — tô cam. Chỉ trang Quản lý NVL ghi đè. */
+  isPlanUsedUp(_code: string | null | undefined): boolean {
+    return false;
+  }
+
+  planUsedUpTitle(_code: string | null | undefined): string {
+    return '';
   }
 
   /** Mã nằm trong danh sách kiểm 100% (tab Inbound). */
@@ -13858,6 +13893,22 @@ export class MaterialsComponent implements OnInit, OnDestroy, AfterViewInit {
       if (row) return Number(row.lotStandardPacking);
     }
     return this.getStandardPacking(code);
+  }
+
+  /** Các Standard khác nhau của mã theo từng PO (Standard lúc nhận) — 1 mã có thể nhiều Standard. */
+  stdListTextForCode(materialCode: string): string {
+    const code = String(materialCode || '').trim().toUpperCase();
+    const set = new Set<number>();
+    (this.inventoryMaterials || []).forEach((m) => {
+      if (String(m.materialCode || '').trim().toUpperCase() !== code) return;
+      const sp = this.getEffectiveStandardPacking(m);
+      if (sp > 0) set.add(sp);
+    });
+    if (!set.size) {
+      const c = this.getStandardPacking(code);
+      return c ? this.formatNumber(c) : '—';
+    }
+    return [...set].sort((x, y) => x - y).map((v) => this.formatNumber(v)).join(' / ');
   }
 
   // Get standard packing from catalog

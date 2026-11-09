@@ -1,180 +1,71 @@
-<div class="menu-container">
-  <div class="menu-topbar">
-    <div class="topbar-left">
-      <img src="assets/img/logo.png" alt="Airspeed Logo" class="topbar-logo">
-      <div class="topbar-brand">
-        <div class="topbar-appname">Warehouse Management System</div>
-        <div class="topbar-emes">eMes</div>
-        <div class="topbar-version">Version 1.1</div>
+<div class="mn">
+  <!-- Thanh đầu trang -->
+  <header class="mn-top">
+    <div class="mn-brand">
+      <img src="assets/img/logo.png" alt="Airspeed" class="mn-brand__logo">
+      <div class="mn-brand__text">
+        <b>Airspeed Warehouse</b>
+        <span>Hệ thống quản lý kho</span>
       </div>
     </div>
-    <div class="topbar-center">
-      <div class="topbar-search">
-        <i class="material-icons search-icon">search</i>
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Tìm tab · gõ mã NVL rồi Enter để tra tồn (Ctrl+K)"
-          [ngModel]="searchTerm"
-          (ngModelChange)="onSearchTermChange($event)"
-          (keydown.enter)="openGlobalSearch()"
-        />
-      </div>
+    <label class="mn-search">
+      <i class="material-icons">search</i>
+      <input
+        type="text"
+        placeholder="Tìm tab hoặc mã NVL…"
+        [ngModel]="searchTerm"
+        (ngModelChange)="onSearchTermChange($event)"
+        (keydown.enter)="openGlobalSearch()"
+        title="Gõ tên tab để lọc · gõ mã NVL rồi Enter để tra tồn (Ctrl+K ở mọi trang)"
+      />
+      <kbd>Ctrl K</kbd>
+    </label>
+    <button type="button" class="mn-lang" title="Ngôn ngữ / Language" (click)="toggleLang()">{{ lang === 'vi' ? 'VI' : 'EN' }}</button>
+  </header>
+
+  <main class="mn-body">
+    <div class="mn-hero">
+      <h1>Menu</h1>
+      <p>Chọn chức năng để bắt đầu</p>
     </div>
-    <div class="topbar-right">
-      <button type="button" class="topbar-icon-btn" title="Notifications">
-        <i class="material-icons">notifications</i>
-        <span class="badge-dot" aria-hidden="true"></span>
+
+    <!-- Dùng gần đây -->
+    <section class="mn-section" *ngIf="recentTabs.length">
+      <h2 class="mn-section__title"><i class="material-icons">history</i>Dùng gần đây</h2>
+      <div class="mn-recent">
+        <button type="button" *ngFor="let tab of recentTabs; trackBy: trackByPath" class="mn-chip tone-{{ tab.tone }}" (click)="navigateToTab(tab.path)">
+          <i class="material-icons">{{ tab.icon }}</i>{{ tab.title }}
+        </button>
+      </div>
+    </section>
+
+    <!-- Các nhóm -->
+    <ng-container *ngFor="let cat of categories">
+      <section class="mn-section" *ngIf="filteredByCategory[cat.key]?.length">
+        <h2 class="mn-section__title">{{ cat.label }}</h2>
+        <div class="mn-grid">
+          <button type="button"
+                  *ngFor="let tab of filteredByCategory[cat.key]; trackBy: trackByPath"
+                  class="mn-card tone-{{ tab.tone }}"
+                  (click)="navigateToTab(tab.path)">
+            <span class="mn-card__icon"><i class="material-icons">{{ tab.icon }}</i></span>
+            <span class="mn-card__text">
+              <span class="mn-card__title">{{ tab.title }}</span>
+              <span class="mn-card__sub">{{ getMenuCardSubtitle(tab) }}</span>
+            </span>
+            <i class="material-icons mn-card__go">chevron_right</i>
+          </button>
+        </div>
+      </section>
+    </ng-container>
+
+    <p class="mn-empty" *ngIf="searchTerm && !hasAnyResult()">Không có tab khớp “{{ searchTerm }}” — Enter để tra theo mã NVL.</p>
+
+    <footer class="mn-foot">
+      <button type="button" class="mn-logout" (click)="logout()" title="Đăng xuất">
+        <i class="material-icons">logout</i>
+        <span>Đăng xuất</span>
       </button>
-      <button type="button" class="topbar-locale" title="Ngôn ngữ / Language" (click)="toggleLang()">{{ lang === 'vi' ? 'VN' : 'EN' }}</button>
-    </div>
-  </div>
-
-  <div class="menu-hero">
-    <div class="hero-title">Menu Overview</div>
-    <div class="hero-subtitle">Truy cập nhanh các module và chức năng</div>
-  </div>
-
-  <!-- Dashboard First -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">MAIN</h5>
-    <div class="menu-grid">
-      <div
-        *ngFor="let tab of filteredByCategory['Main']; trackBy: trackByPath"
-        class="menu-card"
-        (click)="navigateToTab(tab.path)"
-        role="button"
-        tabindex="0"
-      >
-        <div
-          class="menu-card-icon"
-          [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }"
-        >
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Production Group -->
-  <div class="menu-section" *ngIf="filteredByCategory['Production']?.length">
-    <h5 class="menu-category-title">PRODUCTION</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Production']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Stock Check — ngay trên RM -->
-  <div class="menu-section" *ngIf="filteredByCategory['Stock Check']?.length">
-    <h5 class="menu-category-title">STOCK CHECK</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Stock Check']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RM Group -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">RM</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['RM']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Quality Group -->
-  <div class="menu-section menu-section-quality">
-    <h5 class="menu-category-title">QUALITY</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Quality']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- ASM FG Group -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">ASM FG</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['ASM FG']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Report Group -->
-  <div class="menu-section" *ngIf="filteredByCategory['Report']?.length">
-    <h5 class="menu-category-title">REPORT</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Report']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Tools Group -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">Tools & Operations</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Tools']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Admin Group -->
-  <div class="menu-section">
-    <h5 class="menu-category-title">Admin & Reports</h5>
-    <div class="menu-grid">
-      <div *ngFor="let tab of filteredByCategory['Admin']; trackBy: trackByPath" class="menu-card" (click)="navigateToTab(tab.path)" role="button" tabindex="0">
-        <div class="menu-card-icon" [ngStyle]="{ background: tab.accent.bg, borderColor: tab.accent.border }">
-          <span class="menu-line-icon" [style.color]="tab.accent.fg" [innerHTML]="tab.lineIcon"></span>
-        </div>
-        <div class="menu-card-title">{{ tab.title }}</div>
-        <div class="menu-card-subtitle">{{ getMenuCardSubtitle(tab) }}</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Logout Button at Bottom -->
-  <div class="menu-footer">
-    <button class="logout-btn" (click)="logout()" title="Đăng xuất">
-      <i class="material-icons">logout</i>
-      <span>Đăng xuất</span>
-    </button>
-  </div>
+    </footer>
+  </main>
 </div>

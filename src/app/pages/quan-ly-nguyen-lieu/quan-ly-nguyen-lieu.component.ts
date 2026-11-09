@@ -80,6 +80,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
       this.enterKkLocMap();
     } else {
       void this.ensureKkMobileCatalog();
+      void this.loadPlanCheckList();
       this.nlScanDevice = 'pda';
       this.showNlDevicePicker = false;
     }
@@ -2896,6 +2897,10 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     }
   }
 
+  protected override onKkTypeSortChanged(): void {
+    this.kkTypePage = 1;
+  }
+
   toggleKkTypeSortQty(): void {
     this.kkTypeSortQtyDesc = !this.kkTypeSortQtyDesc;
     if (this.kkTypeSortQtyDesc) {
@@ -2972,7 +2977,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
 
   /** Số bộ lọc đang bật (hiện trên nút Lọc). */
   get kkTypeActiveFilterCount(): number {
-    return [this.kkTypeWarnFilter, this.kkTypeLinkQFilter, this.kkTypeKkFilter, this.kkTypeDiffFilter, this.kkTypeFilterLoc, this.kkTypeFilterRolls, this.kkLocScanDay,
+    return [this.kkTypeWarnFilter, this.kkTypeLinkQFilter, this.kkTypeCodeToneFilter, this.kkTypeKkFilter, this.kkTypeDiffFilter, this.kkTypeFilterLoc, this.kkTypeFilterRolls, this.kkLocScanDay,
       this.kkTypeSortQtyDesc ? 1 : '', this.kkTypeSortRollsDesc ? 1 : '', this.kkTypeSortKkTimeDesc ? 1 : ''].filter((v) => !!v).length;
   }
 
@@ -4609,7 +4614,7 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
             'Mã hàng': code,
             'Tên hàng': this.getKkMaterialName(m),
             'Đơn vị': String(cat?.unit || m.unit || ''),
-            'Standard Packing': this.getStandardPacking(code) || Number(cat?.standardPacking) || '',
+            'Standard Packing': this.getEffectiveStandardPacking(m) || '',
             'MSD/ESD': this.getMsdEsdLabel(code) || '',
             'Loại hàng': this.kkTypeOrGroupOfMaterial(code),
             'Kiểm 100%': this.isK100(code) ? 'Có' : '',
@@ -7035,8 +7040,21 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
         this.linkQCheckFileName = '';
       }
       this.dsCheckLists = lists;
+      this.planUsedUpSet = new Set(lists.usedUp);
+      this.cdr.markForCheck();
     })();
     return this.planCheckLoad.then(() => this.applyDsCheckMode(this.pendingCheckMode, false));
+  }
+
+  /** Mã "Mục xài hết" (nhu cầu kế hoạch ≥ tồn trong file) — tô cam ở mọi bảng của trang. */
+  private planUsedUpSet = new Set<string>();
+
+  override isPlanUsedUp(code: string | null | undefined): boolean {
+    return this.planUsedUpSet.size > 0 && this.planUsedUpSet.has(this.normalizeTieuHuyCode(code));
+  }
+
+  override planUsedUpTitle(code: string | null | undefined): string {
+    return this.isPlanUsedUp(code) ? 'Kế hoạch NVL: nhu cầu các tháng tới ≥ tồn — mã này sẽ dùng hết tồn kho' : '';
   }
 
   /** Chọn mục DS Check ('' = tắt). */
@@ -7318,7 +7336,25 @@ export class QuanLyNguyenLieuComponent extends MaterialsComponent {
     }, { idleMs: 50 });
   }
 
+  private kkLocMatMemo: { key: unknown[]; rows: KkLocMaterialRow[] } | null = null;
+
+  /** Lọc bảng theo mã — chỉ tính lại khi dữ liệu/bộ lọc đổi (trước đây lọc lại mỗi lần vẽ màn hình). */
   get kkLocMapFilteredMaterials(): KkLocMaterialRow[] {
+    const key: unknown[] = [
+      this.kkLocMapByMaterial, this.kkEffectiveSearchQuery(), this.kkLocMapWarehouseFilter,
+      this.kkJOnly, this.kkWh3Only, this.kkCountWh3, this.kkFilterUncheckedOnly,
+      this.kkCheckActive, this.linkQCheckSet
+    ];
+    const m = this.kkLocMatMemo;
+    if (m && m.key.length === key.length && m.key.every((v, i) => v === key[i])) return m.rows;
+    const rows = this.computeKkLocMapFilteredMaterials();
+    this.kkLocMatMemo = { key, rows };
+    return rows;
+  }
+
+  trackKkLocMaterialRow = (_: number, row: KkLocMaterialRow): string => this.kkMaterialRowKey(row);
+
+  private computeKkLocMapFilteredMaterials(): KkLocMaterialRow[] {
     let rows = this.kkLocMapByMaterial;
     const q = this.kkEffectiveSearchQuery();
     if (q) rows = rows.filter((r) => this.kkCodeMatchesSearch(r.materialCode, q));

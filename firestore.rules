@@ -120,6 +120,24 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // ===== Chỉ máy chủ (Cloud Functions / bot Zalo dùng Admin SDK — không bị rules chặn) =====
+    // Mã OTP lưu ở đây: nếu client đọc được thì tự lấy mã, mất tác dụng OTP. App web chỉ gọi Functions.
+    match /location-unlock-otp/{id}     { allow read, write: if false; }
+    match /location-add-otp/{id}        { allow read, write: if false; }
+    match /wo-pxk-bypass-otp/{id}       { allow read, write: if false; }
+    match /catalog-delete-otp/{id}      { allow read, write: if false; }
+    match /materials-inventory-otp/{id} { allow read, write: if false; }
+    match /fg-lot-lsx-otp/{id}          { allow read, write: if false; }
+    match /inbound-ldv-otp/{id}         { allow read, write: if false; }
+    // Nhóm Zalo nhận OTP / cảnh báo — chỉ bot ghi; đổi được thì chuyển OTP sang chat khác.
+    match /zalo_group_config/{id}       { allow read, write: if false; }
+    // Chống gửi Zalo trùng (Functions dùng)
+    match /fridge-location-zalo/{id}    { allow read, write: if false; }
+    match /negative-stock-zalo/{id}     { allow read, write: if false; }
+    match /read-guard-notify/{id}       { allow read, write: if false; }
+    // Đếm lần quét thẻ sai theo IP (chống dò mã nhân viên) — chỉ Functions ghi
+    match /scan-login-throttle/{id}     { allow read, write: if false; }
+
     // ===== Các collection khác =====
     // Giữ nguyên hành vi cũ (mọi tài khoản đã đăng nhập đọc/ghi được).
     // Firestore CỘNG quyền giữa các match, nên những collection có quy tắc riêng ở trên
@@ -136,7 +154,19 @@ service cloud.firestore {
         'warehouse-equipment-staff',
         'warehouse-equipment-meta',
         'warehouse-equipment-inspections',
-        'warehouse-equipment-maintenance'
+        'warehouse-equipment-maintenance',
+        'location-unlock-otp',
+        'location-add-otp',
+        'wo-pxk-bypass-otp',
+        'catalog-delete-otp',
+        'materials-inventory-otp',
+        'fg-lot-lsx-otp',
+        'inbound-ldv-otp',
+        'zalo_group_config',
+        'fridge-location-zalo',
+        'negative-stock-zalo',
+        'read-guard-notify',
+        'scan-login-throttle'
       ];
     }
 

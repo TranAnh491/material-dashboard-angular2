@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
-import { TEM_LE_NO_WEIGH_DEFAULT } from './weigh-exempt-report';
+import { TEM_LE_NO_WEIGH_DEFAULT, CL_COUNT_PREFIXES_DEFAULT } from './weigh-exempt-report';
 
 export interface PxkWeightCheckReport {
   id: string;
@@ -23,6 +23,7 @@ export class PxkWeightCheckReportService {
   static readonly EXEMPT = 'pxk-weight-check-exempt';
   static readonly INCLUDE = 'pxk-weight-check-include';
   static readonly TEM_LE_NO_WEIGH = 'app-settings/tem-le-no-weigh';
+  static readonly CL_COUNT_PREFIXES = 'app-settings/cl-count-prefixes';
 
   constructor(
     private firestore: AngularFirestore,
@@ -41,6 +42,24 @@ export class PxkWeightCheckReportService {
   async saveTemLeNoWeighPrefixes(prefixes: string[], updatedBy: string): Promise<void> {
     const list = Array.from(new Set(prefixes.map((p) => String(p || '').trim().toUpperCase()).filter(Boolean))).sort();
     await this.firestore.firestore.doc(PxkWeightCheckReportService.TEM_LE_NO_WEIGH).set({
+      prefixes: list,
+      updatedAt: new Date(),
+      updatedBy: String(updatedBy || '').trim().toUpperCase().slice(0, 20)
+    });
+  }
+
+  /** Danh mục đếm tồn bag CL (chưa lưu lần nào → danh sách mặc định). */
+  async loadClCountPrefixes(): Promise<string[]> {
+    const snap = await this.firestore.firestore.doc(PxkWeightCheckReportService.CL_COUNT_PREFIXES).get();
+    const list = snap.exists ? (snap.data() as any)?.prefixes : null;
+    return Array.isArray(list)
+      ? list.map((p: any) => String(p || '').trim().toUpperCase()).filter(Boolean).sort()
+      : [...CL_COUNT_PREFIXES_DEFAULT];
+  }
+
+  async saveClCountPrefixes(prefixes: string[], updatedBy: string): Promise<void> {
+    const list = Array.from(new Set(prefixes.map((p) => String(p || '').trim().toUpperCase()).filter(Boolean))).sort();
+    await this.firestore.firestore.doc(PxkWeightCheckReportService.CL_COUNT_PREFIXES).set({
       prefixes: list,
       updatedAt: new Date(),
       updatedBy: String(updatedBy || '').trim().toUpperCase().slice(0, 20)

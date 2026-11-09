@@ -302,16 +302,21 @@
       <!-- Materials Accuracy -->
       <article class="card card-chart chart-card chart-card-green dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
         <div class="card-body chart-body acc-card-body">
-          <div class="chart-badge chart-badge-green">Target Achieved</div>
+          <div class="chart-badge" [class.chart-badge-green]="matAccuracyThisMonth >= accuracyTarget" [class.chart-badge-red]="matAccuracyThisMonth < accuracyTarget">
+            {{ matAccuracyThisMonth >= accuracyTarget ? 'Đạt mục tiêu' : 'Dưới mục tiêu' }}
+          </div>
           <h4 class="card-title dash-chart-title">
             <span class="dash-widget__ico dash-widget__ico--green-sm" aria-hidden="true"><i class="material-icons">precision_manufacturing</i></span>
             <span>Materials Accuracy</span>
           </h4>
-          <p class="acc-month-line">Tháng này: <strong>{{ matAccuracyThisMonth | number:'1.2-2' }}%</strong></p>
-          <div class="acc-chart-only">
-            <div class="acc-gauge-wrap">
-              <canvas id="dailySalesChart"></canvas>
+          <p class="acc-month-line">Độ chính xác kiểm kê tháng này</p>
+          <div class="acc-kpi acc-kpi--green">
+            <div class="acc-kpi__value">{{ matAccuracyThisMonth | number:'1.2-2' }}<span>%</span></div>
+            <div class="acc-kpi__bar" [attr.aria-label]="'Accuracy ' + (matAccuracyThisMonth | number:'1.2-2') + '%'">
+              <span class="acc-kpi__fill" [style.width.%]="accBarPct(matAccuracyThisMonth)"></span>
+              <span class="acc-kpi__target" [style.left.%]="accBarPct(accuracyTarget)" [title]="'Mục tiêu ' + accuracyTarget + '%'"></span>
             </div>
+            <div class="acc-kpi__scale"><span>{{ accBarMin }}%</span><span>Mục tiêu ≥ {{ accuracyTarget }}%</span><span>100%</span></div>
           </div>
         </div>
         <footer class="card-footer dash-chart-footer">
@@ -322,16 +327,21 @@
       <!-- Finished Goods Accuracy -->
       <article class="card card-chart chart-card chart-card-blue dash-surface-card dash-widget--clickable" (click)="openAccuracyTurnoverEditModal()" title="Bấm để nhập/sửa data Accuracy &amp; Turnover">
         <div class="card-body chart-body acc-card-body">
-          <div class="chart-badge chart-badge-green">Target Achieved</div>
+          <div class="chart-badge" [class.chart-badge-green]="fgAccuracyThisMonth >= accuracyTarget" [class.chart-badge-red]="fgAccuracyThisMonth < accuracyTarget">
+            {{ fgAccuracyThisMonth >= accuracyTarget ? 'Đạt mục tiêu' : 'Dưới mục tiêu' }}
+          </div>
           <h4 class="card-title dash-chart-title">
             <span class="dash-widget__ico dash-widget__ico--blue-sm" aria-hidden="true"><i class="material-icons">verified</i></span>
             <span>Finished Goods Accuracy</span>
           </h4>
-          <p class="acc-month-line">Tháng này: <strong>{{ fgAccuracyThisMonth | number:'1.2-2' }}%</strong></p>
-          <div class="acc-chart-only">
-            <div class="acc-gauge-wrap">
-              <canvas id="websiteViewsChart"></canvas>
+          <p class="acc-month-line">Độ chính xác kiểm kê tháng này</p>
+          <div class="acc-kpi acc-kpi--blue">
+            <div class="acc-kpi__value">{{ fgAccuracyThisMonth | number:'1.2-2' }}<span>%</span></div>
+            <div class="acc-kpi__bar" [attr.aria-label]="'Accuracy ' + (fgAccuracyThisMonth | number:'1.2-2') + '%'">
+              <span class="acc-kpi__fill" [style.width.%]="accBarPct(fgAccuracyThisMonth)"></span>
+              <span class="acc-kpi__target" [style.left.%]="accBarPct(accuracyTarget)" [title]="'Mục tiêu ' + accuracyTarget + '%'"></span>
             </div>
+            <div class="acc-kpi__scale"><span>{{ accBarMin }}%</span><span>Mục tiêu ≥ {{ accuracyTarget }}%</span><span>100%</span></div>
           </div>
         </div>
         <footer class="card-footer dash-chart-footer">

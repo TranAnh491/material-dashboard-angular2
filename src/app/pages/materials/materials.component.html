@@ -163,7 +163,7 @@
                 <td class="lqs-col-idx">{{ i + 1 }}</td>
                 <td class="lqs-code">
                   <i class="material-icons lqs-caret">{{ linkQCompareExpanded.has(r.code) ? 'expand_less' : 'expand_more' }}</i>
-                  {{ r.code }}
+                  <span [class.code-k100]="isK100(r.code)" [class.plan-used-up]="!isK100(r.code) && isPlanUsedUp(r.code)" [attr.title]="k100Title(r.code) || planUsedUpTitle(r.code) || null">{{ r.code }}</span>
                 </td>
                 <td class="lqs-num">{{ r.linkQText }}</td>
                 <td class="lqs-num">{{ r.webText }}</td>
@@ -187,7 +187,7 @@
                       <strong>{{ r.code }}</strong>
                       <span *ngIf="linkQCatalogName(r.code) as n">{{ n }}</span>
                       <span *ngIf="linkQCatalogUnit(r.code) as u">ĐVT {{ u }}</span>
-                      <span>Standard {{ getStandardPacking(r.code) ? formatNumber(getStandardPacking(r.code)) : '—' }}</span>
+                      <span title="Standard lúc nhận theo từng PO — 1 mã có thể nhiều Standard">Standard {{ stdListTextForCode(r.code) }}</span>
                       <span>LinkQ <b>{{ r.linkQText }}</b></span>
                       <span>Web <b>{{ r.webText }}</b></span>
                       <span>Lệch <b>{{ r.diffText }}</b></span>
@@ -703,13 +703,13 @@
             </tr>
           </thead>
           <tbody>
-            <ng-container *ngFor="let row of kkLocMapFilteredMaterials; let i = index">
+            <ng-container *ngFor="let row of kkLocMapFilteredMaterials; let i = index; trackBy: trackKkLocMaterialRow">
             <tr [class.kk-loc-map__row--done]="row.remaining === 0"
                 [class.kk-loc-map__row--open]="isKkMaterialExpanded(row)">
               <td (click)="toggleKkMaterialExpand(row, $event)">{{ i + 1 }}</td>
               <td class="kk-loc-map__code" (click)="toggleKkMaterialExpand(row, $event)">
                 <i class="material-icons kk-loc-map__caret">{{ isKkMaterialExpanded(row) ? 'expand_more' : 'chevron_right' }}</i>
-                <i class="k100-mark" *ngIf="isK100(row.materialCode)" [title]="k100Title(row.materialCode)">!</i>{{ row.materialCode }}
+                <span [class.code-k100]="isK100(row.materialCode)" [class.plan-used-up]="!isK100(row.materialCode) && isPlanUsedUp(row.materialCode)" [attr.title]="k100Title(row.materialCode) || planUsedUpTitle(row.materialCode) || null">{{ row.materialCode }}</span>
               </td>
               <td class="kk-loc-map__num" (click)="toggleKkMaterialExpand(row, $event)">{{ formatNumber(row.stock) }}</td>
               <td class="kk-loc-map__tick-col" (click)="$event.stopPropagation()">
@@ -768,7 +768,7 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let line of kkMaterialDetailLines(row)">
-                      <td class="kk-loc-map__code"><i class="k100-mark" *ngIf="isK100(line.materialCode)" [title]="k100Title(line.materialCode)">!</i>{{ line.materialCode }}</td>
+                      <td class="kk-loc-map__code"><span [class.code-k100]="isK100(line.materialCode)" [class.plan-used-up]="!isK100(line.materialCode) && isPlanUsedUp(line.materialCode)" [attr.title]="k100Title(line.materialCode) || planUsedUpTitle(line.materialCode) || null">{{ line.materialCode }}</span></td>
                       <td>{{ line.poNumber || '—' }}</td>
                       <td>{{ getDisplayIMD(line) }}</td>
                       <td class="kk-loc-map__num">{{ formatNumber(calculateCurrentStock(line)) }}</td>
@@ -1156,6 +1156,14 @@
                 <option value="yes">Có LinkQ</option>
                 <option value="no">Không có LinkQ</option>
               </select>
+              <select class="kk-tf2__sel" [(ngModel)]="kkTypeCodeToneFilter" (ngModelChange)="onKkTypeWarnFilterChange()"
+                      title="Lọc mã đỏ (Kiểm 100%) hoặc mã cam (Kế hoạch NVL — sẽ dùng hết tồn)"
+                      [class.kk-tf2__sel--on]="kkTypeCodeToneFilter">
+                <option value="">Màu mã: tất cả</option>
+                <option value="any">Đỏ + cam</option>
+                <option value="red">Đỏ – Kiểm 100%</option>
+                <option value="orange">Cam – Kế hoạch xài hết</option>
+              </select>
               <select class="kk-tf2__sel" [(ngModel)]="kkTypeWarnFilter" (ngModelChange)="onKkTypeWarnFilterChange()" title="Lọc theo cảnh báo"
                       [class.kk-tf2__sel--on]="kkTypeWarnFilter">
                 <option value="">Cảnh báo: tất cả</option>
@@ -1218,7 +1226,7 @@
                   <i class="material-icons">close</i></button>
               </ng-container>
               <button type="button" class="kk-tf2__btn" *ngIf="kkTypeActiveFilterCount || kkTypeDetailQuery"
-                      (click)="clearKkTypeFilters(); kkTypeWarnFilter = ''; kkTypeLinkQFilter = ''; kkTypeKkFilter = ''; kkTypeDiffFilter = ''" title="Xóa hết lọc">
+                      (click)="clearKkTypeFilters(); kkTypeWarnFilter = ''; kkTypeLinkQFilter = ''; kkTypeCodeToneFilter = ''; kkTypeKkFilter = ''; kkTypeDiffFilter = ''" title="Xóa hết lọc">
                 <i class="material-icons">filter_alt_off</i>
               </button>
             </div>
@@ -1226,12 +1234,12 @@
             <!-- Sắp xếp + xem -->
             <div class="kk-tf2__grp">
               <span class="kk-tf2__lab">Sắp</span>
-              <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortQtyDesc" (click)="toggleKkTypeSortQty()" title="Số lượng cao → thấp">
-                <i class="material-icons">arrow_downward</i> SL</button>
-              <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortRollsDesc" (click)="toggleKkTypeSortRolls()" title="Nhiều cuộn nhất lên đầu (cột Cuộn)">
-                <i class="material-icons">arrow_downward</i> Cuộn</button>
-              <button type="button" class="kk-tf2__btn" [class.kk-tf2__btn--on]="kkTypeSortKkTimeDesc" (click)="toggleKkTypeSortKkTime()" title="Mã vừa KK mới nhất lên đầu">
-                <i class="material-icons">schedule</i> Mới KK</button>
+              <select class="kk-tf2__sel" [(ngModel)]="kkTypeSortMode" [class.kk-tf2__sel--on]="kkTypeSortMode" title="Sắp xếp bảng">
+                <option value="">Mặc định</option>
+                <option value="qty">SL cao → thấp</option>
+                <option value="rolls">Nhiều cuộn trước</option>
+                <option value="kk">Mới KK trước</option>
+              </select>
               <button type="button" class="kk-tf2__btn" *ngIf="!kkAllStockDetail" [class.kk-tf2__btn--on]="kkTypeByCodeView" [disabled]="kkTypeLinkQLoading"
                       (click)="toggleKkTypeByCodeView()" title="Gộp theo mã (cộng mọi PO) và so với tồn LinkQ">
                 <i class="material-icons" [class.rotating]="kkTypeLinkQLoading">{{ kkTypeLinkQLoading ? 'sync' : 'compare_arrows' }}</i> Theo mã LinkQ</button>
@@ -1435,7 +1443,7 @@
                       [class.kk-bycode-row--first]="first">
                     <ng-container *ngIf="first">
                       <td class="row-header" [attr.rowspan]="r.items?.length">{{ i + 1 }}</td>
-                      <td class="code-cell material-code-cell" [attr.rowspan]="r.items?.length"><i class="k100-mark" *ngIf="isK100(r.code)" [title]="k100Title(r.code)">!</i>{{ r.code }}</td>
+                      <td class="code-cell material-code-cell" [attr.rowspan]="r.items?.length"><span [class.code-k100]="isK100(r.code)" [class.plan-used-up]="!isK100(r.code) && isPlanUsedUp(r.code)" [attr.title]="k100Title(r.code) || planUsedUpTitle(r.code) || null">{{ r.code }}</span></td>
                       <td class="kk-type-name-cell" [attr.rowspan]="r.items?.length" [title]="r.name">{{ r.name }}</td>
                     </ng-container>
                     <td>{{ line.poNumber || '—' }}</td>
@@ -1515,7 +1523,7 @@
                       [class.iqc-row]="isIQCLocation(material.location)"
                       [class.kk-lastbag-row]="isKkRecentLastBag(material)">
                     <td class="row-header">{{ kkTypeRowIndex(i) }}</td>
-                    <td class="code-cell material-code-cell"><i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i><button type="button" class="kk-po-cmp-code" *ngIf="kkPoCmpActive; else kkPlainCode" (click)="openKkPoCmpDetail(material)" title="So sánh toàn bộ PO của mã ở web và LinkQ">{{ material.materialCode }}</button><ng-template #kkPlainCode>{{ material.materialCode }}</ng-template></td>
+                    <td class="code-cell material-code-cell"><button type="button" class="kk-po-cmp-code" *ngIf="kkPoCmpActive; else kkPlainCode" (click)="openKkPoCmpDetail(material)" title="So sánh toàn bộ PO của mã ở web và LinkQ" [class.code-k100]="isK100(material.materialCode)" [class.plan-used-up]="!isK100(material.materialCode) && isPlanUsedUp(material.materialCode)">{{ material.materialCode }}</button><ng-template #kkPlainCode><span [class.code-k100]="isK100(material.materialCode)" [class.plan-used-up]="!isK100(material.materialCode) && isPlanUsedUp(material.materialCode)" [attr.title]="k100Title(material.materialCode) || planUsedUpTitle(material.materialCode) || null">{{ material.materialCode }}</span></ng-template></td>
                     <td class="kk-type-name-cell" [title]="getKkMaterialName(material)">{{ getKkMaterialName(material) }}</td>
                     <td class="kk-haslq-cell" [class.kk-haslq-cell--no]="kkHasLinkQText(material.materialCode) === 'No'">{{ kkHasLinkQText(material.materialCode) }}</td>
                     <td class="number-cell" title="Tồn LinkQ là tổng của mã — không cộng các dòng PO lại">{{ kkLinkQQtyText(material.materialCode) }}</td>
@@ -1874,7 +1882,7 @@
           </label>
           <div class="mat-m-card__main">
             <div class="mat-m-card__titleline">
-              <span class="mat-m-card__code"><i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i>{{ material.materialCode }}</span>
+              <span class="mat-m-card__code"><span [class.code-k100]="isK100(material.materialCode)" [class.plan-used-up]="!isK100(material.materialCode) && isPlanUsedUp(material.materialCode)" [attr.title]="k100Title(material.materialCode) || planUsedUpTitle(material.materialCode) || null">{{ material.materialCode }}</span></span>
             </div>
             <div class="mat-m-card__chips">
               <span class="mat-m-chip" *ngIf="material.poNumber">PO {{ material.poNumber }}</span>
@@ -2036,7 +2044,7 @@
 
           <div class="mat-m-card__main">
             <div class="mat-m-card__titleline">
-              <span class="mat-m-card__code"><i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i>{{ material.materialCode }}</span>
+              <span class="mat-m-card__code"><span [class.code-k100]="isK100(material.materialCode)" [class.plan-used-up]="!isK100(material.materialCode) && isPlanUsedUp(material.materialCode)" [attr.title]="k100Title(material.materialCode) || planUsedUpTitle(material.materialCode) || null">{{ material.materialCode }}</span></span>
               <span class="mat-m-status" [ngClass]="getMobileStatusClass(material)">{{ getMobileStatusLabel(material) }}</span>
             </div>
             <div class="mat-m-card__chips">
@@ -2607,8 +2615,8 @@
           
           <div class="info-row">
             <span class="label">Standard Packing:</span>
-            <span class="value readonly-metric" title="Chỉ đọc — sửa ở Danh mục NVL">
-              {{ getStandardPacking(material.materialCode) }}
+            <span class="value readonly-metric" title="Standard lúc nhận của PO này (chưa có thì lấy Danh mục NVL)">
+              {{ getEffectiveStandardPacking(material) || '—' }}
             </span>
           </div>
         </div>
@@ -2747,7 +2755,7 @@
                 [class.duplicate-cell]="material.isDuplicate"
                 [class.duplicate-code]="material.isDuplicate"
                 [class.normal-code]="!material.isDuplicate">
-              <i class="k100-mark" *ngIf="isK100(material.materialCode)" [title]="k100Title(material.materialCode)">!</i>{{material.materialCode}}
+              <span [class.code-k100]="isK100(material.materialCode)" [class.plan-used-up]="!isK100(material.materialCode) && isPlanUsedUp(material.materialCode)" [attr.title]="k100Title(material.materialCode) || planUsedUpTitle(material.materialCode) || null">{{ material.materialCode }}</span>
             </td>
             <td class="po-cell" [class.duplicate-cell]="material.isDuplicate">{{material.poNumber}}</td>
             <td class="date-cell" [class.duplicate-cell]="material.isDuplicate">
@@ -2910,9 +2918,9 @@
               </select>
             </td>
             <td class="standard-packing-cell readonly-cell"
-                title="Chỉ đọc — sửa ở Danh mục NVL">
+                title="Standard lúc nhận của PO này (chưa có thì lấy Danh mục NVL)">
               <span class="standard-packing-value">
-                {{ getStandardPacking(material.materialCode) }}
+                {{ getEffectiveStandardPacking(material) || '—' }}
               </span>
             </td>
             <td *ngIf="showExtraCols" class="msd-esd-cell">

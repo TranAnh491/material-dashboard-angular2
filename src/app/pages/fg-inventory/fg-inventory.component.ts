@@ -3684,15 +3684,17 @@ export class FGInventoryComponent implements OnInit, OnDestroy {
             const qtyToAddBack = Math.min(remaining, currentExported);
             if (qtyToAddBack <= 0) continue;
 
-            const newTon = currentTon + qtyToAddBack;
-            const newExported = Math.max(0, currentExported - qtyToAddBack);
-
-            await invDoc.ref.update({
-              ton: newTon,
-              xuat: newExported,
-              exported: newExported,
-              updatedAt: processedAt
-            });
+            // Cộng dồn nguyên tử (không ghi đè số do máy khác vừa duyệt xuất cùng lúc)
+            const FV = firebase.firestore.FieldValue;
+            const upd: Record<string, unknown> = { updatedAt: processedAt };
+            if (d.ton !== undefined && d.ton !== null) upd['ton'] = FV.increment(qtyToAddBack);
+            else if (d.stock !== undefined && d.stock !== null) upd['stock'] = FV.increment(qtyToAddBack);
+            else upd['ton'] = currentTon + qtyToAddBack;
+            if (d.xuat !== undefined && d.xuat !== null) upd['xuat'] = FV.increment(-qtyToAddBack);
+            else upd['xuat'] = Math.max(0, currentExported - qtyToAddBack);
+            if (d.exported !== undefined && d.exported !== null && Number(d.exported) === currentExported) upd['exported'] = FV.increment(-qtyToAddBack);
+            else upd['exported'] = Math.max(0, currentExported - qtyToAddBack);
+            await invDoc.ref.update(upd);
 
             remaining -= qtyToAddBack;
           }

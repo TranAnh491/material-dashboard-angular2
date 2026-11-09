@@ -749,6 +749,9 @@
         <button type="button" [class.dv-seg--on]="weighSection === 'temle'" (click)="weighSection = 'temle'">
           Tem lẻ không cân <b>{{ temLeNoWeigh.length }}</b>
         </button>
+        <button type="button" [class.dv-seg--on]="weighSection === 'clcount'" (click)="weighSection = 'clcount'">
+          Đếm tồn bag CL <b>{{ clCountPrefixes.length }}</b>
+        </button>
         <button type="button" [class.dv-seg--on]="weighSection === 'k100'" (click)="weighSection = 'k100'">
           Kiểm 100% <b>{{ k100Rows.length }}</b>
         </button>
@@ -839,6 +842,19 @@
       <div class="dv-weigh__chips">
         <span class="dv-weigh__chip" *ngFor="let p of temLeNoWeigh">{{ p }} <button type="button" (click)="removeTemLeNoWeigh(p)" [disabled]="weighBusy">✕</button></span>
         <span class="dv-weigh__empty" *ngIf="!temLeNoWeigh.length">Chưa có đầu mã nào.</span>
+      </div>
+    </ng-container>
+
+    <!-- Đếm tồn bag CL (Outbound) -->
+    <ng-container *ngIf="weighSection === 'clcount'">
+      <p class="dv-weigh__hint">Đầu mã (vd B009) hoặc mã đầy đủ: khi scan xuất ở Outbound, nếu sau tem này lô chỉ còn 1 bag lẻ (CL) cuối cùng của mã và tổng tồn mã &lt; 5000 → bắt nhân viên đếm lại bag đó.</p>
+      <form class="dv-weigh__add" (submit)="$event.preventDefault(); addClCountPrefix()">
+        <input type="text" [(ngModel)]="clCountDraft" name="clCountDraft" placeholder="Nhập đầu mã hoặc mã hàng…" maxlength="40" autocomplete="off">
+        <button type="submit" [disabled]="weighBusy || !clCountDraft.trim()">Thêm</button>
+      </form>
+      <div class="dv-weigh__chips">
+        <span class="dv-weigh__chip" *ngFor="let p of clCountPrefixes">{{ p }} <button type="button" (click)="removeClCountPrefix(p)" [disabled]="weighBusy">✕</button></span>
+        <span class="dv-weigh__empty" *ngIf="!clCountPrefixes.length">Chưa có đầu mã nào — Outbound không bắt đếm bag CL.</span>
       </div>
     </ng-container>
 

@@ -3,6 +3,14 @@
     <!-- Topbar -->
     <div class="excel-header topbar" (click)="$event.stopPropagation()">
       <div class="topbar__left">
+        <div class="ib-nav">
+          <button type="button" class="ib-btn" title="Quay lại" (click)="goBack()">
+            <i class="material-icons">arrow_back</i>Back
+          </button>
+          <button type="button" class="ib-btn" title="Về Menu" (click)="goToMenu()">
+            <i class="material-icons">home</i>Menu
+          </button>
+        </div>
         <div class="topbar__brand">
           <img src="assets/img/rmin.png" alt="" class="topbar__logo">
           <div class="topbar__titles">
@@ -22,12 +30,6 @@
             {{ f }}
           </button>
         </div>
-        <button type="button" class="icon-btn" title="Back" (click)="goBack()">
-          <i class="material-icons">arrow_back</i>
-        </button>
-        <button type="button" class="icon-btn" title="Về Menu" (click)="goToMenu()">
-          <i class="material-icons">home</i>
-        </button>
       </div>
 
       <!-- Batch Filter Indicator -->
@@ -261,7 +263,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -300,7 +302,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -335,7 +337,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -484,6 +486,7 @@
             <td class="date-cell">
               <input type="date" 
                      class="date-input" 
+                     [class.date-empty]="!material.expiryDate"
                      [value]="material.expiryDate ? material.expiryDate.toISOString().split('T')[0] : ''"
                      (change)="onExpiryDateChange($event, material)"
                      [disabled]="!canEditMaterials || material.isReceived"
@@ -518,6 +521,7 @@
                       [title]="getReceivedTitle(material)">
              </td>
             <td class="number-cell ldv-cell">
+              <div class="ldv-wrap">
               <input type="text"
                      inputmode="decimal"
                      class="editable-input"
@@ -531,6 +535,7 @@
                       class="ldv-edit-btn"
                       *ngIf="canEditMaterials && isRollsOrBagsLocked(material)"
                       (click)="requestRollsOrBagsEdit(material)">Sửa</button>
+              </div>
             </td>
             <td class="number-cell">
               <input type="number"
@@ -712,14 +717,23 @@
               <input 
                 type="text" 
                 id="employeeCodeInput"
+                [attr.name]="employeeFieldName"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="characters"
+                spellcheck="false"
                 [(ngModel)]="employeeCode"
-                placeholder="Nhập mã nhân viên (VD: ASP0106)"
+                placeholder="Quét thẻ nhân viên (không gõ tay / chọn mã đã lưu)"
                 class="employee-input uppercase-input modern-input"
                 [disabled]="isEmployeeCodeSaved"
+                (keydown)="onEmployeeCodeKeydown($event)"
+                (paste)="onEmployeeCodePaste($event)"
+                (drop)="$event.preventDefault()"
                 (input)="onEmployeeCodeInput($event)"
                 (keyup)="onEmployeeCodeKeyup($event)"
                 (keyup.enter)="saveEmployeeCode()">
             </div>
+            <div class="employee-scan-error" *ngIf="employeeScanError">{{ employeeScanError }}</div>
             
             <button 
               class="save-btn modern-btn" 

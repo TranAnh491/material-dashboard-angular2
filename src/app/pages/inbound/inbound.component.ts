@@ -1085,15 +1085,33 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   /** Hàng hiển thị trong bảng; khi xem lô + có ô tìm mã thì lọc theo chuỗi nhập. */
   get batchTableRows(): InboundMaterial[] {
-    const rows = this.filteredMaterials;
-    if (!this.selectedBatchView || this.isBatchActive) {
-      return rows;
+    let rows = this.filteredMaterials;
+    if (this.selectedBatchView && !this.isBatchActive) {
+      const q = (this.batchMaterialCodeSearch || '').trim().toUpperCase();
+      if (q) rows = rows.filter(m => (m.materialCode || '').toUpperCase().includes(q));
     }
-    const q = (this.batchMaterialCodeSearch || '').trim().toUpperCase();
-    if (!q) {
-      return rows;
-    }
-    return rows.filter(m => (m.materialCode || '').toUpperCase().includes(q));
+    return this.sortReceivedLast(rows);
+  }
+
+  /** Thanh tiến độ lô: nhận càng nhiều càng xanh (0% cam → 100% xanh lá). */
+  receiveProgressColor(batch: { receivedCount?: number; count?: number }): string {
+    const total = Number(batch?.count) || 0;
+    const p = total > 0 ? Math.min(1, Math.max(0, (Number(batch?.receivedCount) || 0) / total)) : 0;
+    const hue = Math.round(28 + p * (130 - 28)); // 28 = cam, 130 = xanh lá
+    return `hsl(${hue}, 72%, ${Math.round(48 - p * 10)}%)`;
+  }
+
+  /** Mã chưa đủ (chưa nhận) lên trên, mã đủ (đã nhận) xuống dưới — giữ nguyên thứ tự trong từng nhóm. */
+  private sortRecvSrc: InboundMaterial[] | null = null;
+  private sortRecvKey = '';
+  private sortRecvOut: InboundMaterial[] = [];
+  private sortReceivedLast(rows: InboundMaterial[]): InboundMaterial[] {
+    const key = rows.map(m => (m.isReceived ? '1' : '0')).join('');
+    if (rows === this.sortRecvSrc && key === this.sortRecvKey) return this.sortRecvOut;
+    this.sortRecvSrc = rows;
+    this.sortRecvKey = key;
+    this.sortRecvOut = [...rows.filter(m => !m.isReceived), ...rows.filter(m => !!m.isReceived)];
+    return this.sortRecvOut;
   }
   
   // updatePagination(): void { // Removed pagination update
@@ -1258,8 +1276,9 @@ export class InboundComponent implements OnInit, OnDestroy {
           updatedAt: new Date()
         };
         
-        // Add to inventory-materials collection (no notification)
-        return this.firestore.collection('inventory-materials').add(inventoryMaterial).then(docRef => {
+        // Tạo dòng tồn — mã dòng cố định theo phiếu nhập, chỉ tạo 1 lần (không trùng khi 2 máy / bấm lại)
+        return this.createInventoryRowOnce(material, inventoryMaterial).then(({ ref: docRef, created }) => {
+          if (!created) return docRef; // đã có dòng tồn của phiếu này → không ghi log lần 2
           this.writeInboundKkLog(docRef.id, material, finalBatchNumber, inventoryLocation, kkBy, kkAt);
           const tb = totalBags;
           const bb = (material.bagBatch || '').trim();
@@ -1323,6 +1342,27 @@ export class InboundComponent implements OnInit, OnDestroy {
       });
   }
 
+  /**
+   * Tạo dòng inventory-materials cho 1 phiếu nhập, mã dòng cố định `IB_<id phiếu nhập>`, trong transaction:
+   * đã có → không tạo lại (created = false). Chống trùng dòng tồn khi 2 máy cùng nhận / bấm lại / mạng gửi lại.
+   * Phiếu nhập chưa có id (hiếm) → tạo như cũ.
+   */
+  private async createInventoryRowOnce(material: InboundMaterial, data: Record<string, any>): Promise<{ ref: any; created: boolean }> {
+    const db = this.firestore.firestore;
+    if (!material.id) {
+      const ref = await db.collection('inventory-materials').add(data);
+      return { ref, created: true };
+    }
+    const ref = db.collection('inventory-materials').doc(`IB_${material.id}`);
+    const created = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists) return false;
+      tx.set(ref, { ...data, inboundDocId: material.id });
+      return true;
+    });
+    return { ref, created };
+  }
+
   /** Nhập kho inventory số lượng ngay; totalBags = 0, không ghi rm-bag-history; vị trí IQC — chờ quét tem để finalize. */
   private addToInventoryPreScan(material: InboundMaterial): Promise<void> {
     const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
@@ -1360,7 +1400,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        return this.firestore.collection('inventory-materials').add(inventoryMaterial).then(docRef => docRef);
+        return this.createInventoryRowOnce(material, inventoryMaterial).then(({ ref }) => ref);
       })
       .then(docRef => {
         if (!material.id) throw new Error('Material không có ID');
@@ -6602,6 +6642,14 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   openBatchModal(): void {
+    // Mỗi lần bắt đầu nhận hàng: bắt quét lại thẻ nhân viên, đổi tên ô để trình duyệt không gợi ý mã cũ
+    if (!this.isBatchActive) {
+      this.isEmployeeCodeSaved = false;
+      this.employeeScanError = '';
+      this.employeeFieldName = 'emp-' + Date.now();
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 80);
+    }
     this.showBatchModal = true;
     this.isBatchScanningMode = true; // Enable the new input interface
     console.log('🚀 Mở modal batch processing với giao diện input trực tiếp');
@@ -7204,7 +7252,69 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Lưu mã nhân viên
+  // ===== Bắt buộc QUÉT thẻ nhân viên khi bắt đầu nhận hàng =====
+  // Trình duyệt hay lưu mã đã nhập → nhân viên bấm chọn mã cũ thay vì quét. Chỉ nhận khi
+  // các ký tự được gõ liên tục rất nhanh như máy quét; dán / chọn gợi ý / gõ tay → từ chối.
+  /** Tên ô đổi mỗi lần mở để trình duyệt không gợi ý mã đã lưu */
+  employeeFieldName = 'emp-' + Date.now();
+  employeeScanError = '';
+  private empKeyTimes: number[] = [];
+  /** Giá trị ô bị thay bằng gợi ý / dán (không qua bàn phím) */
+  private empNonKeyInput = false;
+  private static readonly EMP_SCAN_MAX_GAP_MS = 60;
+
+  onEmployeeCodeKeydown(event: KeyboardEvent): void {
+    if (event.key && event.key.length === 1) {
+      this.empKeyTimes.push(performance.now());
+      this.employeeScanError = '';
+    }
+  }
+
+  onEmployeeCodePaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    this.employeeScanError = 'Không được dán mã — hãy quét thẻ nhân viên.';
+  }
+
+  /** Ký tự gần nhất có liên tục nhanh như máy quét không (≥ 7 ký tự, khoảng cách ≤ 60ms). */
+  private employeeLooksScanned(value: string): boolean {
+    if (this.empNonKeyInput) return false;
+    const t = this.empKeyTimes.slice(-Math.max(7, value.length));
+    if (t.length < 7) return false;
+    for (let i = 1; i < t.length; i++) {
+      if (t[i] - t[i - 1] > InboundComponent.EMP_SCAN_MAX_GAP_MS) return false;
+    }
+    return true;
+  }
+
+  private resetEmployeeScan(clearValue: boolean): void {
+    this.empKeyTimes = [];
+    this.empNonKeyInput = false;
+    if (clearValue) {
+      this.employeeCode = '';
+      const el = document.getElementById('employeeCodeInput') as HTMLInputElement | null;
+      if (el) el.value = '';
+    }
+  }
+
   saveEmployeeCode(): void {
+    const raw = String(this.employeeCode || '').trim().toUpperCase();
+    if (!raw) return;
+    if (!this.employeeLooksScanned(raw)) {
+      this.employeeScanError = '❌ Phải QUÉT thẻ nhân viên — không gõ tay, không chọn mã trình duyệt đã lưu.';
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 50);
+      return;
+    }
+    const m = /ASP\d{4}/.exec(raw);
+    if (!m) {
+      this.employeeScanError = `❌ Mã quét "${raw}" không đúng dạng ASP + 4 số.`;
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 50);
+      return;
+    }
+    this.employeeCode = m[0];
+    this.employeeScanError = '';
+    this.resetEmployeeScan(false);
     if (this.employeeCode && this.employeeCode.trim()) {
       this.isEmployeeCodeSaved = true;
       console.log('✅ Mã nhân viên đã được lưu:', this.employeeCode);
@@ -8055,6 +8165,12 @@ export class InboundComponent implements OnInit, OnDestroy {
   onEmployeeCodeInput(event: any): void {
     const input = event.target;
     const value = input.value;
+    // Chọn gợi ý tự điền / dán / kéo thả: không phải gõ phím
+    const it = String(event?.inputType || '');
+    if (!it || it === 'insertReplacementText' || it === 'insertFromPaste' || it === 'insertFromDrop' || it === 'insertFromAutocomplete') {
+      if (value) this.empNonKeyInput = true;
+    }
+    if (!value) this.resetEmployeeScan(false);
     if (value) {
       // Tự động viết hoa và cập nhật ngModel
       this.employeeCode = value.toUpperCase();

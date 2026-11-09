@@ -61,7 +61,7 @@ export class DanhMucNvlTpComponent implements OnInit {
   showNvlColumnFilters = false;
   showTpColumnFilters = false;
   /** Mục con đang xem trong tab Check lượng / Cân. */
-  weighSection: 'pending' | 'exempt' | 'include' | 'temle' | 'k100' = 'pending';
+  weighSection: 'pending' | 'exempt' | 'include' | 'temle' | 'clcount' | 'k100' = 'pending';
 
   toggleMenu(name: string, event: Event): void {
     event.stopPropagation();
@@ -1532,6 +1532,9 @@ export class DanhMucNvlTpComponent implements OnInit {
   weighIncludeDraft = '';
   temLeNoWeigh: string[] = [];
   temLeNoWeighDraft = '';
+  /** Danh mục đếm tồn bag CL (Outbound) */
+  clCountPrefixes: string[] = [];
+  clCountDraft = '';
   weighExemptQuery = '';
 
   async loadWeigh(): Promise<void> {
@@ -1542,7 +1545,8 @@ export class DanhMucNvlTpComponent implements OnInit {
         this.weighReports.loadExemptRows(),
         this.weighReports.loadIncludeCodes(),
         this.weighReports.loadTemLeNoWeighPrefixes(),
-        this.sxxkSuspect.load()
+        this.sxxkSuspect.load(),
+        this.weighReports.loadClCountPrefixes().then((l) => { this.clCountPrefixes = l; })
       ]);
       this.weighPending = pending;
       this.weighExempt = exempt;
@@ -1625,6 +1629,29 @@ export class DanhMucNvlTpComponent implements OnInit {
       const next = this.temLeNoWeigh.filter((p) => p !== prefix);
       await this.weighReports.saveTemLeNoWeighPrefixes(next, await this.currentEmployeeId());
       this.temLeNoWeigh = next;
+    } catch (e: any) { appAlert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async addClCountPrefix(): Promise<void> {
+    const prefix = this.clCountDraft.trim().toUpperCase();
+    if (!prefix || this.weighBusy) return;
+    if (this.clCountPrefixes.includes(prefix)) { this.clCountDraft = ''; return; }
+    this.weighBusy = true;
+    try {
+      const next = [...this.clCountPrefixes, prefix];
+      await this.weighReports.saveClCountPrefixes(next, await this.currentEmployeeId());
+      this.clCountPrefixes = next.sort();
+      this.clCountDraft = '';
+    } catch (e: any) { appAlert('❌ Không thêm được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
+  }
+
+  async removeClCountPrefix(prefix: string): Promise<void> {
+    if (this.weighBusy || !confirm(`Bỏ ${prefix} khỏi danh mục đếm tồn? Outbound sẽ không bắt đếm bag CL của mã này nữa.`)) return;
+    this.weighBusy = true;
+    try {
+      const next = this.clCountPrefixes.filter((p) => p !== prefix);
+      await this.weighReports.saveClCountPrefixes(next, await this.currentEmployeeId());
+      this.clCountPrefixes = next;
     } catch (e: any) { appAlert('❌ Không bỏ được: ' + (e?.message || e)); } finally { this.weighBusy = false; }
   }
 

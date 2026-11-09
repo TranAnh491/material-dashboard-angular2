@@ -12715,7 +12715,9 @@ $asm1-toolbar-h: 36px;
 
 /* Ô tìm, dropdown và nút trên thanh chi tiết: cùng cao 32px, thẳng một hàng */
 .kk-type-filter.kk-tf2 {
-  flex-wrap: nowrap;
+  /* Màn hẹp: xuống dòng thay vì đẩy nút ra ngoài (trước đây phải kéo ngang mới thấy nút cuối) */
+  flex-wrap: wrap;
+  row-gap: 6px;
   align-items: center;
   gap: 6px;
   > .kk-type-filter__search {
@@ -13280,3 +13282,8 @@ tr.kk-lastbag-row > td { background: #fff7cc !important; }
 .kk-bophan-cell { text-align: center; white-space: nowrap;
   select { height: 26px; min-width: 52px; border: 1px solid #c8c8c8; border-radius: 4px; font-weight: 700; text-align: center; }
   &--on select { background: #ffedd5; border-color: #ea580c; color: #9a3412; } }
+
+/* Mã "xài hết" theo Kế hoạch NVL (tab Report) */
+.plan-used-up { color: #EA7A00 !important; font-weight: 700; }
+/* Mã kiểm 100% (tab Inbound) — chữ đỏ, không icon */
+.code-k100 { color: #D32F2F !important; font-weight: 700; }

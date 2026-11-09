@@ -5318,3 +5318,324 @@ iframe {
   background: #fee2e2 !important;
   .editable-input[type='text'] { color: #b91c1c !important; font-weight: 800 !important; }
 }
+
+
+/* =====================================================================
+   GIAO DIỆN GỌN KIỂU EXCEL (07/11/2026) — giống Quản lý NVL / Danh mục
+   Bảng kẻ ô xám, tiêu đề cột xám nhạt, chữ gọn, ít màu; nút cùng tone.
+   ===================================================================== */
+.inbound-shell {
+  /* Đầu trang: 1 hàng, nền trắng */
+  .topbar {
+    background: #fff !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid #d0d0d0 !important;
+    padding: 6px 12px !important;
+    min-height: 0 !important;
+  }
+  .topbar__left { display: flex; align-items: center; gap: 12px; }
+  .topbar__logo { height: 26px !important; width: auto !important; }
+  .topbar__title { font-size: 16px !important; font-weight: 700 !important; color: #111 !important; letter-spacing: 0 !important; }
+  .topbar__subtitle { display: none !important; }
+
+  .ib-nav { display: flex; gap: 6px; padding-right: 12px; border-right: 1px solid #d0d0d0; }
+
+  /* Mọi nút ở đầu trang / thanh công cụ: chữ nhật 36px, viền xám, nền trắng */
+  .ib-btn,
+  .toolbar .btn,
+  .back-to-batches-btn,
+  .tbhd-btn,
+  .factory-switcher__btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+    box-sizing: border-box !important;
+    border: 1px solid #b7b7b7 !important;
+    border-radius: 4px !important;
+    background: #fff !important;
+    background-image: none !important;
+    color: #111 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: pointer;
+    .material-icons { font-size: 18px !important; color: inherit !important; }
+    &:hover:not(:disabled) { background: #f2f2f2 !important; }
+    &:disabled { opacity: .5; cursor: default; }
+  }
+  .factory-switcher {
+    display: inline-flex; gap: 0 !important; padding: 0 !important; border: 0 !important;
+    background: transparent !important; box-shadow: none !important;
+    .factory-switcher__btn { border-radius: 0 !important; }
+    .factory-switcher__btn:first-child { border-radius: 4px 0 0 4px !important; }
+    .factory-switcher__btn:last-child { border-radius: 0 4px 4px 0 !important; margin-left: -1px; }
+    .factory-switcher__btn.active { background: #e3e3e3 !important; border-color: #7a7a7a !important; font-weight: 700 !important; }
+  }
+  .toolbar {
+    background: #fff !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid #d0d0d0 !important;
+    padding: 6px 12px !important;
+  }
+  .batch-view-title { font-size: 13px !important; color: #111 !important;
+    .material-icons { color: #64748b !important; font-size: 18px !important; } }
+  .batch-view-count { color: #64748b !important; }
+  .batch-material-code-search {
+    height: 36px !important; box-sizing: border-box; border: 1px solid #b7b7b7 !important; border-radius: 4px !important;
+    font-size: 13px !important; box-shadow: none !important;
+  }
+}
+
+/* Bảng chi tiết lô */
+.inbound-shell .excel-body-main .excel-table {
+  font-size: 13px !important;
+  border-collapse: collapse !important;
+  background: #fff;
+
+  th, td { border: 1px solid #d0d0d0 !important; }
+  th {
+    background: #f2f2f2 !important;
+    color: #111 !important;
+    border-color: #b7b7b7 !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    padding: 5px 6px !important;
+    height: auto !important;
+    white-space: nowrap;
+  }
+  td {
+    font-size: 13px !important;
+    color: #111 !important;
+    padding: 2px 6px !important;
+    height: 28px !important;
+    background: #fff !important;
+    vertical-align: middle !important;
+  }
+  tbody tr:hover > td { background: #f7f9fc !important; }
+  tbody tr.received-row > td { background: #f3faf4 !important; }
+
+  /* Cột nhà máy: chữ thường, không tô màu */
+  td.factory-cell, td.factory-asm1, td.factory-asm2 {
+    background: inherit !important; color: #111 !important; font-weight: 600 !important; font-size: 12px !important;
+  }
+  td.row-header { color: #64748b !important; font-size: 12px !important; }
+
+  /* Ô nhập trong bảng: trông như ô Excel, chỉ hiện viền khi đang sửa */
+  .editable-input, .date-input {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 13px !important;
+    color: inherit !important;
+    height: 24px !important;
+    width: 100%;
+    padding: 0 2px !important;
+    text-align: center;
+    border-radius: 0 !important;
+    &:focus { outline: 2px solid #1d4ed8 !important; outline-offset: -2px; background: #fff !important; }
+    &:disabled { color: inherit !important; opacity: 1 !important; cursor: default; }
+  }
+  .date-input.date-empty:not(:focus) { color: transparent !important; }
+  .date-input.date-empty:not(:focus)::-webkit-datetime-edit { color: transparent; }
+  .quantity-display { font-size: 13px !important; font-weight: 700 !important; color: #111 !important; }
+
+  /* Mã hàng cần Kiểm 100%: chữ đỏ, không tô nền */
+  td.code-cell--k100 { background: inherit !important; .editable-input { color: #b91c1c !important; font-weight: 700 !important; } }
+
+  /* Trạng thái IQC: chữ, không nền */
+  .iqc-status-badge {
+    background: transparent !important; border: 0 !important; box-shadow: none !important;
+    padding: 0 !important; font-size: 12px !important; font-weight: 600 !important;
+  }
+
+  /* Nút nhỏ trong dòng: cùng 1 kiểu, nhỏ gọn */
+  .week-btn, .ldv-edit-btn, .carton-qr-btn, .storage-unit-cell {
+    height: 22px !important;
+    min-height: 0 !important;
+    padding: 0 6px !important;
+    border: 1px solid #d0d0d0 !important;
+    border-radius: 3px !important;
+    background: #fff !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    color: #334155 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    line-height: 20px !important;
+    .material-icons { font-size: 15px !important; color: inherit !important; vertical-align: middle; }
+    &:hover:not(:disabled) { background: #f2f2f2 !important; }
+  }
+  .week-btn { border-style: dashed !important; color: #94a3b8 !important; min-width: 44px; }
+  .week-btn--set { border-style: solid !important; color: #111 !important; }
+  .week-btn--missing { border-color: #f5b5b5 !important; color: #b91c1c !important; }
+  .storage-unit-cell--empty { color: #64748b !important; }
+  .storage-unit-cell--filled { color: #111 !important; }
+
+  input[type=checkbox] { width: 15px; height: 15px; }
+}
+
+
+/* ===== Sửa lỗi giao diện Inbound (07/11/2026 chiều) ===== */
+/* Ô Lượng đơn vị: td phải là ô bảng (display:flex trên td làm nút Sửa tràn sang cột khác) */
+.ldv-cell { display: table-cell !important; }
+.ldv-wrap { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 96px; }
+.ldv-wrap .editable-input { flex: 1 1 auto; min-width: 48px; }
+.ldv-wrap .ldv-edit-btn { flex: none; }
+
+.inbound-shell {
+  /* Thanh công cụ dính ngay dưới đầu trang mới (đầu trang cao ~49px, không còn 80px) */
+  .excel-actions { top: 49px !important; background: #fff !important; }
+
+  /* Ô số liệu gọn 1 dòng, không chiếm cả khối cao che nội dung khi cuộn */
+  .kpi-panel {
+    display: flex !important; flex-wrap: wrap; gap: 6px 20px !important;
+    padding: 4px 12px 6px !important; margin: 0 !important;
+    background: transparent !important; border: 0 !important; box-shadow: none !important;
+  }
+  .kpi {
+    display: inline-flex !important; align-items: baseline; gap: 6px;
+    padding: 0 !important; margin: 0 !important; min-height: 0 !important;
+    background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+    flex: 0 0 auto !important; width: auto !important;
+  }
+  .kpi__label { font-size: 12px !important; color: #64748b !important; font-weight: 600 !important; margin: 0 !important; }
+  .kpi__value { font-size: 14px !important; color: #111 !important; font-weight: 700 !important; line-height: 1.2 !important; }
+}
+
+/* Bảng chi tiết lô: kiểu Excel — cột rộng theo nội dung, không xuống dòng, cuộn ngang */
+.inbound-shell .excel-body-main .excel-table {
+  table-layout: auto !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  th, td { white-space: nowrap !important; }
+  th { position: sticky; top: 0; z-index: 3 !important; }
+  /* Ô nhập rộng theo nội dung cột (mặc định ô nhập ~150px làm cột phình to) */
+  th { min-width: 0 !important; width: auto !important; }
+  td { min-width: 0 !important; width: auto !important; }
+  td .editable-input { width: 64px !important; min-width: 0 !important; }
+  td.lot-cell .editable-input { width: 72px !important; }
+  td.code-cell .editable-input { width: 84px !important; }
+  td.po-cell .editable-input { width: 116px !important; }
+  td.location-cell .editable-input { width: 72px !important; }
+  td.type-cell .editable-input { width: 52px !important; }
+  td.supplier-cell .editable-input { width: 96px !important; text-align: left; }
+  td.remarks-cell .editable-input { width: 140px !important; text-align: left; }
+  td.date-cell .date-input { width: 118px !important; }
+  .ldv-wrap { min-width: 0; }
+  .ldv-wrap .editable-input { width: 64px !important; flex: none; }
+}
+
+
+/* ===== Inbound: hàng lọc ngang hàng + lưới lô hàng kẻ ô, ít màu (07/11/2026) ===== */
+.inbound-shell {
+  /* Toàn bộ thanh công cụ: 1 hàng, căn giữa theo chiều dọc */
+  .toolbar__row { display: flex !important; align-items: center !important; flex-wrap: wrap; gap: 8px !important; }
+  .toolbar__actions, .toolbar__filters { display: flex !important; align-items: center !important; gap: 8px !important; margin: 0 !important; }
+  .toolbar__filters { margin-left: auto !important; }
+
+  /* Ô tìm lô, nhóm Trả / Nhập / Đã nhập, khoảng ngày: cùng cao 36px, cùng viền, cùng bo góc */
+  .batch-lot-search, .segmented, .date-range__input {
+    height: 36px !important;
+    box-sizing: border-box !important;
+    border: 1px solid #b7b7b7 !important;
+    border-radius: 4px !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .batch-lot-search { padding: 0 8px !important; gap: 6px !important;
+    .material-icons { font-size: 18px !important; color: #64748b !important; }
+    input { height: 34px !important; border: 0 !important; outline: 0; font-size: 13px !important; background: transparent !important; box-shadow: none !important; }
+  }
+  .segmented { display: inline-flex !important; align-items: stretch !important; overflow: hidden; padding: 0 !important; }
+  .segmented__btn {
+    height: 34px !important; padding: 0 12px !important; border: 0 !important; border-radius: 0 !important;
+    background: #fff !important; color: #111 !important; font-size: 13px !important; font-weight: 600 !important;
+    & + .segmented__btn { border-left: 1px solid #d0d0d0 !important; }
+    &.is-active { background: #e3e3e3 !important; color: #111 !important; font-weight: 700 !important; }
+    &:hover:not(.is-active) { background: #f2f2f2 !important; }
+  }
+  .date-range__input {
+    display: inline-flex !important; align-items: center !important; gap: 6px !important; padding: 0 10px !important;
+    color: #111 !important; font-size: 13px !important; font-weight: 600 !important;
+    .material-icons { font-size: 18px !important; color: #64748b !important; }
+  }
+
+  /* Lưới lô hàng: ô kẻ xám, không bo góc, không màu nền */
+  .batch-section-title { color: #111 !important; font-size: 14px !important;
+    .material-icons { color: #64748b !important; } }
+  .batch-grid {
+    gap: 0 !important;
+    border-top: 1px solid #d0d0d0;
+    border-left: 1px solid #d0d0d0;
+  }
+  .batch-card {
+    border: 0 !important;
+    border-right: 1px solid #d0d0d0 !important;
+    border-bottom: 1px solid #d0d0d0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    padding: 8px 10px !important;
+    margin: 0 !important;
+    transform: none !important;
+    &:hover { background: #f7f9fc !important; }
+    &.is-done { background: #f6f6f6 !important; }
+  }
+  .batch-card__code { color: #111 !important; font-size: 14px !important; font-weight: 700 !important; }
+  .batch-card .badge {
+    background: transparent !important; border: 0 !important; padding: 0 !important; box-shadow: none !important;
+    color: #475569 !important; font-size: 12px !important; font-weight: 600 !important;
+  }
+  .batch-card .badge--success { color: #15803d !important; }
+  .batch-card .progress { height: 4px !important; background: #eceff3 !important; border-radius: 0 !important; margin: 6px 0 !important; }
+  .batch-card .progress__bar { background-image: none !important; border-radius: 0 !important; } /* màu do receiveProgressColor() */
+  .batch-card__footer .muted { color: #64748b !important; font-size: 12px !important; }
+}
+
+
+/* ===== Inbound: màu dòng theo trạng thái nhận (07/11/2026) =====
+   Đã nhận: vạch xám đầu dòng, tick xanh dương. Chưa nhận: vạch cam, ô tick trắng.
+   Mọi dòng chữ đen, nền trắng. */
+.inbound-shell .excel-body-main .excel-table {
+  tbody tr > td,
+  tbody tr.received-row > td { background: #fff !important; color: #111 !important; }
+  tbody tr:hover > td { background: #f7f9fc !important; }
+
+  /* Vạch trạng thái ở ô đầu dòng */
+  tbody tr > td:first-child { box-shadow: inset 4px 0 0 #f97316 !important; }
+  tbody tr.received-row > td:first-child { box-shadow: inset 4px 0 0 #9ca3af !important; }
+
+  /* Ô tick: trắng viền xám; đã tick = xanh dương dấu trắng (kể cả khi khóa không sửa được) */
+  td input[type=checkbox] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 16px !important;
+    height: 16px !important;
+    margin: 0 !important;
+    border: 1.5px solid #9ca3af !important;
+    border-radius: 3px !important;
+    background: #fff no-repeat center / 12px 12px !important;
+    opacity: 1 !important;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+  td input[type=checkbox]:checked {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  }
+  td input[type=checkbox]:disabled { cursor: default; }
+  td input[type=checkbox]:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 1px; }
+}
+
+
+/* Lỗi quét thẻ nhân viên (Start nhận hàng) */
+.employee-scan-error { margin-top: 6px; color: #b91c1c; font-size: 13px; font-weight: 600; }

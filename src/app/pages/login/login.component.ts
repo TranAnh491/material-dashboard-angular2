@@ -236,19 +236,9 @@ export class LoginComponent implements OnInit {
         const emp = String(employeeId || '').trim().toUpperCase();
         const pass = String(password || '').trim();
 
-        // Xử lý tài khoản đặc biệt ASP0001
-        if (emp === 'ASP0001' && pass === '112233') {
-          await this.authService.signInSpecialUser('ASP0001', 'ASP0001@asp.com', 'special-asp0001-uid');
-          this.showMessage(
-            this.currentLanguage === 'en' ? 'Admin login successful!' : 'Đăng nhập quản lý thành công!', 
-            'success'
-          );
-          this.clearLoginFields();
-          this.navigateAfterLogin();
-          return;
-        }
+        // (Đã gỡ mật khẩu ghi cứng ASP0001/112233 — ASP0001 đăng nhập như tài khoản thường.)
 
-        // Tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456
+        // Tài xế app phụ Xe Tải: ASP9999 / XETAI + mật khẩu chung (lưu ở máy chủ)
         if (this.isTruckDriverLogin(emp)) {
           if (pass.length < 6) {
             this.showMessage(

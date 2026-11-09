@@ -3478,9 +3478,8 @@ export class FgOutComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Trừ tồn FIFO theo từng vị trí/doc
-      this.subtractFromInventoryDocs(sorted, material.quantity);
-      this.addToExportCollection(material);
+      // Trừ tồn FIFO theo từng vị trí/doc + bản ghi fg-export trong CÙNG 1 batch (cùng thành công / cùng không ghi)
+      void this.subtractFromInventoryDocs(sorted, material.quantity, material);
     };
 
     const expandAcrossLocationsIfNeeded = (primaryDocs: any[]) => {
@@ -3566,38 +3565,33 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Trừ tồn từ danh sách doc FG Inventory (FIFO từng vị trí)
-  private subtractFromInventoryDocs(docs: any[], totalQuantity: number): void {
-    let remainingQuantity = totalQuantity;
-    docs.forEach(doc => {
-      if (remainingQuantity <= 0) return;
-      const d = doc.data() as any;
-      const availableQuantity = Number(d.ton ?? d.stock ?? 0) || 0;
-      const quantityToSubtract = Math.min(remainingQuantity, availableQuantity);
-      if (quantityToSubtract > 0) {
-        const newQuantity = availableQuantity - quantityToSubtract;
-        const currentExported = Number(d.xuat ?? d.exported ?? 0) || 0;
-        const newExported = currentExported + quantityToSubtract;
-        const loc = String(d.location || '').trim() || '—';
-        doc.ref.update({
-          ton: newQuantity,
-          xuat: newExported,
-          exported: newExported,
-          updatedAt: new Date()
-        }).then(() => {
-        }).catch(error => {
-          console.error('❌ Error updating inventory:', error);
-        });
-        remainingQuantity -= quantityToSubtract;
-      }
-    });
-    if (remainingQuantity > 0) {
-      console.warn(`⚠️ Còn ${remainingQuantity} chưa trừ hết sau khi duyệt các vị trí`);
+  /** Phần cập nhật số cho 1 dòng fg-inventory khi xuất (+q) / hoàn tác (−q): cộng dồn nguyên tử, đúng trường dòng đó đang dùng. */
+  private fgInvDelta(d: any, q: number): Record<string, unknown> {
+    const FV = firebase.firestore.FieldValue;
+    const out: Record<string, unknown> = { updatedAt: new Date() };
+    // Tồn: dòng dùng `ton` (chuẩn) hoặc `stock` (dòng cũ)
+    if (d.ton !== undefined && d.ton !== null) out['ton'] = FV.increment(-q);
+    else if (d.stock !== undefined && d.stock !== null) out['stock'] = FV.increment(-q);
+    else out['ton'] = FV.increment(-q);
+    // Đã xuất: `xuat` là chuẩn; `exported` giữ khớp với `xuat`
+    const hasXuat = d.xuat !== undefined && d.xuat !== null;
+    const hasExported = d.exported !== undefined && d.exported !== null;
+    if (hasXuat) {
+      out['xuat'] = FV.increment(q);
+      if (!hasExported || Number(d.exported) === Number(d.xuat)) out['exported'] = FV.increment(q);
+      else out['exported'] = Math.max(0, (Number(d.xuat) || 0) + q);
+    } else if (hasExported) {
+      out['exported'] = FV.increment(q);
+      out['xuat'] = Math.max(0, (Number(d.exported) || 0) + q);
+    } else {
+      out['xuat'] = FV.increment(q);
+      out['exported'] = FV.increment(q);
     }
+    return out;
   }
 
-  // Add export record to fg-export collection
-  private addToExportCollection(material: FgOutItem): void {
-    const exportRecord = {
+  private fgExportRecord(material: FgOutItem): Record<string, unknown> {
+    return {
       materialCode: material.materialCode,
       batchNumber: material.batchNumber,
       lsx: material.lsx,
@@ -3605,95 +3599,67 @@ export class FgOutComponent implements OnInit, OnDestroy {
       quantity: material.quantity,
       shipment: material.shipment,
       pushNo: material.pushNo,
-      approvedBy: material.approvedBy || 'Current User', // TODO: Get from auth service
+      approvedBy: material.approvedBy || 'Current User',
       approvedAt: material.approvedAt || new Date(),
       createdAt: new Date(),
       updatedAt: new Date()
     };
-
-    this.firestore.collection('fg-export').add(exportRecord)
-      .then(docRef => {
-      })
-      .catch(error => {
-        console.error('❌ Error adding export record:', error);
-        appAlert(`❌ Lỗi khi lưu bản ghi xuất: ${error.message}`);
-      });
   }
+
+  // Trừ tồn từ danh sách doc FG Inventory (FIFO từng vị trí) + ghi fg-export — 1 batch, cộng dồn nguyên tử
+  private async subtractFromInventoryDocs(docs: any[], totalQuantity: number, material: FgOutItem): Promise<void> {
+    const db = this.firestore.firestore;
+    const batch = db.batch();
+    let remainingQuantity = totalQuantity;
+    for (const doc of docs) {
+      if (remainingQuantity <= 0) break;
+      const d = doc.data() as any;
+      const availableQuantity = Number(d.ton ?? d.stock ?? 0) || 0;
+      const q = Math.min(remainingQuantity, availableQuantity);
+      if (q > 0) {
+        batch.update(doc.ref, this.fgInvDelta(d, q));
+        remainingQuantity -= q;
+      }
+    }
+    if (remainingQuantity > 0) {
+      appAlert(`⚠️ ${material.materialCode}: còn ${remainingQuantity} chưa trừ được sau khi duyệt các vị trí — chưa ghi gì, kiểm tra tồn rồi duyệt lại.`);
+      return;
+    }
+    batch.set(db.collection('fg-export').doc(), this.fgExportRecord(material));
+    try {
+      await batch.commit();
+    } catch (error: any) {
+      console.error('❌ FG xuất: lỗi ghi tồn + fg-export', error);
+      appAlert(`❌ Chưa ghi được xuất kho ${material.materialCode} (tồn chưa bị trừ): ${error?.message || error}. Bỏ tick rồi duyệt lại.`);
+    }
+  }
+
+  // Add export record to fg-export collection
 
   // Add back quantity to FG Inventory and remove from export collection (hoàn tác duyệt xuất)
-  private addBackToFGInventory(material: FgOutItem): void {
-    
-    // First, remove from export collection
-    this.removeFromExportCollection(material);
-    
-    // Then add back to inventory
-    this.addBackToInventory(material);
-  }
+
 
   // Remove export record from fg-export collection
-  private removeFromExportCollection(material: FgOutItem): void {
-    this.firestore.collection('fg-export', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('batchNumber', '==', material.batchNumber)
-         .where('lsx', '==', material.lsx)
-         .where('lot', '==', material.lot)
-         .where('shipment', '==', material.shipment)
-         .where('pushNo', '==', material.pushNo)
-         .limit(1)
-    ).get().subscribe(snapshot => {
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        doc.ref.delete()
-          .then(() => {
-          })
-          .catch(error => {
-            console.error('❌ Error removing export record:', error);
-          });
-      } else {
-      }
-    });
-  }
 
   // Add back quantity to inventory items
-  private addBackToInventory(material: FgOutItem): void {
-    this.firestore.collection('fg-inventory', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('batchNumber', '==', material.batchNumber)
-         .where('lsx', '==', material.lsx)
-         .where('lot', '==', material.lot)
-    ).get().subscribe(snapshot => {
-      if (snapshot.empty) {
-        return;
-      }
 
-      let remainingQuantity = material.quantity;
-      
-      snapshot.docs.forEach(doc => {
-        if (remainingQuantity <= 0) return;
-        
-        const inventoryData = doc.data() as any;
-        const currentQuantity = inventoryData.ton || 0;
-        const quantityToAddBack = Math.min(remainingQuantity, material.quantity);
-        
-        if (quantityToAddBack > 0) {
-          const newQuantity = currentQuantity + quantityToAddBack;
-          const currentExported = Number(inventoryData.xuat ?? inventoryData.exported ?? 0) || 0;
-          const newExported = Math.max(0, currentExported - quantityToAddBack);
-          
-          doc.ref.update({
-            ton: newQuantity,
-            xuat: newExported,
-            exported: newExported, // backward-compat
-            updatedAt: new Date()
-          }).then(() => {
-          }).catch(error => {
-            console.error('❌ Error updating inventory:', error);
-          });
-          
-          remainingQuantity -= quantityToAddBack;
-        }
+  /** Bỏ duyệt xuất: xóa bản ghi fg-export (tồn được trả lại khi FG Inventory "Refresh" theo danh mục hoàn tác — như cũ). */
+  private removeFromExportCollection(material: FgOutItem): void {
+    const db = this.firestore.firestore;
+    db.collection('fg-export')
+      .where('materialCode', '==', material.materialCode)
+      .where('batchNumber', '==', material.batchNumber)
+      .where('lsx', '==', material.lsx)
+      .where('lot', '==', material.lot)
+      .where('shipment', '==', material.shipment)
+      .where('pushNo', '==', material.pushNo)
+      .limit(1)
+      .get()
+      .then((snap) => (snap.empty ? undefined : snap.docs[0].ref.delete()))
+      .catch((error) => {
+        console.error('❌ Error removing export record:', error);
+        appAlert(`❌ Chưa xóa được bản ghi xuất ${material.materialCode}: ${error?.message || error}. Thử bỏ tick lại.`);
       });
-    });
   }
 
   private rebuildPrintMergeCartonFirstRowMap(): void {
@@ -4544,6 +4510,52 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Load danh sách hàng: lọc shipment từ tab Shipment + phân bổ FIFO từ FG Inventory
+  /**
+   * Nguồn tính tồn cho Xuất kho theo shipment. fg-in / fg-export chỉ đọc theo đúng các mã TP (giá trị
+   * materialCode lưu trên dòng tồn) của những dòng tồn khớp nhu cầu — kết quả tính tồn giống đọc toàn bộ,
+   * vì 2 bảng này chỉ được tra theo khóa mã|batch|lsx|lot của các dòng tồn đó. Lỗi → đọc toàn bộ như cũ.
+   */
+  private async loadFgShipmentSources(demandByMaterial: Map<string, number>, factory: string): Promise<[{ docs: any[] }, { docs: any[] }, { docs: any[] }]> {
+    const invSnapshot: any = await firstValueFrom(this.firestore.collection('fg-inventory').get());
+    const demand = Array.from(demandByMaterial.keys());
+    const codeMatches = (invCodeUpper: string) => demand.some((m) =>
+      invCodeUpper === m ||
+      (m.startsWith(invCodeUpper) && invCodeUpper.length >= 6) ||
+      (invCodeUpper.startsWith(m) && m.length >= 6));
+    const codes = new Set<string>();
+    for (const doc of invSnapshot.docs) {
+      const d = doc.data() as any;
+      const docFactory = (d.factory || 'ASM1').toString().trim().toUpperCase();
+      if (docFactory !== factory) continue;
+      const raw = String(d.materialCode || d.maTP || '');
+      if (raw.trim() && codeMatches(raw.trim().toUpperCase())) {
+        codes.add(raw);
+        codes.add(raw.trim());
+      }
+    }
+    const byCodes = async (col: string): Promise<{ docs: any[] }> => {
+      const list = Array.from(codes);
+      const docs: any[] = [];
+      for (let i = 0; i < list.length; i += 30) {
+        const chunk = list.slice(i, i + 30);
+        const snap: any = await firstValueFrom(this.firestore.collection(col, (ref) => ref.where('materialCode', 'in', chunk)).get());
+        docs.push(...snap.docs);
+      }
+      return { docs };
+    };
+    try {
+      const [fgIn, fgExport] = await Promise.all([byCodes('fg-in'), byCodes('fg-export')]);
+      return [invSnapshot, fgIn, fgExport];
+    } catch (e) {
+      console.warn('[FG Out] đọc theo mã lỗi — đọc toàn bộ như cũ', e);
+      const [fgIn, fgExport]: any[] = await Promise.all([
+        firstValueFrom(this.firestore.collection('fg-in').get()),
+        firstValueFrom(this.firestore.collection('fg-export').get())
+      ]);
+      return [invSnapshot, fgIn, fgExport];
+    }
+  }
+
   loadInventoryForShipment(): void {
     if (!this.xuatKhoSelectedShipment) {
       appAlert('⚠️ Vui lòng chọn shipment');
@@ -4583,11 +4595,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
 
       // Bước 2: Load FG Inventory (chỉ nhà máy của shipment) + fg-in + fg-export, tính tồn
-      const invGet = this.firestore.collection('fg-inventory').get();
-      const fgInGet = this.firestore.collection('fg-in').get();
-      const fgExportGet = this.firestore.collection('fg-export').get();
-
-      forkJoin([invGet, fgInGet, fgExportGet]).pipe(take(1)).subscribe(([invSnapshot, fgInSnapshot, fgExportSnapshot]) => {
+      // fg-inventory: đọc đủ (bảng hiện trạng, còn dùng cho cache trạng thái).
+      // fg-in / fg-export (lịch sử, tăng mãi): chỉ đọc các mã TP của shipment — trước đây đọc toàn bộ mỗi lần bấm.
+      this.loadFgShipmentSources(demandByMaterial, shipmentFactory).then(([invSnapshot, fgInSnapshot, fgExportSnapshot]) => {
         this.fgInvStatusCache = { ts: Date.now(), docs: invSnapshot.docs };
         const key = (mc: string, batch: string, lsx: string, lot: string) =>
           [String(mc || '').trim(), String(batch || '').trim(), String(lsx || '').trim(), String(lot || '').trim()].join('|');

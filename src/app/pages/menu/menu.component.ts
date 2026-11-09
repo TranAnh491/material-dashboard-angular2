@@ -6,7 +6,6 @@ import { MENU_VI_EN } from './menu-i18n';
 import { Router } from '@angular/router';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { MobileDetectionService } from '../../services/mobile-detection.service';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { APP_TABS } from '../../routes/app-tabs';
 import { FilteredRoutesService } from '../../services/filtered-routes.service';
 
@@ -57,21 +56,51 @@ export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
     subtitle: t.subtitle,
   }));
 
-  private readonly iconAccentByPath: Record<string, { bg: string; border: string; fg: string }> = {
-    '/dashboard': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' },
-    '/work-order-status': { bg: 'rgba(249,115,22,0.10)', border: 'rgba(249,115,22,0.18)', fg: '#ea580c' },
-    '/shipment': { bg: 'rgba(52, 120, 246,0.10)', border: 'rgba(52, 120, 246,0.18)', fg: '#3478F6' },
-    '/location': { bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.18)', fg: '#e11d48' },
-    '/rm1-delivery': { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)', fg: '#2563eb' }
+  /** Icon riêng cho từng tab (Material Icons) — trước đây đa số dùng chung 1 icon khối hộp. */
+  private static readonly ICON_BY_PATH: Record<string, string> = {
+    '/dashboard': 'space_dashboard', '/work-order-status': 'assignment', '/shipment': 'local_shipping',
+    '/location': 'place', '/danh-muc-nvl-tp': 'menu_book', '/j-warehouse': 'warehouse', '/report': 'analytics',
+    '/shorted-materials': 'report_problem', '/pd-control': 'precision_manufacturing', '/jit': 'schedule_send',
+    '/inbound': 'move_to_inbox', '/outbound': 'outbox', '/materials': 'inventory_2', '/quan-ly-nguyen-lieu': 'fact_check',
+    '/inventory-overview': 'pie_chart', '/aging-report-nvl': 'hourglass_bottom', '/bag-history': 'history',
+    '/label': 'label', '/qc': 'verified', '/nhiet-do': 'thermostat', '/equipment-checklist': 'build_circle',
+    '/qc-traceability': 'timeline', '/fg-in': 'input', '/fg-out': 'output', '/fg-check': 'task_alt',
+    '/fg-inventory': 'inventory', '/fg-inventory/tp-list': 'list_alt', '/aging-report': 'hourglass_top',
+    '/fg-location': 'swap_horiz', '/pallet-id': 'qr_code_2', '/lich-lam-viec': 'calendar_month',
+    '/materials-dashboard': 'insights', '/rm1-delivery': 'delivery_dining', '/xe-tai': 'airport_shuttle',
+    '/bieu-mau': 'description', '/index': 'account_balance', '/sxxk': 'factory', '/scrap': 'delete_sweep',
+    '/checklist': 'health_and_safety', '/equipment': 'school', '/tai-khoan': 'manage_accounts',
+    '/settings': 'settings', '/zalo': 'chat', '/chuc-nang': 'help_center'
   };
 
-  private readonly lineIconHtmlByPath: Record<string, SafeHtml> = {};
+  /** Màu nhẹ theo nhóm (thay vì mỗi thẻ một màu). */
+  private static readonly TONE_BY_CATEGORY: Record<string, string> = {
+    Main: 'blue', Production: 'violet', 'Stock Check': 'teal', RM: 'teal', Quality: 'green',
+    'ASM FG': 'amber', Report: 'slate', Tools: 'slate', Admin: 'rose'
+  };
+
+  /** Thứ tự + tên nhóm (tiếng Việt; bấm EN thì DomTranslator dịch). */
+  readonly categories: Array<{ key: string; label: string }> = [
+    { key: 'Main', label: 'Chính' },
+    { key: 'Production', label: 'Sản xuất' },
+    { key: 'Stock Check', label: 'Kiểm kê' },
+    { key: 'RM', label: 'Nguyên liệu (RM)' },
+    { key: 'Quality', label: 'Chất lượng' },
+    { key: 'ASM FG', label: 'Thành phẩm (FG)' },
+    { key: 'Report', label: 'Báo cáo' },
+    { key: 'Tools', label: 'Công cụ' },
+    { key: 'Admin', label: 'Quản trị' }
+  ];
+
+  /** Tab mở gần đây từ Menu (lưu trong máy) */
+  recentTabs: MenuTabView[] = [];
+  private static readonly RECENT_KEY = 'menu-recent-v1';
+
   private readonly tabViews: MenuTabView[] = [];
 
   constructor(
     private router: Router,
     private authService: FirebaseAuthService,
-    private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
     private mobileDetection: MobileDetectionService,
     private languageService: LanguageService,
@@ -138,33 +167,32 @@ export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private buildTabViews(): void {
-    // Build once so template doesn't keep calling methods per change detection
-    const svg = (inner: string) =>
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-
-    const rawIconsByPath: Record<string, string> = {
-      '/dashboard': svg('<path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l3-4 3 2 4-6"/>'),
-      '/work-order-status': svg('<path d="M9 6h10"/><path d="M9 10h10"/><path d="M9 14h6"/><path d="M5 6h.01"/><path d="M5 10h.01"/><path d="M5 14h.01"/><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'),
-      '/shipment': svg('<path d="M3 7h12v10H3z"/><path d="M15 10h4l2 2v5h-6z"/><circle cx="7" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>'),
-      '/location': svg('<path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/>'),
-      '/rm1-delivery': svg('<path d="M4 7h10v10H4z"/><path d="M14 10h4l2 2v5h-6z"/><path d="M7 19h.01"/><path d="M17 19h.01"/><path d="M6.5 19a.5.5 0 0 1 1 0"/><path d="M16.5 19a.5.5 0 0 1 1 0"/>')
-    };
-
-    const defaultSvg = svg('<path d="M12 3l9 4.5v9L12 21 3 16.5v-9L12 3z"/><path d="M12 12l9-4.5"/><path d="M12 12L3 7.5"/><path d="M12 12v9"/>');
     for (const tab of this.menuTabs) {
       const path = String(tab.path || '').trim();
-      if (!this.lineIconHtmlByPath[path]) {
-        const html = rawIconsByPath[path] || defaultSvg;
-        this.lineIconHtmlByPath[path] = this.sanitizer.bypassSecurityTrustHtml(html);
-      }
-      const accent = this.iconAccentByPath[path] || { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.12)', fg: '#2563eb' };
       this.tabViews.push({
         ...tab,
-        accent,
-        lineIcon: this.lineIconHtmlByPath[path]
+        icon: MenuComponent.ICON_BY_PATH[path] || tab.icon || 'apps',
+        tone: MenuComponent.TONE_BY_CATEGORY[tab.category] || 'slate'
       });
     }
   }
+
+  private readRecent(): string[] {
+    try {
+      const v = JSON.parse(localStorage.getItem(MenuComponent.RECENT_KEY) || '[]');
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private rememberRecent(path: string): void {
+    try {
+      const next = [path, ...this.readRecent().filter((p) => p !== path)].slice(0, 6);
+      localStorage.setItem(MenuComponent.RECENT_KEY, JSON.stringify(next));
+    } catch { /* bỏ qua */ }
+  }
+
 
   private updateFiltered(): void {
     const q = this.norm(this.searchTerm);
@@ -187,6 +215,7 @@ export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const next: Record<string, MenuTabView[]> = {
       Main: [],
+      Production: [],
       'Stock Check': [],
       'RM': [],
       Quality: [],
@@ -199,6 +228,9 @@ export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
       (next[t.category] ||= []).push(t);
     }
     this.filteredByCategory = next;
+    // Dùng gần đây: chỉ tab còn quyền mở, ẩn khi đang tìm
+    const allowed = new Map(base.map((t) => [t.path, t]));
+    this.recentTabs = q ? [] : this.readRecent().map((p) => allowed.get(p)).filter((t): t is MenuTabView => !!t).slice(0, 6);
     this.cdr.markForCheck();
   }
 
@@ -224,7 +256,12 @@ export class MenuComponent implements OnInit, OnDestroy, AfterViewInit {
   }
   
   navigateToTab(path: string): void {
+    this.rememberRecent(path);
     this.router.navigate([path]);
+  }
+
+  hasAnyResult(): boolean {
+    return this.categories.some((c) => (this.filteredByCategory[c.key] || []).length > 0);
   }
 
   async logout(): Promise<void> {
@@ -246,6 +283,6 @@ type MenuTab = {
   subtitle?: string;
 };
 type MenuTabView = MenuTab & {
-  accent: { bg: string; border: string; fg: string };
-  lineIcon: SafeHtml;
+  /** blue | violet | teal | green | amber | slate | rose */
+  tone: string;
 };

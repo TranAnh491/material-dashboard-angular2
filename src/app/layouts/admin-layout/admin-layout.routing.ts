@@ -43,6 +43,7 @@ export const AdminLayoutRoutes: Routes = [
   { path: 'bag-history',          component: BagHistoryComponent, canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'jit',                  loadChildren: () => import('../../pages/jit/jit.module').then(m => m.JitModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'pd-control',           loadChildren: () => import('../../pages/pd-control/pd-control.module').then(m => m.PdControlModule), canActivate: [AuthGuard, TabPermissionGuard] },
+  { path: 'chuc-nang',            loadChildren: () => import('../../pages/chuc-nang/chuc-nang.module').then(m => m.ChucNangModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'kk-vi-tri',            loadChildren: () => import('../../pages/kk-vi-tri/kk-vi-tri.module').then(m => m.KkViTriModule), canActivate: [AuthGuard] },
   { path: 'location',             loadChildren: () => import('../../pages/location/location.module').then(m => m.LocationModule), canActivate: [AuthGuard, TabPermissionGuard] },
   { path: 'j-warehouse', loadChildren: () => import('../../pages/j-warehouse/j-warehouse.module').then(m => m.JWarehousePageModule), canActivate: [AuthGuard, TabPermissionGuard], data: { preload: true, preloadDelay: 3000 } },

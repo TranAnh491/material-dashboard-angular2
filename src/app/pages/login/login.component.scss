@@ -1,380 +1,341 @@
-.login-container {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  background: url('/assets/img/login.png') center center / cover no-repeat;
-  padding: 20px;
+/* =====================================================================
+   Màn đăng nhập — phong cách Emil Kowalski: tối giản, chữ rõ, viền mảnh,
+   bóng nhiều lớp rất nhẹ, chuyển động ngắn với đường cong ease-out mạnh.
+   ===================================================================== */
+
+:host {
+  display: block;
+  /* Bảng màu "đêm thiên văn" — luôn tối vì nền là bầu trời sao */
+  --lg-bg: #05060c;
+  --lg-card: rgba(14, 15, 22, 0.93);
+  --lg-card-solid: #0e0f16;
+  --lg-text: #f4f4f7;
+  --lg-muted: #9a9cab;
+  --lg-subtle: #5d6070;
+  --lg-label: #d4d5de;
+  --lg-border: rgba(255, 255, 255, 0.09);
+  --lg-border-hover: rgba(255, 255, 255, 0.16);
+  --lg-border-focus: rgba(167, 176, 255, 0.55);
+  --lg-ring: rgba(129, 140, 248, 0.18);
+  --lg-input: rgba(255, 255, 255, 0.035);
+  --lg-primary: #f4f4f7;
+  --lg-primary-hover: #ffffff;
+  --lg-primary-text: #05060c;
+  --lg-ghost-hover: rgba(255, 255, 255, 0.06);
+  --lg-danger: #f87171;
+  --lg-danger-ring: rgba(248, 113, 113, 0.18);
+  --lg-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.lg {
   position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  box-sizing: border-box;
+  background-color: var(--lg-bg) !important;
+  color: var(--lg-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
 
-  // Chữ "AIRSPEED WAREHOUSE" nằm trong ảnh nền (3802×2065, chữ ở ~17,5% phía trên). Với `cover`,
-  // đáy chữ luôn ≤ 17,5vh — chừa khoảng này để chọn ngôn ngữ và thẻ đăng nhập không đè lên chữ.
-  @media (min-width: 601px) {
-    padding-top: calc(18vh + 16px);
-  }
+  *, *::before, *::after { box-sizing: border-box; }
 
-  // Modern Warehouse Background Pattern - AI Grid
-  &::before {
-    display: none;
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-      // AI Grid pattern for warehouse floor
-      linear-gradient(90deg, rgba(0,255,255,0.1) 1px, transparent 1px),
-      linear-gradient(rgba(0,255,255,0.1) 1px, transparent 1px),
-      // Additional tech lines
-      linear-gradient(45deg, rgba(0,255,255,0.05) 1px, transparent 1px),
-      linear-gradient(-45deg, rgba(0,255,255,0.05) 1px, transparent 1px);
-    background-size: 80px 80px, 80px 80px, 120px 120px, 120px 120px;
-    animation: gridMove 30s linear infinite;
-  }
-  
-  // AI Core Orb
-  &::after {
-    display: none;
-    content: '';
-    position: absolute;
-    top: 10%;
-    right: 5%;
-    width: 300px;
-    height: 300px;
-    background: 
-      radial-gradient(circle at 30% 30%, rgba(0,255,255,0.3) 0%, transparent 40%),
-      radial-gradient(circle at 70% 70%, rgba(138,43,226,0.2) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(255,255,255,0.1) 0%, transparent 60%);
-    border-radius: 50%;
-    animation: aiPulse 6s ease-in-out infinite;
-    box-shadow: 
-      0 0 50px rgba(0,255,255,0.3),
-      0 0 100px rgba(138,43,226,0.2);
+  /* CSS chung (template cũ) đặt Roboto cho h1/p/button… → ép dùng Inter trong màn đăng nhập */
+  h1, h2, p, span, b, label, button, input, select, option {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 }
 
-// Warehouse Elements - Robots, Shelves, AI
-.warehouse-elements {
-  display: none;
+/* ---------- Ngôn ngữ ---------- */
+.lg-lang {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 1;
-  
-  // Robot Arms
-  .robot-arm {
-    position: absolute;
-    width: 120px;
-    height: 200px;
-    background: linear-gradient(45deg, rgba(0,255,255,0.2), rgba(138,43,226,0.2));
-    border-radius: 60px;
-    animation: robotMove 12s ease-in-out infinite;
-    
-    &::before {
-      content: '';
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 80px;
-      height: 80px;
-      background: radial-gradient(circle, rgba(0,255,255,0.4), transparent);
-      border-radius: 50%;
-      animation: robotEye 3s ease-in-out infinite;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background-color: var(--lg-border) !important;
+
+  button {
+    height: 28px;
+    min-width: 40px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background-color: transparent !important;
+    color: var(--lg-muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+
+    &:hover { color: var(--lg-text); }
+    &.is-on {
+      background-color: rgba(255, 255, 255, 0.12) !important;
+      color: var(--lg-text);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
-    
+    &:focus-visible { outline: 2px solid var(--lg-border-focus); outline-offset: 1px; }
+  }
+}
+
+/* ---------- Khung giữa ---------- */
+.lg-main {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+  animation: lg-in 480ms var(--lg-ease) both;
+}
+
+.lg-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lg-text);
+}
+.lg-brand__logo { height: 26px; width: auto; }
+
+.lg-card {
+  background-color: var(--lg-card) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--lg-border);
+  border-radius: 16px;
+  padding: 28px 24px 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 24px 64px -16px rgba(0, 0, 0, 0.7),
+    0 0 80px -20px rgba(99, 102, 241, 0.25);
+}
+
+.lg-head {
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--lg-text);
+  }
+  p {
+    margin: 6px 0 0;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--lg-muted);
+  }
+}
+
+/* ---------- Form ---------- */
+.lg-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 22px;
+  animation: lg-fade 260ms var(--lg-ease) both;
+}
+
+.lg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.lg-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--lg-label);
+}
+
+.lg-input,
+.login-scan-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--lg-border) !important;
+  border-radius: 8px !important;
+  background-color: var(--lg-input) !important;
+  background-image: none !important;
+  color: var(--lg-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  &:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px var(--lg-card-solid) inset; -webkit-text-fill-color: var(--lg-text); }
+  -webkit-appearance: none;
+  appearance: none;
+
+  &::placeholder { color: var(--lg-subtle); }
+  &:hover { border-color: var(--lg-border-hover) !important; }
+  &:focus {
+    border-color: var(--lg-border-focus) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 0 0 3px var(--lg-ring);
+  }
+  &.is-invalid {
+    border-color: var(--lg-danger) !important;
+    box-shadow: 0 0 0 3px var(--lg-danger-ring);
+  }
+}
+
+/* Mã nhân viên: chữ đều, dễ đọc ASP0000 */
+.login-id-input,
+.employee-id-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.lg-select {
+  padding-right: 34px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%239a9cab' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+}
+
+.lg-select option { background-color: var(--lg-card-solid); color: var(--lg-text); }
+
+.lg-error {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--lg-danger);
+  animation: lg-fade 180ms var(--lg-ease) both;
+}
+
+/* ---------- Nút ---------- */
+.lg-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  transition:
+    transform 160ms var(--lg-ease),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
+
+  &:active:not(:disabled) { transform: scale(0.97); }
+  &:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--lg-ring), 0 0 0 1px var(--lg-border-focus); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  svg { flex: none; }
+}
+
+.lg-btn--primary {
+  width: 100%;
+  margin-top: 4px;
+  border: 0;
+  background-color: var(--lg-primary) !important;
+  color: var(--lg-primary-text) !important;
+  box-shadow:
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 24px -6px rgba(165, 180, 252, 0.45);
+
+  &:hover:not(:disabled) { background-color: var(--lg-primary-hover) !important; }
+}
+
+.lg-btn--ghost {
+  border: 1px solid var(--lg-border);
+  background-color: var(--lg-input) !important;
+  color: var(--lg-text) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  &:hover:not(:disabled) {
+    background-color: var(--lg-ghost-hover) !important;
+    border-color: var(--lg-border-hover);
+  }
+  &.is-armed {
+    border-color: rgba(134, 239, 172, 0.5);
     &::after {
       content: '';
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 60px;
-      height: 60px;
-      background: linear-gradient(45deg, rgba(138,43,226,0.3), rgba(0,255,255,0.3));
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
-      animation: robotBase 4s ease-in-out infinite;
-    }
-    
-    &:nth-child(1) {
-      top: 20%;
-      left: 10%;
-      animation-delay: 0s;
-    }
-    
-    &:nth-child(2) {
-      top: 15%;
-      right: 15%;
-      animation-delay: 3s;
-      transform: scaleX(-1);
-    }
-    
-    &:nth-child(3) {
-      bottom: 25%;
-      left: 20%;
-      animation-delay: 6s;
-    }
-    
-    &:nth-child(4) {
-      bottom: 20%;
-      right: 10%;
-      animation-delay: 9s;
-      transform: scaleX(-1);
-    }
-  }
-  
-  // Warehouse Shelves
-  .warehouse-shelf {
-    position: absolute;
-    background: linear-gradient(90deg, rgba(0,255,255,0.1), rgba(138,43,226,0.1));
-    border: 2px solid rgba(0,255,255,0.3);
-    border-radius: 8px;
-    animation: shelfGlow 8s ease-in-out infinite;
-    
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, rgba(0,255,255,0.6), rgba(138,43,226,0.6));
-      border-radius: 4px 4px 0 0;
-    }
-    
-    &:nth-child(5) {
-      top: 30%;
-      left: 5%;
-      width: 200px;
-      height: 80px;
-      animation-delay: 0s;
-    }
-    
-    &:nth-child(6) {
-      top: 35%;
-      right: 8%;
-      width: 180px;
-      height: 70px;
-      animation-delay: 2s;
-    }
-    
-    &:nth-child(7) {
-      bottom: 35%;
-      left: 8%;
-      width: 160px;
-      height: 60px;
-      animation-delay: 4s;
-    }
-    
-    &:nth-child(8) {
-      bottom: 30%;
-      right: 5%;
-      width: 220px;
-      height: 90px;
-      animation-delay: 6s;
-    }
-  }
-  
-  // AI Data Streams
-  .ai-stream {
-    position: absolute;
-    width: 3px;
-    height: 100px;
-    background: linear-gradient(to bottom, rgba(0,255,255,0.8), transparent);
-    animation: dataStream 5s linear infinite;
-    
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -2px;
-      width: 7px;
-      height: 7px;
-      background: rgba(0,255,255,1);
-      border-radius: 50%;
-      animation: dataPulse 1s ease-in-out infinite;
-    }
-    
-    &:nth-child(9) {
-      top: 10%;
-      left: 25%;
-      animation-delay: 0s;
-    }
-    
-    &:nth-child(10) {
-      top: 20%;
-      right: 30%;
-      animation-delay: 1s;
-    }
-    
-    &:nth-child(11) {
-      bottom: 15%;
-      left: 35%;
-      animation-delay: 2s;
-    }
-    
-    &:nth-child(12) {
-      bottom: 25%;
-      right: 25%;
-      animation-delay: 3s;
-    }
-  }
-  
-  // Floating Tech Particles
-  .tech-particle {
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    background: rgba(0,255,255,0.8);
-    border-radius: 50%;
-    animation: particleFloat 10s ease-in-out infinite;
-    
-    &:nth-child(13) {
-      top: 40%;
-      left: 15%;
-      animation-delay: 0s;
-    }
-    
-    &:nth-child(14) {
-      top: 45%;
-      right: 20%;
-      animation-delay: 2s;
-    }
-    
-    &:nth-child(15) {
-      bottom: 40%;
-      left: 25%;
-      animation-delay: 4s;
-    }
-    
-    &:nth-child(16) {
-      bottom: 45%;
-      right: 15%;
-      animation-delay: 6s;
+      background: #22c55e;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+      animation: lg-pulse 1.4s ease-in-out infinite;
     }
   }
 }
 
-// Language Selector - Warehouse Theme
-.language-selector {
+.lg-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  opacity: 0.8;
+  animation: lg-spin 700ms linear infinite;
+}
+
+.lg-divider {
   display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 6px;
-  border-radius: 12px;
-  border: 1px solid #6B6B66;
-  position: relative;
-  z-index: 10;
+  margin: 4px 0 -2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--lg-subtle);
 
-  .lang-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 18px;
-    border-radius: 8px;
-    background: transparent;
-    border: 1px solid transparent;
-    color: #1f2937;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    min-width: 130px;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      transition: left 0.5s;
-    }
-
-    &:hover::before {
-      left: 100%;
-    }
-
-    &:hover {
-      background: #EAF2FF;
-    }
-
-    &.active {
-      background: #3478F6;
-      color: #fff;
-      border-color: #3478F6;
-    }
-
-    .flag {
-      font-size: 20px;
-    }
-
-    .lang-text {
-      font-size: 15px;
-      font-weight: 700;
-    }
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--lg-border);
   }
 }
 
-// Nền thẻ gần đặc: ảnh nhà kho phía sau không xuyên qua làm rối chữ và ô nhập.
-.login-card {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #6B6B66;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  padding: 32px 36px;
-  width: 100%;
-  max-width: 400px;
-}
+.lg-scan {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 
-.login-header {
-  text-align: center;
-  margin-bottom: 30px;
-
-  h2 {
-    color: #333;
-    margin-bottom: 8px;
-    font-weight: 600;
-  }
-
-  p {
-    color: #666;
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .signup-hint {
-    line-height: 1.45;
-    font-size: 13px;
-    color: #555;
+  .login-scan-input {
+    grid-column: 1 / -1;
+    animation: lg-fade 200ms var(--lg-ease) both;
   }
 }
 
-.form-group {
-  margin-bottom: 20px;
-}
-
-.full-width {
-  width: 100%;
-}
-
-.employee-id-input {
-  text-transform: uppercase;
-}
-
-.login-id-input {
-  text-transform: none;
-}
-
+/* Ô mồi chặn trình duyệt tự điền — luôn ẩn */
 .login-autofill-decoy {
   position: absolute;
   left: -9999px;
@@ -385,294 +346,230 @@
   pointer-events: none;
 }
 
-.login-password-input {
-  -webkit-text-security: disc;
-  text-security: disc;
+.lg-switch {
+  align-self: center;
+  border: 0;
+  background-color: transparent !important;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--lg-muted);
+  cursor: pointer;
+  transition: color 150ms ease;
+
+  b { font-weight: 500; color: var(--lg-text); }
+  &:hover b { text-decoration: underline; text-underline-offset: 3px; }
+  &:focus-visible { outline: 2px solid var(--lg-border-focus); outline-offset: 2px; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
-.login-scan {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-
-  button {
-    flex: 1;
-    min-width: 120px;
-  }
+/* ---------- Chuyển động ---------- */
+@keyframes lg-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes lg-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes lg-spin { to { transform: rotate(360deg); } }
+@keyframes lg-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
-.login-scan-input {
-  flex: 1 1 100%;
-  height: 40px;
-  border: 1px solid #6B6B66;
-  border-radius: 4px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.7);
+@media (prefers-reduced-motion: reduce) {
+  .lg-main, .lg-form, .lg-error, .lg-scan .login-scan-input { animation: none; }
+  .lg-btn { transition: none; }
+  .lg-btn:active:not(:disabled) { transform: none; }
+  .lg-btn--ghost.is-armed::after { animation: none; }
 }
 
-.login-footer {
-  text-align: center;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #8F8F89;
-
-  button {
-    color: #3478F6;
-    font-weight: 500;
-  }
-}
-
-// Snackbar styles
-::ng-deep .success-snackbar {
-  background: #4caf50;
-  color: white;
-}
-
-::ng-deep .error-snackbar {
-  background: #f44336;
-  color: white;
-}
-
-// Warehouse Animations
-@keyframes gridMove {
-  0% {
-    transform: translate(0, 0);
-  }
-  100% {
-    transform: translate(80px, 80px);
-  }
-}
-
-@keyframes aiPulse {
-  0%, 100% {
-    transform: scale(1) rotate(0deg);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.1) rotate(180deg);
-    opacity: 1;
-  }
-}
-
-@keyframes robotMove {
-  0%, 100% {
-    transform: translateY(0px) rotate(0deg);
-  }
-  25% {
-    transform: translateY(-20px) rotate(5deg);
-  }
-  50% {
-    transform: translateY(-10px) rotate(-5deg);
-  }
-  75% {
-    transform: translateY(-15px) rotate(3deg);
-  }
-}
-
-@keyframes robotEye {
-  0%, 100% {
-    opacity: 0.6;
-    transform: translateX(-50%) scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: translateX(-50%) scale(1.2);
-  }
-}
-
-@keyframes robotBase {
-  0%, 100% {
-    transform: translateX(-50%) rotate(0deg);
-  }
-  50% {
-    transform: translateX(-50%) rotate(180deg);
-  }
-}
-
-@keyframes shelfGlow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(0,255,255,0.2);
-    border-color: rgba(0,255,255,0.3);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(0,255,255,0.5);
-    border-color: rgba(0,255,255,0.6);
-  }
-}
-
-@keyframes dataStream {
-  0% {
-    transform: translateY(-100px);
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100px);
-    opacity: 0;
-  }
-}
-
-@keyframes dataPulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.5);
-    opacity: 0.7;
-  }
-}
-
-@keyframes particleFloat {
-  0%, 100% {
-    transform: translateY(0px) translateX(0px);
-    opacity: 0.8;
-  }
-  25% {
-    transform: translateY(-15px) translateX(10px);
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(-25px) translateX(-5px);
-    opacity: 0.6;
-  }
-  75% {
-    transform: translateY(-10px) translateX(15px);
-    opacity: 0.9;
-  }
-}
-
-// Responsive
+/* ---------- Điện thoại ---------- */
 @media (max-width: 480px) {
-  .login-card {
-    padding: 20px;
-    margin: 10px;
-  }
-
-  .language-selector {
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-    max-width: 300px;
-
-    .lang-btn {
-      min-width: auto;
-      width: 100%;
-    }
-  }
-  
-  // Mobile warehouse elements
-  .warehouse-elements {
-    .robot-arm {
-      width: 80px;
-      height: 140px;
-    }
-    
-    .warehouse-shelf {
-      width: 120px !important;
-      height: 50px !important;
-    }
-    
-    .ai-stream {
-      height: 60px;
-    }
-  }
-} 
-// ── Mobile: gọn, nền đặc, chữ rõ ───────────────────
-@media (max-width: 600px) {
-  .login-container {
-    background: #F4F5F7;
-    justify-content: flex-start;
-    padding: 16px 14px 28px;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-
-  .language-selector {
-    flex-direction: row;
-    gap: 6px;
-    width: 100%;
-    max-width: 420px;
-    margin: 0 0 14px;
-    padding: 4px;
-    background: #fff;
-    border: 1px solid #6B6B66;
-    border-radius: 980px;
-    backdrop-filter: none;
-
-    .lang-btn {
-      flex: 1;
-      width: auto;
-      min-width: 0;
-      padding: 8px 10px;
-      gap: 6px;
-      border-radius: 980px;
-      background: transparent;
-      border: 0;
-      color: #000;
-      box-shadow: none;
-
-      &::before { display: none; }
-      &:hover { transform: none; box-shadow: none; background: #EAF2FF; }
-      &.active { background: #3478F6; color: #fff; box-shadow: none; }
-      .flag { font-size: 16px; }
-      .lang-text { font-size: 13px; }
-    }
-  }
-
-  .login-card {
-    background: #fff;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border: 1px solid #6B6B66;
-    border-radius: 16px;
-    box-shadow: none;
-    padding: 22px 18px;
-    margin: 0;
-    max-width: 420px;
-  }
-
-  .login-header {
-    margin-bottom: 20px;
-    h2 { color: #000; font-size: 24px; font-weight: 700; margin-bottom: 6px; }
-    p { color: #333; font-size: 14px; }
-    .signup-hint { color: #333; font-size: 13px; }
-  }
-
-  .form-group { margin-bottom: 14px; }
-
-  :host ::ng-deep {
-    .login-card .mat-form-field-infix { padding: 0.9em 0 0.8em; border-top: 0.7em solid transparent; }
-    .login-card input.mat-input-element {
-      font-size: 17px;
-      font-weight: 500;
-      color: #000;
-      caret-color: #3478F6;
-      height: 1.6em;
-    }
-    .login-card .mat-form-field-label { color: #333; font-size: 15px; }
-    .login-card .mat-form-field-appearance-outline .mat-form-field-outline { color: #6B6B66 !important; }
-    .login-card .mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick { color: #3478F6 !important; }
-    .login-card .mat-form-field-wrapper { padding-bottom: 0.9em; }
-    .login-card button.mat-raised-button,
-    .login-card button.mat-stroked-button { min-height: 50px; font-size: 16px; border-radius: 12px; }
-  }
-
-  .login-scan {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 12px;
-    button { min-width: 0; }
-  }
-  .login-scan-input { height: 48px; font-size: 16px; color: #000; background: #fff; }
-
-  .login-footer {
-    margin-top: 16px;
-    padding-top: 14px;
-    button { width: 100%; min-height: 46px; font-size: 15px; color: #2057B5; }
-  }
+  .lg { padding: 64px 16px 32px; align-items: flex-start; }
+  .lg-card { padding: 24px 20px 20px; border-radius: 12px; }
+  /* 16px để iPhone không tự phóng to khi chạm ô nhập; nút cao hơn cho dễ bấm */
+  .lg-input, .login-scan-input { height: 44px; font-size: 16px; }
+  .lg-btn { height: 44px; font-size: 15px; }
 }
+
+
+/* =====================================================================
+   NỀN THIÊN VĂN — sao (3 lớp, trôi + lấp lánh), tinh vân, quỹ đạo có hành tinh,
+   chân trời hành tinh phát sáng, sao băng. Chỉ trang trí, không nhận thao tác.
+   ===================================================================== */
+.lg-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 90% 80% at 50% 50%, #0a1024 0%, #060917 55%, #020309 100%);
+}
+
+/* Sao: mỗi lớp là các chấm sáng lặp lại; lớp càng xa càng nhỏ, mờ, trôi chậm */
+.lg-stars {
+  position: absolute;
+  inset: -50%;
+  background-repeat: repeat;
+  will-change: transform, opacity;
+}
+.lg-stars--1 {
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 90px 120px, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 160px 60px, rgba(199, 210, 254, 0.6), transparent),
+    radial-gradient(1px 1px at 230px 190px, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1px 1px at 50px 220px, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 270px 20px, rgba(254, 240, 220, 0.5), transparent);
+  background-size: 300px 260px;
+  opacity: 0.7;
+  animation: lg-drift 240s linear infinite, lg-twinkle 6s ease-in-out infinite;
+}
+.lg-stars--2 {
+  background-image:
+    radial-gradient(1.5px 1.5px at 60px 80px, rgba(255, 255, 255, 0.85), transparent),
+    radial-gradient(1.5px 1.5px at 340px 260px, rgba(186, 230, 253, 0.8), transparent),
+    radial-gradient(1.5px 1.5px at 210px 380px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 420px 120px, rgba(254, 215, 170, 0.7), transparent);
+  background-size: 480px 440px;
+  animation: lg-drift 160s linear infinite reverse, lg-twinkle 4.5s ease-in-out -2s infinite;
+}
+.lg-stars--3 {
+  background-image:
+    radial-gradient(2px 2px at 140px 160px, #fff, transparent),
+    radial-gradient(2px 2px at 520px 420px, rgba(199, 210, 254, 0.95), transparent),
+    radial-gradient(2.5px 2.5px at 380px 60px, rgba(255, 255, 255, 0.9), transparent);
+  background-size: 640px 560px;
+  filter: drop-shadow(0 0 3px rgba(199, 210, 254, 0.8));
+  animation: lg-drift 110s linear infinite, lg-twinkle 3.2s ease-in-out -1s infinite;
+}
+
+/* ---------- Hệ Mặt Trời nhìn từ ngoài vũ trụ ----------
+   Mặt phẳng quỹ đạo ép dẹt (scaleY) cho cảm giác nhìn chéo; mỗi quỹ đạo xoay quanh Mặt Trời,
+   hành tinh xoay ngược + giãn lại theo chiều dọc để luôn tròn, không méo. */
+.lg-ss {
+  --tilt: 0.34;      /* độ dẹt mặt phẳng quỹ đạo */
+  --unsquash: 2.94;  /* = 1 / --tilt */
+  position: absolute;
+  left: 18%;
+  top: 56%;
+  width: 0;
+  height: 0;
+}
+
+.lg-ss__plane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: rotate(-12deg) scaleY(var(--tilt));
+}
+
+.lg-orb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(165, 180, 252, 0.13);
+  animation: lg-orbit var(--t) linear var(--d) infinite;
+}
+.lg-pl {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--s);
+  height: var(--s);
+  margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+  border-radius: 50%;
+  animation: lg-pl-upright var(--t) linear var(--d) infinite;
+}
+
+@mixin orb($dia, $t, $d) {
+  width: $dia;
+  height: $dia;
+  margin: calc(#{$dia} / -2) 0 0 calc(#{$dia} / -2);
+  --t: #{$t};
+  --d: #{$d};
+}
+
+.lg-orb--mercury { @include orb(22vmin, 22s, -6s);
+  .lg-pl { --s: 5px; background: radial-gradient(circle at 35% 35%, #e7e5e4, #a8a29e 55%, #57534e); } }
+.lg-orb--venus { @include orb(32vmin, 36s, -20s);
+  .lg-pl { --s: 8px; background: radial-gradient(circle at 35% 35%, #fef9c3, #e9c27a 55%, #a16207); box-shadow: 0 0 8px rgba(253, 224, 71, 0.35); } }
+.lg-orb--earth { @include orb(44vmin, 50s, -12s);
+  .lg-pl { --s: 9px; background: radial-gradient(circle at 35% 35%, #bae6fd, #3b82f6 50%, #1e3a8a); box-shadow: 0 0 10px rgba(96, 165, 250, 0.55); } }
+.lg-orb--mars { @include orb(56vmin, 74s, -50s);
+  .lg-pl { --s: 7px; background: radial-gradient(circle at 35% 35%, #fecaca, #ef4444 55%, #7f1d1d); } }
+.lg-orb--belt {
+  @include orb(72vmin, 400s, 0s);
+  border: 2px dotted rgba(214, 211, 209, 0.22);
+}
+.lg-orb--jupiter { @include orb(94vmin, 140s, -90s);
+  .lg-pl { --s: 20px;
+    background:
+      repeating-linear-gradient(180deg, rgba(120, 72, 40, 0.0) 0 3px, rgba(120, 72, 40, 0.35) 3px 5px),
+      radial-gradient(circle at 35% 35%, #fde7c7, #d6a26a 55%, #7c4a22);
+    box-shadow: 0 0 14px rgba(214, 162, 106, 0.35); } }
+.lg-orb--saturn { @include orb(120vmin, 210s, -40s);
+  .lg-pl { --s: 16px;
+    background: radial-gradient(circle at 35% 35%, #fef3c7, #e8c98a 55%, #8a6a2c);
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 36px;
+      height: 10px;
+      margin: -5px 0 0 -18px;
+      border-radius: 50%;
+      border: 2px solid rgba(232, 201, 138, 0.6);
+      transform: rotate(-18deg);
+    } } }
+.lg-orb--uranus { @include orb(148vmin, 300s, -210s);
+  .lg-pl { --s: 12px; background: radial-gradient(circle at 35% 35%, #ecfeff, #67e8f9 55%, #0e7490); box-shadow: 0 0 10px rgba(103, 232, 249, 0.35); } }
+.lg-orb--neptune { @include orb(176vmin, 400s, -120s);
+  .lg-pl { --s: 12px; background: radial-gradient(circle at 35% 35%, #dbeafe, #3b5bdb 55%, #1e1b4b); box-shadow: 0 0 10px rgba(99, 102, 241, 0.45); } }
+
+/* Mặt Trời */
+.lg-sun {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 13vmin;
+  height: 13vmin;
+  margin: -6.5vmin 0 0 -6.5vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 40%, #fffbea 0%, #ffe08a 28%, #ffad3b 62%, #e2621b 100%);
+  box-shadow:
+    0 0 30px 8px rgba(255, 196, 92, 0.55),
+    0 0 90px 30px rgba(255, 140, 50, 0.28),
+    0 0 220px 90px rgba(255, 120, 40, 0.12);
+  animation: lg-sun 7s ease-in-out infinite alternate;
+}
+
+@keyframes lg-orbit { to { transform: rotate(360deg); } }
+@keyframes lg-pl-upright {
+  from { transform: rotate(0deg) scaleY(var(--unsquash)); }
+  to { transform: rotate(-360deg) scaleY(var(--unsquash)); }
+}
+@keyframes lg-sun {
+  from { filter: brightness(1); transform: scale(1); }
+  to { filter: brightness(1.08); transform: scale(1.03); }
+}
+
+@keyframes lg-drift { to { transform: translate3d(-300px, -260px, 0); } }
+@keyframes lg-twinkle { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-stars, .lg-orb, .lg-pl, .lg-sun { animation: none; }
+}
+
+@media (max-width: 480px) {
+  .lg-ss { left: 50%; top: 14%; }
+  .lg-ss__plane { transform: rotate(-8deg) scaleY(var(--tilt)); }
+}
+

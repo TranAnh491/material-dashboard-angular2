@@ -1704,17 +1704,23 @@ export const lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (
   }
 });
 
-export const scanLoginFn = functions.https.onCall(async (data: { payload?: string }) => {
+export const scanLoginFn = functions
+  .runWith({ secrets: [zaloBotToken] })
+  .https.onCall(async (data: { payload?: string }, context) => {
   const payload = typeof data?.payload === 'string' ? data.payload : '';
   if (!payload.trim()) {
     throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
   }
   try {
     const { signInFromScan } = await import('./scan-login');
-    return await signInFromScan(payload);
+    const ip = String(context?.rawRequest?.ip || context?.rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    return await signInFromScan(payload, ip);
   } catch (e: unknown) {
     const anyErr = e as { message?: string };
     const msg = (anyErr instanceof Error ? anyErr.message : anyErr?.message) ?? '';
+    if (msg === 'throttled') {
+      throw new functions.https.HttpsError('resource-exhausted', 'Quét sai quá nhiều lần — đợi 15 phút hoặc báo quản lý.');
+    }
     if (msg === 'permission-denied') {
       throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
     }
@@ -1722,8 +1728,10 @@ export const scanLoginFn = functions.https.onCall(async (data: { payload?: strin
   }
 });
 
-/** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456 */
-export const truckDriverSignInFn = functions.https.onCall(async (data: { employeeId?: string; password?: string }) => {
+/** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + mật khẩu chung (secret TRUCK_DRIVER_PASSWORD) */
+export const truckDriverSignInFn = functions
+  .runWith({ secrets: ['TRUCK_DRIVER_PASSWORD'] })
+  .https.onCall(async (data: { employeeId?: string; password?: string }) => {
   const employeeId = typeof data?.employeeId === 'string' ? data.employeeId.trim() : '';
   const password = typeof data?.password === 'string' ? data.password : '';
   if (!employeeId || !password) {

@@ -318,10 +318,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) — nhập tay qua modal chung (danh mục Accuracy/Turnover). */
   matAccuracyThisMonth = 99.85;
+  /** Mục tiêu độ chính xác kiểm kê (%) — trước đây nhãn "Target Achieved" ghi cứng, luôn hiện đạt. */
+  readonly accuracyTarget = 99.5;
+  /** Thanh tiến độ Accuracy bắt đầu từ mức này để chênh lệch 99,x% nhìn thấy được */
+  readonly accBarMin = 95;
+  accBarPct(v: number): number {
+    const n = Number(v) || 0;
+    return Math.max(0, Math.min(100, ((n - this.accBarMin) / (100 - this.accBarMin)) * 100));
+  }
   fgAccuracyThisMonth = 100;
 
   /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng — nhập tay qua modal chung. */
-  readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `Thg ${i + 1}`);
+  readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `T${i + 1}`);
   fgTurnoverMonthValues: (number | null)[] = [
     1.33, 0.4, 0.83, 0.8, 1, null, null, null, null, null, null, null
   ];
@@ -2579,16 +2587,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
         datasets: [
           {
             type: 'bar' as const,
-            label: 'Turnover tháng',
+            label: 'Vòng quay tháng',
             data: bars,
-            backgroundColor: barBlue,
+            // Đạt mục tiêu: xanh; dưới mục tiêu: cam
+            backgroundColor: bars.map((v) => (typeof v === 'number' && v < tgt ? '#F59E0B' : barBlue)),
             borderRadius: 6,
+            maxBarThickness: 28,
             borderSkipped: false,
             order: 2
           },
           {
             type: 'line' as const,
-            label: `Target tháng (${tgt})`,
+            label: `Mục tiêu (${tgt})`,
             data: targetLine,
             borderColor: targetColor,
             backgroundColor: 'transparent',
@@ -2605,7 +2615,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 4, right: 4, bottom: 0, left: 2 } },
+        layout: { padding: { top: 16, right: 4, bottom: 0, left: 2 } },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
@@ -2640,9 +2650,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             grid: { display: false },
             ticks: {
               color: 'rgba(15,23,42,0.55)',
-              maxRotation: 45,
+              maxRotation: 0,
               minRotation: 0,
-              font: { size: 9, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+              autoSkip: false,
+              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
             },
             border: { display: false }
           },
@@ -2681,9 +2692,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
               const y = p.y;
               const base = p.base;
               if (![x, y, base].every((n) => typeof n === 'number' && Number.isFinite(n))) return;
-              const midY = (y + base) / 2;
-              c.fillStyle = '#ffffff';
-              c.fillText(raw.toFixed(2), x, midY);
+              void base;
+              c.fillStyle = 'rgba(15,23,42,0.75)';
+              c.fillText(raw.toFixed(2), x, y - 8);
             });
             c.restore();
           }

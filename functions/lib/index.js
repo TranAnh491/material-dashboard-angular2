@@ -1570,27 +1570,35 @@ exports.lookupAuthLoginEmailByEmployeeIdFn = functions.https.onCall(async (data)
         throw new functions.https.HttpsError('internal', msg || 'Lỗi tra cứu email.');
     }
 });
-exports.scanLoginFn = functions.https.onCall(async (data) => {
-    var _a;
+exports.scanLoginFn = functions
+    .runWith({ secrets: [params_config_1.zaloBotToken] })
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d;
     const payload = typeof (data === null || data === void 0 ? void 0 : data.payload) === 'string' ? data.payload : '';
     if (!payload.trim()) {
         throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
     }
     try {
         const { signInFromScan } = await Promise.resolve().then(() => __importStar(require('./scan-login')));
-        return await signInFromScan(payload);
+        const ip = String(((_a = context === null || context === void 0 ? void 0 : context.rawRequest) === null || _a === void 0 ? void 0 : _a.ip) || ((_c = (_b = context === null || context === void 0 ? void 0 : context.rawRequest) === null || _b === void 0 ? void 0 : _b.headers) === null || _c === void 0 ? void 0 : _c['x-forwarded-for']) || '').split(',')[0].trim();
+        return await signInFromScan(payload, ip);
     }
     catch (e) {
         const anyErr = e;
-        const msg = (_a = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _a !== void 0 ? _a : '';
+        const msg = (_d = (anyErr instanceof Error ? anyErr.message : anyErr === null || anyErr === void 0 ? void 0 : anyErr.message)) !== null && _d !== void 0 ? _d : '';
+        if (msg === 'throttled') {
+            throw new functions.https.HttpsError('resource-exhausted', 'Quét sai quá nhiều lần — đợi 15 phút hoặc báo quản lý.');
+        }
         if (msg === 'permission-denied') {
             throw new functions.https.HttpsError('permission-denied', 'Không đăng nhập được.');
         }
         throw new functions.https.HttpsError('internal', 'Không đăng nhập được.');
     }
 });
-/** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + 123456 */
-exports.truckDriverSignInFn = functions.https.onCall(async (data) => {
+/** Đăng nhập tài xế app phụ Xe Tải: ASP9999 / XETAI + mật khẩu chung (secret TRUCK_DRIVER_PASSWORD) */
+exports.truckDriverSignInFn = functions
+    .runWith({ secrets: ['TRUCK_DRIVER_PASSWORD'] })
+    .https.onCall(async (data) => {
     var _a;
     const employeeId = typeof (data === null || data === void 0 ? void 0 : data.employeeId) === 'string' ? data.employeeId.trim() : '';
     const password = typeof (data === null || data === void 0 ? void 0 : data.password) === 'string' ? data.password : '';

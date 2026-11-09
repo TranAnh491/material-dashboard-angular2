@@ -457,6 +457,14 @@ export const APP_TABS: AppTab[] = [
     permission: { name: 'Zalo', group: 'Khác' },
     desktopOnly: true, adminOnly: true,
   },
+  {
+    // Dùng chung quyền tab Settings: ai vào được Settings (Admin / Quản lý) thì xem được trang này
+    path: '/chuc-nang', key: 'settings', title: 'Chức năng',
+    hideNavbar: true,
+    subtitle: 'Danh sách toàn bộ chức năng, việc máy chủ tự làm, bảo mật (chỉ admin)',
+    menu: { category: 'Admin', icon: 'menu_book', iconImage: 'assets/img/setting.png' },
+    ownNav: true, adminOnly: true,
+  },
 ];
 
 /** Bố cục sidebar: path = 1 mục; object = nhóm có mục con. */

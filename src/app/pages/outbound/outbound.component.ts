@@ -5,7 +5,7 @@ import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, RM_QTY_DECIMALS_4 } 
 import { WeekFormat, fmtDmy, isWeekTrackedCode, weekCodeText, weekStatusText, weekWindow } from '../../shared/week-code';
 import { WeekInputResult } from '../../shared/week-input-popup/week-input-popup.component';
 import { PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
-import { WEIGH_EXEMPT_REASONS, WEIGH_EXEMPT_OTHER, buildWeighExemptReason, needsWeigh, temLeMustWeigh, WEIGH_TOLERANCE_PERCENT } from '../../services/weigh-exempt-report';
+import { WEIGH_EXEMPT_REASONS, WEIGH_EXEMPT_OTHER, buildWeighExemptReason, needsWeigh, temLeMustWeigh, WEIGH_TOLERANCE_PERCENT, CL_COUNT_PREFIXES_DEFAULT, matchesPrefixList } from '../../services/weigh-exempt-report';
 import { buildMaterialQrLabelDocument } from '../../services/material-qr-label.util';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ElementRef, ViewChild, HostListener, inject } from '@angular/core';
 import { WeekRulesService } from '../../services/week-rules.service';
@@ -37,6 +37,7 @@ import * as firebase from 'firebase/compat/app';
 import * as XLSX from 'xlsx';
 import { ClientReloadService } from '../../services/client-reload.service';
 import { PxkOddWeighService } from '../../services/pxk-odd-weigh.service';
+import { OutboundScanLockService, ScanLockTem } from '../../services/outbound-scan-lock.service';
 
 /** Bag lẻ cần chụp hình + cân khi scan xuất (Check lượng PXK). */
 interface OddWeighCtx {
@@ -52,6 +53,13 @@ interface OddWeighCtx {
   bagQty: number;
   /** Trọng lượng chẵn cuộn trong danh mục NVL (0 = chưa có) */
   catalogWeight: number;
+  /** Đã có số cân cho LSX + mã + PO → bag lẻ này chỉ bắt chụp hình (không cân lại, không ghi đè số cũ) */
+  photoOnly?: boolean;
+}
+
+/** Lỗi chặn scan có thông báo riêng (vd mã Check lượng thiếu Standard). */
+function oddWeighBlock(message: string): Error {
+  return Object.assign(new Error(message), { oddWeighBlock: true });
 }
 
 /** Một dòng scan trong phiên xuất BS */
@@ -824,8 +832,61 @@ export class OutboundComponent implements OnInit, OnDestroy {
     private sxxkSuspect: SxxkSuspectService,
     private authService: FirebaseAuthService,
     private temXuatKho: TemXuatKhoService,
-    private clientReload: ClientReloadService
+    private clientReload: ClientReloadService,
+    private scanLock: OutboundScanLockService
   ) {}
+
+  // ===== Chống trùng tem giữa các LSX / máy (outbound-scan-locks) =====
+  /** Tem đã giữ khoá nhưng còn chờ popup (đếm CL / cân / chụp) — huỷ popup thì trả khoá. */
+  private lockInFlight: ScanLockTem | null = null;
+
+  private lockTemOf(item: { materialCode?: string; poNumber?: string; importDate?: string | null; bagBatch?: string; bagNumberDisplay?: string }): ScanLockTem {
+    return {
+      factory: this.selectedFactory,
+      materialCode: String(item?.materialCode || ''),
+      poNumber: String(item?.poNumber || ''),
+      tem: item?.importDate ?? '',
+      bagBatch: item?.bagBatch || '',
+      bagNumberDisplay: item?.bagNumberDisplay || ''
+    };
+  }
+
+  /** Tem của dòng Xuất BS (phần 4 nguyên văn của QR). */
+  private lockTemOfBs(line: BsScanLine): ScanLockTem {
+    const part4 = (String(line?.rawQr || '').split('|')[3] || '').trim();
+    const p = this.rmBagHistory.parseQrPart4(part4);
+    return {
+      factory: this.selectedFactory,
+      materialCode: line.materialCode,
+      poNumber: line.po,
+      tem: part4,
+      bagBatch: p.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(part4),
+      bagNumberDisplay: p.bagNumberDisplay || ''
+    };
+  }
+
+  private releaseInFlightLock(): void {
+    const t = this.lockInFlight;
+    this.lockInFlight = null;
+    if (t) void this.scanLock.release([t]);
+  }
+
+  private releaseScanLocks(items: any[]): void {
+    const tems = (items || []).map((it) => this.lockTemOf(it));
+    if (tems.length) void this.scanLock.release(tems);
+  }
+
+  /** Lưu xuất xong → khoá các tem vĩnh viễn (theo LSX của từng dòng). */
+  private markScanLocksSaved(items: any[]): void {
+    const byLsx = new Map<string, { emp: string; tems: ScanLockTem[] }>();
+    for (const it of items || []) {
+      const lsx = String(it?.productionOrder || this.batchProductionOrder || '').trim();
+      const g = byLsx.get(lsx) || { emp: String(it?.employeeId || this.batchEmployeeId || ''), tems: [] };
+      g.tems.push(this.lockTemOf(it));
+      byLsx.set(lsx, g);
+    }
+    for (const [lsx, g] of byLsx) void this.scanLock.markSaved(g.tems, lsx, g.emp);
+  }
 
   private static readonly RELOAD_HOLD_KEY = 'outbound-scan';
 
@@ -1225,8 +1286,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   private syncWorkOrderCreatedByFromPendingScans(): void {
+    this.syncWorkOrderCreatedByFor(this.pendingScanData);
+  }
+
+  /** Ghi Người soạn cho các LSX trong danh sách tem (mỗi LSX lấy NV quét). */
+  private syncWorkOrderCreatedByFor(items: Array<{ productionOrder?: string; employeeId?: string }>): void {
     const lsxToEmp = new Map<string, string>();
-    for (const item of this.pendingScanData) {
+    for (const item of items) {
       const lsx = String(item?.productionOrder || this.batchProductionOrder || '').trim();
       const emp = String(item?.employeeId || this.batchEmployeeId || '').trim();
       if (lsx && emp && emp !== 'BS') lsxToEmp.set(lsx, emp);
@@ -1238,8 +1304,35 @@ export class OutboundComponent implements OnInit, OnDestroy {
     lsxToEmp.forEach((emp, lsx) => this.syncWorkOrderCreatedByAfterExport(lsx, emp));
   }
   
+  // ===== Tự lưu khi scan lâu: tem chờ lưu lâu nhất ≥ 5 phút → lưu luôn, giữ phiên scan =====
+  static readonly AUTO_SAVE_AFTER_MS = 5 * 60 * 1000;
+  private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+
+  private startAutoSave(): void {
+    if (this.autoSaveTimer) return;
+    this.autoSaveTimer = setInterval(() => void this.autoSaveTick(), 60 * 1000);
+  }
+
+  private async autoSaveTick(): Promise<void> {
+    if (!this.pendingScanData.length || this.isSavingBatchData) return;
+    if (!this.isProductionOrderScanned || !this.isEmployeeIdScanned) return;
+    // Đang dở popup (cân / đếm / chụp / nhập Week) → đợi xong mới lưu
+    if (this.oddWeigh || this.clCount || this.tlPhoto || this.weekAsk || this.lockInFlight) return;
+    const times = this.pendingScanData
+      .map((it) => {
+        const v: any = it?.scanTime;
+        const t = v instanceof Date ? v.getTime() : (v?.toDate ? v.toDate().getTime() : new Date(v).getTime());
+        return Number.isFinite(t) ? t : NaN;
+      })
+      .filter((t) => Number.isFinite(t));
+    if (!times.length) return;
+    if (Date.now() - Math.min(...times) < OutboundComponent.AUTO_SAVE_AFTER_MS) return;
+    await this.pauseSaveBatch();
+  }
+
   ngOnInit(): void {
     console.log('🏭 Outbound component initialized');
+    this.startAutoSave();
     // Danh sách Kiểm 100% (cùng nguồn tab Inbound, có cache) — để nhận diện mã khi scan
     void this.sxxkSuspect.load().catch(() => undefined);
 
@@ -1622,6 +1715,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
   
   ngOnDestroy(): void {
+    if (this.autoSaveTimer) { clearInterval(this.autoSaveTimer); this.autoSaveTimer = null; }
     this.stopOddWeighCamera(true);
     window.removeEventListener('storage', this.onNvlCatalogStorage);
     this.clientReload.clearHold(OutboundComponent.RELOAD_HOLD_KEY);
@@ -1973,7 +2067,20 @@ export class OutboundComponent implements OnInit, OnDestroy {
       }
       const status = String(match.status || '').toLowerCase();
       if (status !== 'kitting') {
-        appAlert(`LSX "${lsx}" chưa ở trạng thái Kitting. Cột Tình trạng ở tab Work Order Status phải là Kitting mới được quét LSX.`);
+        // Chưa Kitting (trống / Waiting / Delay) → tự chuyển Kitting ngay khi scan LSX ở Outbound
+        if (!status || status === 'waiting' || status === 'delay') {
+          const now = new Date();
+          await this.firestore.firestore.collection('work-orders').doc(match.id).update({
+            status: 'kitting',
+            kittingStartedAt: now,
+            lastUpdated: now,
+            kittingAutoFromOutbound: true
+          });
+          appAlert(`✅ LSX "${lsx}": tình trạng ${status ? status.toUpperCase() : 'trống'} → tự chuyển KITTING để scan xuất.`);
+          return true;
+        }
+        // Đã qua Kitting (Ready / Transfer / Done / JIT…) → không tự lùi trạng thái
+        appAlert(`LSX "${lsx}" đang ở tình trạng ${status.toUpperCase()} (đã qua Kitting) — không scan xuất được. Đổi lại tình trạng ở tab Work Order nếu cần xuất thêm.`);
         return false;
       }
       return true;
@@ -2676,6 +2783,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   closeBsScanDialog(): void {
+    // Dòng chưa lưu → trả khoá (dòng đã lưu đã chuyển 'saved', không bị xoá)
+    if (this.bsScanLines.length) void this.scanLock.release(this.bsScanLines.map((l) => this.lockTemOfBs(l)));
+    this.releaseInFlightLock();
     this.bsScanOpen = false;
     this.bsScanItem = null;
     this.bsScanLines = [];
@@ -2788,6 +2898,15 @@ export class OutboundComponent implements OnInit, OnDestroy {
       qty: scannedQty,
       rawQr: raw
     };
+    // Trùng tem với LSX / máy khác (hoặc đã xuất) → báo đỏ, không nhận
+    const bsLockTem = this.lockTemOfBs(line);
+    const bsDupErr = await this.scanLock.claim(bsLockTem, `BS ${String(item.lsx || '').trim()}`, 'BS');
+    if (bsDupErr) {
+      this.bsScanError = `❌ ${bsDupErr}`;
+      this.playScanBeep(false);
+      return;
+    }
+    this.lockInFlight = bsLockTem;
     // Bag CL lẻ duy nhất của mã PCS (tồn mã < 5000) → đếm chính xác trước khi nhận tem
     const bsPendingCode = this.bsScanLines
       .filter((l) => String(l.materialCode || '').trim().toUpperCase() === scannedCode.trim().toUpperCase())
@@ -2809,48 +2928,65 @@ export class OutboundComponent implements OnInit, OnDestroy {
     let odd: OddWeighCtx | null = null;
     try {
       odd = await this.findBsOddWeighNeed(item, scannedCode, scannedPo, scannedQty);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('findBsOddWeighNeed:', e);
-      this.bsScanError = `❌ Không kiểm tra được Check lượng cho ${scannedCode}. Scan lại.`;
-      return;
-    }
-    if (odd) {
-      this.openOddWeigh(odd, { __bs: true, line });
+      this.bsScanError = e?.oddWeighBlock ? `❌ ${e.message}` : `❌ Không kiểm tra được Check lượng cho ${scannedCode}. Scan lại.`;
+      this.releaseInFlightLock();
       return;
     }
     const bsP4 = (String(line.rawQr || '').split('|')[3] || '').trim();
     const tlBs = this.tlTagOf(bsP4);
-    if (tlBs) {
-      this.openTlPhoto(scannedCode, scannedPo, tlBs, async () => {
+    if (odd?.photoOnly) {
+      this.openTlPhoto(scannedCode, scannedPo, tlBs || { tag: 'lẻ', imd: '' }, async () => {
+        this.lockInFlight = null;
         this.bsScanLines.push(line);
         this.bsScanError = '';
         setTimeout(() => (document.getElementById('bs-scan-input') as HTMLInputElement | null)?.focus(), 60);
       });
       return;
     }
+    if (odd) {
+      this.openOddWeigh(odd, { __bs: true, line });
+      return;
+    }
+    // Tem TL: chỉ bắt chụp với mã thuộc Check lượng (băng keo, lá đồng… không bắt)
+    if (tlBs && await this.tlNeedsPhoto(scannedCode)) {
+      this.openTlPhoto(scannedCode, scannedPo, tlBs, async () => {
+        this.lockInFlight = null;
+        this.bsScanLines.push(line);
+        this.bsScanError = '';
+        setTimeout(() => (document.getElementById('bs-scan-input') as HTMLInputElement | null)?.focus(), 60);
+      });
+      return;
+    }
+    this.lockInFlight = null;
     this.bsScanLines.push(line);
   }
 
   /** Bag lẻ của Xuất BS cần cân? (mã thuộc Check lượng, lượng < Standard, chưa có số cân của LSX + mã + PO). */
   private async findBsOddWeighNeed(item: BsPendingItem, code: string, po: string, bagQty: number): Promise<OddWeighCtx | null> {
     const c = String(code || '').trim().toUpperCase();
-    const std = this.stdFor(c, po);
-    if (!(std > 0) || !(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
     await this.ensureWeighCodesLoaded();
     if (!needsWeigh(c, this.weighExemptCodes, this.weighIncludeCodes)) return null;
+    const std = this.stdFor(c, po);
+    if (!(std > 0)) throw oddWeighBlock(this.missingStdMessage(c));
+    if (!(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
     const lsx = `BS ${String(item.lsx || BS_COMMON_LSX).trim()}`;
     const [saved, catalogWeight] = await Promise.all([
       this.pxkOddWeigh.getSaved(lsx, c, po),
       this.pxkOddWeigh.catalogUnitWeight(c)
     ]);
-    if (Number(saved?.weightOdd) > 0) return null;
     // exportQty = lượng bag → phần lẻ = cả bag (so với dự kiến theo GW bag nguyên ÷ Standard)
-    return { lsx, code: c, po: String(po || '').trim(), maKho: '', exportQty: bagQty, std, oddQty: bagQty, bagQty, catalogWeight };
+    const ctx: OddWeighCtx = { lsx, code: c, po: String(po || '').trim(), maKho: '', exportQty: bagQty, std, oddQty: bagQty, bagQty, catalogWeight };
+    // Đã cân rồi → bag lẻ tiếp theo vẫn phải chụp hình
+    if (Number(saved?.weightOdd) > 0) ctx.photoOnly = true;
+    return ctx;
   }
 
   /** Bag đã cân xong / đã báo → đưa vào đúng phiên (Xuất BS hoặc Xuất NL). */
   private finishOddWeighItem(item: any, flashSuffix: string): void {
     if (item?.__bs) {
+      this.lockInFlight = null;
       this.bsScanLines.push(item.line as BsScanLine);
       this.bsScanError = '';
       setTimeout(() => (document.getElementById('bs-scan-input') as HTMLInputElement | null)?.focus(), 60);
@@ -2860,7 +2996,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   removeBsScanLine(idx: number): void {
-    this.bsScanLines.splice(idx, 1);
+    const [line] = this.bsScanLines.splice(idx, 1);
+    if (line) void this.scanLock.release([this.lockTemOfBs(line)]);
   }
 
   async doneBsScan(): Promise<void> {
@@ -2936,6 +3073,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
         }
       }
       await batch.commit();
+      await this.scanLock.markSaved(this.bsScanLines.map((l) => this.lockTemOfBs(l)), `BS ${String(item.lsx || '').trim()}`, 'BS');
       if (!invDocs.length) console.warn(`[BS] Không có dòng tồn ${code} - PO ${po}: chỉ ghi outbound`);
 
       // 3. Đủ → ẩn khỏi danh sách; chưa đủ → giữ lại với phần còn lại
@@ -3084,28 +3222,6 @@ export class OutboundComponent implements OnInit, OnDestroy {
   // 🗑️ REMOVED: Debug functions - không cần nữa
   
   // 🔧 UNIFIED INVENTORY UPDATE: Đảm bảo camera và scanner cùng dùng 1 method
-  private async unifiedUpdateInventory(
-    materialCode: string,
-    poNumber: string,
-    exportQuantity: number,
-    importDate?: string,
-    scanMethod: string = 'UNIFIED',
-    exportedBagsDelta: number = 0,
-    bagBatch?: string
-  ): Promise<void> {
-    try {
-      console.log(`🎯 UNIFIED UPDATE: ${scanMethod} - Material=${materialCode}, PO=${poNumber}, Qty=${exportQuantity}, Batch=${importDate}, BagsDelta=${exportedBagsDelta}`);
-      
-      // Gọi method cập nhật inventory thống nhất (đã loại bỏ các delay không cần thiết)
-      await this.updateInventoryExported(materialCode, poNumber, exportQuantity, importDate, exportedBagsDelta, bagBatch);
-      
-      console.log(`✅ UNIFIED: Inventory updated successfully for ${scanMethod}`);
-      
-    } catch (error) {
-      console.error(`❌ UNIFIED: Error updating inventory for ${scanMethod}:`, error);
-      throw error;
-    }
-  }
   
   // Professional Scanning Setup Modal Methods
   closeScanningSetupModal(): void {
@@ -4237,6 +4353,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.batchProductionOrder = '';
     this.batchEmployeeId = '';
     this.clearBatchPxkCache();
+    this.releaseScanLocks(this.pendingScanData); // bỏ phiên chưa lưu → trả khoá
+    this.releaseInFlightLock();
     this.pendingScanData = [];
     this.currentScanStep = 'batch';
     this.errorMessage = '';
@@ -4298,86 +4416,13 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.isLoading = true;
       this.errorMessage = `Đang xử lý ${this.pendingScanData.length} mã hàng...`;
       
-      // Process each scanned item by creating outbound records
-      const batch = this.firestore.firestore.batch();
-      const outboundCollection = this.firestore.collection('outbound-materials');
-      
-      for (const scanItem of this.pendingScanData) {
-        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
-        const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate;
-        const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
-        const outboundData: OutboundMaterial = {
-          factory: this.selectedFactory,
-          materialCode: scanItem.materialCode,
-          poNumber: scanItem.poNumber,
-          quantity: scanItem.quantity,
-          unit: 'PCS',
-          exportQuantity: scanItem.quantity,
-          ...(this.leExportQty(scanItem.materialCode, scanItem.quantity, scanItem.poNumber) > 0
-            ? { leQty: this.leExportQty(scanItem.materialCode, scanItem.quantity, scanItem.poNumber) }
-            : {}),
-          scanCount: scanItem.scanCount ?? 1,
-          exportDate: new Date(),
-          location: scanItem.location,
-          exportedBy: scanItem.employeeId || this.batchEmployeeId,
-          batch: imdStored,
-          batchNumber: imdStored,
-          bagBatch: scanItem.bagBatch || p.bagFractionLabel,
-          ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
-          scanMethod: 'CAMERA', // 🔧 CAMERA ONLY: Đánh dấu rõ ràng là camera
-          notes: `Auto-scanned export - ${scanItem.scanTime.toISOString()}`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          productionOrder: scanItem.productionOrder,
-          employeeId: scanItem.employeeId || this.batchEmployeeId,
-          importDate: imdStored
-        };
-        
-        const docRef = outboundCollection.ref.doc();
-        batch.set(docRef, outboundData);
-      }
-      
-      // Commit batch
-      await batch.commit();
-      console.log(`✅ Successfully saved ${this.pendingScanData.length} items to outbound-materials collection`);
-      this.syncWorkOrderCreatedByFromPendingScans();
-      this.markTemLeClExported(this.pendingScanData);
-      this.writeLsxLog(this.pendingScanData, 'CAMERA');
-
-      // 🔧 UNIFIED: Cập nhật inventory exported quantity cho từng item (TUẦN TỰ)
-      console.log('📦 Updating inventory exported quantities sequentially...');
-      for (let i = 0; i < this.pendingScanData.length; i++) {
-        const scanItem = this.pendingScanData[i];
-        try {
-          console.log(`📦 Processing item ${i + 1}/${this.pendingScanData.length}: ${scanItem.materialCode}`);
-          await this.unifiedUpdateInventory(
-            scanItem.materialCode,
-            scanItem.poNumber,
-            scanItem.quantity,
-            scanItem.importDate,
-            'BATCH_SCANNER',
-            scanItem.exportedBagsDelta ?? 0,
-            scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate)
-          );
-          console.log(`✅ Updated inventory for ${scanItem.materialCode} - PO: ${scanItem.poNumber} - Qty: ${scanItem.quantity}`);
-          
-          // 🔧 SYNC FIX: Thêm delay giữa các lần update để tránh race condition
-          if (i < this.pendingScanData.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        } catch (error) {
-          console.error(`❌ Error updating inventory for ${scanItem.materialCode}:`, error);
-        }
-      }
-      console.log('✅ All inventory exported quantities updated');
-      
-      // Clear pending data
-      const processedCount = this.pendingScanData.length;
-      for (const scanItem of this.pendingScanData) {
+      // Lưu phiếu xuất + trừ tồn trong cùng batch (dùng chung đường lưu chính — không còn trừ tồn rời rạc)
+      const savedItems = [...this.pendingScanData];
+      await this.batchUpdateAllScanData();
+      const processedCount = savedItems.length;
+      for (const scanItem of savedItems) {
         this.addBatchPxkExported(scanItem.materialCode, scanItem.poNumber, scanItem.quantity);
       }
-      this.pendingScanData = [];
-      this.savePendingToStorage();
       
       // Success message
       this.errorMessage = `✅ Đã lưu ${processedCount} mã hàng vào outbound và cập nhật inventory!`;
@@ -4691,55 +4736,6 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   // Create new outbound record
-  private async createNewOutboundRecord(exportedBy: string): Promise<void> {
-    const p = this.rmBagHistory.parseQrPart4(this.lastScannedData.importDate);
-    const imdStored =
-      p.imdKey || this.normalizeImportDate(this.lastScannedData.importDate) || this.lastScannedData.importDate || null;
-    const outboundRecord: OutboundMaterial = {
-      factory: this.selectedFactory,
-      materialCode: this.lastScannedData.materialCode,
-      poNumber: this.lastScannedData.poNumber,
-      quantity: this.lastScannedData.quantity,
-      unit: 'KG', // Default unit
-      exportQuantity: this.exportQuantity,
-      ...(this.leExportQty(this.lastScannedData.materialCode, this.exportQuantity, this.lastScannedData.poNumber) > 0
-        ? { leQty: this.leExportQty(this.lastScannedData.materialCode, this.exportQuantity, this.lastScannedData.poNumber) }
-        : {}),
-      exportDate: new Date(),
-      location: '',
-      exportedBy: this.batchEmployeeId || exportedBy,
-      employeeId: this.batchEmployeeId || exportedBy,
-      productionOrder: this.batchProductionOrder || '',
-      batchNumber: imdStored,
-      bagBatch: p.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(this.lastScannedData.importDate),
-      bagNumberDisplay: p.bagNumberDisplay || undefined,
-      scanMethod: 'SCANNER', // 🔧 SCANNER ONLY: Đánh dấu rõ ràng là scanner
-      notes: `Auto-scanned export - Original: ${this.lastScannedData.quantity}, Exported: ${this.exportQuantity}`,
-      importDate: imdStored,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    console.log('🔍 Saving outbound record with importDate:', outboundRecord.importDate);
-    
-    console.log('📝 Creating new outbound record:', outboundRecord);
-    console.log('📅 Import date in outbound record:', outboundRecord.importDate);
-    console.log('📅 Import date type in outbound record:', typeof outboundRecord.importDate);
-    
-    // Add to outbound collection
-    console.log('🔥 Adding to Firebase collection: outbound-materials');
-    const docRef = await this.firestore.collection('outbound-materials').add(outboundRecord);
-    console.log('✅ New outbound record created with ID:', docRef.id);
-    this.syncWorkOrderCreatedByAfterExport();
-    this.markTemLeClExported([this.lastScannedData]);
-    this.writeLsxLog([{ ...this.lastScannedData, quantity: this.exportQuantity, scanTime: new Date() }], 'SCANNER');
-    
-    // Verify data was saved correctly
-    const savedDoc = await docRef.get();
-    const savedData = savedDoc.data() as any;
-    console.log('📅 Saved importDate in database:', savedData?.importDate);
-    console.log('📅 Saved importDate type in database:', typeof savedData?.importDate);
-  }
 
   // 🔧 SCANNER ONLY: Auto-export method that runs immediately after scanner scan
   private async autoExportScannedMaterial(): Promise<void> {
@@ -4820,7 +4816,8 @@ export class OutboundComponent implements OnInit, OnDestroy {
     const data = this.lastScannedData;
     const qty = this.exportQuantity;
     const tl = this.tlTagOf(data?.importDate);
-    if (data && tl) {
+    // Tem TL: chỉ bắt chụp với mã thuộc Check lượng (băng keo, lá đồng… không bắt)
+    if (data && tl && await this.tlNeedsPhoto(data.materialCode)) {
       this.openTlPhoto(data.materialCode, data.poNumber, tl, async () => {
         this.lastScannedData = data;
         this.exportQuantity = qty;
@@ -4848,22 +4845,25 @@ export class OutboundComponent implements OnInit, OnDestroy {
       
       // 🔧 SCANNER LOGIC: Tạo record mới cho mỗi lần scan
       console.log('➕ SCANNER: Creating new record for each scan');
-          await this.createNewOutboundRecord(exportedBy);
-      
-      // 🔧 UNIFIED: Cập nhật cột "đã xuất" trong inventory
-      console.log('📦 Updating inventory exported quantity...');
-      console.log(`🔍 Parameters: Material=${this.lastScannedData.materialCode}, PO=${this.lastScannedData.poNumber}, Qty=${this.exportQuantity}, Batch=${this.lastScannedData.importDate}`);
-      const bagDelta = this.parseImdFromQrPart4(this.lastScannedData.importDate).bagDelta;
-      const bagBatch = this.rmBagHistory.extractBagLabelFromQrPart4(this.lastScannedData.importDate);
-      await this.unifiedUpdateInventory(
-        this.lastScannedData.materialCode, 
-        this.lastScannedData.poNumber, 
-        this.exportQuantity,
-        this.lastScannedData.importDate,
-        'AUTO_EXPORT',
-        bagDelta,
-        bagBatch
-      );
+          // Phiếu xuất + trừ tồn trong cùng batch (trước đây 2 bước rời: có phiếu mà có thể không trừ tồn)
+      {
+        const d = this.lastScannedData;
+        const p4 = this.rmBagHistory.parseQrPart4(d.importDate);
+        await this.saveScanChunkAtomic([{
+          materialCode: d.materialCode,
+          poNumber: d.poNumber,
+          quantity: this.exportQuantity,
+          scanCount: 1,
+          importDate: d.importDate,
+          exportedBagsDelta: this.parseImdFromQrPart4(d.importDate).bagDelta,
+          bagBatch: p4.bagFractionLabel || this.rmBagHistory.extractBagLabelFromQrPart4(d.importDate),
+          bagNumberDisplay: p4.bagNumberDisplay || '',
+          location: '',
+          productionOrder: this.batchProductionOrder || '',
+          employeeId: this.batchEmployeeId || exportedBy,
+          scanTime: new Date()
+        }], 'SCANNER', exportedBy);
+      }
       console.log('✅ Inventory exported quantity updated successfully');
       
       // Store data for success message
@@ -4963,6 +4963,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     
     // 🔧 SIÊU TỐI ƯU: Batch update tất cả pending scan data
     if (savedCount > 0) {
+      let saveFailed = false;
       try {
         console.log(`📦 Batch updating ${savedCount} items...`);
         
@@ -4979,15 +4980,20 @@ export class OutboundComponent implements OnInit, OnDestroy {
         console.log(`✅ Saved ${savedCount} items - Firebase listener will auto-sync data`);
         
       } catch (error) {
+        saveFailed = true;
         console.error('❌ Error in batch update:', error);
-        appAlert('Lỗi cập nhật dữ liệu: ' + error.message);
+        appAlert('❌ Chưa lưu được: ' + error.message + ' — Các tem đã scan vẫn còn trong danh sách, sửa lỗi rồi bấm lưu lại.');
       } finally {
-        console.log('🔄 Entering finally block - resetting states...');
         this.isLoading = false;
         this.isSavingBatchData = false;
-        console.log('✅ Loading flags reset:', { isLoading: this.isLoading, isSavingBatchData: this.isSavingBatchData });
-        
-        // 🔧 SỬA LỖI: Reset trong finally block để đảm bảo luôn chạy
+      }
+      // Lỗi lưu: GIỮ phiên + danh sách tem đang chờ (trước đây bị xóa sạch → mất tem đã quét)
+      if (saveFailed) {
+        this.cdr.detectChanges();
+        return;
+      }
+      {
+        // Lưu xong: reset phiên
         console.log('🔄 Resetting all batch scanning states...');
         this.isBatchScanningMode = false;
         this.batchProductionOrder = '';
@@ -5023,58 +5029,56 @@ export class OutboundComponent implements OnInit, OnDestroy {
     }
   }
 
-  // 🔧 ĐƠN GIẢN HÓA: Chỉ lưu outbound records, BỎ inventory updates
+  /**
+   * Lưu các tem đang chờ: phiếu xuất (outbound-materials) và trừ tồn (inventory-materials)
+   * nằm CÙNG MỘT batch Firestore — cùng thành công hoặc cùng không ghi gì, không còn cảnh
+   * "có phiếu xuất mà tồn không bị trừ". Đọc dòng tồn trước khi ghi; đọc lỗi / không có tồn → không ghi gì, báo lỗi.
+   * Nhiều tem: chia nhóm ≤ 150 tem, mỗi nhóm 1 batch; nhóm nào lưu xong thì bỏ khỏi danh sách chờ ngay
+   * (lỗi giữa chừng không lưu trùng khi bấm lưu lại).
+   */
   private async batchUpdateAllScanData(): Promise<void> {
-    if (this.pendingScanData.length === 0) {
-      console.log('⚠️ No pending data to save');
-      return;
+    if (this.pendingScanData.length === 0) return;
+    const all = [...this.pendingScanData];
+    const CHUNK = 150;
+    for (let i = 0; i < all.length; i += CHUNK) {
+      await this.saveScanChunkAtomic(all.slice(i, i + CHUNK));
     }
+  }
 
-    console.log(`📦 Saving ${this.pendingScanData.length} scanned items to outbound...`);
-    
-    const batch = this.firestore.firestore.batch();
+  private async saveScanChunkAtomic(items: any[], scanMethod: 'CAMERA' | 'SCANNER' = 'CAMERA', exportedByFallback = ''): Promise<void> {
+    const db = this.firestore.firestore;
+    const FV = firebase.default.firestore.FieldValue;
+    const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
-    // 1. CỘNG DỒN - CHỈ KHI TRÙNG ĐẦY ĐỦ 6 TRƯỜNG
-    // Nguyên tắc: Ngày xuất + Mã hàng + Số PO + IMD + Mã nhân viên + Lệnh sản xuất
+    // 1. Phiếu xuất: gộp dòng khi trùng đủ 6 trường (ngày, mã, PO, IMD, NV, LSX) — CỘNG lượng
     const consolidatedMap = new Map<string, any>();
-    
-    for (const scanItem of this.pendingScanData) {
-      // 🔧 FIX: Key phải bao gồm ĐẦY ĐỦ các trường để tách dòng đúng
-      // Ngày xuất (normalize về ngày, bỏ giờ phút giây)
-      const exportDateStr = scanItem.scanTime instanceof Date 
-        ? scanItem.scanTime.toISOString().split('T')[0] 
-        : new Date(scanItem.scanTime).toISOString().split('T')[0];
-      
+    for (const scanItem of items) {
+      const exportDateStr = (scanItem.scanTime instanceof Date ? scanItem.scanTime : new Date(scanItem.scanTime))
+        .toISOString().split('T')[0];
       const key = `${exportDateStr}|${scanItem.materialCode}|${scanItem.poNumber}|${scanItem.importDate || 'NO_IMD'}|${scanItem.employeeId}|${scanItem.productionOrder}`;
-      
-      if (consolidatedMap.has(key)) {
-        // ✅ TRÙNG ĐẦY ĐỦ 6 TRƯỜNG:
-        // - Không cộng dồn quantity/exportQuantity (quantity đã là tổng theo scan)
-        // - Chỉ cộng dồn scanCount = số lần scan
-        const existing = consolidatedMap.get(key);
+      const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
+      const qty = Number(scanItem.quantity) || 0;
+      const le = this.leExportQty(scanItem.materialCode, qty, scanItem.poNumber);
+      const existing = consolidatedMap.get(key);
+      if (existing) {
         existing.scanCount = (existing.scanCount || 1) + (scanItem.scanCount || 1);
+        existing.quantity = r4((Number(existing.quantity) || 0) + qty);
+        existing.exportQuantity = existing.quantity;
+        if (le > 0) existing.leQty = r4((Number(existing.leQty) || 0) + le);
         existing.updatedAt = scanItem.scanTime;
-        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const bb = scanItem.bagBatch || p.bagFractionLabel;
         if (bb) {
-          const parts = new Set(
-            (existing.bagBatch ? String(existing.bagBatch).split(/\s*,\s*/) : []).filter(Boolean)
-          );
+          const parts = new Set((existing.bagBatch ? String(existing.bagBatch).split(/\s*,\s*/) : []).filter(Boolean));
           parts.add(bb);
           existing.bagBatch = [...parts].join(', ');
         }
         const bnd = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         if (bnd) {
-          const bset = new Set(
-            (existing.bagNumberDisplay ? String(existing.bagNumberDisplay).split(/\s*,\s*/) : []).filter(Boolean)
-          );
+          const bset = new Set((existing.bagNumberDisplay ? String(existing.bagNumberDisplay).split(/\s*,\s*/) : []).filter(Boolean));
           bset.add(bnd);
           existing.bagNumberDisplay = [...bset].join(', ');
         }
-        console.log(`📊 Merged scan: ${scanItem.materialCode} (${scanItem.quantity}kg) into existing record`);
       } else {
-        // ❌ KHÁC ÍT NHẤT 1 TRƯỜNG → Tạo dòng mới
-        const p = this.rmBagHistory.parseQrPart4(scanItem.importDate);
         const imdStored = p.imdKey || this.normalizeImportDate(scanItem.importDate) || scanItem.importDate || null;
         const bagNumberDisplay = (scanItem.bagNumberDisplay || p.bagNumberDisplay || '').trim();
         consolidatedMap.set(key, {
@@ -5082,102 +5086,113 @@ export class OutboundComponent implements OnInit, OnDestroy {
           materialCode: scanItem.materialCode,
           poNumber: scanItem.poNumber,
           location: scanItem.location,
-          quantity: scanItem.quantity,
+          quantity: qty,
           unit: 'KG',
-          exportQuantity: scanItem.quantity,
-          ...(this.leExportQty(scanItem.materialCode, scanItem.quantity, scanItem.poNumber) > 0
-            ? { leQty: this.leExportQty(scanItem.materialCode, scanItem.quantity, scanItem.poNumber) }
-            : {}),
+          exportQuantity: qty,
+          ...(le > 0 ? { leQty: le } : {}),
           scanCount: scanItem.scanCount || 1,
           exportDate: scanItem.scanTime,
-          exportedBy: scanItem.employeeId || this.batchEmployeeId,
+          exportedBy: scanItem.employeeId || this.batchEmployeeId || exportedByFallback,
           productionOrder: scanItem.productionOrder,
-          employeeId: scanItem.employeeId || this.batchEmployeeId,
+          employeeId: scanItem.employeeId || this.batchEmployeeId || exportedByFallback,
           batchNumber: imdStored,
           bagBatch: scanItem.bagBatch || p.bagFractionLabel,
           ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
-          scanMethod: 'CAMERA',
-          notes: `Batch scan - ${scanItem.productionOrder}`,
+          scanMethod,
+          notes: scanMethod === 'SCANNER' ? `Auto-scanned export - ${scanItem.productionOrder}` : `Batch scan - ${scanItem.productionOrder}`,
           importDate: imdStored,
           createdAt: scanItem.scanTime,
           updatedAt: scanItem.scanTime
         });
-        console.log(`📝 New record: ${scanItem.materialCode} | PO: ${scanItem.poNumber} | IMD: ${scanItem.importDate || 'N/A'}`);
       }
     }
-    
-    console.log(`📊 Consolidated ${this.pendingScanData.length} scans into ${consolidatedMap.size} outbound records`);
-    
-    // 2. Tạo consolidated outbound records trong batch
-    for (const [key, record] of consolidatedMap) {
-      const docRef = this.firestore.collection('outbound-materials').doc().ref;
-      batch.set(docRef, record);
-    }
 
-    // 3. Commit batch outbound records
-    console.log(`📦 Committing ${consolidatedMap.size} records to Firebase...`);
-    await batch.commit();
-    console.log(`✅ Successfully saved ${consolidatedMap.size} outbound records!`);
-    this.syncWorkOrderCreatedByFromPendingScans();
-    this.markTemLeClExported(this.pendingScanData);
-    this.writeLsxLog(this.pendingScanData, 'CAMERA');
-
-    // 4. Update inventory - Chạy SONG SONG không chờ để không làm chậm
-    console.log(`📦 Updating inventory in background...`);
-    this.updateInventoryInBackground(this.pendingScanData);
-  }
-  
-  // Update inventory trong background, không block UI
-  private updateInventoryInBackground(scanData: any[]): void {
-    // Group theo materialCode + poNumber + importDate
-    const groupedUpdates = new Map<string, any>();
-    
-    for (const scanItem of scanData) {
-      const key = `${scanItem.materialCode}|${scanItem.poNumber}|${scanItem.importDate || 'NOBATCH'}`;
-      const bb =
-        scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate);
-      if (groupedUpdates.has(key)) {
-        const existing = groupedUpdates.get(key);
-        // Không cộng dồn quantity (chỉ cộng số lần scan/bags nếu có)
-        existing.quantity = existing.quantity ?? scanItem.quantity;
-        existing.exportedBagsDelta = (existing.exportedBagsDelta || 0) + (scanItem.exportedBagsDelta || 0);
-        if (bb) {
-          const set = new Set(
-            (existing.bagBatch ? String(existing.bagBatch).split(/\s*,\s*/) : []).filter(Boolean)
-          );
-          set.add(bb);
-          existing.bagBatch = [...set].join(', ');
+    // 2. Trừ tồn: đọc dòng tồn theo Mã + PO (1 lần / cặp), chọn dòng theo IMD tem — CỘNG lượng các tem cùng dòng
+    const docsByCodePo = new Map<string, any[]>();
+    const inv = new Map<string, { doc: any; qty: number; le: number; bags: number; bagBatches: Set<string>; part4: string; code: string; po: string }>();
+    for (const scanItem of items) {
+      const code = String(scanItem.materialCode || '').trim();
+      const po = String(scanItem.poNumber || '').trim();
+      const cpKey = `${code}|${po}`;
+      let docs = docsByCodePo.get(cpKey);
+      if (!docs) {
+        try {
+          const snap = await db.collection('inventory-materials')
+            .where('materialCode', '==', code)
+            .where('poNumber', '==', po)
+            .where('factory', '==', this.selectedFactory)
+            .get();
+          docs = snap.docs;
+        } catch (e: any) {
+          throw new Error(`Không đọc được tồn kho ${code} · PO ${po} (lỗi mạng) — chưa lưu gì, bấm lưu lại. ${e?.message || ''}`);
         }
-      } else {
-        groupedUpdates.set(key, {
-          materialCode: scanItem.materialCode,
-          poNumber: scanItem.poNumber,
-          quantity: scanItem.quantity,
-          // exportQuantity trong inventory update lấy từ quantity, không cộng dồn
-          importDate: scanItem.importDate,
-          exportedBagsDelta: scanItem.exportedBagsDelta || 0,
-          bagBatch: bb || ''
-        });
+        docsByCodePo.set(cpKey, docs);
       }
+      const target = this.pickInvDocForExport(docs, scanItem.importDate);
+      if (!target) {
+        throw new Error(`${code} · PO ${po} không có trong tồn kho ${this.selectedFactory} — chưa lưu gì. Xóa dòng này khỏi danh sách rồi lưu lại.`);
+      }
+      const qty = Number(scanItem.quantity) || 0;
+      const cur = inv.get(target.id) || { doc: target, qty: 0, le: 0, bags: 0, bagBatches: new Set<string>(), part4: scanItem.importDate || '', code, po };
+      cur.qty = r4(cur.qty + qty);
+      cur.le = r4(cur.le + this.leExportQty(code, qty, po));
+      cur.bags += Number(scanItem.exportedBagsDelta) > 0 ? Number(scanItem.exportedBagsDelta) : 0;
+      const bb = scanItem.bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(scanItem.importDate);
+      if (bb) cur.bagBatches.add(bb);
+      inv.set(target.id, cur);
     }
-    
-    console.log(`📊 Grouped ${scanData.length} items into ${groupedUpdates.size} inventory updates`);
-    
-    // Update từng item trong background (không await)
-    groupedUpdates.forEach((update, key) => {
-      this.updateInventoryExported(
-        update.materialCode,
-        update.poNumber,
-        update.quantity,
-        update.importDate,
-        update.exportedBagsDelta || 0,
-        update.bagBatch || undefined
-      ).catch(error => {
-        console.error(`⚠️ Background inventory update failed for ${key}:`, error.message);
-      });
-    });
-    
-    console.log(`✅ Inventory updates queued in background`);
+
+    // 3. Một batch: phiếu xuất + trừ tồn
+    const batch = db.batch();
+    for (const record of consolidatedMap.values()) {
+      batch.set(db.collection('outbound-materials').doc(), record);
+    }
+    const now = new Date();
+    for (const [docId, u] of inv) {
+      const payload: Record<string, unknown> = { exported: FV.increment(u.qty), updatedAt: now };
+      if (u.le > 0) payload['xtLe'] = FV.increment(u.le);
+      if (u.bags > 0) payload['exportedBags'] = FV.increment(u.bags);
+      batch.update(db.collection('inventory-materials').doc(docId), payload);
+    }
+    await batch.commit();
+
+    // 4. Đã lưu chắc chắn → bỏ NGAY các tem vừa lưu khỏi danh sách chờ (trước mọi việc phụ),
+    //    để lỗi ở việc phụ không làm lần bấm lưu sau trừ tồn lần hai.
+    const lsxEmpBefore = items.map((it) => ({ productionOrder: it.productionOrder, employeeId: it.employeeId }));
+    this.pendingScanData = this.pendingScanData.filter((x) => !items.includes(x));
+    this.savePendingToStorage();
+
+    // 5. Việc phụ (log, khóa tem, người soạn…) — lỗi ở đây không ảnh hưởng số liệu xuất / tồn
+    const safe = (label: string, fn: () => void) => {
+      try { fn(); } catch (e) { console.warn(`[Outbound] ${label} sau khi lưu`, e); }
+    };
+    safe('đồng bộ người soạn', () => this.syncWorkOrderCreatedByFor(lsxEmpBefore));
+    safe('tem lẻ CL', () => this.markTemLeClExported(items));
+    safe('log LSX', () => this.writeLsxLog(items, scanMethod));
+    safe('khóa tem', () => this.markScanLocksSaved([...items]));
+    for (const u of inv.values()) {
+      if (u.bags > 0) void this.logBagHistoryAfterExport(u).catch((e) => console.warn('[bag-history] xuất', e));
+    }
+  }
+
+  /** Lịch sử bịch sau khi xuất (không ảnh hưởng tồn) — giống trước đây. */
+  private async logBagHistoryAfterExport(u: { doc: any; bags: number; bagBatches: Set<string>; part4: string; code: string; po: string }): Promise<void> {
+    const data = u.doc.data() as any;
+    const totalB = Math.floor(Number(data.totalBags ?? 0));
+    const newExpBags = Math.floor(Number(data.exportedBags ?? 0)) + u.bags;
+    const remainingB = Math.max(0, totalB - newExpBags);
+    const { imdKey } = this.parseImdFromQrPart4(u.part4);
+    const imd = imdKey || this.normalizeImportDate(data.importDate);
+    const bagBatch = [...u.bagBatches].join(', ');
+    const p = this.rmBagHistory.parseQrPart4(u.part4);
+    const bagNumberDisplay = (p.bagNumberDisplay || '').trim();
+    const base = {
+      factory: this.selectedFactory, materialCode: u.code, poNumber: u.po, imd,
+      totalBags: totalB, exportedBags: newExpBags, remainingBags: remainingB, bagBatch,
+      ...(bagNumberDisplay ? { bagNumberDisplay } : {}), inventoryDocId: u.doc.id
+    };
+    await this.rmBagHistory.log({ event: 'XUẤT', ...base, bagsDelta: u.bags, note: 'Xuất bịch (QR -i/n)' });
+    await this.rmBagHistory.log({ event: 'TỒN', ...base, note: 'Tồn bịch sau xuất' });
   }
 
   // 🔧 SCAN REVIEW MODAL: Xem danh sách scan trước khi lưu
@@ -5485,7 +5500,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
 
   /**
    * Chặn xuất làm âm tồn: lượng scan + các tem đang chờ lưu trừ vào cùng dòng tồn không được vượt tồn dòng đó.
-   * Lỗi đọc tồn (mạng) → không chặn. Mã + PO không có trong tồn → không chặn (không trừ tồn nên không âm).
+   * Lỗi đọc tồn (mạng) → CHẶN, bắt scan lại. Mã + PO không có trong tồn kho → CHẶN (không xuất hàng không có trên sổ).
    */
   private async validateScanStock(
     code: string,
@@ -5497,7 +5512,11 @@ export class OutboundComponent implements OnInit, OnDestroy {
     const none = { err: null, left: null };
     const c = String(code || '').trim().toUpperCase();
     const p = String(po || '').trim();
-    if (!c || !p || p === 'Unknown' || !(qty > 0)) return none;
+    if (!(qty > 0)) return none; // lượng không hợp lệ: các bước kiểm khác báo lỗi
+    if (!c) return { err: 'Không đọc được mã hàng trên tem — scan lại.', left: null };
+    if (!p || p === 'Unknown') {
+      return { err: `Tem ${c} không có PO — không xác định được lô trong tồn kho, không cho xuất.`, left: null };
+    }
     let docs: any[] = [];
     try {
       const snap = await this.firestore.collection('inventory-materials', (ref) =>
@@ -5507,11 +5526,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
       ).get().toPromise();
       docs = snap?.docs || [];
     } catch (e) {
-      console.warn('[validateScanStock] đọc tồn lỗi — bỏ qua kiểm tra', e);
-      return none;
+      console.warn('[validateScanStock] đọc tồn lỗi', e);
+      return { err: `Không đọc được tồn kho của ${c} · PO ${p} (lỗi mạng) — kiểm tra mạng rồi scan lại.`, left: null };
     }
     const target = this.pickInvDocForExport(docs, importDate);
-    if (!target) return none;
+    if (!target) {
+      return {
+        err: `Không cho xuất — ${c} · PO ${p} không có trong tồn kho ${this.selectedFactory || ''}.\n` +
+          `Kiểm tra lại tem, hoặc báo quản lý kho nhập tồn cho lô này rồi scan lại.`,
+        left: null
+      };
+    }
     const stock = this.invRowStock(target.data());
     let pend = 0;
     for (const it of pending || []) {
@@ -5638,111 +5663,6 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   // Minimal fallback to avoid compile break if missing
-  private async updateInventoryExported(
-    materialCode: string,
-    poNumber: string,
-    exportQuantity: number,
-    importDate?: string,
-    exportedBagsDelta: number = 0,
-    bagBatch?: string
-  ): Promise<void> {
-    try {
-      console.log(`📦 Updating inventory exported: ${materialCode}, PO: ${poNumber}, Qty: ${exportQuantity}, Batch: ${importDate}, BagsDelta: ${exportedBagsDelta}`);
-      
-      // 🔧 KHÔNG DÙNG where('importDate') vì format có thể khác nhau
-      // Query tất cả records của materialCode + poNumber, sau đó filter client-side
-      const snapshot = await this.firestore.collection('inventory-materials', ref =>
-        ref.where('materialCode', '==', materialCode)
-           .where('poNumber', '==', poNumber)
-           .where('factory', '==', this.selectedFactory)
-      ).get().toPromise();
-      
-      if (snapshot && !snapshot.empty) {
-        console.log(`📦 Found ${snapshot.docs.length} inventory records for ${materialCode} - PO ${poNumber}`);
-        
-        // Dòng trừ: khớp IMD tem; không khớp → dòng còn tồn nhiều nhất (tồn = đầu kỳ + nhập − xuất − XT)
-        const targetDoc = this.pickInvDocForExport(snapshot.docs, importDate)!;
-        
-        // Update inventory — atomic increment (tránh race khi nhiều scan cùng lúc cùng một dòng tồn).
-        const data = targetDoc.data() as any;
-        const currentExported = Number(data.exported) || 0;
-        const newExported = currentExported + exportQuantity;
-
-        let imdForRow = '';
-        if (importDate) {
-          const { imdKey } = this.parseImdFromQrPart4(importDate);
-          imdForRow = imdKey || this.normalizeImportDate(importDate);
-        } else {
-          imdForRow = this.normalizeImportDate(data.importDate);
-        }
-        const totalB = Math.floor(Number(data.totalBags ?? 0));
-        const prevExpBags = Math.floor(Number(data.exportedBags ?? 0));
-        const newExpBags = prevExpBags + (exportedBagsDelta > 0 ? exportedBagsDelta : 0);
-        const remainingB = Math.max(0, totalB - newExpBags);
-        
-        console.log(
-          `🔄 Updating inventory doc ${targetDoc.id}: exported += ${exportQuantity} (atomic; snapshot was ${currentExported} → ~${newExported})`
-        );
-        
-        const payload: Record<string, unknown> = {
-          exported: firebase.default.firestore.FieldValue.increment(exportQuantity),
-          updatedAt: new Date()
-        };
-        const leQty = this.leExportQty(materialCode, exportQuantity, poNumber);
-        if (leQty > 0) {
-          payload.xtLe = firebase.default.firestore.FieldValue.increment(leQty);
-        }
-        if (exportedBagsDelta > 0) {
-          payload.exportedBags = firebase.default.firestore.FieldValue.increment(exportedBagsDelta);
-        }
-        await this.firestore.collection('inventory-materials').doc(targetDoc.id).update(payload);
-
-        if (exportedBagsDelta > 0) {
-          const imd = imdForRow || this.normalizeImportDate(data.importDate);
-          const p = this.rmBagHistory.parseQrPart4(importDate);
-          const bagNumberDisplay = (p.bagNumberDisplay || '').trim();
-          await this.rmBagHistory.log({
-            event: 'XUẤT',
-            factory: this.selectedFactory,
-            materialCode,
-            poNumber,
-            imd,
-            totalBags: totalB,
-            exportedBags: newExpBags,
-            remainingBags: remainingB,
-            bagsDelta: exportedBagsDelta,
-            bagBatch: bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(importDate),
-            ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
-            inventoryDocId: targetDoc.id,
-            note: 'Xuất bịch (QR -i/n)'
-          });
-          await this.rmBagHistory.log({
-            event: 'TỒN',
-            factory: this.selectedFactory,
-            materialCode,
-            poNumber,
-            imd,
-            totalBags: totalB,
-            exportedBags: newExpBags,
-            remainingBags: remainingB,
-            bagBatch: bagBatch || this.rmBagHistory.extractBagLabelFromQrPart4(importDate),
-            ...(bagNumberDisplay ? { bagNumberDisplay } : {}),
-            inventoryDocId: targetDoc.id,
-            note: 'Tồn bịch sau xuất'
-          });
-        }
-        
-        console.log(`✅ Inventory updated: ${materialCode} - PO ${poNumber}, exported: ${newExported}`);
-      } else {
-        console.log(`⚠️ No inventory record found for ${materialCode} - PO ${poNumber}`);
-        console.log(`⚠️ Skipping inventory update (material may not exist in inventory)`);
-      }
-    } catch (error) {
-      console.error(`❌ Error updating inventory exported:`, error);
-      // Không throw error để không block batch update của các item khác
-      console.log(`⚠️ Continuing batch update despite inventory update error`);
-    }
-  }
   
   /** Phần 4 QR: DDMMYYYY, DDMMYYYY-i/tổng, có thể (T1) tách bịch — khớp IMD kho; có i/tổng → +1 bịch. */
   private parseImdFromQrPart4(part4: string | null | undefined): { imdKey: string; bagDelta: number } {
@@ -6035,6 +5955,15 @@ export class OutboundComponent implements OnInit, OnDestroy {
       ...(crumbQty > 0 ? { crumbQty } : {})
     };
 
+    // Trùng tem với LSX / máy khác (hoặc tem đã xuất) → báo đỏ, không nhận
+    const lockTem = this.lockTemOf(scanItem);
+    const dupErr = await this.scanLock.claim(lockTem, this.batchProductionOrder, this.batchEmployeeId);
+    if (dupErr) {
+      this.showScanError(dupErr);
+      return;
+    }
+    this.lockInFlight = lockTem;
+
     // Bag CL (lẻ) duy nhất còn lại của mã PCS, tồn mã < 5000 → bắt đếm chính xác bag còn lại
     let clNeed: ClCountCtx | null = null;
     try {
@@ -6058,10 +5987,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
       odd = await this.findOddWeighNeed(materialCode, poNumber, quantity);
     } catch (e: any) {
       console.warn('findOddWeighNeed:', e);
-      this.showScanError(`Không kiểm tra được Check lượng cho ${materialCode}. Scan lại.`);
+      this.showScanError(e?.oddWeighBlock ? e.message : `Không kiểm tra được Check lượng cho ${materialCode}. Scan lại.`);
+      this.releaseInFlightLock();
       return;
     }
     const tl = this.tlTagOf(scanItem.importDate);
+    if (odd?.photoOnly) {
+      // Mã Check lượng: LSX này đã cân bag lẻ rồi → bag lẻ này chỉ cần chụp hình
+      this.openTlPhoto(materialCode, poNumber, tl || { tag: 'lẻ', imd: p.imdKey || '' },
+        async () => this.commitScanItem(scanItem, ' · đã chụp bag lẻ'));
+      return;
+    }
     if (odd && tl && p.imdKey) {
       const suffix = await this.inheritOddWeighFromSplit(odd, p.imdKey, tl.tag);
       if (suffix != null) {
@@ -6075,11 +6011,27 @@ export class OutboundComponent implements OnInit, OnDestroy {
       this.openOddWeigh(odd, scanItem);
       return;
     }
-    if (tl) {
+    // Tem TL: chỉ bắt chụp với mã thuộc Check lượng (băng keo, lá đồng… không bắt)
+    if (tl && await this.tlNeedsPhoto(materialCode)) {
       this.openTlPhoto(materialCode, poNumber, tl, async () => this.commitScanItem(scanItem, ' · đã chụp TL'));
       return;
     }
     this.commitScanItem(scanItem);
+  }
+
+  /** Tem TL có phải chụp hình không: chỉ mã thuộc Check lượng (đầu mã phải cân / mã thêm, trừ mã miễn cân). Lỗi đọc danh sách → vẫn bắt chụp. */
+  private async tlNeedsPhoto(code: string): Promise<boolean> {
+    try {
+      await this.ensureWeighCodesLoaded();
+      return needsWeigh(String(code || '').trim().toUpperCase(), this.weighExemptCodes, this.weighIncludeCodes);
+    } catch {
+      return true;
+    }
+  }
+
+  private missingStdMessage(code: string): string {
+    return `Mã ${code} thuộc Check lượng nhưng Danh mục NVL chưa có Standard packing — không kiểm được bag lẻ. ` +
+      `Báo quản lý kho cập nhật Standard rồi scan lại.`;
   }
 
   // ===== Bag TL khi xuất: bắt buộc chụp hình (mọi cách xuất, mọi thiết bị) =====
@@ -6221,6 +6173,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.stopTlPhotoCamera();
     this.tlPhoto = null;
     t.onCancel?.();
+    this.releaseInFlightLock();
     if (this.bsScanOpen) this.bsScanError = `❌ Đã hủy tem ${t.tag} — chưa chụp hình bag TL nên chưa nhận.`;
     else this.showScanError(`Đã hủy tem ${t.code} ${t.tag} — chưa chụp hình bag TL nên chưa nhận tem.`);
   }
@@ -6233,6 +6186,19 @@ export class OutboundComponent implements OnInit, OnDestroy {
   readonly clSkipReasons = ['Dạng cuộn', 'Nhiều bộ phận', 'Dạng vỉ'];
   /** Mã đã báo không đếm được (cl-count-skip/{mã}) → lần sau không hỏi đếm nữa. */
   private clSkipCodes: Set<string> | null = null;
+
+  /** Danh mục đếm tồn bag CL (đầu mã) — Danh mục NVL/TP → Check lượng / Cân → Đếm tồn bag CL. */
+  private clCountPrefixes: string[] | null = null;
+  private async ensureClCountPrefixes(): Promise<string[]> {
+    if (this.clCountPrefixes) return this.clCountPrefixes;
+    try {
+      this.clCountPrefixes = await this.pxkWeightReports.loadClCountPrefixes();
+    } catch (e) {
+      console.warn('[CL count] prefixes', e);
+      return [...CL_COUNT_PREFIXES_DEFAULT]; // lỗi đọc → dùng mặc định, lần sau đọc lại
+    }
+    return this.clCountPrefixes;
+  }
 
   private async ensureClSkipCodes(): Promise<Set<string>> {
     if (this.clSkipCodes) return this.clSkipCodes;
@@ -6280,21 +6246,17 @@ export class OutboundComponent implements OnInit, OnDestroy {
     setTimeout(() => (document.getElementById('cl-count-input') as HTMLInputElement | null)?.focus(), 80);
   }
 
-  private isPcsUnit(code: string): boolean {
-    const u = String((this.catalogByCode.get(code) as any)?.unit || '').trim().toUpperCase();
-    return /^(PCS|PC|EA|CÁI|CAI|CHIẾC|CHIEC)$/.test(u);
-  }
-
   /**
    * Sau tem này lô còn bag lẻ (CL) — và đó là bag lẻ duy nhất của mã (các lô khác chẵn Standard),
-   * mã đơn vị cái (PCS), tổng tồn mã sau xuất < 5000 → cần đếm chính xác.
+   * mã thuộc danh mục đếm tồn (đầu mã, mặc định B009/B016/B019/B020/B021), tổng tồn mã sau xuất < 5000 → cần đếm chính xác.
    */
   private async findClCountNeed(
     materialCode: string, poNumber: string, importDate: string | null, qty: number, left: number | null,
     pendingOverride?: number
   ): Promise<ClCountCtx | null> {
     const code = String(materialCode || '').trim().toUpperCase();
-    if (!code || left == null || !this.isPcsUnit(code)) return null;
+    if (!code || left == null) return null;
+    if (!matchesPrefixList(code, await this.ensureClCountPrefixes())) return null;
     if ((await this.ensureClSkipCodes()).has(code)) return null; // đã báo cáo không đếm được (cuộn / nhiều bộ phận / vỉ)
     const r4 = (n: number) => Math.round(n * 10000) / 10000;
     const EPS = 0.0001;
@@ -6362,6 +6324,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.clCount = null;
     if (!c) return;
     c.onCancel?.();
+    this.releaseInFlightLock();
     this.showScanError(`Đã hủy tem ${c.code} — chưa đếm bag CL nên chưa nhận tem.`);
   }
 
@@ -6383,6 +6346,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   }
 
   private commitScanItem(scanItem: any, flashSuffix = ''): void {
+    this.lockInFlight = null; // tem đã vào danh sách chờ lưu — khoá giữ tới khi lưu / xoá dòng
     this.pendingScanData = [...this.pendingScanData, scanItem];
     this.savePendingToStorage();
     this.playScanBeep(true);
@@ -6437,25 +6401,33 @@ export class OutboundComponent implements OnInit, OnDestroy {
   /** null = không cần cân. Bag lẻ = lượng < Standard Packing, mã thuộc Check lượng, PXK có phần lẻ, chưa có hình đã cân. */
   private async findOddWeighNeed(code: string, po: string, bagQty: number): Promise<OddWeighCtx | null> {
     const c = String(code || '').trim().toUpperCase();
-    const std = this.stdFor(c, po);
-    if (!(std > 0) || !(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
     const key = this.pxkScanKey(c, po);
+    // batchPxkPairs đã bỏ dòng NVL_SX / NVL_KS (hàng đã ở sản xuất)
     const lines = this.batchPxkPairs.filter((p) => this.pxkScanKey(p.code, p.po) === key);
     if (!lines.length) return null;
-    const exportQty = lines.reduce((s, p) => s + p.qty, 0);
     const maKho = lines.find((p) => p.maKho)?.maKho || '';
+    const kho = maKho.trim().toUpperCase();
+    if (kho.includes('NVL_SX') || kho.includes('NVL_KS')) return null;
     await this.ensureWeighCodesLoaded();
-    if (!this.pxkOddWeigh.isCheckLine(c, maKho, this.weighExemptCodes, this.weighIncludeCodes)) return null;
-    const { oddQty } = this.pxkOddWeigh.splitRollQty(exportQty, std);
-    if (!(oddQty > 0)) return null;
+    // Mã thuộc Check lượng (kể cả dòng PXK thiếu Mã kho)
+    if (!needsWeigh(c, this.weighExemptCodes, this.weighIncludeCodes)) return null;
+    const std = this.stdFor(c, po);
+    // Trước đây thiếu Standard thì bỏ qua im lặng → giờ chặn và báo
+    if (!(std > 0)) throw oddWeighBlock(this.missingStdMessage(c));
+    if (!(bagQty > 0) || !(bagQty < std - 1e-9)) return null;
+    const exportQty = lines.reduce((s, p) => s + p.qty, 0);
+    // PXK xuất tròn bội số Standard mà vẫn scan bag lẻ → phần lẻ = cả bag này
+    let { oddQty } = this.pxkOddWeigh.splitRollQty(exportQty, std);
+    if (!(oddQty > 0)) oddQty = bagQty;
     const lsx = String(this.batchProductionOrder || '').trim();
     const [saved, catalogWeight] = await Promise.all([
       this.pxkOddWeigh.getSaved(lsx, c, po),
       this.pxkOddWeigh.catalogUnitWeight(c)
     ]);
-    // Đã có số gram (có hoặc không có ảnh) → không bắt cân lại
-    if (Number(saved?.weightOdd) > 0) return null;
-    return { lsx, code: c, po: String(po || '').trim(), maKho, exportQty, std, oddQty, bagQty, catalogWeight };
+    const ctx: OddWeighCtx = { lsx, code: c, po: String(po || '').trim(), maKho, exportQty, std, oddQty, bagQty, catalogWeight };
+    // Đã có số cân cho LSX + mã + PO → không cân lại (giữ số cũ) nhưng bag lẻ này vẫn phải chụp hình
+    if (Number(saved?.weightOdd) > 0) ctx.photoOnly = true;
+    return ctx;
   }
 
   private openOddWeigh(ctx: OddWeighCtx, scanItem: any): void {
@@ -6697,6 +6669,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   cancelOddWeigh(): void {
     const code = this.oddWeigh?.code || '';
     this.closeOddWeigh();
+    this.releaseInFlightLock();
     this.setScanFlash('err', `Đã hủy bag lẻ ${code} — bag chưa được nhận.`);
     setTimeout(() => this.focusScannerInput(), 50);
   }
@@ -6791,9 +6764,9 @@ export class OutboundComponent implements OnInit, OnDestroy {
     this.isSavingBatchData = true;
     this.cdr.detectChanges();
     try {
+      // batchUpdateAllScanData tự bỏ đúng các tem vừa lưu khỏi danh sách chờ —
+      // KHÔNG xóa sạch: tem quét thêm trong lúc đang lưu (tự lưu 5 phút) vẫn được giữ.
       await this.batchUpdateAllScanData();
-      this.pendingScanData = [];
-      this.savePendingToStorage();
       const lsx = (this.batchProductionOrder || '').trim();
       if (lsx) this.batchPxkExportedByKey = await this.loadBatchPxkExportedTotals(lsx);
       this.setScanFlash('ok', `💾 Đã lưu ${n} bag — tiếp tục scan ${lsx}`);
@@ -6888,6 +6861,7 @@ export class OutboundComponent implements OnInit, OnDestroy {
   removePendingScan(item: any): void {
     if (!confirm(`Xóa dòng scan ${item?.materialCode} · ${item?.importDate || ''} · ${item?.quantity}?`)) return;
     this.pendingScanData = this.pendingScanData.filter((x) => x !== item);
+    this.releaseScanLocks([item]);
     this.savePendingToStorage();
     this.setScanFlash('ok', `Đã xóa dòng ${item?.materialCode}`);
     setTimeout(() => this.focusScannerInput(), 50);
