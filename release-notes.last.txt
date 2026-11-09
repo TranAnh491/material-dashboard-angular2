@@ -1,0 +1,6 @@
+Quản lý NVL: mã Kiểm 100% hiện chữ đỏ (bỏ icon !), mã sẽ dùng hết tồn theo Kế hoạch NVL hiện chữ cam
+Quản lý NVL: thêm ô lọc "Màu mã" — xem riêng mã đỏ, mã cam hoặc cả hai
+Quản lý NVL: mở lại tab nhanh hơn — giữ dữ liệu tồn kho 90 giây, không đọc lại từ đầu
+Quản lý NVL: bảng theo mã hàng mượt hơn khi cuộn và gõ tìm
+Quản lý NVL: 3 nút sắp xếp gom thành 1 ô chọn; thanh nút tự xuống dòng trên màn hẹp, không bị che nút
+Tồn kho: cột Standard Packing hiện theo Standard lúc nhận của từng PO; 1 mã có nhiều Standard thì hiện đủ

@@ -1,3 +1,5 @@
+import { APP_TABS, SIDEBAR_LAYOUT } from './app-tabs';
+
 export interface RouteInfo {
     path: string;
     title: string;
@@ -6,77 +8,15 @@ export interface RouteInfo {
     children?: RouteInfo[];
 }
 
-export const ROUTES: RouteInfo[] = [
-  { path: '/dashboard', title: 'Dashboard',  icon: 'dashboard', class: '' },
-  { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', class: '' },
-  { path: '/work-order-status', title: 'Work Order',  icon: 'assignment', class: '' },
-  { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', class: '' },
-  { path: '/shipment', title: 'Shipment', icon: 'local_shipping', class: '' },
-  { path: '/stock-check', title: 'Stock Check', icon: 'checklist', class: '' },
-  {
-    path: '',
-    title: 'RM',
-    icon: 'inventory',
-    class: 'asm1-rm-parent',
-    children: [
-      { path: '/inbound', title: 'RM Inbound', icon: 'IB', class: '' },
-      { path: '/outbound', title: 'RM Outbound', icon: 'OB', class: '' },
-      { path: '/materials', title: 'RM Inventory', icon: 'IV', class: '' },
-      { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'QL', class: '' },
-      { path: '/inventory-overview', title: 'RM Overview', icon: 'IO', class: '' },
-      { path: '/bag-history', title: 'Control Batch', icon: 'H', class: '' }
-    ]
-  },
-  { 
-    path: '', 
-    title: 'ASM FG', 
-    icon: 'check_circle_outline', 
-    class: 'asm1-fg-parent',
-    children: [
-      { path: '/fg-in', title: 'FG In', icon: 'move_to_inbox', class: 'material-child-icon' },
-      { path: '/fg-out', title: 'FG Out', icon: 'outbox', class: 'material-child-icon' },
-      { path: '/fg-check', title: 'FG Check', icon: 'fact_check', class: 'material-child-icon' },
-      { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory', class: 'material-child-icon' },
-      { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', class: 'material-child-icon' },
-      { path: '/fg-location', title: 'FG Location', icon: 'location_on', class: 'material-child-icon' },
-      { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', class: 'material-child-icon' }
-    ]
-  },
-  {
-    path: '',
-    title: 'Tools',
-    icon: 'build',
-    class: 'tools-parent',
-    children: [
-      { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', class: 'material-child-icon' },
-      { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', class: 'material-child-icon' },
-      { path: '/xe-tai', title: 'Xe Tải', icon: 'local_shipping', class: 'material-child-icon' },
-      { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', class: 'material-child-icon' },
-      { path: '/label', title: 'Label', icon: 'label', class: 'material-child-icon' },
-      { path: '/bieu-mau', title: 'Biểu mẫu', icon: 'description', class: 'material-child-icon' }
-    ]
-  },
-  {
-    path: '',
-    title: 'Report',
-    icon: 'assessment',
-    class: 'report-parent',
-    children: [
-      { path: '/report', title: 'Report', icon: 'analytics', class: 'material-child-icon' },
-      { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', class: 'material-child-icon' }
-    ]
-  },
-  { path: '/location', title: 'Materials', icon: 'inventory_2', class: '' },
-  { path: '/nhiet-do', title: 'Nhiệt Độ', icon: 'thermostat', class: '' },
-  { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', class: '' },
-  { path: '/qc', title: 'Quality', icon: 'assignment_turned_in', class: '' },
-  { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', class: '' },
-  { path: '/index', title: 'Bonded Report', icon: 'analytics', class: '' },
+// Sinh từ app-tabs.ts (SIDEBAR_LAYOUT + tiêu đề/icon của từng tab) — không sửa trực tiếp ở đây.
+function toRoute(path: string, cls: string): RouteInfo {
+  const tab = APP_TABS.find(t => t.path === path);
+  if (!tab) throw new Error(`SIDEBAR_LAYOUT: không có tab ${path} trong APP_TABS`);
+  return { path, title: tab.title, icon: tab.sidebarIcon || '', class: cls };
+}
 
-  { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', class: '' },
-  { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', class: '' },
-  { path: '/equipment', title: 'Training', icon: 'integration_instructions', class: '' },
-  { path: '/settings', title: 'Settings', icon: 'settings', class: '' },
-  { path: '/zalo', title: 'Zalo', icon: 'chat', class: '' },
-  { path: '/j-warehouse', title: 'J Warehouse', icon: 'warehouse', class: '' }
-]; 
+export const ROUTES: RouteInfo[] = SIDEBAR_LAYOUT.map(item =>
+  typeof item === 'string'
+    ? toRoute(item, '')
+    : { path: '', title: item.title, icon: item.icon, class: item.class, children: item.children.map(p => toRoute(p, item.childClass)) }
+);

@@ -1,3 +1,4 @@
+import { isBsLsx, stripBsLsx } from '../shared/lsx-bo-sung';
 import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { MaterialLifecycleService } from './material-lifecycle.service';
@@ -35,6 +36,7 @@ export class WorkOrderOutboundCreatedByService {
   normLsxForMatch(s: string): string {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
     if (!t) return '';
+    if (isBsLsx(t)) return 'BS' + this.normLsxForMatch(stripBsLsx(s)); // LSX bổ sung
     const compact = t.replace(/[-.]/g, '/');
     if (/^(KZ|LH)LSX/.test(compact)) return compact;
     const m = compact.match(/(\d{4}\/\d+)/);

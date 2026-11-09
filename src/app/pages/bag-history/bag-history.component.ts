@@ -1,3 +1,4 @@
+import { Router } from '@angular/router';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
@@ -161,7 +162,8 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
     private fns: AngularFireFunctions,
     private snackBar: MatSnackBar,
     private rmBagHistory: RmBagHistoryService,
-    private readTracker: ReadTrackerService
+    private readTracker: ReadTrackerService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -468,6 +470,112 @@ export class BagHistoryComponent implements OnInit, OnDestroy {
 
   trackByIndex(index: number, _: any): number { return index; }
   trackByBagId(index: number, item: any): string { return item?.id || item?.bagId || String(index); }
+
+  // ===== Giao diện Notepad: toàn bộ nội dung dưới dạng log =====
+  goBack(): void {
+    history.back();
+  }
+
+  goMenu(): void {
+    void this.router.navigate(['/menu']);
+  }
+
+  reloadAll(): void {
+    void this.loadOutboundExportDuplicates();
+    if ((this.search || '').trim() && this.queryResultRows !== null) void this.executeSearch();
+  }
+
+  get logLines(): Array<{ text: string; kind?: 'head' | 'warn' | 'muted'; row?: OutboundDuplicateGroupRow }> {
+    const pad = (v: unknown, w: number) => { const t = String(v ?? ''); return t.length >= w ? t.slice(0, w) : t + ' '.repeat(w - t.length); };
+    const padL = (v: unknown, w: number) => { const t = String(v ?? ''); return t.length >= w ? t : ' '.repeat(w - t.length) + t; };
+    const out: Array<{ text: string; kind?: 'head' | 'warn' | 'muted'; row?: OutboundDuplicateGroupRow }> = [];
+    const line = '='.repeat(110);
+
+    out.push({ text: line, kind: 'head' });
+    out.push({ text: '  KIỂM TRA TRÙNG XUẤT KHO (outbound) — trùng = cùng mã + PO + IMD + Bịch + Bag xuất > 1 lần', kind: 'head' });
+    out.push({ text: line, kind: 'head' });
+    if (this.outboundDupLoading) {
+      out.push({ text: '  Đang đọc outbound-materials…', kind: 'muted' });
+    } else if (this.outboundDupError) {
+      out.push({ text: '  ❌ ' + this.outboundDupError, kind: 'warn' });
+    } else {
+      out.push({ text: `  Từ ngày        : ${this.outboundDupSinceLabel}` });
+      out.push({ text: `  Bản ghi        : ${this.outboundDupTotalScanned} trong phạm vi · ${this.outboundDupEligibleCount} đủ điều kiện` });
+      out.push({ text: `  Loại trừ       : ${this.excludeEnabled ? `bật — ${this.excludeCodeCount} mã / tiền tố` : 'tắt'}` });
+      out.push({
+        text: `  Kết quả        : ${this.outboundDupRows.length ? this.outboundDupRows.length + ' nhóm trùng' : 'không có nhóm trùng ✔'}`,
+        kind: this.outboundDupRows.length ? 'warn' : undefined
+      });
+      if (this.outboundDupRows.length) {
+        out.push({ text: '' });
+        out.push({ text: `    ${pad('Nhà máy', 8)}${pad('Mã', 10)}${pad('PO', 16)}${pad('IMD', 12)}${pad('Bịch', 8)}${pad('Bag', 9)}${padL('Lần', 4)}  ${pad('Ngày', 18)}LSX`, kind: 'muted' });
+        for (const r of this.outboundDupRows) {
+          out.push({
+            row: r,
+            text: ` ${pad(r.factory, 8)}${pad(r.materialCode, 10)}${pad(r.poNumber, 16)}${pad(r.imd || '—', 12)}${pad(r.bagBatch || '—', 8)}${pad(this.getBagColumnDisplay(r), 9)}${padL(r.count, 4)}  ${pad(r.latestExportAtLabel || '—', 18)}${r.productionOrderSummary || ''}${r.revivedAfterIgnore ? '  (mới phát sinh thêm)' : ''}`,
+            kind: 'warn'
+          });
+        }
+        out.push({ text: '  [x] = đã bỏ qua nhóm này (bấm vào ô để đổi).', kind: 'muted' });
+      }
+    }
+
+    out.push({ text: '' });
+    out.push({ text: line, kind: 'head' });
+    out.push({ text: `  TRA CỨU MÃ${this.lastSearchedMaterialCode ? ': ' + this.lastSearchedMaterialCode : ''}   (Nhà máy: ${this.factoryFilter === 'ALL' ? 'Tất cả' : this.factoryFilter}${this.eventFilter ? ' · Loại: ' + this.eventFilter : ''})`, kind: 'head' });
+    out.push({ text: line, kind: 'head' });
+    if (this.isLoading) {
+      out.push({ text: '  Đang tải…', kind: 'muted' });
+    } else if (this.isQueryRunning) {
+      out.push({ text: '  Đang tìm…', kind: 'muted' });
+    } else if (this.queryResultRows === null) {
+      out.push({ text: '  Nhập mã A/B + 6 số (VD A005006) vào ô Mã rồi Enter. Để trống rồi Enter để bỏ tra cứu.', kind: 'muted' });
+      if (this.searchHint) out.push({ text: '  ' + this.searchHint, kind: 'warn' });
+    } else {
+      if (this.searchHint) out.push({ text: '  ' + this.searchHint, kind: 'muted' });
+      out.push({ text: '' });
+      out.push({ text: `  ${pad('Nhà máy', 8)}${pad('Mã', 10)}${pad('PO', 16)}${pad('IMD', 12)}${pad('Batch', 10)}${padL('Nhập', 8)}${padL('Xuất', 8)}${padL('Tồn', 8)}`, kind: 'muted' });
+      let n = 0, x = 0, t = 0;
+      for (const r of this.searchSummaryRows) {
+        n += r.nhapBags || 0; x += r.xuatBags || 0; t += r.tonKho || 0;
+        out.push({
+          text: `  ${pad(r.factory, 8)}${pad(r.materialCode, 10)}${pad(r.poNumber, 16)}${pad(r.imd || '—', 12)}${pad(this.getBagColumnDisplay(r), 10)}${padL(r.nhapBags > 0 ? r.nhapBags : '', 8)}${padL(r.xuatBags > 0 ? r.xuatBags : '', 8)}${padL(r.tonKho > 0 || r.nhapBags > 0 ? r.tonKho : '', 8)}`
+        });
+      }
+      if (!this.searchSummaryRows.length) {
+        out.push({ text: '  (không có dòng — thử đổi Loại / Nhà máy)', kind: 'muted' });
+      } else {
+        out.push({ text: `  ${'-'.repeat(80)}`, kind: 'muted' });
+        out.push({ text: `  ${pad('Tổng', 56)}${padL(n, 8)}${padL(x, 8)}${padL(t, 8)}` });
+      }
+    }
+    out.push({ text: '' });
+    out.push({ text: '--- Hết log ---', kind: 'muted' });
+    return out;
+  }
+
+  private logText(): string {
+    return this.logLines.map((l) => (l.row ? (this.isOutboundDupGroupIgnored(l.row) ? '[x]' : '[ ]') : '') + l.text).join('\n');
+  }
+
+  async copyLog(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(this.logText());
+      this.snackBar.open('Đã copy log', '', { duration: 1500 });
+    } catch {
+      this.snackBar.open('Không copy được — bôi đen rồi Ctrl+C', '', { duration: 2500 });
+    }
+  }
+
+  downloadLog(): void {
+    const blob = new Blob(['\ufeff' + this.logText().replace(/\n/g, '\r\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Control_Batch${this.lastSearchedMaterialCode ? '_' + this.lastSearchedMaterialCode : ''}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   getBagColumnDisplay(row: { bagBatch?: string; bagNumberDisplay?: string }): string {
     const bnd = (row.bagNumberDisplay || '').trim();

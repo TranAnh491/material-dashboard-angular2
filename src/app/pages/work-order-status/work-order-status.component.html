@@ -67,6 +67,9 @@
                 <button type="button" class="wo-tab" [class.wo-tab--on]="selectedFactory === 'ASM3'" (click)="selectFactory('ASM3')">ASM3</button>
                 <button type="button" class="wo-tab" [class.wo-tab--on]="selectedFactory === 'Sample 1'" (click)="selectFactory('Sample 1')">SAMPLE 1</button>
                 <button type="button" class="wo-tab" [class.wo-tab--on]="selectedFactory === 'Sample 2'" (click)="selectFactory('Sample 2')">SAMPLE 2</button>
+                <button type="button" class="wo-tab wo-tab--bs" [class.wo-tab--on]="selectedFactory === 'BS ASM1'" (click)="selectFactory('BS ASM1')" title="LSX Bổ sung (import thêm) — ASM1">BỔ SUNG ASM1<span class="wo-tab__badge" *ngIf="boSungPendingCount('BS ASM1') as c" [title]="c + ' LSX chờ bổ sung'">{{ c }}</span></button>
+                <button type="button" class="wo-tab wo-tab--bs" [class.wo-tab--on]="selectedFactory === 'BS ASM2'" (click)="selectFactory('BS ASM2')" title="LSX Bổ sung (import thêm) — ASM2">BỔ SUNG ASM2<span class="wo-tab__badge" *ngIf="boSungPendingCount('BS ASM2') as c" [title]="c + ' LSX chờ bổ sung'">{{ c }}</span></button>
+                <button type="button" class="wo-tab wo-tab--bs" [class.wo-tab--on]="selectedFactory === 'BS ASM3'" (click)="selectFactory('BS ASM3')" title="LSX Bổ sung (import thêm) — ASM3">BỔ SUNG ASM3<span class="wo-tab__badge" *ngIf="boSungPendingCount('BS ASM3') as c" [title]="c + ' LSX chờ bổ sung'">{{ c }}</span></button>
                 <button type="button" class="wo-tab wo-tab--bag" [class.wo-tab--on]="showBagQrDialog" (click)="openBagQrDialog()" title="Soạn túi R029 theo LSX và in tem QR">
                   <i class="material-icons">qr_code_2</i> BAG
                 </button>
@@ -103,13 +106,73 @@
                         matTooltip="Mở cửa sổ hướng dẫn, sau đó bấm Chọn file Excel để import PXK">
                   <i class="material-icons">description</i> IMPORT FILE PXK
                 </button>
-                <button type="button" class="wo-action wo-action--danger" (click)="showDeleteDialog = true" *ngIf="hasDeletePermissionValue">
+                <button type="button" class="wo-action wo-action--danger" (click)="openDelLsx()"
+                        title="Xóa lệnh sản xuất — cần mã 4 số Zalo từ nhóm Quản lý kho">
                   <i class="material-icons">delete</i> XÓA
                 </button>
               </div>
             </div>
 
             <!-- MORE Dialog (Import Work Orders + PXK utilities) -->
+            <!-- Thống kê tuần: số LSX / tuần (W1–W52) + tổng số mã NVL -->
+            <div class="time-range-dialog-overlay" *ngIf="showWeekStats" (click)="showWeekStats = false">
+              <div class="wk-stats" (click)="$event.stopPropagation()">
+                <div class="wk-stats__bar">
+                  <strong>Thống kê LSX theo tuần</strong>
+                  <select [(ngModel)]="weekStatsYear" (ngModelChange)="loadWeekStats()" [disabled]="weekStatsLoading">
+                    <option [ngValue]="0">4 tuần gần nhất</option>
+                    <option *ngFor="let y of weekStatsYears" [ngValue]="y">Cả năm {{ y }}</option>
+                  </select>
+                  <select [(ngModel)]="weekStatsFactory" (ngModelChange)="loadWeekStats()" [disabled]="weekStatsLoading">
+                    <option value="">Tất cả nhà máy</option>
+                    <option *ngFor="let f of ['ASM1','ASM2','ASM3','Sample 1','Sample 2','BS ASM1','BS ASM2','BS ASM3']" [value]="f">{{ f }}</option>
+                  </select>
+                  <span class="wk-stats__info">{{ weekStatsInfo }}</span>
+                  <span class="wk-stats__grow"></span>
+                  <button type="button" class="wk-btn" (click)="downloadWeekStats()" [disabled]="weekStatsLoading || !weekStatsRows.length">
+                    <i class="material-icons">download</i>Tải Excel</button>
+                  <button type="button" class="wk-btn" (click)="showWeekStats = false"><i class="material-icons">close</i>Đóng</button>
+                </div>
+                <p class="wk-stats__note">Tuần ISO (thứ 2 → chủ nhật) theo Ngày giao NVL (chưa có thì ngày tạo LSX). LSX import nhiều lần tính 1. Số mã = mã NVL khác nhau trong PXK. Bấm tuần để xem từng LSX.</p>
+                <div class="wk-stats__wrap">
+                  <table class="wk-table">
+                    <thead>
+                      <tr><th>Tuần</th><th>Từ</th><th>Đến</th><th class="n">Số LSX</th><th class="n">Tổng số mã</th><th class="n">TB mã / LSX</th></tr>
+                    </thead>
+                    <tbody>
+                      <ng-container *ngFor="let r of weekStatsRows">
+                        <tr class="wk-row" [class.wk-row--zero]="!r.lsx.length" (click)="r.lsx.length && toggleWeekStatsRow(r.week)">
+                          <td class="b">{{ r.lsx.length ? (weekStatsOpen.has(r.week) ? '▾' : '▸') : '' }} W{{ r.week }}</td>
+                          <td>{{ r.from | date:'dd/MM/yyyy' }}</td>
+                          <td>{{ r.to | date:'dd/MM/yyyy' }}</td>
+                          <td class="n b">{{ r.lsx.length }}</td>
+                          <td class="n">{{ r.codes | number }}</td>
+                          <td class="n">{{ r.lsx.length ? ((r.codes / r.lsx.length) | number:'1.0-1') : '' }}</td>
+                        </tr>
+                        <ng-container *ngIf="weekStatsOpen.has(r.week)">
+                          <tr *ngFor="let x of r.lsx" class="wk-sub">
+                            <td></td>
+                            <td colspan="2">{{ x.lsx }} <small>{{ x.factory }} · {{ x.date | date:'dd/MM' }}</small></td>
+                            <td></td>
+                            <td class="n">{{ x.codes }}</td>
+                            <td></td>
+                          </tr>
+                        </ng-container>
+                      </ng-container>
+                    </tbody>
+                    <tfoot *ngIf="weekStatsRows.length">
+                      <tr>
+                        <th colspan="3">{{ weekStatsYear ? 'Tổng năm ' + weekStatsYear : 'Tổng 4 tuần' }}</th>
+                        <th class="n">{{ weekStatsTotal.lsx | number }}</th>
+                        <th class="n">{{ weekStatsTotal.codes | number }}</th>
+                        <th class="n">{{ weekStatsTotal.lsx ? ((weekStatsTotal.codes / weekStatsTotal.lsx) | number:'1.0-1') : '' }}</th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
             <div class="time-range-dialog-overlay" *ngIf="showMoreDialog">
               <div class="time-range-dialog more-dialog">
                 <div class="dialog-header">
@@ -166,9 +229,13 @@
                               style="color: #0f766e; font-weight: 600;" title="Mã / đầu mã tự điền PXK, không cần scan">
                         <i class="material-icons">playlist_add_check</i> Danh mục không tính PXK
                       </button>
-                      <button class="btn btn-outline-primary" type="button" (click)="openPxkWeightReportDialog()"
+                      <button class="btn btn-outline-primary" type="button" (click)="goToWeighCatalog()"
                               style="color: #e65100; font-weight: 600;" title="Báo cáo mã không hợp lý để check lượng">
                         <i class="material-icons">rule</i> Danh mục check lượng
+                      </button>
+                      <button class="btn btn-outline-primary" type="button" (click)="openWeekStats()"
+                              style="color: #37474f; font-weight: 600;" title="Số LSX mỗi tuần (W1–W52) và tổng số mã NVL trong LSX">
+                        <i class="material-icons">bar_chart</i> Thống kê tuần
                       </button>
                       <button class="btn btn-outline-primary" type="button" (click)="openLsxSearchDialog()"
                               style="color: #5c6bc0; font-weight: 600;" title="Tìm LSX đã từng có trên Firebase">
@@ -718,6 +785,16 @@
                        placeholder="Tìm kiếm Work Order, Mã TP VN, LSX..."
                        autocomplete="off">
               </label>
+              <label class="wo-search wo-search--nvl" title="Nhập mã NVL rồi Enter → các LSX đang chờ soạn có mã này (theo PXK)">
+                <i class="material-icons">{{ nvlSearching ? 'hourglass_top' : 'inventory_2' }}</i>
+                <input type="search"
+                       [(ngModel)]="nvlSearch"
+                       (keyup.enter)="searchNvl()"
+                       (search)="nvlSearch ? searchNvl() : clearNvlSearch()"
+                       placeholder="Mã NVL chờ soạn (Enter)…"
+                       autocomplete="off">
+                <button type="button" class="wo-search__go" (click)="searchNvl()" [disabled]="nvlSearching">Tìm</button>
+              </label>
               <label class="wo-filter">
                 <span>Trạng thái</span>
                 <select [(ngModel)]="statusFilter" (ngModelChange)="onStatusFilterChange()">
@@ -727,6 +804,7 @@
                   <option value="ready">Ready</option>
                   <option value="ready-iqc">Ready-IQC</option>
                   <option value="transfer">Transfer</option>
+                  <option value="jit">JIT</option>
                   <option value="delay">Delay</option>
                 </select>
               </label>
@@ -737,6 +815,11 @@
                   <option value="completed">Hoàn thành</option>
                 </select>
               </label>
+            </div>
+            <div class="wo-nvl-info" *ngIf="nvlSearchInfo">
+              <i class="material-icons">inventory_2</i>
+              <span>{{ nvlSearchInfo }}</span>
+              <button type="button" (click)="clearNvlSearch()">Bỏ lọc NVL</button>
             </div>
 
 
@@ -887,12 +970,13 @@
                           <th>SL sản phẩm</th>
                           <th>Khách hàng</th>
                           <th>Gấp</th>
+                          <th title="Tick = cho phép xuất thiếu LSX (phần chưa xuất treo lại, LSX chưa Done)">Partial</th>
                           <th>Ngày giao NVL</th>
                           <th>Line</th>
                           <th>NVL thiếu</th>
                           <th>Người soạn</th>
                           <th>Số Mã</th>
-                          <th>Tình trạng</th>
+                          <th class="wo-th-info" (click)="showStatusInfo = true" title="Bấm để xem ý nghĩa từng tình trạng">Tình trạng<i class="material-icons wo-th-info__ic">info_outline</i></th>
                           <th>Đủ/Thiếu</th>
                           <th>Ngày nhận thông tin</th>
                         </tr>
@@ -908,7 +992,8 @@
                           <td class="lsx-cell lsx-cell--print"
                               [class.wo-lsx-pxk]="hasPxkForWorkOrder(wo)"
                               (click)="openLsxLabelDialog(wo, $event)"
-                              title="In tem LSX 10×10 cm">{{wo.productionOrder}}</td>
+                              title="In tem LSX 10×10 cm"><span class="wo-lsx-seq" *ngIf="(wo.lsxSeq || 0) > 1"
+                                title="LSX import lần {{ wo.lsxSeq }} trong 30 ngày">{{ wo.lsxSeq }}</span>{{wo.productionOrder}}<span class="wo-nvl-need" *ngIf="nvlNeedFor(wo) as nd" [title]="'Mã NVL: ' + nd.codes.join(', ')">{{ nd.qty | number:'1.0-3' }} {{ nd.unit }}</span></td>
                           <td class="wo-sl">
                             <div class="wo-sl-row">
                               <button type="button" class="wo-print-btn" [class.wo-print-btn--on]="hasPxkForWorkOrder(wo)" (click)="printPxk(wo)" [title]="'SL: ' + (wo.quantity | number) + ' — In PXK'">
@@ -935,6 +1020,18 @@
                               <i class="material-icons" *ngIf="wo.isUrgent">local_fire_department</i>
                               <span *ngIf="!wo.isUrgent">!</span>
                             </button>
+                          </td>
+                          <td class="wo-partial">
+                            <input type="checkbox" [checked]="!!wo.partialAllowed" (change)="togglePartialAllowed(wo)" [disabled]="!canEdit()"
+                                   title="Cho phép xuất thiếu LSX này">
+                            <button type="button" class="wo-partial-btn" *ngIf="canPartialExport(wo)" (click)="partialExport(wo)"
+                                    [disabled]="partialExportBusyId === (wo.id || wo.productionOrder)"
+                                    title="Scan chưa đủ → xuất phần đã scan, treo phần còn thiếu (LSX chưa Done)">
+                              {{ partialExportBusyId === (wo.id || wo.productionOrder) ? '…' : 'Xuất thiếu' }}
+                            </button>
+                            <span class="wo-partial-pending" *ngIf="hasPartialPending(wo)" [title]="partialPendingTitle(wo)">
+                              Treo {{ wo.partialPending?.lines?.length }} mã
+                            </span>
                           </td>
                           <td>
                             <span class="wo-date">
@@ -973,6 +1070,7 @@
                               <option value="ready-iqc">Ready-IQC</option>
                               <option value="transfer" [disabled]="isStatusOptionDisabled(wo, 'transfer')">Transfer</option>
                               <option value="done">Done</option>
+                              <option value="jit">JIT</option>
                               <option value="delay">Delay</option>
                             </select>
                           </td>
@@ -1142,7 +1240,7 @@
               Bổ Sung
             </span>
             <span style="font-size:11px;color:#555">
-              {{ isBsImport ? '✅ Lưu vào Xuất BS — không có LSX → gán "LSX Chung"; không hiện trên bảng Work Order' : 'Tắt: import thông thường vào PXK' }}
+              {{ isBsImport ? '✅ Lưu vào Xuất BS — không có LSX / N/A → hiển thị LSX "N/A"; không hiện trên bảng Work Order' : 'Tắt: import thông thường vào PXK' }}
             </span>
           </div>
         </div>
@@ -1358,6 +1456,33 @@
     </div>
   </div>
 
+  <!-- Ý nghĩa cột Tình trạng (bấm tiêu đề cột) -->
+  <div class="time-range-dialog-overlay" *ngIf="showStatusInfo" (click)="showStatusInfo = false">
+    <div class="time-range-dialog wo-status-info" (click)="$event.stopPropagation()">
+      <div class="dialog-header">
+        <h4><i class="material-icons" style="vertical-align:middle;margin-right:6px;">info_outline</i> Ý nghĩa cột Tình trạng</h4>
+        <button mat-icon-button type="button" (click)="showStatusInfo = false" title="Đóng">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p class="wo-status-info__flow">Luồng chuẩn: <b>Waiting → Kitting → Ready → Transfer → Done</b></p>
+        <table class="xl-table wo-status-info__table">
+          <thead>
+            <tr><th>Tình trạng</th><th>Ý nghĩa</th><th>Điều kiện chọn</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of statusInfoRows">
+              <td class="wo-status-info__name">{{ r.label }}</td>
+              <td>{{ r.meaning }}</td>
+              <td>{{ r.rule }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- BAG Print Dialog -->
   <!-- BAG QR: Scan LSX → danh sách túi R029 → in tem QR -->
   <div class="time-range-dialog-overlay" *ngIf="showBagQrDialog">
@@ -1558,6 +1683,45 @@
   </div>
 
   <!-- Delete Time Range Dialog -->
+  <!-- Xóa lệnh sản xuất theo LSX: mã Zalo 4 số gửi nhóm Quản lý kho -->
+  <div class="modal-overlay" *ngIf="showDelLsx" (click)="showDelLsx = false">
+    <div class="del-lsx" (click)="$event.stopPropagation()">
+      <div class="del-lsx__head">
+        <strong>Xóa lệnh sản xuất</strong>
+        <button type="button" class="wk-btn" (click)="showDelLsx = false"><i class="material-icons">close</i>Đóng</button>
+      </div>
+      <div class="del-lsx__row">
+        <input type="search" [(ngModel)]="delLsxInput" (keyup.enter)="findDelLsx()" placeholder="Nhập / scan LSX (vd KZLSX1126/0438)" autocomplete="off">
+        <button type="button" class="wk-btn" (click)="findDelLsx()" [disabled]="delLsxBusy || !delLsxInput.trim()"><i class="material-icons">search</i>Tìm</button>
+      </div>
+      <table class="wk-table" *ngIf="delLsxMatches.length">
+        <thead><tr><th class="c">Xóa</th><th>Lần</th><th>Nhà máy</th><th>Mã TP</th><th class="n">SL</th><th>Tình trạng</th><th>Ngày tạo</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let w of delLsxMatches">
+            <td class="c"><input type="checkbox" [checked]="delLsxSel.has(w.id!)" (change)="toggleDelLsxSel(w.id!)"></td>
+            <td>{{ $any(w).lsxSeq || 1 }}</td>
+            <td>{{ w.factory }}</td>
+            <td>{{ w.productCode }}</td>
+            <td class="n">{{ w.quantity | number }}</td>
+            <td>{{ getStatusText(w.status) }}</td>
+            <td>{{ $any(w).createdDate?.toDate ? ($any(w).createdDate.toDate() | date:'dd/MM/yyyy HH:mm') : '' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="del-lsx__row" *ngIf="delLsxMatches.length">
+        <button type="button" class="wk-btn" (click)="sendDelLsxOtp()" [disabled]="delLsxBusy || !delLsxSel.size">
+          <i class="material-icons">sms</i>{{ delLsxSent ? 'Gửi lại mã Zalo' : 'Gửi mã Zalo (nhóm Quản lý kho)' }}</button>
+        <input id="del-lsx-otp" class="del-lsx__otp" type="text" inputmode="numeric" maxlength="4" [(ngModel)]="delLsxOtp"
+               (keyup.enter)="confirmDelLsx()" placeholder="Mã 4 số" [disabled]="!delLsxSent || delLsxBusy" autocomplete="off">
+        <button type="button" class="wk-btn wk-btn--danger" (click)="confirmDelLsx()" [disabled]="!delLsxSent || delLsxBusy || delLsxOtp.length !== 4">
+          <i class="material-icons">delete</i>Xóa {{ delLsxSel.size }} dòng</button>
+      </div>
+      <p class="del-lsx__msg" *ngIf="delLsxMsg">{{ delLsxMsg }}</p>
+      <p class="del-lsx__note">Xóa dòng Work Order của LSX (dữ liệu PXK, lịch sử xuất giữ nguyên). Mỗi lần xóa ghi nhật ký người xóa.</p>
+      <button type="button" class="del-lsx__link" *ngIf="hasDeletePermissionValue" (click)="showDelLsx = false; showDeleteDialog = true">Xóa nhiều Work Order theo thời gian…</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" *ngIf="showDeleteDialog" (click)="showDeleteDialog = false">
     <div class="modal-dialog" (click)="$event.stopPropagation()">
       <div class="modal-header">
@@ -1797,12 +1961,16 @@
         </ng-container>
         <p class="pxk-bypass-otp-error" *ngIf="pxkBypassOtpError">{{ pxkBypassOtpError }}</p>
         <p class="pxk-bypass-otp-info" *ngIf="pxkBypassOtpInfo">{{ pxkBypassOtpInfo }}</p>
+        <div class="pxk-bypass-otp-reason" *ngIf="pxkBypassOtpReason"><strong>Lý do lệch</strong><pre>{{ pxkBypassOtpReason }}</pre></div>
         <div class="dialog-actions" style="margin-top: 16px;">
           <button mat-button type="button" (click)="closePxkBypassOtpModal()"
                   [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Hủy</button>
           <button mat-button type="button" *ngIf="pxkBypassOtpStep === 2 && pxkBypassOtpMode === 'otp'"
                   (click)="pxkBypassOtpStep = 1; pxkBypassOtpCode = ''; pxkBypassOtpError = ''"
                   [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying">Gửi lại mã</button>
+          <button mat-stroked-button type="button" *ngIf="pendingPxkBypassWo?.partialAllowed"
+                  (click)="partialExportFromBypass()" [disabled]="pxkBypassOtpSending || pxkBypassOtpVerifying"
+                  title="LSX được tick Partial: xuất phần đã scan, treo phần thiếu, LSX chưa Done">Xuất thiếu</button>
           <button mat-raised-button color="primary" type="button" *ngIf="pxkBypassOtpStep === 1"
                   (click)="sendPxkBypassOtp()" [disabled]="pxkBypassOtpSending">
             {{ pxkBypassOtpSending ? 'Đang gửi…' : 'Gửi mã Zalo' }}

@@ -4,6 +4,7 @@ import { map } from 'rxjs/operators';
 import { ROUTES, RouteInfo } from '../routes/sidebar-routes';
 import { TabPermissionService } from './tab-permission.service';
 import { RolePermissionService } from './role-permission.service';
+import { getAppTab, isAdminOnlyTabKey } from '../routes/app-tabs';
 
 @Injectable({
   providedIn: 'root'
@@ -24,6 +25,17 @@ export class FilteredRoutesService {
       map(([permissions, userRole]) => {
         return this.filterRoutesByPermissions(ROUTES, permissions, userRole);
       })
+    );
+  }
+
+  /** Hàm kiểm tra 1 đường dẫn tab có được mở không (cùng quy tắc với sidebar) — cho trang Menu ẩn thẻ không có quyền. */
+  getPathAccessChecker(): Observable<(path: string) => boolean> {
+    return combineLatest([
+      this.tabPermissionService.getCurrentUserTabPermissions(),
+      this.rolePermissionService.getCurrentUserRole()
+    ]).pipe(
+      map(([permissions, userRole]) => (path: string) =>
+        this.hasAccessToRoute({ path } as RouteInfo, permissions || {}, userRole))
     );
   }
 
@@ -71,86 +83,23 @@ export class FilteredRoutesService {
 
   // Kiểm tra quyền truy cập cho một route
   private hasAccessToRoute(route: RouteInfo, permissions: { [key: string]: boolean }, userRole: string | null): boolean {
-    // Xe Tải: ai đăng nhập cũng truy cập được (không phụ thuộc tab permissions)
-    if (route.path === '/xe-tai') return true;
+    const tab = getAppTab(route.path);
 
-    const tabKey = this.getTabKeyFromRoute(route.path);
-    
-    if (!tabKey) {
-      // Nếu không xác định được tab key, KHÔNG cho phép truy cập (để bảo mật)
+    if (!tab) {
+      // Nếu không xác định được tab, KHÔNG cho phép truy cập (để bảo mật)
       return false;
     }
 
-    // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
-    if (tabKey === 'settings' || tabKey === 'zalo') {
+    // Tab không cần quyền (vd Xe Tải): ai đăng nhập cũng truy cập được
+    if (tab.key === null) return true;
+
+    // Đặc biệt cho Settings / Zalo - chỉ Admin và Quản lý mới có quyền
+    if (isAdminOnlyTabKey(tab.key)) {
       return userRole === 'Admin' || userRole === 'Quản lý';
     }
 
     // Kiểm tra permission - CHỈ cho phép nếu có permission rõ ràng là true
     // Nếu false hoặc undefined → KHÔNG cho phép (user mới đăng ký phải chờ duyệt)
-    return permissions[tabKey] === true;
-  }
-
-  // Map route path sang tab key
-  private getTabKeyFromRoute(path: string): string | null {
-    const tabKeyMap: { [key: string]: string } = {
-      '/dashboard': 'dashboard',
-      '/pd-control': 'pd-control',
-      '/materials-dashboard': 'materials-dashboard',
-      '/fgs-dashboard': 'fgs-dashboard',
-      '/work-order-status': 'work-order-status',
-      '/lich-lam-viec': 'lich-lam-viec',
-      '/shipment': 'shipment',
-      
-      // RM Inbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/inbound': 'inbound',
-      // RM Inventory Overview — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/inventory-overview': 'inventory-overview',
-
-      // RM Outbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/outbound': 'outbound',
-      // RM Inventory (Materials) — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/materials': 'materials',
-      '/quan-ly-nguyen-lieu': 'materials',
-
-      '/bag-history': 'bag-history',
-      
-      // ASM FG routes
-      '/fg-in': 'fg-in',
-      '/fg-out': 'fg-out',
-      '/fg-check': 'fg-check',
-      '/fg-inventory': 'fg-inventory',
-      '/fg-overview': 'fg-overview',
-      '/fg-location': 'fg-location',
-      '/pallet-id': 'pallet-id',
-      
-      // Other routes
-      '/location': 'location',
-      '/stock-check': 'stock-check',
-      '/bieu-mau': 'bieu-mau',
-      '/label': 'label',
-      '/index': 'index',
-      '/sxxk': 'sxxk',
-      '/scrap': 'scrap',
-      '/checklist': 'checklist',
-      '/equipment': 'equipment',
-      '/qc': 'qc',
-      '/qc-traceability': 'qc',
-      '/nhiet-do': 'nhiet-do',
-      '/rm1-delivery': 'rm1-delivery',
-      '/report': 'report',
-      '/shorted-materials': 'shorted-materials',
-      '/settings': 'settings',
-      '/zalo': 'zalo',
-      // Xe Tải: không check tab permission (hasAccessToRoute sẽ allow)
-      '/xe-tai': 'dashboard',
-      
-      // Legacy routes (for backward compatibility)
-      '#materials': 'materials',
-      '/inbound-materials': 'materials',
-      '/outbound-materials': 'materials'
-    };
-
-    return tabKeyMap[path] || null;
+    return permissions[tab.key] === true;
   }
 } 

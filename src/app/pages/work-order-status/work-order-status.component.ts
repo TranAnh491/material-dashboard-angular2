@@ -1,3 +1,5 @@
+import { appAlert } from '../../shared/app-toast';
+import { isBsLsx, stripBsLsx, toBsLsx } from '../../shared/lsx-bo-sung';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { MatDatepicker } from '@angular/material/datepicker';
 import { MAT_RIPPLE_GLOBAL_OPTIONS, RippleGlobalOptions } from '@angular/material/core';
@@ -27,6 +29,8 @@ import { WoGuideJob, WoGuideRole, WoGuideStaff, WoLsxGuideService } from '../../
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 import { PxkWeightCheckReport, PxkWeightCheckReportService } from '../../services/pxk-weight-check-report.service';
 import { ReadyIqcZaloService } from '../../services/ready-iqc-zalo.service';
+import { ReadyPhotoZaloService } from '../../services/ready-photo-zalo.service';
+import { WEIGH_REQUIRED_PREFIXES, WEIGH_TOLERANCE_PERCENT, catalogBagWeight, weighPercentOk } from '../../services/weigh-exempt-report';
 import firebase from 'firebase/compat/app';
 
 // Interface for scanned items
@@ -60,6 +64,8 @@ interface PxkLine {
   tongSLYCau?: string; // Tổng lượng định mức (cột R theo file PXK)
   luongYeuCau?: string; // Lượng yêu cầu (cột O theo file PXK)
   soPOKH?: string; phanTramHaoHut?: string; maKhachHang?: string; ghiChu?: string;
+  /** LSX lần mấy (1 = gốc, 2, 3… = LSX con tách khi import thêm lúc LSX không còn Waiting). */
+  seq?: number;
 }
 
 /** Dữ liệu PXK nhóm theo LSX */
@@ -69,6 +75,15 @@ type PxkDataByLsx = { [lsx: string]: PxkLine[] };
 const RULE_THIEU_BLOCK_DATE = new Date(2025, 0, 1); // Luôn áp dụng
 
 const globalRippleConfig: RippleGlobalOptions = { disabled: true };
+
+/** Kết quả import PXK cho 1 LSX. bsLsx = LSX Bổ sung nhận mã import thêm. */
+type PxkMergeResult = {
+  added: number; skipped: number; seq: number; childCreated: boolean; mergedWaiting: boolean;
+  bsLsx?: string; bsCreated?: boolean; bsReopened?: boolean;
+};
+
+/** 1 lô tồn của mã + PO (vị trí theo IMD) — cột Vị trí In PXK. */
+type PxkLotLoc = { imd: string; loc: string; stock: number; ms: number };
 
 @Component({
   selector: 'app-work-order-status',
@@ -139,6 +154,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   
   // Filters
   searchTerm: string = '';
+  /** Tìm theo mã NVL: LSX chưa xong có mã này trong PXK (đang chờ soạn) */
+  nvlSearch = '';
+  nvlSearching = false;
+  /** null = không lọc theo NVL; key WO → lượng NVL yêu cầu trong PXK */
+  nvlMatch: Map<string, { qty: number; unit: string; codes: string[] }> | null = null;
+  nvlSearchInfo = '';
   statusFilter: WorkOrderStatus | 'all' = 'all';
   doneFilter: 'notCompleted' | 'completed' = 'notCompleted'; // Default: show not completed
 
@@ -336,6 +357,18 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   // Scan QR -> Chọn trạng thái dialog (sau khi scan LSX)
   showScanStatusSelectDialog: boolean = false;
+  /** Popup giải thích ý nghĩa từng tình trạng (bấm tiêu đề cột Tình trạng). */
+  showStatusInfo = false;
+  readonly statusInfoRows: { value: string; label: string; meaning: string; rule: string }[] = [
+    { value: 'waiting', label: 'Waiting', meaning: 'LSX mới nhận / import, kho chưa bắt đầu soạn NVL.', rule: 'Chọn được bất kỳ lúc nào.' },
+    { value: 'kitting', label: 'Kitting', meaning: 'Kho đang soạn NVL cho LSX. Ghi lại giờ bắt đầu soạn.', rule: 'Chỉ chọn khi đang Waiting. Xuất thiếu (Partial) cũng đưa LSX về Kitting để soạn tiếp phần còn treo.' },
+    { value: 'ready', label: 'Ready', meaning: 'Đã soạn xong, NVL sẵn sàng giao Line. Ghi giờ Ready, chốt Standard packing; Line cần chụp hình → báo Zalo team soạn.', rule: 'Chỉ chọn khi đang Kitting. Phải qua kiểm tra cân PXK.' },
+    { value: 'ready-iqc', label: 'Ready-IQC', meaning: 'Đã soạn nhưng còn mã NVL chờ IQC kiểm. Gửi Zalo danh sách mã chờ IQC.', rule: 'Chọn được bất kỳ lúc nào.' },
+    { value: 'transfer', label: 'Transfer', meaning: 'Đã chuyển NVL cho Line / xưởng.', rule: 'Chỉ chọn khi đang Ready. LSX bị thiếu cần OTP Zalo nhóm Quản lý kho.' },
+    { value: 'done', label: 'Done', meaning: 'LSX hoàn tất, đã giao đủ.', rule: 'Phải qua kiểm tra cân PXK. LSX bị thiếu cần OTP Zalo. LSX chia nhiều lần giao (JIT) chưa giao hết sẽ tự chuyển sang JIT.' },
+    { value: 'jit', label: 'JIT', meaning: 'LSX chia nhiều lần giao, kho chưa giao hết.', rule: 'Tick Đã giao đủ các lần ở trang JIT thì tự chuyển Done.' },
+    { value: 'delay', label: 'Delay', meaning: 'LSX bị hoãn / trễ, chưa soạn hoặc chưa giao được. Đếm riêng ở ô Delay và Dashboard.', rule: 'Chọn được bất kỳ lúc nào.' },
+  ];
   scanStatusSelectWorkOrder: WorkOrder | null = null;
 
   // Popup "status changed" after scanning
@@ -379,7 +412,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   pxkBypassOtpVerifying = false;
   pxkBypassOtpLsx = '';
   pxkBypassOtpNextStatusLabel = '';
-  private pendingPxkBypassWo: WorkOrder | null = null;
+  pendingPxkBypassWo: WorkOrder | null = null;
   private pendingPxkBypassStatus = '';
   private pendingPxkBypassAction: 'status' | 'complete' | null = null;
   private pxkBypassGrantedLsx = '';
@@ -388,7 +421,6 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   /** Popup trước khi chọn file import PXK (mô tả nguồn dữ liệu) */
   showPxkImportDialog: boolean = false;
 
-  private readonly PXK_WEIGHT_OK_PERCENT = 98;
   private readonly PXK_WEIGHT_CHECK_COLLECTION = 'pxk-weight-checks';
   private pxkWeightExemptCodes = new Set<string>();
   private pxkWeightIncludeCodes = new Set<string>();
@@ -459,7 +491,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     private woLsxGuide: WoLsxGuideService,
     private nvlCatalog: NvlCatalogFullService,
     private pxkWeightReports: PxkWeightCheckReportService,
-    private readyIqcZalo: ReadyIqcZaloService
+    private readyIqcZalo: ReadyIqcZaloService,
+    private readyPhotoZalo: ReadyPhotoZaloService
   ) {
     // Generate years from current year - 2 to current year + 2
     const currentYear = new Date().getFullYear();
@@ -644,7 +677,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   private isValidFactory(factory: string): boolean {
     if (!factory) return false;
     const normalized = this.normalizeFactoryName(factory);
-    const validFactories = ['asm1', 'asm2', 'asm3', 'sample 1', 'sample 2'];
+    const validFactories = ['asm1', 'asm2', 'asm3', 'sample 1', 'sample 2', 'bs asm1', 'bs asm2', 'bs asm3'];
     return validFactories.includes(normalized);
   }
 
@@ -667,14 +700,14 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
       
       if (!validExtensions.includes(fileExtension)) {
-        alert('❌ Vui lòng chọn file Excel (.xlsx hoặc .xls)');
+        appAlert('❌ Vui lòng chọn file Excel (.xlsx hoặc .xls)');
         return;
       }
       
       // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        alert('❌ File quá lớn. Vui lòng chọn file nhỏ hơn 10MB');
+        appAlert('❌ File quá lớn. Vui lòng chọn file nhỏ hơn 10MB');
         return;
       }
       
@@ -683,7 +716,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         await this.processExcelData(jsonData);
       }).catch((error) => {
         console.error('❌ Error reading Excel file:', error);
-        alert(`❌ Lỗi khi đọc file Excel:\n${error.message || error}`);
+        appAlert(`❌ Lỗi khi đọc file Excel:\n${error.message || error}`);
       });
     }
   }
@@ -709,7 +742,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       void this.ensurePxkSoMaForDisplayed();
     } catch (e) {
       console.error('❌ loadWorkOrders failed:', e);
-      alert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
+      appAlert(`⚠️ Lỗi tải dữ liệu Work Order: ${(e as Error)?.message || e}`);
     } finally {
       this.isLoading = false;
       this.cdr.markForCheck();
@@ -904,7 +937,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
     const normalizeLsx = (s: string): string => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
     const samePrefix = (a: string, b: string): boolean => {
@@ -925,6 +959,178 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   }
 
   /** Load PXK theo danh sách LSX (query `lsx in`, batch 30). Chỉ gọi khi user thao tác. */
+  // ===== Thống kê tuần: số LSX mỗi tuần (W1–W52) + số mã NVL trong LSX =====
+  showWeekStats = false;
+  /** 0 = 4 tuần gần nhất (mặc định); số năm = cả năm W1–W52 */
+  weekStatsYear = 0;
+  /** Số mã NVL theo LSX đã đọc (đỡ đọc lại PXK khi đổi lựa chọn) */
+  private weekStatsCodeCache = new Map<string, number>();
+  /** '' = tất cả nhà máy; mặc định theo tab đang chọn */
+  weekStatsFactory = '';
+  weekStatsLoading = false;
+  weekStatsInfo = '';
+  weekStatsRows: Array<{ week: number; year: number; from: Date; to: Date; lsx: Array<{ lsx: string; factory: string; codes: number; date: Date }>; codes: number }> = [];
+  weekStatsOpen = new Set<number>();
+  readonly weekStatsYears = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
+
+  openWeekStats(): void {
+    this.showMoreDialog = false;
+    this.showWeekStats = true;
+    this.weekStatsFactory = this.selectedFactory || '';
+    void this.loadWeekStats();
+  }
+
+  /** Tuần ISO (thứ 2 đầu tuần) của ngày; năm của tuần có thể khác năm dương lịch ở đầu/cuối năm. */
+  private isoWeek(d: Date): { year: number; week: number } {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = t.getUTCDay() || 7;
+    t.setUTCDate(t.getUTCDate() + 4 - day);
+    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return { year: t.getUTCFullYear(), week: Math.ceil(((t.getTime() - y0.getTime()) / 86400000 + 1) / 7) };
+  }
+
+  /** Thứ 2 của tuần ISO `week` năm `year`. */
+  private isoWeekStart(year: number, week: number): Date {
+    const jan4 = new Date(year, 0, 4);
+    const day = jan4.getDay() || 7;
+    const mon = new Date(year, 0, 4 - day + 1);
+    mon.setDate(mon.getDate() + (week - 1) * 7);
+    return mon;
+  }
+
+  /**
+   * Thống kê theo tuần (ngày giao NVL; chưa có thì ngày tạo LSX): số LSX + tổng số mã NVL (khác nhau, theo PXK) của các LSX.
+   */
+  async loadWeekStats(): Promise<void> {
+    if (this.weekStatsLoading) return;
+    this.weekStatsLoading = true;
+    this.weekStatsInfo = 'Đang tải Work Order…';
+    this.weekStatsOpen.clear();
+    this.cdr.detectChanges();
+    try {
+      const y = Number(this.weekStatsYear) || 0;
+      // Danh sách tuần cần thống kê: 4 tuần gần nhất (tuần này + 3 tuần trước) hoặc cả năm
+      type WkRow = { week: number; year: number; from: Date; to: Date; lsx: Array<{ lsx: string; factory: string; codes: number; date: Date }>; codes: number };
+      const rows: WkRow[] = [];
+      const addWeek = (start: Date) => {
+        const end = new Date(start); end.setDate(end.getDate() + 6);
+        const wk = this.isoWeek(start);
+        rows.push({ week: wk.week, year: wk.year, from: start, to: end, lsx: [], codes: 0 });
+      };
+      if (!y) {
+        const t = new Date(); t.setHours(0, 0, 0, 0);
+        const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() || 7) - 1));
+        for (let k = 3; k >= 0; k--) { const d = new Date(mon); d.setDate(mon.getDate() - k * 7); addWeek(d); }
+      } else {
+        const lastWeek = this.isoWeek(new Date(y, 11, 28)).week; // 52 hoặc 53
+        for (let w = 1; w <= lastWeek; w++) addWeek(this.isoWeekStart(y, w));
+      }
+      const from = rows[0].from;
+      const to = new Date(rows[rows.length - 1].from); to.setDate(to.getDate() + 7);
+      const rowOf = (d: Date) => rows.find((r) => d >= r.from && d.getTime() < r.from.getTime() + 7 * 86400000);
+      const db = this.firestore.firestore;
+      const [byDelivery, byCreated] = await Promise.all([
+        db.collection('work-orders').where('deliveryDate', '>=', from).where('deliveryDate', '<', to).get(),
+        db.collection('work-orders').where('createdDate', '>=', from).where('createdDate', '<', to).get()
+      ]);
+      const wos = new Map<string, any>();
+      [...byDelivery.docs, ...byCreated.docs].forEach((d) => wos.set(d.id, d.data()));
+      const fac = this.normalizeFactoryName(this.weekStatsFactory || '');
+      // 1 LSX = 1 dòng (LSX import nhiều lần tính 1); LSX bổ sung tính riêng
+      const lsxMap = new Map<string, { lsx: string; factory: string; date: Date }>();
+      wos.forEach((w) => {
+        const lsx = String(w?.productionOrder || '').trim();
+        if (!lsx) return;
+        if (fac && this.normalizeFactoryName(String(w?.factory || '')) !== fac) return;
+        const date = this.toDateSafe(w?.deliveryDate) || this.toDateSafe(w?.createdDate);
+        if (!date || !rowOf(date)) return;
+        const key = lsx.toUpperCase().replace(/\s+/g, '');
+        const prev = lsxMap.get(key);
+        if (!prev || date < prev.date) lsxMap.set(key, { lsx, factory: String(w?.factory || ''), date });
+      });
+      // Số mã NVL mỗi LSX (mã khác nhau trong PXK) — đọc song song 8 nhóm × 30 LSX, nhớ kết quả đã đọc
+      const list = [...lsxMap.values()];
+      const keyOf = (x: string) => x.toUpperCase().replace(/\s+/g, '');
+      const need = [...new Set(list.map((x) => x.lsx).filter((l) => !this.weekStatsCodeCache.has(keyOf(l))))];
+      const IN_MAX = 30;
+      const chunks: string[][] = [];
+      for (let i = 0; i < need.length; i += IN_MAX) chunks.push(need.slice(i, i + IN_MAX));
+      let doneChunks = 0;
+      const readChunk = async (chunk: string[]) => {
+        const snap = await db.collection('pxk-import-data').where('lsx', 'in', chunk).get();
+        const found = new Map<string, number>();
+        snap.forEach((doc) => {
+          const d = doc.data() as any;
+          const set = new Set<string>();
+          for (const l of (d?.lines || []) as any[]) {
+            const c = String(l?.materialCode || '').trim().toUpperCase();
+            if (c) set.add(c);
+          }
+          const k = keyOf(String(d?.lsx || ''));
+          found.set(k, (found.get(k) || 0) + set.size);
+        });
+        chunk.forEach((l) => this.weekStatsCodeCache.set(keyOf(l), found.get(keyOf(l)) ?? -1)); // -1 = chưa có PXK
+        doneChunks++;
+        this.weekStatsInfo = `Đang đọc PXK ${Math.min(doneChunks * IN_MAX, need.length)}/${need.length} LSX…`;
+        this.cdr.detectChanges();
+      };
+      const PARALLEL = 8;
+      for (let i = 0; i < chunks.length; i += PARALLEL) {
+        await Promise.all(chunks.slice(i, i + PARALLEL).map(readChunk));
+      }
+      for (const x of list) {
+        const row = rowOf(x.date);
+        if (!row) continue;
+        const codes = Math.max(0, this.weekStatsCodeCache.get(keyOf(x.lsx)) ?? 0);
+        row.lsx.push({ ...x, codes });
+        row.codes += codes;
+      }
+      rows.forEach((r) => r.lsx.sort((a, b) => a.date.getTime() - b.date.getTime() || a.lsx.localeCompare(b.lsx)));
+      this.weekStatsRows = rows;
+      const noPxk = list.filter((x) => (this.weekStatsCodeCache.get(keyOf(x.lsx)) ?? -1) < 0).length;
+      this.weekStatsInfo = `${list.length} LSX · ${rows.reduce((a, r) => a + r.codes, 0)} mã` + (noPxk ? ` · ${noPxk} LSX chưa import PXK (0 mã)` : '');
+    } catch (e: any) {
+      console.error('[Thống kê tuần]', e);
+      this.weekStatsInfo = 'Lỗi tải thống kê: ' + (e?.message || e);
+    } finally {
+      this.weekStatsLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private toDateSafe(v: any): Date | null {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    if (typeof v.toDate === 'function') return v.toDate();
+    if (typeof v.seconds === 'number') return new Date(v.seconds * 1000);
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  get weekStatsTotal(): { lsx: number; codes: number } {
+    return this.weekStatsRows.reduce((a, r) => ({ lsx: a.lsx + r.lsx.length, codes: a.codes + r.codes }), { lsx: 0, codes: 0 });
+  }
+
+  toggleWeekStatsRow(w: number): void {
+    if (this.weekStatsOpen.has(w)) this.weekStatsOpen.delete(w); else this.weekStatsOpen.add(w);
+  }
+
+  /** Tải Excel thống kê tuần (sheet Tuần + sheet LSX). */
+  downloadWeekStats(): void {
+    const fmt = (d: Date) => d.toLocaleDateString('vi-VN');
+    const wk = this.weekStatsRows.map((r) => ({
+      'Tuần': `W${r.week}/${r.year}`, 'Từ': fmt(r.from), 'Đến': fmt(r.to), 'Số LSX': r.lsx.length, 'Tổng số mã': r.codes,
+      'TB mã / LSX': r.lsx.length ? Math.round((r.codes / r.lsx.length) * 10) / 10 : 0
+    }));
+    const lsx = this.weekStatsRows.flatMap((r) => r.lsx.map((x) => ({
+      'Tuần': `W${r.week}/${r.year}`, 'LSX': x.lsx, 'Nhà máy': x.factory, 'Ngày': fmt(x.date), 'Số mã': x.codes
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wk), 'Tuan');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lsx), 'LSX');
+    XLSX.writeFile(wb, `Thong-ke-LSX-tuan-${this.weekStatsYear || '4-tuan'}${this.weekStatsFactory ? '-' + this.weekStatsFactory.replace(/\s+/g, '') : ''}.xlsx`);
+  }
+
   async loadPxkFromFirebase(workOrders: WorkOrder[]): Promise<void> {
     const FIRESTORE_IN_MAX = 30;
     const candidates = workOrders.filter(wo => this.hasPxkForWorkOrder(wo));
@@ -1024,20 +1230,26 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   /** Xóa dữ liệu PXK theo LSX (nhập LSX cần xóa) */
   async clearPxkImportedData(): Promise<void> {
+    if (!(await this.hasDeletePermission()) && !(await this.isPxkDeleteStaff())) {
+      appAlert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      return;
+    }
     const input = prompt(
       'Nhập LSX cần xóa dữ liệu PXK:\n' +
       '  ASM1 / Sample 1 → KZLSX0326/0089\n' +
-      '  ASM2 / Sample 2 → LHLSX0326/0012\n\n' +
+      '  ASM2 / Sample 2 → LHLSX0326/0012\n' +
+      '  LSX bổ sung → BS KZLSX0326/0089\n\n' +
       '⚠️ Phải nhập đầy đủ prefix KZLSX hoặc LHLSX để tránh xóa nhầm nhà máy.'
     );
     if (input == null || input === undefined) return;
     const lsxToDelete = String(input).trim();
-    if (!lsxToDelete) { alert('Chưa nhập LSX.'); return; }
+    if (!lsxToDelete) { appAlert('Chưa nhập LSX.'); return; }
 
     // Normalize GIỮ NGUYÊN prefix KZ/LH để phân biệt ASM1 và ASM2
     const normLsx = (s: string): string => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
       const numPart = m ? m[1].replace(/[-.]/g, '/') : '';
       if (!numPart) return t;
       const prefix = t.startsWith('KZ') ? 'KZ' : t.startsWith('LH') ? 'LH' : '';
@@ -1046,12 +1258,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
     const targetNorm = normLsx(lsxToDelete);
     if (!targetNorm) {
-      alert('LSX không đúng format.\nASM1: KZLSX0326/0089\nASM2: LHLSX0326/0012');
+      appAlert('LSX không đúng format.\nASM1: KZLSX0326/0089\nASM2: LHLSX0326/0012');
       return;
     }
 
     // Cảnh báo nếu nhập thiếu prefix
-    const upper = lsxToDelete.toUpperCase().replace(/\s/g, '');
+    const upper = stripBsLsx(lsxToDelete).toUpperCase().replace(/\s/g, '');
     if (!upper.startsWith('KZ') && !upper.startsWith('LH')) {
       const confirm = window.confirm(
         `⚠️ LSX "${lsxToDelete}" không có prefix KZLSX/LHLSX.\n` +
@@ -1070,7 +1282,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         if (normLsx(docLsx) === targetNorm) toDelete.push({ id: docSnap.id, lsx: docLsx });
       });
       if (toDelete.length === 0) {
-        alert(`Không tìm thấy dữ liệu PXK cho LSX: ${lsxToDelete}`);
+        appAlert(`Không tìm thấy dữ liệu PXK cho LSX: ${lsxToDelete}`);
         return;
       }
       for (const { id, lsx } of toDelete) {
@@ -1083,10 +1295,10 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.invalidatePxkCache();
       this.calculateSummary();
       this.cdr.detectChanges();
-      alert(`✅ Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
+      appAlert(`✅ Đã xóa dữ liệu PXK cho LSX: ${toDelete.map(x => x.lsx).join(', ')}.`);
     } catch (e) {
       console.error('[PXK] Lỗi khi xóa:', e);
-      alert('Lỗi khi xóa dữ liệu PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+      appAlert('Lỗi khi xóa dữ liệu PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
     } finally {
       this.isClearingPxk = false;
     }
@@ -1213,8 +1425,20 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return String(raw ?? '').trim().toUpperCase().replace(/\s+/g, '');
   }
 
+  /** Số LSX Bổ sung đang chờ (chưa Done / Transfer) theo tab BS ASM1 / ASM2 / ASM3 — hiện trên nút tab. */
+  boSungPendingCount(tab: string): number {
+    const want = this.normalizeFactoryName(tab);
+    let n = 0;
+    for (const wo of this.workOrders || []) {
+      if (this.normalizeFactoryName(String(wo?.factory || '')) !== want) continue;
+      if (wo.isCompleted || wo.status === WorkOrderStatus.DONE || wo.status === WorkOrderStatus.TRANSFER) continue;
+      n++;
+    }
+    return n;
+  }
+
   inferFactoryFromLsxPrefix(lsx: string): 'ASM1' | 'ASM2' | null {
-    const u = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
+    const u = stripBsLsx(lsx).toUpperCase().replace(/\s/g, '');
     if (u.startsWith('LH')) return 'ASM2';
     if (u.startsWith('KZ')) return 'ASM1';
     return null;
@@ -1223,8 +1447,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   /** Sample 1 / ASM1 → kho ASM1; Sample 2 / ASM2 → kho ASM2 (PXK, outbound). */
   private mapDisplayFactoryToOperationalAsm(displayFactory: string): 'ASM1' | 'ASM2' | null {
     const n = this.normalizeFactoryName(String(displayFactory || '').trim());
-    if (n === 'asm1' || n === 'sample 1') return 'ASM1';
-    if (n === 'asm2' || n === 'sample 2' || n === 'asm3') return 'ASM2';
+    if (n === 'asm1' || n === 'sample 1' || n === 'bs asm1') return 'ASM1';
+    if (n === 'asm2' || n === 'sample 2' || n === 'asm3' || n === 'bs asm2' || n === 'bs asm3') return 'ASM2';
     return null;
   }
 
@@ -1345,7 +1569,9 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         matchesDoneFilter = wo.isCompleted;
       }
 
-      return matchesSearch && matchesStatus && matchesFactory && matchesDoneFilter && matchesViewDate;
+      const matchesNvl = !this.nvlMatch || this.nvlMatch.has(this.nvlWoKey(wo));
+
+      return matchesSearch && matchesStatus && matchesFactory && matchesDoneFilter && matchesViewDate && matchesNvl;
     });
     
     
@@ -1697,7 +1923,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     try {
       const win = window.open('', '_blank', 'width=520,height=560');
       if (!win) {
-        alert('Không mở được cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không mở được cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
       const safe = this.escapeHtmlForPrint(lsx);
@@ -1779,6 +2005,12 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.pxkSkipCatalogDraft = '';
   }
 
+  /** Danh mục check lượng đã gộp về Danh mục NVL/TP → tab Check lượng / Cân (1 nguồn). */
+  goToWeighCatalog(): void {
+    this.showMoreDialog = false;
+    void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'weigh' } });
+  }
+
   openPxkWeightReportDialog(): void {
     this.showMoreDialog = false;
     this.showPxkWeightReportDialog = true;
@@ -1799,7 +2031,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   /** LSX còn dòng phải check lượng — icon ở cột SL sản phẩm. */
   lsxNeedsWeightCheck(wo: WorkOrder): boolean {
-    const lines = this.getPxkLinesForLsx(String(wo?.productionOrder || ''));
+    const lines = this.getPxkLinesForLsx(String(wo?.productionOrder || ''), Number(wo?.lsxSeq) || 1);
     return lines.some((line) => this.isPxkWeightCheckLine(line.materialCode, line.maKho));
   }
 
@@ -1826,7 +2058,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       await this.refreshPxkWeightCatalog();
       void this.refreshPxkWeightIcons();
     } catch (error: any) {
-      alert(error?.message || 'Không duyệt được báo cáo.');
+      appAlert(error?.message || 'Không duyệt được báo cáo.');
     } finally {
       this.pxkWeightReportSaving = false;
       this.cdr.markForCheck();
@@ -1843,7 +2075,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       await this.refreshPxkWeightCatalog();
       void this.refreshPxkWeightIcons();
     } catch (error: any) {
-      alert(error?.message || 'Không từ chối được báo cáo.');
+      appAlert(error?.message || 'Không từ chối được báo cáo.');
     } finally {
       this.pxkWeightReportSaving = false;
       this.cdr.markForCheck();
@@ -1924,7 +2156,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.pxkSkipCatalogKind = 'code';
       this.pxkSkipScanCatalog = await this.woPxkSkipCatalog.load();
     } catch (error: any) {
-      alert(error?.message || 'Không thêm được mã.');
+      appAlert(error?.message || 'Không thêm được mã.');
     } finally {
       this.pxkSkipCatalogSaving = false;
       this.cdr.markForCheck();
@@ -1939,7 +2171,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       await this.woPxkSkipCatalog.remove(item.id);
       this.pxkSkipScanCatalog = await this.woPxkSkipCatalog.load();
     } catch (error: any) {
-      alert(error?.message || 'Không xóa được mã.');
+      appAlert(error?.message || 'Không xóa được mã.');
     } finally {
       this.pxkSkipCatalogSaving = false;
       this.cdr.markForCheck();
@@ -1961,7 +2193,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       this.staffCatalogDraft = '';
       this.syncCreatedByPickerFromCatalog(await this.woCreatedByStaff.loadStaff());
     } catch (error: any) {
-      alert(error?.message || 'Không thêm được nhân viên.');
+      appAlert(error?.message || 'Không thêm được nhân viên.');
     } finally {
       this.staffCatalogSaving = false;
       this.cdr.markForCheck();
@@ -1976,7 +2208,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       await this.woCreatedByStaff.deleteStaff(staff.id);
       this.syncCreatedByPickerFromCatalog(await this.woCreatedByStaff.loadStaff());
     } catch (error: any) {
-      alert(error?.message || 'Không xóa được nhân viên.');
+      appAlert(error?.message || 'Không xóa được nhân viên.');
     } finally {
       this.staffCatalogSaving = false;
       this.cdr.markForCheck();
@@ -2006,7 +2238,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const factories = [...new Set([...lsxMap.values()].map(e => e.factory))];
     const normLsx = (s: string) => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
     const factoryToLsxScanMap = new Map<string, Map<string, Map<string, number>>>(); // factory -> lsxNorm -> mat|po -> qty
@@ -2044,7 +2277,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
         const po = String((l as any).po || (l as any).poNumber || '').trim();
         let scanQty: number;
-        if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) scanQty = Number(l.quantity) || 0;
+        // Mã / kho bỏ qua scan chỉ coi là đủ khi LSX đã bắt đầu xuất (có lượt scan thật)
+        if ((isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
         else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) scanQty = Number(l.quantity) || 0;
         else scanQty = getScanQty(l.materialCode, po);
         if (this.isPxkSkipThieuCode(matCode)) continue;
@@ -2075,6 +2309,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
     if (!t) return '';
     const compact = t.replace(/[-.]/g, '/');
+    if (isBsLsx(t)) return 'BS' + this.normLsxForMatch(stripBsLsx(s)); // LSX bổ sung
     if (/^(KZ|LH)LSX/.test(compact)) return compact;
     const m = compact.match(/(\d{4}\/\d+)/);
     return m ? m[1] : compact;
@@ -2114,7 +2349,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
   async searchLsxInFirebase(): Promise<void> {
     const raw = (this.lsxSearchInput || '').trim();
     if (!raw) {
-      alert('Vui lòng nhập LSX cần tìm.');
+      appAlert('Vui lòng nhập LSX cần tìm.');
       return;
     }
 
@@ -2220,7 +2455,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       };
     } catch (e) {
       console.error('searchLsxInFirebase failed:', e);
-      alert('❌ Lỗi khi tìm LSX trên Firebase. Xem Console để biết chi tiết.');
+      appAlert('❌ Lỗi khi tìm LSX trên Firebase. Xem Console để biết chi tiết.');
       this.lsxSearchResult = {
         query: raw,
         normalized: targetNorm,
@@ -2261,6 +2496,75 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     const raw = (wo.productionOrder || '').trim().toUpperCase().replace(/\s/g, '');
     const norm = this.normLsxForMatch(wo.productionOrder);
     return this.lsxWithThieuSet.has(raw) || this.lsxWithThieuSet.has(norm);
+  }
+
+  private nvlWoKey(wo: WorkOrder): string {
+    return wo.id || `${wo.productionOrder || ''}#${wo.lsxSeq || 1}`;
+  }
+
+  /** WO còn phải soạn: chưa Done / Transfer, chưa hoàn tất. */
+  private isWoPendingKit(wo: WorkOrder): boolean {
+    return !wo.isCompleted && wo.status !== WorkOrderStatus.DONE && wo.status !== WorkOrderStatus.TRANSFER;
+  }
+
+  /** Tìm LSX đang chờ soạn có mã NVL (theo PXK đã import) → lọc bảng. */
+  async searchNvl(): Promise<void> {
+    const q = String(this.nvlSearch || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!q) {
+      this.clearNvlSearch();
+      return;
+    }
+    this.nvlSearching = true;
+    this.nvlSearchInfo = '';
+    this.cdr.markForCheck();
+    try {
+      const candidates = this.workOrders.filter((wo) => this.woMatchesSelectedFactory(wo) && this.isWoPendingKit(wo));
+      await this.loadPxkFromFirebase(candidates);
+      const match = new Map<string, { qty: number; unit: string; codes: string[] }>();
+      const lsxList: string[] = [];
+      let noPxk = 0;
+      for (const wo of candidates) {
+        const lines = this.getPxkLinesForLsx(wo.productionOrder || '', Number(wo?.lsxSeq) || 1);
+        if (!lines.length) {
+          noPxk++;
+          continue;
+        }
+        const hit = lines.filter((l) => String(l.materialCode || '').trim().toUpperCase().includes(q));
+        if (!hit.length) continue;
+        const qty = hit.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+        const codes = [...new Set(hit.map((l) => String(l.materialCode || '').trim().toUpperCase()))];
+        match.set(this.nvlWoKey(wo), { qty, unit: String(hit[0].unit || ''), codes });
+        lsxList.push(wo.productionOrder || '');
+      }
+      this.nvlMatch = match;
+      this.nvlSearchInfo = match.size
+        ? `Mã ${q}: ${match.size} LSX đang chờ soạn` + (noPxk ? ` · ${noPxk} LSX chưa import PXK không kiểm được` : '')
+        : `Không có LSX đang chờ soạn nào dùng mã ${q}` + (noPxk ? ` (${noPxk} LSX chưa import PXK không kiểm được)` : '');
+      this.clearSelection();
+      this.currentPage = 1;
+      this.applyFilters();
+      this.calculateSummary();
+    } catch (e: any) {
+      this.nvlSearchInfo = 'Lỗi khi tìm: ' + (e?.message || e);
+    } finally {
+      this.nvlSearching = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  clearNvlSearch(): void {
+    this.nvlSearch = '';
+    this.nvlMatch = null;
+    this.nvlSearchInfo = '';
+    this.currentPage = 1;
+    this.applyFilters();
+    this.calculateSummary();
+    this.cdr.markForCheck();
+  }
+
+  /** Lượng NVL đang tìm cần soạn cho WO (hiện cạnh LSX). */
+  nvlNeedFor(wo: WorkOrder): { qty: number; unit: string; codes: string[] } | null {
+    return this.nvlMatch?.get(this.nvlWoKey(wo)) || null;
   }
 
   onSearchChange(): void {
@@ -2324,7 +2628,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('❌ Error adding work order:', error);
-          alert(`❌ Error adding work order: ${error.message || error}\n\nPlease try again.`);
+          appAlert(`❌ Error adding work order: ${error.message || error}\n\nPlease try again.`);
         });
     }
   }
@@ -2364,9 +2668,51 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     return key.startsWith('WHE') || key.startsWith('WHD') || key.startsWith('WHF') || key.startsWith('WHG') || key.startsWith('WHH');
   }
 
+  /** Line cần chụp hình khi giao: USB C, WHA / WHB / WHG / WHH (kể cả WH A, WH-B…) → icon camera trên PXK + Zalo khi Ready. */
+  isPhotoRequiredLine(line: string): boolean {
+    if (/USB\s*C/i.test(String(line || ''))) return true;
+    const key = this.normalizeProductionLineKey(line);
+    return ['WHA', 'WHB', 'WHG', 'WHH'].some((p) => key.startsWith(p));
+  }
+
+  /** Ready + Line cần chụp hình → Zalo riêng cho team soạn LSX (người soạn / team / mã ASP scan xuất). */
+  private async notifyReadyPhotoForWorkOrder(wo: WorkOrder): Promise<void> {
+    const lsx = String(wo?.productionOrder || '').trim();
+    const line = String(wo?.productionLine || '').trim();
+    if (!lsx || !this.isPhotoRequiredLine(line)) return;
+    const team = String(wo.createdByTeam || '').trim();
+    const teamKey = team.toLocaleUpperCase('vi');
+    const names = new Set<string>(this.parseCreatedByNames(wo.createdBy).map((n) => this.labelForCreatedBy(n)));
+    if (teamKey) {
+      for (const s of this.woGuideStaff) {
+        if (String(s.team || '').trim().toLocaleUpperCase('vi') === teamKey) names.add(s.name);
+      }
+    }
+    const memberIds = [String(wo.createdByMemberId || '').trim().toUpperCase()].filter(Boolean);
+    try {
+      const res = await this.readyPhotoZalo.notify({
+        lsx,
+        line,
+        factory: this.getWorkOrderDisplayFactory(wo) || '',
+        productCode: String(wo.productCode || '').trim(),
+        team,
+        names: [...names].filter(Boolean),
+        memberIds
+      });
+      if (!res.sentTo.length && !res.skipped) {
+        appAlert(`LSX ${lsx} (Line ${line}) cần chụp hình — chưa nhắn Zalo được cho team soạn (chưa liên kết bot / chưa chọn Người soạn).`);
+      }
+    } catch (error) {
+      console.error('Ready-photo Zalo:', error);
+      const message = error instanceof Error ? error.message : 'Không gửi được Zalo.';
+      appAlert(`Đã lưu Ready. Zalo nhắc chụp hình chưa gửi được cho team soạn.
+${message}`);
+    }
+  }
+
   /** KZ + Line WHE/WHD/WHF/WHG/WHH → ASM3 trên PXK; KZ khác → ASM1; LH → ASM2. */
   private resolvePxkFactoryBadge(lsx: string, productionLine: string): 'ASM1' | 'ASM2' | 'ASM3' | null {
-    const lsxUpper = String(lsx || '').trim().toUpperCase().replace(/\s/g, '');
+    const lsxUpper = stripBsLsx(lsx).toUpperCase().replace(/\s/g, '');
     if (lsxUpper.startsWith('LH')) return 'ASM2';
     if (lsxUpper.startsWith('KZ')) {
       return this.isAsm3ProductionLine(productionLine) ? 'ASM3' : 'ASM1';
@@ -2539,8 +2885,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.pxkBypassOtpCode = '';
     this.pxkBypassOtpError = '';
     this.pxkBypassOtpInfo = '';
+    this.pxkBypassOtpReason = '';
     this.cdr.detectChanges();
+    void this.buildPxkBypassReason(workOrder).then((r) => {
+      if (this.pendingPxkBypassWo !== workOrder) return;
+      this.pxkBypassOtpReason = r;
+      this.cdr.detectChanges();
+    });
   }
+
+  /** Lý do PXK lệch (các mã thiếu) — gửi kèm OTP Zalo */
+  pxkBypassOtpReason = '';
 
   closePxkBypassOtpModal(): void {
     this.showPxkBypassOtpModal = false;
@@ -2588,11 +2943,13 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     this.pxkBypassOtpSending = true;
     try {
       const requestedBy = await this.getPxkBypassRequester();
+      if (!this.pxkBypassOtpReason) this.pxkBypassOtpReason = await this.buildPxkBypassReason(this.pendingPxkBypassWo);
       await this.woPxkBypassOtp.requestOtp({
         lsx,
         requestedBy,
         nextStatus: this.pxkBypassOtpNextStatusLabel,
-        factory: this.selectedFactory || ''
+        factory: this.selectedFactory || '',
+        reason: this.pxkBypassOtpReason
       });
       this.pxkBypassOtpStep = 2;
       this.pxkBypassOtpInfo = `Đã gửi mã 4 số qua Zalo tới nhóm Quản lý kho cho LSX ${lsx}.`;
@@ -2691,11 +3048,17 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
 
   async onStatusChange(workOrder: WorkOrder, newStatus: string): Promise<void> {
     const oldStatus = workOrder.status;
-    const newStatusEnum = this.convertStringToStatus(newStatus);
+    let newStatusEnum = this.convertStringToStatus(newStatus);
+    // LSX đã chia nhiều lần giao (JIT) mà kho chưa giao hết → không Done, chuyển JIT
+    if (newStatusEnum === WorkOrderStatus.DONE && workOrder.jitActive && !workOrder.jitDelivered) {
+      appAlert(`LSX ${workOrder.productionOrder} đang chia nhiều lần giao (JIT) — chưa giao hết nên chuyển sang JIT.\nTick Đã giao đủ các lần ở trang JIT thì tự Done.`);
+      newStatusEnum = WorkOrderStatus.JIT;
+      newStatus = WorkOrderStatus.JIT;
+    }
     const currentStatus = (workOrder.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
     const transitionCheck = this.isStatusTransitionAllowed(currentStatus, newStatusEnum);
     if (!transitionCheck.allowed) {
-      alert(transitionCheck.message);
+      appAlert(transitionCheck.message);
       workOrder.status = oldStatus;
       this.cdr.detectChanges();
       return;
@@ -2706,7 +3069,7 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
     ) {
       const weightMsg = await this.getPxkWeightCheckBlockMessage(workOrder);
       if (weightMsg) {
-        alert(weightMsg);
+        appAlert(weightMsg);
         workOrder.status = oldStatus;
         this.cdr.detectChanges();
         return;
@@ -2739,6 +3102,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
       if (newStatus === WorkOrderStatus.DONE && oldStatus !== WorkOrderStatus.DONE) {
         updatedWorkOrder.doneAt = now;
+        // Đã Done → hết phần treo của xuất thiếu
+        if (workOrder.partialPending) updatedWorkOrder.partialPending = null;
       }
       
       if (oldStatus === WorkOrderStatus.DONE && newStatus !== WorkOrderStatus.DONE) {
@@ -2763,6 +3128,8 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       }
       if (newStatus === WorkOrderStatus.READY && oldStatus !== WorkOrderStatus.READY) {
         workOrder.readyAt = now;
+        void this.notifyReadyPhotoForWorkOrder(workOrder);
+        void this.snapshotStdForWo(workOrder, true); // chốt Standard packing lúc Ready
       }
       if (newStatus === WorkOrderStatus.DONE && oldStatus !== WorkOrderStatus.DONE) {
         workOrder.doneAt = now;
@@ -2866,9 +3233,15 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       payload.createdByMemberId = firebase.firestore.FieldValue.delete();
     }
 
+    const becameReady = field === 'status' && processedValue === WorkOrderStatus.READY && workOrder.status !== WorkOrderStatus.READY;
     this.materialService.updateWorkOrder(workOrder.id!, payload as Partial<WorkOrder>)
       .then(() => {
         console.log(`✅ Successfully updated work order ${workOrder.id} in Firebase`);
+        if (becameReady) {
+          void this.notifyReadyPhotoForWorkOrder({ ...workOrder, ...updatedWorkOrder });
+          const local = this.workOrders.find((w) => w.id === workOrder.id) || workOrder;
+          void this.snapshotStdForWo(local, true); // chốt Standard packing lúc Ready
+        }
         
         // Update local array
         const index = this.workOrders.findIndex(wo => wo.id === workOrder.id);
@@ -2886,15 +3259,130 @@ export class WorkOrderStatusComponent implements OnInit, OnDestroy {
       })
       .catch(error => {
         console.error(`❌ Error updating work order ${workOrder.id}:`, error);
-        alert(`❌ Lỗi khi cập nhật work order: ${error.message || error}`);
+        appAlert(`❌ Lỗi khi cập nhật work order: ${error.message || error}`);
       });
+  }
+
+  // ===== Xóa lệnh sản xuất theo LSX — mã Zalo 4 số gửi nhóm Quản lý kho =====
+  showDelLsx = false;
+  delLsxInput = '';
+  delLsxMatches: WorkOrder[] = [];
+  delLsxSel = new Set<string>();
+  delLsxOtp = '';
+  delLsxSent = false;
+  delLsxBusy = false;
+  delLsxMsg = '';
+  /** LSX đã gửi mã (mã gắn với đúng LSX này) */
+  private delLsxKey = '';
+
+  openDelLsx(): void {
+    this.showDelLsx = true;
+    this.delLsxInput = '';
+    this.delLsxMatches = [];
+    this.delLsxSel.clear();
+    this.delLsxOtp = '';
+    this.delLsxSent = false;
+    this.delLsxMsg = '';
+    this.delLsxKey = '';
+  }
+
+  /** Tìm các dòng Work Order của LSX (mọi lần import, mọi nhà máy). */
+  async findDelLsx(): Promise<void> {
+    const raw = String(this.delLsxInput || '').trim();
+    if (!raw || this.delLsxBusy) return;
+    this.delLsxBusy = true;
+    this.delLsxMsg = '';
+    this.delLsxSent = false;
+    this.delLsxOtp = '';
+    try {
+      const variants = [...new Set([raw, raw.toUpperCase(), raw.replace(/\s+/g, '').toUpperCase()])];
+      const snap = await this.firestore.firestore.collection('work-orders').where('productionOrder', 'in', variants).get();
+      this.delLsxMatches = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as WorkOrder))
+        .sort((a, b) => (Number((a as any).lsxSeq) || 1) - (Number((b as any).lsxSeq) || 1));
+      this.delLsxSel = new Set(this.delLsxMatches.map((w) => w.id!));
+      this.delLsxKey = this.delLsxMatches[0]?.productionOrder ? String(this.delLsxMatches[0].productionOrder).trim() : '';
+      if (!this.delLsxMatches.length) this.delLsxMsg = `Không tìm thấy Work Order cho LSX "${raw}".`;
+    } catch (e: any) {
+      this.delLsxMsg = 'Lỗi tìm LSX: ' + (e?.message || e);
+    } finally {
+      this.delLsxBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  toggleDelLsxSel(id: string): void {
+    if (this.delLsxSel.has(id)) this.delLsxSel.delete(id); else this.delLsxSel.add(id);
+    this.delLsxSent = false;
+    this.delLsxOtp = '';
+  }
+
+  /** Gửi mã 4 số qua Zalo tới nhóm Quản lý kho. */
+  async sendDelLsxOtp(): Promise<void> {
+    const rows = this.delLsxMatches.filter((w) => this.delLsxSel.has(w.id!));
+    if (!rows.length || !this.delLsxKey || this.delLsxBusy) return;
+    this.delLsxBusy = true;
+    this.delLsxMsg = '';
+    try {
+      const requestedBy = await this.getPxkBypassRequester();
+      const detail = rows.map((w) => `${(w as any).lsxSeq > 1 ? 'lần ' + (w as any).lsxSeq + ' · ' : ''}${w.factory || ''} · ${w.productCode || ''} · SL ${w.quantity || 0} · ${this.getStatusText(w.status)}`).join('; ');
+      await this.woPxkBypassOtp.requestOtp({
+        lsx: this.delLsxKey,
+        requestedBy,
+        factory: String(rows[0].factory || ''),
+        reason: `Xóa ${rows.length} dòng Work Order — ${detail}`,
+        purpose: 'delete'
+      });
+      this.delLsxSent = true;
+      this.delLsxMsg = 'Đã gửi mã 4 số qua Zalo tới nhóm Quản lý kho (hiệu lực 10 phút).';
+      setTimeout(() => (document.getElementById('del-lsx-otp') as HTMLInputElement | null)?.focus(), 80);
+    } catch (e: any) {
+      this.delLsxMsg = 'Không gửi được mã: ' + (e?.message || e);
+    } finally {
+      this.delLsxBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Nhập đúng mã → xóa các dòng Work Order đã chọn của LSX (ghi nhật ký wo-delete-log). */
+  async confirmDelLsx(): Promise<void> {
+    const code = String(this.delLsxOtp || '').trim();
+    const rows = this.delLsxMatches.filter((w) => this.delLsxSel.has(w.id!));
+    if (!/^\d{4}$/.test(code)) { this.delLsxMsg = 'Nhập mã 4 số nhận từ Zalo.'; return; }
+    if (!rows.length || this.delLsxBusy) return;
+    this.delLsxBusy = true;
+    this.delLsxMsg = '';
+    try {
+      const ok = await this.woPxkBypassOtp.verifyOtp(code, this.delLsxKey, 'delete');
+      if (!ok) throw new Error('Mã không đúng.');
+      const by = await this.getPxkBypassRequester();
+      let done = 0;
+      for (const w of rows) {
+        const { id, ...data } = w as any;
+        await this.firestore.firestore.collection('wo-delete-log').add({
+          woId: id, lsx: w.productionOrder || '', deletedBy: by, deletedAt: new Date(), via: 'zalo-otp', data
+        });
+        await this.deleteWorkOrderWithFallback(id, w);
+        done++;
+      }
+      const ids = new Set(rows.map((w) => w.id));
+      this.workOrders = this.workOrders.filter((w) => !ids.has(w.id));
+      this.applyFilters();
+      this.calculateSummary();
+      appAlert(`✅ Đã xóa ${done} dòng Work Order của LSX ${this.delLsxKey}.`);
+      this.showDelLsx = false;
+    } catch (e: any) {
+      this.delLsxMsg = '❌ ' + (e?.message || e);
+    } finally {
+      this.delLsxBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   async deleteWorkOrder(workOrder: WorkOrder): Promise<void> {
     // Check delete permission first
     const hasPermission = await this.hasDeletePermission();
     if (!hasPermission) {
-      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
       return;
     }
 
@@ -2931,13 +3419,13 @@ Are you absolutely sure you want to delete this work order?`;
           this.calculateSummary();
           
           // Show success message
-          alert(`✅ Work Order ${workOrder.orderNumber} has been deleted successfully.`);
+          appAlert(`✅ Work Order ${workOrder.orderNumber} has been deleted successfully.`);
         })
         .catch(error => {
           console.error('Error deleting work order:', error);
           
           // Show error message
-          alert(`❌ Error: Failed to delete Work Order ${workOrder.orderNumber}. Please try again.
+          appAlert(`❌ Error: Failed to delete Work Order ${workOrder.orderNumber}. Please try again.
           
 Error details: ${error.message || 'Unknown error occurred'}`);
         })
@@ -2956,12 +3444,12 @@ Error details: ${error.message || 'Unknown error occurred'}`);
     // Check delete permission first
     const hasPermission = await this.hasDeletePermission();
     if (!hasPermission) {
-      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
       return;
     }
 
     if (workOrders.length === 0) {
-      alert('⚠️ No work orders selected for deletion.');
+      appAlert('⚠️ No work orders selected for deletion.');
       return;
     }
 
@@ -2991,9 +3479,9 @@ Are you absolutely sure you want to delete these ${workOrders.length} work order
           
           // Show results
           if (failed === 0) {
-            alert(`✅ Successfully deleted all ${successful} work orders.`);
+            appAlert(`✅ Successfully deleted all ${successful} work orders.`);
           } else {
-            alert(`⚠️ Bulk delete completed:
+            appAlert(`⚠️ Bulk delete completed:
 • Successfully deleted: ${successful} work orders
 • Failed to delete: ${failed} work orders
 
@@ -3002,7 +3490,7 @@ Please check the console for error details.`);
         })
         .catch(error => {
           console.error('Bulk delete error:', error);
-          alert(`❌ Error during bulk delete operation. Please try again.`);
+          appAlert(`❌ Error during bulk delete operation. Please try again.`);
         });
     }
   }
@@ -3016,6 +3504,7 @@ Please check the console for error details.`);
       case WorkOrderStatus.TRANSFER: return 'status-transfer';
       case WorkOrderStatus.DONE: return 'status-done';
       case WorkOrderStatus.DELAY: return 'status-delay';
+      case WorkOrderStatus.JIT: return 'status-jit';
       default: return '';
     }
   }
@@ -3038,7 +3527,7 @@ Please check the console for error details.`);
     );
 
     if (filteredData.length === 0) {
-      alert(`❌ Không có dữ liệu nào cho nhà máy ${this.selectedFactory} trong ${this.WO_RECENT_DAYS} ngày gần nhất`);
+      appAlert(`❌ Không có dữ liệu nào cho nhà máy ${this.selectedFactory} trong ${this.WO_RECENT_DAYS} ngày gần nhất`);
       return;
     }
 
@@ -3128,45 +3617,23 @@ Please check the console for error details.`);
         throw new Error('No valid work orders found in the Excel file');
       }
       
-      // Step 3: Check for duplicate LSX (productionOrder) values in Firebase
-      console.log('Step 3: Checking for duplicate LSX in Firebase...');
+      // Step 3: LSX đã import trong 30 ngày → vẫn lưu, đánh số lần 2, 3… (lsxSeq)
+      console.log('Step 3: Numbering re-imported LSX (30 days)...');
       this.importProgress = 30;
-      
-      // Extract all LSX values from the imported data
-      const importedLSX = workOrders.map(wo => wo.productionOrder).filter(lsx => lsx);
-      console.log('📋 LSX values to check:', importedLSX);
-      
-      // Check against Firebase for existing LSX
-      const lsxCheck = await this.checkExistingLSXInFirebase(importedLSX);
-      
-      console.log('📊 Firebase LSX Check Results:');
-      console.log('  - Existing in Firebase:', lsxCheck.existing);
-      console.log('  - New (not in Firebase):', lsxCheck.new);
-      console.log('  - Total imported LSX:', importedLSX.length);
-      console.log('  - Already exist:', lsxCheck.existing.length);
-      console.log('  - New:', lsxCheck.new.length);
-      
-      // Filter work orders based on Firebase check
-      const validWorkOrders: Partial<WorkOrder>[] = [];
-      const duplicates: string[] = [];
-      
-      for (const workOrder of workOrders) {
-        if (workOrder.productionOrder && lsxCheck.existing.includes(workOrder.productionOrder)) {
-          duplicates.push(workOrder.productionOrder);
-          console.warn(`⚠️ LSX already exists in Firebase: ${workOrder.productionOrder}`);
-        } else {
-          validWorkOrders.push(workOrder);
-        }
-      }
-
-      if (duplicates.length > 0) {
-        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
-        console.warn(duplicateMessage);
-        // Don't show alert here, let the bulk insert handle it
+      const validWorkOrders: Partial<WorkOrder>[] = workOrders.filter(wo => wo.productionOrder);
+      const mergedWaiting: string[] = [];
+      const duplicates = await this.assignLsxSeqForImport(validWorkOrders, mergedWaiting);
+      if (mergedWaiting.length) {
+        appAlert(`ℹ️ ${mergedWaiting.length} LSX đang Waiting — gộp vào LSX đang có, không tạo dòng mới:\n${mergedWaiting.join('\n')}`);
       }
 
       // Validate data before saving
       if (validWorkOrders.length === 0) {
+        if (mergedWaiting.length) {
+          this.isImporting = false;
+          this.closeImportDialog();
+          return;
+        }
         throw new Error('No valid data found in Excel file (all LSX already exist in Firebase)');
       }
 
@@ -3186,7 +3653,7 @@ Please check the console for error details.`);
         const message = `❌ Import thất bại hoàn toàn!\n\n` +
           `Không có work order nào được import thành công.\n` +
           `Vui lòng kiểm tra format file Excel và thử lại.`;
-        alert(message);
+        appAlert(message);
       } else if (results.success > 0 && results.failed > 0) {
         // Partial success - log to console only, no alert to avoid confusion
         console.log(`⚠️ Import hoàn thành với một số lỗi:
@@ -3199,10 +3666,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 ✅ Đã import thành công: ${results.success} work orders`);
       }
 
-      // Show duplicate LSX warning if any
-      if (duplicates.length > 0) {
-        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
-        alert(duplicateMessage);
+      // LSX import lại trong 30 ngày → đã lưu kèm số lần
+      if (duplicates.length > 0 && results.success > 0) {
+        appAlert(`ℹ️ ${duplicates.length} LSX đã import trong 30 ngày — vẫn lưu, đánh số lần import trước LSX:\n${duplicates.join('\n')}`);
       }
       
       // Always reload data to show any successful imports
@@ -3229,7 +3695,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     } catch (error) {
       console.error('Import error:', error);
       const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
-      
+      if (/FILE PXK/.test(errorMessage)) appAlert('⚠️ ' + errorMessage);
+
       this.importResults = {
         success: 0,
         failed: 1,
@@ -3241,7 +3708,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       };
       
       // Show error message to user
-      alert(`❌ Import failed:\n\n${errorMessage}\n\nPlease check the file format and try again.`);
+      appAlert(`❌ Import failed:\n\n${errorMessage}\n\nPlease check the file format and try again.`);
       
     } finally {
       this.isImporting = false;
@@ -3288,6 +3755,16 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const workOrders: Partial<WorkOrder>[] = [];
     const errors: string[] = [];
 
+    // Chọn nhầm file PXK vào Import LSX: cột "Mã Ctừ" (PX/DN) bị đọc thành Nhà máy, mã vật tư thành LSX.
+    const fold = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+    const headerText = (headers || []).map(fold);
+    const pxkHeader = headerText.some((h: string) => h === 'ma ctu' || h === 'ma vat tu' || h === 'so chung tu' || h === 'xuat kho');
+    const sample = data.slice(1, 201).filter((r: any[]) => r && r.length);
+    const pxRows = sample.filter((r: any[]) => /^(PX|DN)/i.test(String(r[0] ?? '').trim())).length;
+    if (pxkHeader || (sample.length && pxRows / sample.length >= 0.5)) {
+      throw new Error('Đây là FILE PXK, không phải file LSX.\n\nĐể import PXK hãy dùng nút "IMPORT FILE PXK". Không có Work Order nào được tạo.');
+    }
+
     console.log('Excel headers:', headers);
     console.log('Total rows to process:', data.length - 1);
 
@@ -3319,6 +3796,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         }
         if (!row[5] || row[5].toString().trim() === '') { // Work Order is required (now at index 5)
           errors.push(`Row ${i + 1}: Work Order is required`);
+          continue;
+        }
+        // LSX phải đúng dạng (KZLSX…/…, LHLSX…/…) — tránh lưu mã vật tư thành LSX
+        if (!/LSX|\d{4}[\/\-.]\d+/i.test(row[5].toString().trim())) {
+          errors.push(`Row ${i + 1}: LSX "${row[5].toString().trim()}" không đúng dạng (VD: KZLSX1126/0125)`);
           continue;
         }
         
@@ -3750,7 +4232,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     XLSX.writeFile(workbook, filename);
     
     console.log('✅ Work Order template downloaded:', filename);
-    alert(`✅ Đã tải xuống template Excel: ${filename}`);
+    appAlert(`✅ Đã tải xuống template Excel: ${filename}`);
   }
 
   /** Tải form mẫu import PXK - cập nhật theo template in PXK. Cột E=Mã Khách Hàng, cột P=Số PO KH, cột R=Tổng lượng định mức, cột S=Ghi chú */
@@ -3787,7 +4269,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'PXK');
     const filename = `Form_Import_PXK_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(workbook, filename);
-    alert(`✅ Đã tải xuống form PXK: ${filename}`);
+    appAlert(`✅ Đã tải xuống form PXK: ${filename}`);
   }
 
   /** Tải lịch sử PXK theo tháng - tất cả các cột từ PXK. Nếu pxkDownloadAllMonths=true thì tải tất cả không lọc tháng. */
@@ -3850,10 +4332,10 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const msg = this.pxkDownloadAllMonths
         ? `Đã tải xuống ${totalRows} dòng PXK (tất cả): ${filename}`
         : `Đã tải xuống ${totalRows} dòng PXK tháng ${m}/${y}: ${filename}`;
-      alert(`✅ ${msg}`);
+      appAlert(`✅ ${msg}`);
     } catch (e) {
       console.error('[PXK Download]', e);
-      alert('Lỗi khi tải PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+      appAlert('Lỗi khi tải PXK: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
     } finally {
       this.isDownloadingPxk = false;
       this.showPxkDownloadDialog = false;
@@ -3863,13 +4345,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   /** Tải PXK của một LSX ra Excel, cùng cột với phiếu In PXK. */
   async downloadPxkExcel(workOrder: WorkOrder): Promise<void> {
     const lsx = String(workOrder?.productionOrder || '').trim();
+    const seqWin = this.woSeqWindow(workOrder);
     if (!lsx || this.pxkExcelDownloadingLsx) return;
     this.pxkExcelDownloadingLsx = lsx;
     try {
       const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
-      const lines = this.getPxkLinesForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx, Number(workOrder?.lsxSeq) || 1);
       if (!hasPxk || lines.length === 0) {
-        alert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
+        appAlert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
         return;
       }
       const factoryFilter = this.resolveOutboundFactoryFilterForPxk(workOrder);
@@ -3879,6 +4362,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const locationMap = new Map<string, string>();
       const iqcStatusMap = new Map<string, string>();
       const scanQtyMap = new Map<string, number>();
+      const lotsByKey = new Map<string, PxkLotLoc[]>();
+      const imdByKey = new Map<string, Set<string>>();
       const employeeIds = new Set<string>();
       let nhanVienGiaoStr = '-';
       let nhanVienNhanStr = '-';
@@ -3897,6 +4382,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
               lines.map((l) => l.materialCode)
             );
             maps.locationMap.forEach((v, k) => locationMap.set(k, v));
+            maps.lotsByKey.forEach((v, k) => lotsByKey.set(k, v));
             maps.iqcStatusMap.forEach((v, k) => iqcStatusMap.set(k, v));
           } catch (e) {
             console.warn('Không load được vị trí / IQC từ inventory:', e);
@@ -3915,14 +4401,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
               const d = doc.data() as any;
               const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
               if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+              const inWin = this.inWoSeqWindow(seqWin, d.exportDate ?? d.createdAt); // nhân viên / lô: chỉ lần import này
               const empId = String(d.employeeId || d.exportedBy || '').trim();
-              if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
+              if (inWin && empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
               const mat = String(d.materialCode || '').trim().toUpperCase();
               const po = this.pxkPoKey(d.poNumber || d.po);
               const exportQty = Number(d.exportQuantity || 0);
               if (mat && po) {
                 const key = `${mat}|${po}`;
                 scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
+                const imdX = this.pxkImdKey(d.importDate ?? d.batchNumber);
+                if (inWin && imdX) { const st = imdByKey.get(key) || new Set<string>(); st.add(imdX); imdByKey.set(key, st); }
               }
             });
           } catch (e) {
@@ -3955,7 +4444,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         (async () => {
           try {
             const [catalog, checks] = await Promise.all([
-              this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode)),
+              this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode), workOrder, true),
               this.loadPxkWeightChecks(lsx, lines)
             ]);
             catalog.forEach((v, k) => catalogWeightMap.set(k, v));
@@ -3977,6 +4466,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         })()
       ]);
 
+      this.allocateScanToSeq(lsx, Number(workOrder?.lsxSeq) || 1, scanQtyMap);
+      this.applyExportedLotLocations(locationMap, lotsByKey, imdByKey);
       const invKey = (materialCode: string, po: string): string =>
         `${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`;
       const getScanQty = (materialCode: string, po: string): number =>
@@ -4050,7 +4541,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const po = String(line.po || '').trim();
         const qtyPxk = Number(line.quantity) || 0;
         let scanQty: number;
-        if (this.isPxkSkipWarehouse(maKho) || this.isPxkAlwaysFullExportCode(matCode)) {
+        if ((this.isPxkSkipWarehouse(maKho) || this.isPxkAlwaysFullExportCode(matCode)) && hasAnyScanData) {
           scanQty = qtyPxk;
         } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
           scanQty = qtyPxk;
@@ -4067,7 +4558,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
         const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
         const weightPercent = weightFull != null && weightOdd != null
-          ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+          ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty))
           : null;
         const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
         const checkLabel = !weightCheck
@@ -4135,7 +4626,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       });
     } catch (e) {
       console.error('[PXK Excel]', e);
-      alert('Lỗi khi tải PXK Excel: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
+      appAlert('Lỗi khi tải PXK Excel: ' + (e && (e as Error).message ? (e as Error).message : 'Vui lòng thử lại.'));
     } finally {
       this.pxkExcelDownloadingLsx = '';
     }
@@ -4474,7 +4965,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   async deleteSelectedWorkOrders(): Promise<void> {
     if (this.selectedWorkOrders.length === 0) {
-      alert('⚠️ No work orders selected for deletion.');
+      appAlert('⚠️ No work orders selected for deletion.');
       return;
     }
 
@@ -4648,35 +5139,9 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
       console.log('📋 Processed new work order data:', newWorkOrderData.length, 'items');
 
-      // Check for duplicate LSX (productionOrder) values - KIỂM TRA VỚI FIREBASE THAY VÌ this.workOrders
-      const importedLSX = newWorkOrderData
-        .map(wo => wo.productionOrder?.trim())
-        .filter(lsx => lsx);
-      console.log('📋 LSX values to check (after trim):', importedLSX);
-      console.log('📋 Raw LSX values from Excel:', newWorkOrderData.map(wo => `"${wo.productionOrder}"`));
-      
-      // Check against Firebase for existing LSX (giống như importWorkOrdersFromExcel)
-      const lsxCheck = await this.checkExistingLSXInFirebase(importedLSX);
-      
-      console.log('📊 Firebase LSX Check Results:');
-      console.log('  - Existing in Firebase:', lsxCheck.existing);
-      console.log('  - New (not in Firebase):', lsxCheck.new);
-      console.log('  - Total imported LSX:', importedLSX.length);
-      console.log('  - Already exist:', lsxCheck.existing.length);
-      console.log('  - New:', lsxCheck.new.length);
-
-      // Check for duplicates within the import batch itself
-      const batchDuplicates: string[] = [];
-      const seenInBatch = new Set<string>();
-
-      const duplicates: string[] = [];
+      // LSX đã import trong 30 ngày → vẫn lưu, đánh số lần 2, 3… (assignLsxSeqForImport bên dưới)
       const invalidLsxFactory: string[] = []; // ASM2 dùng KZLSX (sai format)
       const validWorkOrders: WorkOrder[] = [];
-
-      // Tải 1 lần để tra chi tiết các LSX trùng (nếu có) — tránh gọi lại Firestore trong loop bên dưới.
-      const workOrdersForDupDetails = lsxCheck.existing.length > 0
-        ? await this.loadAllWorkOrdersFromFirebase()
-        : [];
 
       for (const workOrder of newWorkOrderData) {
         const lsx = workOrder.productionOrder?.trim();
@@ -4703,84 +5168,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           invalidLsxFactory.push(`${lsx} (${workOrder.factory || this.selectedFactory}: phải KZLSX, không LH)`);
           continue;
         }
-        
-        // Check duplicate within batch (normalized)
-        const normalizedLsx = lsx.toUpperCase();
-        if (seenInBatch.has(normalizedLsx)) {
-          batchDuplicates.push(lsx);
-          console.warn(`⚠️ Duplicate LSX within import batch: "${lsx}"`);
-          continue;
-        }
-        seenInBatch.add(normalizedLsx);
-        
-        // Check against Firebase (normalized comparison)
-        // lsxCheck.existing now contains normalized values (uppercase, trimmed)
-        const isExisting = lsxCheck.existing.includes(normalizedLsx);
-        
-        if (isExisting) {
-          duplicates.push(lsx);
-
-          // Find the matching work order to show details
-          const matchingWO = workOrdersForDupDetails.find(wo =>
-            wo.productionOrder?.trim().toUpperCase() === normalizedLsx
-          );
-          
-          if (matchingWO) {
-            const locationInfo = `Factory: ${matchingWO.factory || 'N/A'}, Status: ${matchingWO.status || 'N/A'}, Year: ${matchingWO.year || 'N/A'}, Month: ${matchingWO.month || 'N/A'}`;
-            console.warn(`⚠️ LSX already exists in Firebase: "${lsx}"`);
-            console.warn(`   📍 Location: ${locationInfo}`);
-            
-            // Check if factory is valid
-            const isValidFactory = this.isValidFactory(matchingWO.factory || '');
-            
-            if (!isValidFactory) {
-              // Factory is invalid (e.g., ASM3), allow import
-              console.warn(`   ⚠️ LSX tồn tại ở factory không hợp lệ: "${matchingWO.factory}"`);
-              console.warn(`   ✅ Cho phép import lại vì factory không hợp lệ (chỉ có ASM1, ASM2, Sample 1, Sample 2)`);
-              validWorkOrders.push(workOrder);
-              console.log(`✅ LSX sẽ được import lại vì factory cũ không hợp lệ: "${lsx}"`);
-            } else {
-              // Factory is valid, check if it matches current filter
-              console.warn(`   🔍 This LSX may not appear in your current view because:`);
-              console.warn(`      - Current factory filter: "${this.selectedFactory}"`);
-              console.warn(`      - Current status filter: "${this.statusFilter}"`);
-              console.warn(`      - LSX exists in factory: "${matchingWO.factory || 'N/A'}"`);
-              console.warn(`      - LSX status: "${matchingWO.status || 'N/A'}"`);
-              
-              // Show user-friendly alert
-              alert(`⚠️ LSX "${lsx}" đã tồn tại trong Firebase!\n\n` +
-                    `📍 Thông tin LSX đã tồn tại:\n` +
-                    `   - Nhà máy: ${matchingWO.factory || 'N/A'}\n` +
-                    `   - Trạng thái: ${matchingWO.status || 'N/A'}\n` +
-                    `   - Năm: ${matchingWO.year || 'N/A'}\n` +
-                    `   - Tháng: ${matchingWO.month || 'N/A'}\n\n` +
-                    `💡 Lý do không thấy khi search:\n` +
-                    `   - Bạn đang filter theo nhà máy: "${this.selectedFactory}"\n` +
-                    `   - LSX này ở nhà máy: "${matchingWO.factory || 'N/A'}"\n\n` +
-                    `🔧 Giải pháp: Chuyển sang nhà máy "${matchingWO.factory || 'N/A'}" để xem LSX này.`);
-            }
-          } else {
-            console.warn(`⚠️ LSX already exists in Firebase: "${lsx}" (normalized: "${normalizedLsx}")`);
-          }
-        } else {
-          validWorkOrders.push(workOrder);
-          console.log(`✅ LSX is new and will be imported: "${lsx}" (normalized: "${normalizedLsx}")`);
-        }
+        validWorkOrders.push(workOrder);
       }
 
-      // Show warnings
-      if (batchDuplicates.length > 0) {
-        const batchMessage = `⚠️ Tìm thấy ${batchDuplicates.length} LSX trùng lặp trong file:\n${batchDuplicates.join(', ')}`;
-        console.warn(batchMessage);
-      }
-
-      if (duplicates.length > 0) {
-        const duplicateMessage = `⚠️ Tìm thấy ${duplicates.length} LSX đã tồn tại trong Firebase:\n${duplicates.join(', ')}\n\nChỉ import ${validWorkOrders.length} work orders mới.`;
-        alert(duplicateMessage);
+      // LSX đã import trong 30 ngày (hoặc lặp trong file) → vẫn lưu, đánh số lần import
+      const renumbered = await this.assignLsxSeqForImport(validWorkOrders);
+      if (renumbered.length > 0) {
+        appAlert(`ℹ️ ${renumbered.length} LSX đã import trong 30 ngày (đã soạn) — lưu thành LSX Bổ sung:\n${renumbered.join('\n')}`);
       }
 
       if (invalidLsxFactory.length > 0) {
-        alert(`⚠️ Bỏ qua ${invalidLsxFactory.length} dòng vì ASM2 phải dùng LSX dạng LHLSX:\n${invalidLsxFactory.join('\n')}`);
+        appAlert(`⚠️ Bỏ qua ${invalidLsxFactory.length} dòng vì ASM2 phải dùng LSX dạng LHLSX:\n${invalidLsxFactory.join('\n')}`);
       }
 
       // Validate data before saving
@@ -4793,7 +5191,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       
     } catch (error) {
       console.error('❌ Error processing Excel data:', error);
-      alert(`❌ Lỗi khi xử lý dữ liệu Excel:\n${error.message || error}`);
+      appAlert(`❌ Lỗi khi xử lý dữ liệu Excel:\n${error.message || error}`);
       this.isLoading = false;
     } finally {
       // Always reset isLoading to false, regardless of success or error
@@ -4826,14 +5224,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     if (successCount > 0) {
       this.firebaseSaved = true;
       console.log(`✅ Successfully saved ${successCount} work orders to Firebase`);
-      alert(`✅ Đã lưu thành công ${successCount} work orders vào Firebase!${errorCount > 0 ? `\n❌ ${errorCount} work orders không thể lưu.` : ''}`);
+      appAlert(`✅ Đã lưu thành công ${successCount} work orders vào Firebase!${errorCount > 0 ? `\n❌ ${errorCount} work orders không thể lưu.` : ''}`);
       
       // Reload data to show the new work orders
       this.loadWorkOrders();
     } else {
       this.firebaseSaved = false;
       console.error('❌ Failed to save any work orders');
-      alert('❌ Không thể lưu work orders nào vào Firebase!');
+      appAlert('❌ Không thể lưu work orders nào vào Firebase!');
     }
   }
 
@@ -4875,14 +5273,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         this.firebaseSaved = true;
         this.isSaving = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
+        appAlert('✅ Dữ liệu đã được lưu thành công vào Firebase!');
       })
       .catch((error) => {
         console.error('❌ Error saving to Firebase: ', error);
         this.isSaving = false;
         this.firebaseSaved = false;
         console.log('🔄 Updated firebaseSaved to:', this.firebaseSaved);
-        alert(`❌ Lỗi khi lưu dữ liệu vào Firebase:\n${error.message || error}`);
+        appAlert(`❌ Lỗi khi lưu dữ liệu vào Firebase:\n${error.message || error}`);
       });
   }
 
@@ -4921,6 +5319,26 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       console.error('❌ Error loading permissions:', error);
       this.hasDeletePermissionValue = false;
       this.hasCompletePermissionValue = false;
+    }
+  }
+
+  /** Nhân viên kho được xóa dữ liệu PXK (dù chưa bật quyền Xóa trong Settings). */
+  private static readonly PXK_DELETE_STAFF = ['ASP0119', 'ASP0538', 'ASP1761'];
+
+  private async isPxkDeleteStaff(): Promise<boolean> {
+    try {
+      const user = await this.afAuth.currentUser;
+      if (!user) return false;
+      const ids = new Set<string>();
+      const fromEmail = String(user.email || '').toUpperCase().match(/ASP\d{4}/);
+      if (fromEmail) ids.add(fromEmail[0]);
+      // Email công ty (vd wh2@...) không chứa mã ASP → lấy mã nhân viên trong hồ sơ users/{uid}
+      const prof: any = (await firstValueFrom(this.firestore.collection('users').doc(user.uid).get())).data();
+      const emp = String(prof?.employeeId || '').toUpperCase().match(/ASP\d{4}/);
+      if (emp) ids.add(emp[0]);
+      return WorkOrderStatusComponent.PXK_DELETE_STAFF.some(x => ids.has(x));
+    } catch {
+      return false;
     }
   }
 
@@ -5014,7 +5432,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   // Preview items to be deleted
   previewDeleteItems(): void {
     if (!this.deleteStartDate || !this.deleteEndDate) {
-      alert('Vui lòng chọn khoảng thời gian!');
+      appAlert('Vui lòng chọn khoảng thời gian!');
       return;
     }
 
@@ -5037,12 +5455,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   async deleteWorkOrdersByTimeRange(): Promise<void> {
     const hasPermission = await this.hasDeletePermission();
     if (!hasPermission) {
-      alert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền xóa dữ liệu! Vui lòng liên hệ quản trị viên để được cấp quyền.');
       return;
     }
 
     if (this.deletePreviewItems.length === 0) {
-      alert('❌ Không có work orders nào để xóa!');
+      appAlert('❌ Không có work orders nào để xóa!');
       return;
     }
 
@@ -5074,7 +5492,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
       // Show result
       const message = `✅ Đã xóa thành công ${successCount} work orders!${errorCount > 0 ? `\n❌ ${errorCount} work orders không thể xóa.` : ''}`;
-      alert(message);
+      appAlert(message);
 
       // Close dialog and reset
       this.showDeleteDialog = false;
@@ -5082,7 +5500,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
     } catch (error) {
       console.error('❌ Error during bulk delete:', error);
-      alert(`❌ Lỗi khi xóa work orders: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi xóa work orders: ${error.message || error}`);
     } finally {
       this.isDeleting = false;
     }
@@ -5114,6 +5532,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       case 'delay':
       case 'chậm':
         return WorkOrderStatus.DELAY;
+      case 'jit':
+        return WorkOrderStatus.JIT;
       default:
         return WorkOrderStatus.WAITING;
     }
@@ -5136,6 +5556,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         return WorkOrderStatus.WAITING;
       case 'delay':
         return WorkOrderStatus.DELAY;
+      case 'jit':
+        return WorkOrderStatus.JIT;
       default:
         return WorkOrderStatus.WAITING;
     }
@@ -5144,14 +5566,14 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   editWorkOrder(workOrder: WorkOrder): void {
     console.log('✏️ Editing work order:', workOrder);
     // For now, just log the action. You can implement edit functionality later
-    alert(`Chỉnh sửa Work Order: ${workOrder.orderNumber || workOrder.productCode}`);
+    appAlert(`Chỉnh sửa Work Order: ${workOrder.orderNumber || workOrder.productCode}`);
   }
 
   // New methods for the updated UI
   async completeWorkOrder(workOrder: WorkOrder): Promise<void> {
     const weightMsg = await this.getPxkWeightCheckBlockMessage(workOrder);
     if (weightMsg) {
-      alert(weightMsg);
+      appAlert(weightMsg);
       return;
     }
     const blocked = await this.isDoneBlockedForWorkOrder(workOrder);
@@ -5167,7 +5589,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     // Kiểm tra quyền hoàn thành
     const hasPermission = await this.hasCompletePermission();
     if (!hasPermission) {
-      alert('❌ Bạn không có quyền hoàn thành Work Order! Vui lòng liên hệ quản trị viên để được cấp quyền.');
+      appAlert('❌ Bạn không có quyền hoàn thành Work Order! Vui lòng liên hệ quản trị viên để được cấp quyền.');
       return;
     }
     
@@ -5217,6 +5639,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   getStatusText(status: WorkOrderStatus): string {
     const statusMap: { [key: string]: string } = {
+      'jit': 'JIT',
+      'ready-iqc': 'Ready-IQC',
       'waiting': 'Waiting',
       'kitting': 'Kitting',
       'ready': 'Ready',
@@ -5237,6 +5661,98 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'delay': 'badge badge-danger'
     };
     return statusClassMap[status] || 'badge badge-warning';
+  }
+
+  /** Cột Partial: bật / tắt cho phép xuất thiếu LSX. */
+  togglePartialAllowed(workOrder: WorkOrder): void {
+    if (!this.canEdit()) return;
+    workOrder.partialAllowed = !workOrder.partialAllowed;
+    this.updateWorkOrder(workOrder, 'partialAllowed', workOrder.partialAllowed);
+  }
+
+  /** Đang treo phần chưa xuất (đã xuất thiếu, chưa Done). */
+  hasPartialPending(wo: WorkOrder): boolean {
+    return !!wo?.partialPending?.lines?.length && wo.status !== WorkOrderStatus.DONE;
+  }
+
+  partialPendingTitle(wo: WorkOrder): string {
+    const p = wo?.partialPending;
+    if (!p?.lines?.length) return '';
+    const fmt = (n: number) => this.formatQuantityForPxk(n).replace(/\.00$/, '');
+    return `Xuất thiếu lúc ${this.formatPartialAt(p.at)}${p.by ? ' · ' + p.by : ''}\nCòn treo:\n`
+      + p.lines.map((l) => `${l.code}${l.po ? ' · PO ' + l.po : ''}: ${fmt(l.remain)} ${l.unit || ''}`.trim()).join('\n');
+  }
+
+  private formatPartialAt(at: any): string {
+    const d = at?.toDate ? at.toDate() : new Date(at);
+    return isNaN(d?.getTime?.()) ? '' : d.toLocaleString('vi-VN', { hour12: false });
+  }
+
+  /** Nút Xuất thiếu: chỉ LSX tick Partial, chưa Done / Transfer. */
+  canPartialExport(wo: WorkOrder): boolean {
+    return !!wo?.partialAllowed && this.canEdit() && wo.status !== WorkOrderStatus.DONE && wo.status !== WorkOrderStatus.TRANSFER && !wo.isCompleted;
+  }
+
+  partialExportBusyId = '';
+
+  /**
+   * Xuất thiếu: ghi nhận phần đã scan xuất, treo lại phần chưa xuất (theo PXK).
+   * Tình trạng giữ chưa Done — về Kitting để scan tiếp phần còn treo ở Outbound.
+   */
+  async partialExport(workOrder: WorkOrder): Promise<void> {
+    if (!this.canPartialExport(workOrder) || this.partialExportBusyId) return;
+    const lsx = String(workOrder.productionOrder || '').trim();
+    if (!lsx) return;
+    this.partialExportBusyId = workOrder.id || lsx;
+    this.cdr.detectChanges();
+    try {
+      await this.ensurePxkLoadedForLsx(lsx);
+      if (!this.hasPxkForWorkOrder(workOrder)) {
+        appAlert(`LSX ${lsx} chưa import PXK — không xác định được phần thiếu.`);
+        return;
+      }
+      const rows = await this.getPxkThieuLinesForLsx(lsx, this.resolveOutboundFactoryFilterForPxk(workOrder));
+      if (!rows.length) {
+        appAlert(`LSX ${lsx} đã scan đủ theo PXK — không cần xuất thiếu.`);
+        return;
+      }
+      const fmt = (n: number) => this.formatQuantityForPxk(n).replace(/\.00$/, '');
+      const lines = rows.map((r) => ({
+        code: r.code, po: r.po, need: r.need, scan: r.scan, remain: Math.max(0, r.need - r.scan), unit: r.unit || ''
+      }));
+      const preview = lines.slice(0, 12).map((l) => `• ${l.code}${l.po ? ' (PO ' + l.po + ')' : ''}: đã xuất ${fmt(l.scan)} / ${fmt(l.need)} → treo ${fmt(l.remain)} ${l.unit}`).join('\n')
+        + (lines.length > 12 ? `\n… và ${lines.length - 12} mã khác` : '');
+      if (!confirm(`Xuất thiếu LSX ${lsx}?\n\n${preview}\n\nPhần đã xuất được ghi nhận, phần còn thiếu treo lại. LSX vẫn chưa Done (về Kitting để scan tiếp phần còn thiếu).`)) return;
+      const by = await this.getPxkBypassRequester();
+      const entry = { at: new Date(), by, lines };
+      const history = [...(workOrder.partialExports || []), entry].slice(-20);
+      const patch: Partial<WorkOrder> = {
+        partialPending: entry,
+        partialExports: history,
+        status: WorkOrderStatus.KITTING
+      };
+      await this.materialService.updateWorkOrder(workOrder.id!, patch);
+      workOrder.partialPending = entry;
+      workOrder.partialExports = history;
+      workOrder.status = WorkOrderStatus.KITTING;
+      workOrder.lastUpdated = new Date();
+      this.applyFilters();
+      this.calculateSummary();
+      appAlert(`✅ Đã xuất thiếu LSX ${lsx}: treo ${lines.length} mã chưa xuất. Tình trạng: Kitting.`);
+    } catch (e: any) {
+      console.error('[Partial export] failed', e);
+      appAlert('Lỗi xuất thiếu: ' + (e?.message || e));
+    } finally {
+      this.partialExportBusyId = '';
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Từ popup vượt quyền: LSX Partial → xuất thiếu thay vì xin mã. */
+  async partialExportFromBypass(): Promise<void> {
+    const wo = this.pendingPxkBypassWo;
+    this.closePxkBypassOtpModal();
+    if (wo) await this.partialExport(wo);
   }
 
   toggleUrgent(workOrder: WorkOrder): void {
@@ -5261,7 +5777,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     const endDateStr = this.endDate ? this.endDate.toISOString().split('T')[0] : '';
     
     if (!startDateStr || !endDateStr) {
-      alert('❌ Vui lòng chọn khoảng thời gian!');
+      appAlert('❌ Vui lòng chọn khoảng thời gian!');
       return;
     }
     
@@ -5284,7 +5800,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     });
     
     if (filteredByDateAndFactory.length === 0) {
-      alert(`❌ Không có work orders nào của nhà máy ${this.selectedFactory} trong khoảng thời gian đã chọn!`);
+      appAlert(`❌ Không có work orders nào của nhà máy ${this.selectedFactory} trong khoảng thời gian đã chọn!`);
       return;
     }
     
@@ -5382,6 +5898,74 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       'delay': 'Delay'
     };
     return statusMap[status] || 'Waiting';
+  }
+
+  /**
+   * Import lại LSX: chỉ so với Work Order tạo trong 30 ngày gần nhất (cùng LSX, không phân biệt hoa thường).
+   * Đã có → vẫn lưu, gán lsxSeq = lần tiếp theo (2, 3…); chỉ có bản cũ hơn 30 ngày → lưu như LSX mới.
+   * Lặp trong cùng file cũng đánh số tiếp. Trả về danh sách LSX được đánh số để báo.
+   */
+  private async assignLsxSeqForImport(
+    workOrders: Array<Partial<WorkOrder>>,
+    merged: string[] = []
+  ): Promise<string[]> {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const toMs = (v: any): number => {
+      if (!v) return 0;
+      if (v instanceof Date) return v.getTime();
+      if (typeof v.toDate === 'function') return v.toDate().getTime();
+      if (typeof v.seconds === 'number') return v.seconds * 1000;
+      const t = new Date(v).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+    const existing = await this.loadAllWorkOrdersFromFirebase();
+    const maxSeq = new Map<string, number>();
+    /** LSX đang có ít nhất 1 dòng Waiting → import lại thì gộp vào, không tạo dòng mới. */
+    const waitingKeys = new Set<string>();
+    for (const wo of existing) {
+      const key = String(wo.productionOrder || '').trim().toUpperCase();
+      if (!key || toMs((wo as any).createdDate) < cutoff) continue;
+      maxSeq.set(key, Math.max(maxSeq.get(key) || 0, Number((wo as any).lsxSeq) || 1));
+      if (wo.status === WorkOrderStatus.WAITING) waitingKeys.add(key);
+    }
+    const renumbered: string[] = [];
+    // LSX Bổ sung đã có (mọi trạng thái, không giới hạn 30 ngày) → import thêm thì cộng dồn, không tạo dòng mới
+    const bsExisting = new Set(existing
+      .map((wo) => String(wo.productionOrder || '').trim())
+      .filter((x) => isBsLsx(x))
+      .map((x) => toBsLsx(x).toUpperCase()));
+    for (let i = workOrders.length - 1; i >= 0; i--) {
+      const key = String(workOrders[i].productionOrder || '').trim().toUpperCase();
+      if (key && waitingKeys.has(key)) {
+        merged.unshift(String(workOrders[i].productionOrder).trim());
+        workOrders.splice(i, 1);
+      }
+    }
+    for (let i = 0; i < workOrders.length; i++) {
+      const wo = workOrders[i];
+      const key = String(wo.productionOrder || '').trim().toUpperCase();
+      if (!key || isBsLsx(key)) continue;
+      const prev = maxSeq.get(key) || 0;
+      if (prev > 0) {
+        // Import thêm LSX đã soạn → LSX Bổ sung "BS …" (tab Bổ sung ASM1/2/3); đã có Bổ sung → cộng dồn
+        const bs = toBsLsx(String(wo.productionOrder).trim());
+        if (bsExisting.has(bs.toUpperCase())) {
+          merged.push(`${bs} (cộng dồn)`);
+          workOrders.splice(i, 1);
+          i--;
+          continue;
+        }
+        wo.factory = this.boSungFactoryFor(wo);
+        wo.productionOrder = bs;
+        wo.notes = `Bổ sung LSX ${stripBsLsx(bs)}`;
+        delete (wo as any).lsxSeq;
+        bsExisting.add(bs.toUpperCase());
+        renumbered.push(`${bs} → ${wo.factory}`);
+        continue;
+      }
+      maxSeq.set(key, prev + 1);
+    }
+    return renumbered;
   }
 
   private async checkExistingLSXInFirebase(lsxValues: string[]): Promise<{ existing: string[], new: string[] }> {
@@ -5533,7 +6117,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       this.showQRCodeDialog(qrImage, workOrder, qrData);
     }).catch(error => {
       console.error('Error generating QR code:', error);
-      alert('Lỗi khi tạo QR code!');
+      appAlert('Lỗi khi tạo QR code!');
     });
   }
 
@@ -5752,7 +6336,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
     } catch (error) {
       console.error('Error showing QR code dialog:', error);
-      alert('Lỗi khi hiển thị QR code!');
+      appAlert('Lỗi khi hiển thị QR code!');
     }
   }
 
@@ -5821,7 +6405,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true }) as any[][];
       if (rows.length < 2) {
-        alert('File PXK không có dữ liệu.');
+        appAlert('File PXK không có dữ liệu.');
         return;
       }
       const norm = (s: string) => s.toLowerCase().replace(/\s/g, '').replace(/[àáảãạăắằẳẵặâấầẩẫậ]/g, 'a').replace(/[đ]/g, 'd').replace(/[èéẻẽẹêếềểễệ]/g, 'e').replace(/[ìíỉĩị]/g, 'i').replace(/[òóỏõọôốồổỗộơớờởỡợ]/g, 'o').replace(/[ùúủũụưứừửữự]/g, 'u');
@@ -5943,7 +6527,8 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const woLsxList = [...new Set(allWo.map(wo => String(wo.productionOrder || '').trim()).filter(Boolean))];
       const normalizeLsx = (s: string): string => {
         const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-        const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+        const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+        const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
         return m ? m[1].replace(/[-.]/g, '/') : t;
       };
       const woNormToOriginal = new Map<string, string[]>();
@@ -5989,7 +6574,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         String(lsxStr || '').trim().toUpperCase().startsWith('KZ') ? 'ASM1' : 'ASM2';
       /** Key nhóm phiếu BS không có LSX — lưu Firestore lsx='LSX Chung' */
       const BS_NO_LSX_KEY = '__NO_LSX__';
-      const BS_COMMON_LSX = 'LSX Chung';
+      const BS_COMMON_LSX = 'N/A';
       /** Đọc tất cả LSX từ file, không phụ thuộc Work Order - lưu toàn bộ để dùng sau */
       const parseWithCols = (maCtuCol: number, lsxCol: number, vatTuCol: number, qtyCol: number, dvtCol: number, poCol: number, soChungTuCol: number, maKhoCol: number, loaiHinhCol: number,
         tenVatTuCol = -1, dinhMucCol = -1, tenTPCol = -1, tongSLYCauCol = -1, luongYeuCauCol = -1, maKhachHangCol = -1, soPOKHCol = -1, phanTramHaoHutCol = -1, ghiChuCol = -1) => {
@@ -6130,30 +6715,21 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         const pxkLsxRaw = getFullLsxFromCell(row[idxSoLenhSXFinal]);
         if (pxkLsxRaw) pxkLsxSamples.push(pxkLsxRaw);
       }
-      // Merge: cùng số CT ghi đè, khác số CT thêm mới — chỉ cho PXK thường (không trộn vào BS)
-      if (!this.isBsImport) {
-        for (const [lsxKey, newLines] of Object.entries(byLsx)) {
-          const existing = this.pxkDataByLsx[lsxKey] || [];
-          const newSoCtSet = new Set(newLines.map(l => l.soChungTu ?? ''));
-          const kept = existing.filter(l => !newSoCtSet.has(l.soChungTu ?? ''));
-          this.pxkDataByLsx[lsxKey] = [...kept, ...newLines];
-        }
-        this.invalidatePxkCache();
-      }
+      // PXK thường: gộp / tách LSX con khi lưu (mergePxkImportForLsx) — không trộn sẵn vào cache ở đây.
       const total = Object.values(byLsx).reduce((s, arr) => s + arr.length, 0);
       const storedKeys = Object.keys(byLsx);
       console.log('[PXK Import] Sheet:', Object.keys(workbook.Sheets).find(k => workbook.Sheets[k] === sheet), '| Header row:', headerRowIndex, '| Cols:', { idxMaCtu: idxMaCtuFinal, idxSoLenhSX: idxSoLenhSXFinal, idxMaVatTu: idxMaVatTuFinal }, '| Rows PX:', rowsWithPx, '| Total:', total, '| Stored LSX keys:', storedKeys.slice(0, 10), '| WO LSX sample:', woLsxList.slice(0, 5), '| PXK LSX sample:', pxkLsxSamples);
       if (total === 0) {
         if (rowsWithPx > 0) {
           if (this.isBsImport) {
-            alert(`Import PXK Bổ Sung: Tìm thấy ${rowsWithPx} dòng PX/DN nhưng không đọc được mã vật tư/lượng.\nCột Mã vật tư đang đọc: ${colLetter(idxMaVatTuFinal)} (cột ${idxMaVatTuFinal + 1}).`);
+            appAlert(`Import PXK Bổ Sung: Tìm thấy ${rowsWithPx} dòng PX/DN nhưng không đọc được mã vật tư/lượng.\nCột Mã vật tư đang đọc: ${colLetter(idxMaVatTuFinal)} (cột ${idxMaVatTuFinal + 1}).`);
           } else {
-            alert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột Số lệnh SX đang đọc: ${colLetter(idxSoLenhSXFinal)} (cột ${idxSoLenhSXFinal + 1}).`);
+            appAlert(`Import PXK: Tìm thấy ${rowsWithPx} dòng Mã Ctừ=PX nhưng không có dòng nào có LSX đúng format.\nASM1: KZLSX + 4 số + / + 4 số (VD: KZLSX0326/0089)\nASM2: LHLSX + 4 số + / + 4 số (VD: LHLSX0326/0089)\nCột Số lệnh SX đang đọc: ${colLetter(idxSoLenhSXFinal)} (cột ${idxSoLenhSXFinal + 1}).`);
           }
         } else if (rows.length > dataStartRow) {
-          alert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
+          appAlert(`Import PXK: Không tìm thấy dòng nào có Mã Ctừ = PX.\nKiểm tra cột "Mã Ctừ" (cột ${idxMaCtuFinal + 1}).\nDòng tiêu đề: ${headerRowIndex + 1}. Mở Console (F12) để xem chi tiết.`);
         } else {
-          alert('Import PXK: Không có dữ liệu sau dòng tiêu đề.');
+          appAlert('Import PXK: Không có dữ liệu sau dòng tiêu đề.');
         }
       } else {
         // Loại bỏ undefined khỏi object trước khi lưu Firestore (Firestore không chấp nhận undefined)
@@ -6171,6 +6747,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         };
         let saveOk = 0;
         let saveErrors = 0;
+        const pxkReport: Array<{ lsx: string } & PxkMergeResult> = [];
         for (const lsxKey of Object.keys(byLsx)) {
           const isNoLsx = this.isBsImport && (lsxKey === BS_NO_LSX_KEY || !String(lsxKey || '').trim());
           const lsxForDoc = isNoLsx ? BS_COMMON_LSX : lsxKey;
@@ -6182,8 +6759,20 @@ Kiểm tra chi tiết lỗi trong popup import.`);
             : `${factorySave}_${lsxKey.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
           let linesToSave: any[] = byLsx[lsxKey] || [];
           if (!this.isBsImport) {
-            linesToSave = this.pxkDataByLsx[lsxKey] || linesToSave;
+            try {
+              const r = await this.mergePxkImportForLsx(lsxKey, docId, factorySave, linesToSave, sanitizeLine);
+              pxkReport.push({ lsx: lsxKey, ...r });
+              saveOk++;
+            } catch (mergeErr) {
+              saveErrors++;
+              console.error(`[PXK Save] ❌ Lỗi LSX ${lsxKey}:`, mergeErr);
+            }
+            continue;
           } else {
+            // Xuất BS chỉ nhận mã B và lượng cần xuất > 0
+            linesToSave = linesToSave.filter((l: any) =>
+              String(l?.materialCode || '').trim().toUpperCase().startsWith('B') && (Number(l?.quantity) || 0) > 0);
+            if (!linesToSave.length) continue;
             // BS: merge với phiếu đã có trên Firestore (giữ done), không lấy từ cache PXK thường
             try {
               const prevSnap = await this.firestore.collection('pxk-bs-data').doc(docId).get().toPromise();
@@ -6225,7 +6814,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         }
         console.log(`[PXK Save] Kết quả: ${saveOk} LSX lưu thành công, ${saveErrors} lỗi`);
         if (saveErrors > 0) {
-          alert(`⚠️ Import PXK: ${saveOk} LSX lưu thành công, ${saveErrors} LSX bị lỗi. Mở F12 Console để xem chi tiết.`);
+          appAlert(`⚠️ Import PXK: ${saveOk} LSX lưu thành công, ${saveErrors} LSX bị lỗi. Mở F12 Console để xem chi tiết.`);
         }
         const lsxList = Object.keys(byLsx).map(k => (k === BS_NO_LSX_KEY ? BS_COMMON_LSX : k)).sort();
         const maxShow = 15;
@@ -6233,16 +6822,38 @@ Kiểm tra chi tiết lỗi trong popup import.`);
           ? lsxList.join(', ')
           : lsxList.slice(0, maxShow).join(', ') + ` và ${lsxList.length - maxShow} LSX khác`;
         if (!this.isBsImport && Object.keys(byLsx).length > 0) {
-          const indexKeys = Object.keys(byLsx).filter(k => k && k !== BS_NO_LSX_KEY);
+          const indexKeys = [
+            ...Object.keys(byLsx).filter(k => k && k !== BS_NO_LSX_KEY),
+            ...pxkReport.map((r) => r.bsLsx || '').filter(Boolean)
+          ];
           this.pxkIndexLsxKeys = [...new Set([...this.pxkIndexLsxKeys, ...indexKeys])];
           await this.savePxkIndexKeys(indexKeys, false);
         }
-        alert(`Đã import PXK${this.isBsImport ? ' Bổ Sung' : ''}: ${total} dòng, ${lsxList.length} phiếu.\n\nLSX đã import:\n${lsxDisplay}`);
+        if (this.isBsImport) {
+          appAlert(`Đã import PXK Bổ Sung: ${total} dòng, ${lsxList.length} phiếu.\n\nLSX đã import:\n${lsxDisplay}`);
+        } else {
+          const added = pxkReport.reduce((n, r) => n + r.added, 0);
+          const skipped = pxkReport.reduce((n, r) => n + r.skipped, 0);
+          const children = pxkReport.filter((r) => r.childCreated);
+          const merged = pxkReport.filter((r) => r.mergedWaiting && r.added > 0);
+          const noNew = pxkReport.filter((r) => r.added === 0);
+          const lines: string[] = [
+            `Đã import PXK: ${pxkReport.length} LSX · thêm ${added} dòng · bỏ ${skipped} dòng trùng.`
+          ];
+          if (merged.length) lines.push('', `Gộp vào LSX đang Waiting (${merged.length}):`, ...merged.slice(0, 15).map((r) => `• ${r.lsx}${r.seq > 1 ? ' (lần ' + r.seq + ')' : ''}: +${r.added} dòng`));
+          if (children.length) lines.push('', `Tách LSX con (LSX cũ không còn Waiting) (${children.length}):`, ...children.slice(0, 15).map((r) => `• ${r.lsx} → lần ${r.seq}: ${r.added} dòng`));
+          const bsRows = pxkReport.filter((r) => r.bsLsx && (r.added > 0 || r.bsCreated));
+          if (bsRows.length) lines.push('', `Import thêm → LSX Bổ sung (${bsRows.length}):`, ...bsRows.slice(0, 15).map((r) =>
+            `• ${r.bsLsx}: +${r.added} dòng${r.bsCreated ? ' (tạo mới)' : ' (cộng dồn)'}${r.bsReopened ? ' — mở lại Waiting' : ''}`));
+          if (noNew.length) lines.push('', `Không có dòng mới (${noNew.length}): ${noNew.slice(0, 10).map((r) => r.lsx).join(', ')}${noNew.length > 10 ? '…' : ''}`);
+          appAlert(lines.join('\n'));
+          if (children.length || pxkReport.some((r) => r.bsCreated || r.bsReopened)) await this.loadWorkOrders();
+        }
         this.calculateSummary();
       }
     } catch (err) {
       console.error('PXK import error:', err);
-      alert('Lỗi khi đọc file PXK: ' + (err as Error).message);
+      appAlert('Lỗi khi đọc file PXK: ' + (err as Error).message);
     } finally {
       this.isImportingPxk = false;
       this.isBsImport = false;
@@ -6251,19 +6862,192 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   }
 
   /** Xóa cache khi dữ liệu PXK thay đổi (sau load hoặc import) */
+  /** Khóa 1 dòng PXK để bỏ dòng trùng lặp (cùng số CT, mã, PO, kho, lượng). */
+  private pxkLineDupKey(l: any): string {
+    return [
+      String(l?.soChungTu || '').trim().toUpperCase(),
+      String(l?.materialCode || '').trim().toUpperCase(),
+      this.pxkPoKey(l?.po),
+      String(l?.maKho || '').trim().toUpperCase(),
+      String(Math.round((Number(l?.quantity) || 0) * 10000) / 10000)
+    ].join('|');
+  }
+
+  /**
+   * Import PXK cho 1 LSX:
+   * - Bỏ dòng trùng (trong file và với dòng đã import trước).
+   * - Còn LSX Waiting (bất kỳ lần nào) → gộp mã mới vào LSX Waiting lần nhỏ nhất.
+   * - Không còn Waiting → tách LSX con (lần 2, 3…): tạo Work Order mới cùng số LSX, chỉ chứa mã mới.
+   * Mọi dòng vẫn nằm chung 1 doc pxk-import-data (Outbound/Dashboard đọc như cũ); mỗi dòng có `seq` = lần LSX.
+   */
+  private async mergePxkImportForLsx(
+    lsxKey: string,
+    docId: string,
+    factory: 'ASM1' | 'ASM2',
+    importLines: PxkLine[],
+    sanitizeLine: (l: any) => any
+  ): Promise<PxkMergeResult> {
+    const docRef = this.firestore.firestore.collection('pxk-import-data').doc(docId);
+    const prevSnap = await docRef.get();
+    const prevLines: PxkLine[] = prevSnap.exists ? (((prevSnap.data() as any)?.lines || []) as PxkLine[]) : [];
+    // Dòng cũ chưa có seq = lần 1
+    const existing: PxkLine[] = prevLines.map((l) => ({ ...l, seq: Number(l.seq) || 1 }));
+    const seen = new Set(existing.map((l) => this.pxkLineDupKey(l)));
+    const fresh: PxkLine[] = [];
+    let skipped = 0;
+    for (const l of importLines) {
+      const k = this.pxkLineDupKey(l);
+      if (seen.has(k)) { skipped++; continue; }
+      seen.add(k);
+      fresh.push(l);
+    }
+
+    // LSX lần mới nhất của LSX này
+    const woSnap = await this.firestore.firestore.collection('work-orders').where('productionOrder', '==', lsxKey).get();
+    const wos = woSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as WorkOrder));
+    const latest = wos.sort((a, b) => (Number(b.lsxSeq) || 1) - (Number(a.lsxSeq) || 1))[0];
+    const latestSeq = Math.max(1, Number(latest?.lsxSeq) || 1, ...existing.map((l) => Number(l.seq) || 1));
+
+    if (!fresh.length) {
+      return { added: 0, skipped, seq: latestSeq, childCreated: false, mergedWaiting: false };
+    }
+
+    // Còn LSX Waiting (chưa soạn) → gộp mã mới vào LSX Waiting lần nhỏ nhất, không tách LSX con
+    const waitingTarget = wos
+      .filter((w) => w.status === WorkOrderStatus.WAITING)
+      .sort((a, b) => (Number(a.lsxSeq) || 1) - (Number(b.lsxSeq) || 1))[0];
+    const isWaiting = !latest || !!waitingTarget;
+    let seq = waitingTarget ? (Number(waitingTarget.lsxSeq) || 1) : (latest ? (Number(latest.lsxSeq) || 1) : latestSeq);
+    // LSX đã soạn (không còn Waiting) mà import thêm → đưa sang LSX Bổ sung (BS …), cộng dồn
+    if (!isWaiting && latest && prevLines.length > 0) {
+      return this.appendBoSungPxk(lsxKey, factory, fresh, sanitizeLine, latest, skipped);
+    }
+    const childCreated = false;
+
+    const all = [...existing, ...fresh.map((l) => ({ ...l, seq }))];
+    await docRef.set({
+      lsx: lsxKey,
+      factory,
+      lines: all.map(sanitizeLine),
+      importedAt: new Date()
+    });
+    this.pxkDataByLsx[lsxKey] = all;
+    this.invalidatePxkCache();
+    return { added: fresh.length, skipped, seq, childCreated, mergedWaiting: isWaiting && !!latest && prevLines.length > 0 };
+  }
+
+  /** Nhóm Bổ sung của Work Order: ASM1 / ASM2 / ASM3 (Sample theo LSX + Line). */
+  private boSungFactoryFor(wo: Partial<WorkOrder>): string {
+    const n = this.normalizeFactoryName(String(wo?.factory || ''));
+    // ASM3 không có factory riêng: LSX ASM1 / Sample 1 thuộc Line WHE/WHD/WHF/WHG/WHH → Bổ sung ASM3
+    if ((n === 'asm1' || n === 'sample 1') && this.isAsm3ProductionLine(String(wo?.productionLine || ''))) return 'BS ASM3';
+    if (n === 'asm1' || n === 'asm2' || n === 'asm3') return 'BS ' + n.toUpperCase();
+    if (/^bs asm[123]$/.test(n)) return n.toUpperCase();
+    const b = this.resolvePxkFactoryBadge(String(wo?.productionOrder || ''), String(wo?.productionLine || ''));
+    if (b) return 'BS ' + b;
+    return n === 'sample 2' ? 'BS ASM2' : 'BS ASM1';
+  }
+
+  /**
+   * Import thêm PXK cho LSX đã soạn → LSX Bổ sung "BS <LSX>": Work Order + PXK riêng (cộng dồn các lần import).
+   * Bổ sung đã Done mà có mã mới → mở lại Waiting.
+   */
+  private async appendBoSungPxk(
+    lsxKey: string,
+    factory: 'ASM1' | 'ASM2',
+    fresh: PxkLine[],
+    sanitizeLine: (l: any) => any,
+    mainWo: WorkOrder,
+    skipped: number
+  ): Promise<PxkMergeResult> {
+    const db = this.firestore.firestore;
+    const bsLsx = toBsLsx(lsxKey);
+    const docId = `${factory}_${bsLsx.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const ref = db.collection('pxk-import-data').doc(docId);
+    const snap = await ref.get();
+    const prev: PxkLine[] = snap.exists ? (((snap.data() as any)?.lines || []) as PxkLine[]) : [];
+    const seen = new Set(prev.map((l) => this.pxkLineDupKey(l)));
+    const add = fresh.filter((l) => {
+      const k = this.pxkLineDupKey(l);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    const now = new Date();
+    const woSnap = await db.collection('work-orders').where('productionOrder', '==', bsLsx).get();
+    let bsCreated = false;
+    let bsReopened = false;
+    if (woSnap.empty) {
+      const child: Record<string, unknown> = { ...mainWo };
+      delete child['id'];
+      for (const f of ['kittingStartedAt', 'readyAt', 'doneAt', 'createdByFromOutbound', 'createdByMemberId', 'checkedBy',
+        'missingMaterials', 'materialsComplete', 'materialsStatus', 'isCompleted', 'lsxSeq', 'partialPending', 'partialExports']) {
+        delete child[f];
+      }
+      Object.assign(child, {
+        productionOrder: bsLsx,
+        factory: this.boSungFactoryFor(mainWo),
+        status: WorkOrderStatus.WAITING,
+        createdBy: '',
+        createdByTeam: '',
+        notes: `Bổ sung LSX ${lsxKey} (${this.getStatusText(mainWo.status)})`,
+        createdDate: now,
+        lastUpdated: now
+      });
+      Object.keys(child).forEach((k) => child[k] === undefined && delete child[k]);
+      await db.collection('work-orders').add(child);
+      bsCreated = true;
+    } else if (add.length) {
+      const d = woSnap.docs[0];
+      const st = String((d.data() as any)?.status || '');
+      if (st === WorkOrderStatus.DONE || st === WorkOrderStatus.TRANSFER || (d.data() as any)?.isCompleted) {
+        await d.ref.update({
+          status: WorkOrderStatus.WAITING,
+          isCompleted: false,
+          doneAt: firebase.firestore.FieldValue.delete(),
+          lastUpdated: now
+        });
+        bsReopened = true;
+      }
+    }
+    const all: PxkLine[] = [...prev.map((l) => ({ ...l, seq: 1 })), ...add.map((l) => ({ ...l, seq: 1 }))];
+    if (add.length) {
+      await ref.set({
+        lsx: bsLsx,
+        factory,
+        lines: all.map(sanitizeLine),
+        importedAt: now,
+        isBoSungLsx: true,
+        mainLsx: lsxKey
+      });
+    }
+    this.pxkDataByLsx[bsLsx] = all;
+    this.invalidatePxkCache();
+    return {
+      added: add.length, skipped: skipped + (fresh.length - add.length), seq: 1,
+      childCreated: false, mergedWaiting: false, bsLsx, bsCreated, bsReopened
+    };
+  }
+
   private invalidatePxkCache(): void {
     this._pxkLinesCache.clear();
   }
 
-  getPxkLinesForLsx(lsx: string): PxkLine[] {
+  /**
+   * Dòng PXK của LSX. `seq` (lần LSX của Work Order) → chỉ lấy mã của lần đó (LSX con chỉ hiện mã cần xuất lúc đó).
+   * Không truyền seq → toàn bộ dòng của LSX.
+   */
+  getPxkLinesForLsx(lsx: string, seq?: number): PxkLine[] {
     if (!lsx) return [];
     const woLsx = String(lsx).trim();
-    if (this._pxkLinesCache.has(woLsx)) return this._pxkLinesCache.get(woLsx)!;
+    const cacheKey = seq ? `${woLsx}#${seq}` : woLsx;
+    if (this._pxkLinesCache.has(cacheKey)) return this._pxkLinesCache.get(cacheKey)!;
 
     const woUpper = woLsx.toUpperCase();
     const normalizeLsx = (s: string): string => {
       const t = String(s || '').trim().toUpperCase().replace(/\s/g, '');
-      const m = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m0 = t.match(/(\d{4}[\/\-\.]\d+)/);
+      const m = m0 && /^BS/.test(t) ? ([m0[0], 'BS' + m0[1]] as unknown as RegExpMatchArray) : m0; // LSX bổ sung ≠ LSX chính
       return m ? m[1].replace(/[-.]/g, '/') : t;
     };
     const samePrefix = (a: string, b: string): boolean => {
@@ -6285,8 +7069,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         break;
       }
     }
+    // Dữ liệu cũ (chưa có seq) → mọi lần LSX đều thấy toàn bộ như trước
+    if (seq && result.some((l) => l.seq != null)) {
+      result = result.filter((l) => (Number(l.seq) || 1) === seq);
+    }
     result = this.mergePxkLinesByCodePoKho(result);
-    this._pxkLinesCache.set(woLsx, result);
+    this._pxkLinesCache.set(cacheKey, result);
     return result;
   }
 
@@ -6387,7 +7175,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   getPxkSoMa(wo: WorkOrder): string {
     const lsx = String(wo?.productionOrder || '').trim();
     if (!lsx) return '—';
-    const lines = this.getPxkLinesForLsx(lsx);
+    const lines = this.getPxkLinesForLsx(lsx, Number(wo?.lsxSeq) || 1);
     if (lines.length === 0) return '—';
     const n = lines.filter((l) => !this.isPxkSoMaExcludedLine(l.maKho)).length;
     return String(n);
@@ -6431,7 +7219,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
   hasPxkForWorkOrder(wo: WorkOrder): boolean {
     const lsx = wo.productionOrder || '';
     if (!lsx) return false;
-    if (this.getPxkLinesForLsx(lsx).length > 0) return true;
+    if (this.getPxkLinesForLsx(lsx, Number(wo?.lsxSeq) || 1).length > 0) return true;
     return this.pxkLsxHasImportedPresence(lsx);
   }
 
@@ -6565,6 +7353,67 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     return { byLsx: cache.byLsx, lsxToMemberId: cache.lsxToMemberId };
   }
 
+  /**
+   * LSX import nhiều lần (lsxSeq 2, 3…): khung thời gian của lần này — từ lúc tạo WO lần này
+   * đến lúc tạo WO lần kế tiếp. Lần 1 không giới hạn đầu. Dùng để In / Tải PXK chỉ tính lượng scan của đúng lần đó.
+   */
+  private woSeqWindow(wo: WorkOrder | null | undefined): { from: number; to: number } {
+    const all = { from: 0, to: Number.POSITIVE_INFINITY };
+    if (!wo) return all;
+    const seq = Number((wo as any).lsxSeq) || 1;
+    const norm = this.normLsxForMatch(String(wo.productionOrder || ''));
+    const ms = (w: any) => this.parseOutboundExportDateMs(w?.createdDate ?? w?.createdAt);
+    const sibs = (this.workOrders || []).filter((w) =>
+      w !== wo && this.normLsxForMatch(String(w.productionOrder || '')) === norm
+      && String(w.factory || '') === String(wo.factory || ''));
+    const next = sibs.filter((w) => (Number((w as any).lsxSeq) || 1) > seq).map(ms).filter((x) => x > 0);
+    const hasLater = sibs.length > 0 || seq > 1;
+    if (!hasLater) return all;
+    return {
+      from: seq > 1 ? ms(wo) : 0,
+      to: next.length ? Math.min(...next) : Number.POSITIVE_INFINITY
+    };
+  }
+
+  /**
+   * LSX import nhiều lần: lượng đã xuất (cộng dồn cả LSX, theo mã + PO) chia cho các lần theo thứ tự 1 → 2 → 3…
+   * Lần trước nhận đủ phần PXK của nó trước, phần dư mới sang lần sau; lần cuối của mã + PO nhận hết phần còn lại.
+   * Gộp LSX Waiting vào 1 → các mã gộp chung 1 lần, lượng đã xuất trước đó vẫn được ghi nhận.
+   */
+  private allocateScanToSeq(lsx: string, seq: number, scanQtyMap: Map<string, number>): void {
+    const all = this.getPxkLinesForLsx(lsx);
+    if (!all.some((l) => (Number((l as any).seq) || 1) !== seq)) return; // chỉ 1 lần → giữ nguyên
+    const need = new Map<string, Map<number, number>>();
+    for (const l of all) {
+      if (this.isPxkSkipWarehouse(String((l as any).maKho || '').trim().toUpperCase())) continue;
+      const key = `${String(l.materialCode || '').trim().toUpperCase()}|${this.pxkPoKey((l as any).po || (l as any).poNumber)}`;
+      const s0 = Number((l as any).seq) || 1;
+      const bySeq = need.get(key) || new Map<number, number>();
+      bySeq.set(s0, (bySeq.get(s0) || 0) + (Number(l.quantity) || 0));
+      need.set(key, bySeq);
+    }
+    need.forEach((bySeq, key) => {
+      if (!bySeq.has(seq)) return;
+      const total = scanQtyMap.get(key) || 0;
+      let prev = 0;
+      let later = false;
+      bySeq.forEach((q, s0) => {
+        if (s0 < seq) prev += q;
+        if (s0 > seq) later = true;
+      });
+      let a = Math.max(0, total - prev);
+      if (later) a = Math.min(a, bySeq.get(seq) || 0);
+      scanQtyMap.set(key, Math.round(a * 10000) / 10000);
+    });
+  }
+
+  private inWoSeqWindow(win: { from: number; to: number }, exportDate: unknown): boolean {
+    if (win.from <= 0 && win.to === Number.POSITIVE_INFINITY) return true;
+    const t = this.parseOutboundExportDateMs(exportDate);
+    if (!t) return win.from <= 0; // không có ngày xuất → chỉ tính cho lần 1
+    return t >= win.from && t < win.to;
+  }
+
   private parseOutboundExportDateMs(v: unknown): number {
     if (!v) return 0;
     if (v instanceof Date) return v.getTime();
@@ -6598,8 +7447,17 @@ Kiểm tra chi tiết lỗi trong popup import.`);
 
   /** Kiểm tra LSX có PXK và So sánh có dòng Thiếu không - dùng CHÍNH XÁC logic In PXK */
   async hasPxkThieuForLsx(lsx: string, factoryFilter: 'ASM1' | 'ASM2'): Promise<boolean> {
+    return (await this.getPxkThieuLinesForLsx(lsx, factoryFilter)).length > 0;
+  }
+
+  /** Các dòng PXK đang Thiếu (lượng scan xuất < lượng PXK) — lý do lệch khi vượt quyền. */
+  async getPxkThieuLinesForLsx(
+    lsx: string,
+    factoryFilter: 'ASM1' | 'ASM2'
+  ): Promise<Array<{ code: string; po: string; need: number; scan: number; unit: string }>> {
+    const out: Array<{ code: string; po: string; need: number; scan: number; unit: string }> = [];
     const lines = this.getPxkLinesForLsx(lsx);
-    if (lines.length === 0) return false;
+    if (lines.length === 0) return out;
 
     const woLsxNorm = this.normLsxForMatch(lsx);
     const byLsx = await this.getOutboundLsxScanMapForFactoryFilter(factoryFilter, [lsx]);
@@ -6624,7 +7482,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
       const po = String((l as any).po || (l as any).poNumber || '').trim();
       let scanQty: number;
-      if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) {
+      if ((isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0; // Đã Giao / luôn đủ
       } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0; // Coi như đủ
@@ -6634,9 +7492,31 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       const qtyPxk = Number(l.quantity) || 0;
       if (this.isPxkSkipThieuCode(matCode)) continue;
       const soSanh = !hasAnyScanData && scanQty === 0 ? '' : getSoSanh(qtyPxk, scanQty);
-      if (soSanh.startsWith('Thiếu')) return true;
+      if (soSanh.startsWith('Thiếu')) out.push({ code: matCode, po, need: qtyPxk, scan: scanQty, unit: String(l.unit || '') });
     }
-    return false;
+    return out;
+  }
+
+  /** Lý do lệch dạng chữ (gửi Zalo + hiện trong popup vượt quyền). */
+  private async buildPxkBypassReason(workOrder: WorkOrder | null): Promise<string> {
+    if (!workOrder) return '';
+    try {
+      const lsx = String(workOrder.productionOrder || '').trim();
+      if (!lsx) return '';
+      await this.ensurePxkLoadedForLsx(lsx);
+      const rows = await this.getPxkThieuLinesForLsx(lsx, this.resolveOutboundFactoryFilterForPxk(workOrder));
+      if (!rows.length) return '';
+      const fmt = (n: number) => this.formatQuantityForPxk(n).replace(/\.00$/, '');
+      const MAX = 15;
+      const parts = rows.slice(0, MAX).map((r, i) =>
+        `${i + 1}. ${r.code}${r.po ? ' · PO ' + r.po : ''}: PXK ${fmt(r.need)} – đã xuất ${fmt(r.scan)} → thiếu ${fmt(r.need - r.scan)}${r.unit ? ' ' + r.unit : ''}`
+      );
+      if (rows.length > MAX) parts.push(`… và ${rows.length - MAX} mã khác`);
+      return `PXK thiếu ${rows.length} mã (lượng scan xuất chưa đủ PXK):\n` + parts.join('\n');
+    } catch (e) {
+      console.warn('[PXK bypass] build reason failed', e);
+      return '';
+    }
   }
 
   /** Nếu LSX có PXK và So sánh có Thiếu thì không cho chọn Done hoặc Transfer */
@@ -7033,11 +7913,11 @@ Kiểm tra chi tiết lỗi trong popup import.`);
         w.document.write(html);
         w.document.close();
       } else {
-        alert('Không mở được cửa sổ in. Hãy cho phép popup.');
+        appAlert('Không mở được cửa sổ in. Hãy cho phép popup.');
       }
     } catch (err) {
       console.error('[BAG QR] print error', err);
-      alert('Lỗi in tem QR: ' + ((err as Error)?.message || 'Vui lòng thử lại.'));
+      appAlert('Lỗi in tem QR: ' + ((err as Error)?.message || 'Vui lòng thử lại.'));
     } finally {
       this.bagQrBusy = false;
       this.cdr.detectChanges();
@@ -7242,12 +8122,12 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     if (this.bagPrintBusy) return;
     const factoryLabel = String(this.bagPrintFactory || '').trim();
     if (!factoryLabel) {
-      alert('Vui lòng chọn nhà máy.');
+      appAlert('Vui lòng chọn nhà máy.');
       return;
     }
     const selectedDates = this.getSelectedBagPrintDates();
     if (selectedDates.length === 0) {
-      alert('Vui lòng chọn ít nhất một ngày trong tuần (Thứ 2 – Thứ 7).');
+      appAlert('Vui lòng chọn ít nhất một ngày trong tuần (Thứ 2 – Thứ 7).');
       return;
     }
 
@@ -7255,7 +8135,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
     try {
       const lineByLsx = this.buildWorkOrderLineMapForBag(factoryLabel);
       if (lineByLsx.size === 0) {
-        alert(`Không có LSX nào trên Work Order Status cho nhà máy ${factoryLabel}.`);
+        appAlert(`Không có LSX nào trên Work Order Status cho nhà máy ${factoryLabel}.`);
         return;
       }
 
@@ -7293,7 +8173,7 @@ Kiểm tra chi tiết lỗi trong popup import.`);
       }
 
       if (byDay.size === 0) {
-        alert(
+        appAlert(
           `Không có PXK mã R029 cho LSX trên Work Order Status — nhà máy ${factoryLabel}, ` +
             `tuần ${this.bagWeekRangeLabel} (ngày đã chọn).\n` +
             `Kiểm tra đã import PXK (Xuất Kho > 0) cho các LSX trên tab.`
@@ -7344,11 +8224,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         w.document.close();
         this.showBagPrintDialog = false;
       } else {
-        alert('Không mở được cửa sổ in. Cho phép popup hoặc dùng Ctrl+P.');
+        appAlert('Không mở được cửa sổ in. Cho phép popup hoặc dùng Ctrl+P.');
       }
     } catch (err) {
       console.error('Lỗi in BAG:', err);
-      alert('Lỗi in BAG: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
+      appAlert('Lỗi in BAG: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
     } finally {
       this.bagPrintBusy = false;
       this.cdr.detectChanges();
@@ -7463,7 +8343,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!lsx || wo.status !== WorkOrderStatus.READY_IQC) return;
     try {
       await this.ensurePxkLoadedForLsx(lsx);
-      const lines = this.getPxkLinesForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx, Number(wo?.lsxSeq) || 1);
       const factory = this.mapDisplayFactoryToOperationalAsm(this.getWorkOrderDisplayFactory(wo)) || 'ASM1';
       const maps = await this.loadPxkLocationIqcMaps(factory, lines.map((line) => line.materialCode));
       const seen = new Set<string>();
@@ -7500,17 +8380,57 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       console.error('Ready-IQC Zalo:', error);
       if (alertOnFail) {
         const message = error instanceof Error ? error.message : 'Không gửi được Zalo.';
-        alert(`Đã lưu Ready-IQC. Zalo chưa báo được nhóm PLN.\n${message}`);
+        appAlert(`Đã lưu Ready-IQC. Zalo chưa báo được nhóm PLN.\n${message}`);
       }
     }
+  }
+
+  /** IMD dạng DDMMYYYY từ batchNumber / importDate (Timestamp, Date, chuỗi). */
+  private pxkImdKey(v: unknown): string {
+    if (v == null || v === '') return '';
+    if (typeof v === 'string') {
+      const m = /^(\d{8})/.exec(v.trim());
+      if (m) return m[1];
+    }
+    const ms = this.parseOutboundExportDateMs(v);
+    if (!ms) return '';
+    const d = new Date(ms);
+    return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
+  }
+
+  private uniqLocs(locs: string[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const l of locs) {
+      const t = String(l || '').trim();
+      const k = t.toUpperCase();
+      if (!t || seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+    }
+    return out;
+  }
+
+  /** In / tải PXK: mã + PO đã xuất cho LSX từ nhiều IMD → hiện vị trí từng lô đã lấy (vd "R03-1-2B, R04-1-2B"). */
+  private applyExportedLotLocations(
+    locationMap: Map<string, string>,
+    lotsByKey: Map<string, PxkLotLoc[]>,
+    imdByKey: Map<string, Set<string>>
+  ): void {
+    imdByKey.forEach((imds, key) => {
+      const lots = (lotsByKey.get(key) || []).filter((l) => l.imd && imds.has(l.imd)).sort((a, b) => a.ms - b.ms);
+      const locs = this.uniqLocs(lots.map((l) => l.loc));
+      if (locs.length) locationMap.set(key, locs.join(', '));
+    });
   }
 
   private async loadPxkLocationIqcMaps(
     factory: string,
     materialCodes: string[]
-  ): Promise<{ locationMap: Map<string, string>; iqcStatusMap: Map<string, string> }> {
+  ): Promise<{ locationMap: Map<string, string>; iqcStatusMap: Map<string, string>; lotsByKey: Map<string, PxkLotLoc[]> }> {
     const locationMap = new Map<string, string>();
     const iqcStatusMap = new Map<string, string>();
+    const lotsByKey = new Map<string, PxkLotLoc[]>();
     const codes = [...new Set(
       materialCodes.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean)
     )];
@@ -7530,14 +8450,26 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           const iqc = String(d.iqcStatus || '').trim();
           if (!mat || !po) return;
           const key = `${mat}|${po}`;
-          if (loc) locationMap.set(key, loc);
           if (iqc) iqcStatusMap.set(key, iqc);
+          const stock = (Number(d.openingStock) || 0) + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+          const imd = this.pxkImdKey(d.batchNumber) || this.pxkImdKey(d.importDate);
+          const list = lotsByKey.get(key) || [];
+          list.push({ imd, loc, stock, ms: this.parseOutboundExportDateMs(d.importDate) });
+          lotsByKey.set(key, list);
         });
       } catch (e) {
         console.warn('Không load vị trí / IQC cho nhóm mã PXK:', chunk, e);
       }
     }
-    return { locationMap, iqcStatusMap };
+    // Vị trí: mọi lô còn tồn (lô cũ trước); hết tồn → vị trí lô mới nhất
+    lotsByKey.forEach((lots, key) => {
+      const withStock = lots.filter((l) => l.stock > 0.0001 && l.loc).sort((a, b) => a.ms - b.ms);
+      const locs = this.uniqLocs(withStock.map((l) => l.loc));
+      if (locs.length) { locationMap.set(key, locs.join(', ')); return; }
+      const newest = lots.filter((l) => l.loc).sort((a, b) => b.ms - a.ms)[0];
+      if (newest) locationMap.set(key, newest.loc);
+    });
+    return { locationMap, iqcStatusMap, lotsByKey };
   }
 
 
@@ -7621,7 +8553,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       ? this.pxkOddWeightPercent(weightFull, weightOdd, standard, oddQty)
       : null;
     const okFlag = percent == null ? null : this.pxkWeightIsOk(percent);
-    await this.nvlCatalog.update(code, { unitWeight: weightFull });
+    await this.nvlCatalog.update(code, { gwBag: weightFull });
     await this.firestore.collection(this.PXK_WEIGHT_CHECK_COLLECTION).doc(this.pxkWeightCheckDocId(lsx, code, po)).set({
       lsx,
       lsxNorm: this.normLsxForMatch(lsx),
@@ -7637,6 +8569,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       weightOdd: oddQty > 0 ? weightOdd : null,
       percent: percent == null ? null : Math.round(percent * 10) / 10,
       ok: okFlag,
+      oddBagQty: oddQty > 0 ? oddQty : null,
       updatedAt: new Date()
     }, { merge: true });
     return {
@@ -7662,6 +8595,10 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     <p id="pxkWMeta" style="margin:0 0 6px;font-size:13px;color:#37474f;"></p>
     <p id="pxkWSplit" style="margin:0 0 10px;font-size:13px;line-height:1.4;"></p>
     <p id="pxkWSaved" style="margin:0 0 10px;font-size:13px;font-weight:700;color:#1b5e20;"></p>
+    <p id="pxkWPhoto" style="display:none;margin:0 0 10px;font-size:13px;">
+      <a id="pxkWPhotoLink" href="#" target="_blank" rel="noopener" style="color:#1565c0;font-weight:700;">📷 Xem hình bag lẻ đã cân</a>
+      <span id="pxkWPhotoBy" style="color:#607d8b;"></span>
+    </p>
     <label style="display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:13px;font-weight:700;">
       <span id="pxkWFullLabel">Trọng lượng chẵn cuộn</span>
       <input id="pxkWFull" type="text" inputmode="decimal" autocomplete="off" style="height:36px;border:1px solid #90a4ae;border-radius:4px;padding:0 8px;font-size:14px;">
@@ -7729,7 +8666,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!(expected > 0)) return null;
     return (odd / expected) * 100;
   }
-  function isOk(p) { return Math.round(p * 10) / 10 >= 98; }
+  function isOk(p) { return Math.abs(Math.round(p * 10) / 10 - 100) <= ${WEIGH_TOLERANCE_PERCENT}; }
   function pctLabel(p) { return (Math.round(p * 10) / 10).toFixed(1) + '%'; }
   function rowIsCheckOk(r) {
     if (r.ok === true) return true;
@@ -7789,7 +8726,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     expEl.textContent = 'Trọng lượng lẻ kỳ vọng: ' + gram(expected);
     if (pct == null) { resEl.textContent = ''; return; }
     var ok = isOk(pct);
-    resEl.textContent = ok ? (pctLabel(pct) + ' · OK') : (pctLabel(pct) + ' · Không đạt (cần ≥ 98%)');
+    resEl.textContent = ok ? (pctLabel(pct) + ' · OK') : (pctLabel(pct) + ' · Không đạt (lệch > ±${WEIGH_TOLERANCE_PERCENT}%)');
     resEl.style.color = ok ? '#1b5e20' : '#c62828';
   }
   function openEditor(idx) {
@@ -7809,6 +8746,12 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       if (r.oddQty > 0 && r.weightOdd > 0) savedText += ' · Lẻ: ' + gram(r.weightOdd);
     }
     document.getElementById('pxkWSaved').textContent = savedText;
+    document.getElementById('pxkWPhoto').style.display = r.photoUrl ? 'block' : 'none';
+    document.getElementById('pxkWPhotoLink').setAttribute('href', r.photoUrl || '#');
+    document.getElementById('pxkWPhotoBy').textContent = r.photoUrl
+      ? (r.photoSource === 'tach-tem-le' ? ' · cân lúc tách tem lẻ ' + (r.photoTag || '') : ' · cân ở Outbound')
+        + (r.weighedBy ? ' bởi ' + r.weighedBy : '') + ' (hình lưu 6 tháng)'
+      : '';
     var full = r.weightFull > 0 ? r.weightFull : (r.catalogWeight > 0 ? r.catalogWeight : '');
     document.getElementById('pxkWFull').value = full === '' ? '' : String(full);
     document.getElementById('pxkWOdd').value = r.weightOdd > 0 ? String(r.weightOdd) : '';
@@ -7910,17 +8853,67 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 </script>`;
   }
 
+  /** Ready trở đi (Ready, Ready IQC, Transfer, Done): dùng Standard packing đã chốt. */
+  private isPostReadyStatus(s: unknown): boolean {
+    return [WorkOrderStatus.READY, WorkOrderStatus.READY_IQC, WorkOrderStatus.TRANSFER, WorkOrderStatus.DONE]
+      .includes(s as WorkOrderStatus);
+  }
+
+  /**
+   * Chốt Standard packing (danh mục NVL) của các mã trong PXK vào Work Order — gọi lúc sang Ready.
+   * LSX đã Ready mà chưa có bản chốt (trước khi có chức năng) → chốt lần đầu dùng tới.
+   */
+  private async snapshotStdForWo(wo: WorkOrder, force = false): Promise<Record<string, number> | null> {
+    if (!wo?.id) return null;
+    if (!force && wo.stdSnapshot && Object.keys(wo.stdSnapshot).length) return wo.stdSnapshot;
+    const lsx = String(wo.productionOrder || '').trim();
+    if (!lsx) return null;
+    try {
+      await this.ensurePxkLoadedForLsx(lsx);
+      const codes = [...new Set(this.getPxkLinesForLsx(lsx).map((l) => String(l.materialCode || '').trim().toUpperCase()).filter(Boolean))];
+      if (!codes.length) return null;
+      const snap: Record<string, number> = {};
+      await Promise.all(codes.map(async (c) => {
+        try {
+          const sp = Number((await this.nvlCatalog.getByCode(c))?.standardPacking) || 0;
+          if (sp > 0) snap[c] = sp;
+        } catch { /* bỏ qua mã lỗi */ }
+      }));
+      const at = new Date();
+      await this.materialService.updateWorkOrder(wo.id, { stdSnapshot: snap, stdSnapshotAt: at } as Partial<WorkOrder>);
+      wo.stdSnapshot = snap;
+      wo.stdSnapshotAt = at;
+      const local = this.workOrders.find((w) => w.id === wo.id);
+      if (local && local !== wo) { local.stdSnapshot = snap; local.stdSnapshotAt = at; }
+      return snap;
+    } catch (e) {
+      console.warn('[Std snapshot] không chốt được', lsx, e);
+      return null;
+    }
+  }
+
+  /** create = chưa có bản chốt thì chốt ngay (In / Tải PXK); không thì chỉ dùng bản chốt sẵn có (icon). */
+  private async stdSnapshotFor(wo?: WorkOrder, create = false): Promise<Record<string, number> | null> {
+    if (!wo || !this.isPostReadyStatus(wo.status)) return null;
+    if (!create) return wo.stdSnapshot && Object.keys(wo.stdSnapshot).length ? wo.stdSnapshot : null;
+    return this.snapshotStdForWo(wo);
+  }
+
   private async loadPxkCatalogWeightMap(
-    codes: string[]
+    codes: string[],
+    wo?: WorkOrder,
+    createSnapshot = false
   ): Promise<Map<string, { standard: number; unitWeight: number }>> {
     const map = new Map<string, { standard: number; unitWeight: number }>();
+    // LSX đã Ready: Standard theo bản chốt lúc Ready, không theo danh mục mới
+    const snapshot = await this.stdSnapshotFor(wo, createSnapshot);
     const unique = [...new Set(codes.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean))];
     await Promise.all(unique.map(async (code) => {
       try {
         const item = await this.nvlCatalog.getByCode(code);
         map.set(code, {
-          standard: Number(item?.standardPacking) || 0,
-          unitWeight: Number(item?.unitWeight) || 0
+          standard: (snapshot && snapshot[code] > 0) ? snapshot[code] : (Number(item?.standardPacking) || 0),
+          unitWeight: catalogBagWeight(item)
         });
       } catch (e) {
         console.warn('[PXK Check lượng] Không đọc danh mục:', code, e);
@@ -7992,11 +8985,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const lsx = String(workOrder?.productionOrder || '').trim();
     if (!lsx) return 'red';
     await this.ensurePxkLoadedForLsx(lsx);
-    const lines = this.getPxkLinesForLsx(lsx);
+    const lines = this.getPxkLinesForLsx(lsx, Number(workOrder?.lsxSeq) || 1);
     const applicable = lines.filter((l) => this.isPxkWeightCheckLine(l.materialCode, l.maKho));
     if (applicable.length === 0) return 'red';
     const [catalog, checks] = await Promise.all([
-      this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode)),
+      this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode), workOrder),
       this.loadPxkWeightChecks(lsx, applicable)
     ]);
     let over = false;
@@ -8014,7 +9007,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       if (!(cat.standard > 0) || !(weightFull > 0)) return 'red';
       if (split.oddQty > 0) {
         if (!(weightOdd > 0)) return 'red';
-        const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+        const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty));
         if (pct == null) return 'red';
         if (Math.round(pct * 10) / 10 > this.PXK_WEIGHT_HIGH_PERCENT) over = true;
       }
@@ -8024,7 +9017,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 
   /**
    * Dòng thuộc Check lượng phải OK mới được sang Ready / Done.
-   * Không có lẻ: đã lưu trọng lượng chẵn là đủ. Có lẻ: % phải từ 98% trở lên.
+   * Không có lẻ: đã lưu trọng lượng chẵn là đủ. Có lẻ: % lệch không quá ±5%.
    */
   private async getPxkWeightCheckBlockMessage(workOrder: WorkOrder): Promise<string | null> {
     const lsx = String(workOrder?.productionOrder || '').trim();
@@ -8032,12 +9025,12 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     try {
       await this.ensurePxkWeightCatalogLoaded();
       await this.ensurePxkLoadedForLsx(lsx);
-      const lines = this.getPxkLinesForLsx(lsx);
+      const lines = this.getPxkLinesForLsx(lsx, Number(workOrder?.lsxSeq) || 1);
       const applicable = lines.filter((l) => this.isPxkWeightCheckLine(l.materialCode, l.maKho));
       if (applicable.length === 0) return null;
 
       const [catalog, checks] = await Promise.all([
-        this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode)),
+        this.loadPxkCatalogWeightMap(applicable.map((l) => l.materialCode), workOrder),
         this.loadPxkWeightChecks(lsx, applicable)
       ]);
       const failed: string[] = [];
@@ -8056,7 +9049,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
         if (cat.standard > 0 && !(split.oddQty > 0)) {
           ok = weightFull > 0;
         } else if (cat.standard > 0) {
-          const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty);
+          const pct = this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty));
           ok = pct != null && this.pxkWeightIsOk(pct);
         }
         if (!ok) failed.push(code);
@@ -8071,7 +9064,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     }
   }
 
-  /** Check lượng: mã đầu B018/B009/B016/B008/B021/B023/B024, hoặc mã được thêm trong danh mục. Không kho trống / NVL_SX / NVL_KS. */
+  /** Check lượng: đầu mã trong WEIGH_REQUIRED_PREFIXES, hoặc mã được thêm trong danh mục. Không kho trống / NVL_SX / NVL_KS. */
   private isPxkWeightCheckLine(materialCode: string, maKho: string | undefined | null): boolean {
     const kho = String(maKho || '').trim().toUpperCase();
     if (!kho || kho === 'NVL_SX' || kho === 'NVL_KS' || kho.includes('NVL_SX') || kho.includes('NVL_KS')) return false;
@@ -8079,7 +9072,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     if (!code || this.pxkWeightExemptCodes.has(code)) return false;
     if (this.pxkWeightIncludeCodes.has(code)) return true;
     if (code.startsWith('R') || code.startsWith('A')) return false;
-    return ['B018', 'B009', 'B016', 'B008', 'B021', 'B023', 'B024'].some((prefix) => code.startsWith(prefix));
+    return WEIGH_REQUIRED_PREFIXES.some((prefix) => code.startsWith(prefix));
   }
 
   private pxkNeedCheckIconHtml(tone: 'red' | 'green' | 'orange'): string {
@@ -8103,7 +9096,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       await this.refreshPxkWeightCatalog();
       void this.refreshPxkWeightIcons();
     } catch (error: any) {
-      alert(error?.message || 'Không thêm được mã.');
+      appAlert(error?.message || 'Không thêm được mã.');
     } finally {
       this.pxkWeightReportSaving = false;
       this.cdr.markForCheck();
@@ -8119,7 +9112,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       await this.refreshPxkWeightCatalog();
       void this.refreshPxkWeightIcons();
     } catch (error: any) {
-      alert(error?.message || 'Không bỏ được mã.');
+      appAlert(error?.message || 'Không bỏ được mã.');
     } finally {
       this.pxkWeightReportSaving = false;
       this.cdr.markForCheck();
@@ -8163,9 +9156,14 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     return (Math.round(percent * 10) / 10).toFixed(1) + '%';
   }
 
-  /** So với số % đang hiện (1 chữ số). Từ 98.0% trở lên là OK. */
+  /** So với số % đang hiện (1 chữ số). Lệch không quá ±5% là OK. */
   private pxkWeightIsOk(percent: number): boolean {
-    return Math.round(percent * 10) / 10 >= this.PXK_WEIGHT_OK_PERCENT;
+    return weighPercentOk(percent);
+  }
+
+  /** Lượng ứng với trọng lượng lẻ đã cân: bag lẻ cân ở Outbound / lúc tách tem (oddBagQty), không có thì lẻ theo PXK. */
+  private pxkOddBasis(saved: any, oddQty: number): number {
+    return Number(saved?.oddBagQty) > 0 ? Number(saved.oddBagQty) : oddQty;
   }
 
   private pxkWeightCheckDocId(lsx: string, materialCode: string, po: string): string {
@@ -8175,18 +9173,19 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
 
   async printPxk(workOrder: WorkOrder): Promise<void> {
     const lsx = workOrder.productionOrder || '';
+    const seqWin = this.woSeqWindow(workOrder);
     const printWin = this.openPxkPrintWindow(lsx);
     if (!printWin) {
-      alert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này.');
+      appAlert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này.');
       return;
     }
     try {
     await this.ensurePxkWeightCatalogLoaded();
     const hasPxk = await this.ensurePxkLoadedForLsx(lsx);
-    const lines = this.getPxkLinesForLsx(lsx);
+    const lines = this.getPxkLinesForLsx(lsx, Number(workOrder?.lsxSeq) || 1);
     if (!hasPxk || lines.length === 0) {
       printWin.close();
-      alert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
+      appAlert('Chưa có dữ liệu PXK cho LSX ' + lsx + '. Vui lòng import file PXK trước.');
       return;
     }
     const factoryFilter = this.resolveOutboundFactoryFilterForPxk(workOrder);
@@ -8198,6 +9197,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const locationMap = new Map<string, string>();
     const iqcStatusMap = new Map<string, string>();
     const scanQtyMap = new Map<string, number>();
+    const lotsByKey = new Map<string, PxkLotLoc[]>();
+    const imdByKey = new Map<string, Set<string>>();
     const employeeIds = new Set<string>();
     let nhanVienGiaoStr = '-';
     let nhanVienNhanStr = '-';
@@ -8229,6 +9230,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
             lines.map((l) => l.materialCode)
           );
           maps.locationMap.forEach((v, k) => locationMap.set(k, v));
+          maps.lotsByKey.forEach((v, k) => lotsByKey.set(k, v));
           maps.iqcStatusMap.forEach((v, k) => iqcStatusMap.set(k, v));
         } catch (e) {
           console.warn('Không load được vị trí / IQC từ inventory:', e);
@@ -8247,14 +9249,17 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
             const d = doc.data() as any;
             const poLsxNorm = this.normLsxForMatch(String(d.productionOrder || ''));
             if (!woLsxNorm || !poLsxNorm || poLsxNorm !== woLsxNorm) return;
+              const inWin = this.inWoSeqWindow(seqWin, d.exportDate ?? d.createdAt); // nhân viên / lô: chỉ lần import này
             const empId = String(d.employeeId || d.exportedBy || '').trim();
-            if (empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
+            if (inWin && empId) employeeIds.add(empId.length > 7 ? empId.substring(0, 7) : empId);
             const mat = String(d.materialCode || '').trim().toUpperCase();
             const po = this.pxkPoKey(d.poNumber || d.po);
             const exportQty = Number(d.exportQuantity || 0);
             if (mat && po) {
               const key = `${mat}|${po}`;
               scanQtyMap.set(key, (scanQtyMap.get(key) || 0) + exportQty);
+              const imdX = this.pxkImdKey(d.importDate ?? d.batchNumber);
+              if (inWin && imdX) { const st = imdByKey.get(key) || new Set<string>(); st.add(imdX); imdByKey.set(key, st); }
             }
           });
         } catch (e) {
@@ -8292,7 +9297,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       (async () => {
         try {
           const [catalog, checks] = await Promise.all([
-            this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode)),
+            this.loadPxkCatalogWeightMap(lines.map((l) => l.materialCode), workOrder, true),
             this.loadPxkWeightChecks(lsx, lines)
           ]);
           catalog.forEach((v, k) => catalogWeightMap.set(k, v));
@@ -8303,6 +9308,8 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       })()
     ]);
 
+    this.allocateScanToSeq(lsx, Number(workOrder?.lsxSeq) || 1, scanQtyMap);
+    this.applyExportedLotLocations(locationMap, lotsByKey, imdByKey);
     const invKey = (materialCode: string, po: string): string =>
       `${String(materialCode || '').trim().toUpperCase()}|${this.pxkPoKey(po)}`;
     const getLocation = (materialCode: string, po: string): string =>
@@ -8357,7 +9364,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const po = String(l.po || '').trim();
       const isNvlSxOnly = this.isPxkSkipWarehouse(maKho);
       let scanQty: number;
-      if (isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) {
+      if ((isNvlSxOnly || this.isPxkAlwaysFullExportCode(matCode)) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0;
       } else if (this.isPxkAutoFullExportCode(matCode) && hasAnyScanData) {
         scanQty = Number(l.quantity) || 0;
@@ -8379,7 +9386,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
       const weightFull = saved && Number(saved.weightFull) > 0 ? Number(saved.weightFull) : null;
       const weightOdd = saved && Number(saved.weightOdd) > 0 ? Number(saved.weightOdd) : null;
       const weightPercent = weightFull != null && weightOdd != null
-        ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, split.oddQty)
+        ? this.pxkOddWeightPercent(weightFull, weightOdd, cat.standard, this.pxkOddBasis(saved, split.oddQty))
         : null;
       const weightOk = weightPercent == null ? null : this.pxkWeightIsOk(weightPercent);
       if (weightCheck) {
@@ -8398,7 +9405,11 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
           weightFull,
           weightOdd,
           percent: weightPercent,
-          ok: weightOk
+          ok: weightOk,
+          photoUrl: String(saved?.oddPhotoUrl || ''),
+          photoSource: String(saved?.oddWeighSource || ''),
+          photoTag: String(saved?.oddSplitTag || ''),
+          weighedBy: String(saved?.oddWeighedBy || '')
         });
       }
       const lineCheckOk = weightCheck && (
@@ -8548,8 +9559,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#000}
     const maKhachHangDisplay = lines.map(l => String((l as any).maKhachHang || '').trim()).find(v => v) || workOrder.customer || '-';
     const maKhachHangBox = infoBox('Mã Khách Hàng', this.escapeHtmlForPrint(maKhachHangDisplay));
     const lsxBox = `<div style="${boxStyle};position:relative;"><div style="position:absolute;top:6px;left:6px;"><strong style="font-size:10px;text-transform:uppercase;display:block;margin-bottom:2px;">Lệnh Sản Xuất</strong><span style="word-break:break-all;font-size:11px;">${this.escapeHtmlForPrint(lsx)}</span></div>${qrImage ? `<img src="${qrImage}" alt="QR" style="position:absolute;bottom:6px;right:6px;width:70px;height:70px;display:block;" />` : ''}</div>`;
-    const isUsbCLine = /USB\s*C/i.test(lineNhan);
-    const cameraIconHtml = isUsbCLine ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
+    const cameraIconHtml = this.isPhotoRequiredLine(lineNhan) ? `<span style="position:absolute;top:4px;right:4px;width:24px;height:24px;display:inline-block;" title="Chụp hình"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span>` : '';
     const lineNhanBoxStyle = boxStyle + ';flex-direction:row;align-items:center;justify-content:space-between;gap:6px;';
     const lineNhanBox = `<div style="${lineNhanBoxStyle}">${factoryIconHtml}${cameraIconHtml}<div style="flex:1;display:flex;flex-direction:column;padding-top:${factoryIconHtml ? '22px' : '0'};"><strong style="font-size:10px;text-transform:uppercase;margin-bottom:2px;">Line Nhận</strong><span style="word-break:break-all;font-size:11px;">${this.escapeHtmlForPrint(lineNhan)}</span></div>${qrImageLine ? `<img src="${qrImageLine}" alt="QR Line" style="width:70px;height:70px;flex-shrink:0;display:block;" />` : ''}</div>`;
     const soChungTuBox = `<div style="${boxStyle}"><strong style="font-size:10px;text-transform:uppercase;position:absolute;top:6px;left:6px;">Số Chứng Từ</strong><div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.4;font-size:11px;padding-top:18px;"><span>${soChungTuDisplay}</span></div></div>`;
@@ -8651,12 +9661,12 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
     if (!this.writePxkPrintWindow(printWin, html)) {
-      alert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này (hoặc bấm Ctrl+P để in trang hiện tại).');
+      appAlert('Không mở được cửa sổ in. Vui lòng cho phép popup cho trang này (hoặc bấm Ctrl+P để in trang hiện tại).');
     }
     } catch (err) {
       console.error('Lỗi khi in PXK:', err);
       try { printWin.close(); } catch {}
-      alert('Lỗi khi in PXK: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
+      appAlert('Lỗi khi in PXK: ' + (err && (err as Error).message ? (err as Error).message : 'Vui lòng thử lại.'));
     }
   }
 
@@ -8760,68 +9770,6 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
     this.backToMainView();
   }
 
-  async loadAllWorkOrdersForScan(): Promise<void> {
-    try {
-      console.log('🔍 Loading all work orders for scan lookup...');
-      
-      // Use AngularFirestore instead of native Firestore
-      const querySnapshot = await this.firestore.collection('work-orders', ref => 
-        ref.orderBy('createdDate', 'desc')
-      ).get().toPromise();
-      
-      if (querySnapshot) {
-        console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
-        
-        this.allWorkOrdersForScan = [];
-        this.workOrderScanIndex.clear();
-        querySnapshot.forEach((doc) => {
-          const data = doc.data() as WorkOrder;
-          const wo: WorkOrder = {
-            id: doc.id,
-            ...data
-          } as WorkOrder;
-          this.allWorkOrdersForScan.push(wo);
-          const key = String(wo.productionOrder || '').trim().toUpperCase();
-          if (key) this.workOrderScanIndex.set(key, wo);
-        });
-
-        console.log(`✅ Loaded ${this.allWorkOrdersForScan.length} work orders for scan lookup`);
-      } else {
-        console.log('❌ QuerySnapshot is null');
-      }
-    } catch (error) {
-      console.error('❌ Error loading all work orders for scan:', error);
-    }
-  }
-
-  private async loadWorkOrdersByFactory(factory: string): Promise<WorkOrder[]> {
-    try {
-      console.log(`🔍 Loading work orders for factory: ${factory}`);
-      const db = getFirestore();
-      const workOrdersCollection = collection(db, 'workOrders');
-      const q = query(workOrdersCollection, orderBy('createdDate', 'desc'));
-      const querySnapshot = await getDocs(q);
-      
-      console.log(`📊 Total documents in workOrders collection: ${querySnapshot.size}`);
-      
-      const workOrders: WorkOrder[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as WorkOrder;
-        // Load ALL work orders for scan (don't filter by factory)
-        workOrders.push({
-          id: doc.id,
-          ...data
-        } as WorkOrder);
-      });
-      
-      console.log(`✅ Loaded ${workOrders.length} work orders from ${factory}`);
-      return workOrders;
-    } catch (error) {
-      console.error(`❌ Error loading work orders for factory ${factory}:`, error);
-      return [];
-    }
-  }
-
   async startScanner(): Promise<void> {
     try {
       console.log('📷 Starting QR scanner...');
@@ -8853,7 +9801,7 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
       console.log('✅ QR scanner started successfully');
     } catch (error) {
       console.error('❌ Error starting scanner:', error);
-      alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+      appAlert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
     }
   }
 
@@ -8881,7 +9829,7 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
       this.processLSXQRCode(lsxValue);
     } catch (error) {
       console.error('❌ Error processing scan:', error);
-      alert(`❌ Lỗi xử lý QR code: ${error}`);
+      appAlert(`❌ Lỗi xử lý QR code: ${error}`);
     }
   }
 
@@ -8928,7 +9876,7 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
     
     const workOrder = await this.findWorkOrderForScanByLsx(lsxValue);
     if (!workOrder) {
-      alert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}`);
+      appAlert(`❌ Không tìm thấy Work Order với LSX: ${lsxValue}`);
       return;
     }
     
@@ -8976,6 +9924,8 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
         return 'Done';
       case WorkOrderStatus.DELAY:
         return 'Delay';
+      case WorkOrderStatus.JIT:
+        return 'JIT';
       default:
         return 'Waiting';
     }
@@ -9136,7 +10086,7 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
 
     } catch (error) {
       console.error('❌ Error completing scan:', error);
-      alert('❌ Lỗi khi hoàn thành scan!');
+      appAlert('❌ Lỗi khi hoàn thành scan!');
     } finally {
       this.isProcessingScan = false;
     }
@@ -9184,7 +10134,7 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
 
   async processScanResults(): Promise<void> {
     if (this.scannedItems.length === 0) {
-      alert('❌ Chưa có item nào được scan!');
+      appAlert('❌ Chưa có item nào được scan!');
       return;
     }
 
@@ -9219,12 +10169,12 @@ ${this.buildPxkWeightClientHtml(lsx, weightMeta)}
       }
 
       await this.loadWorkOrders();
-      alert(`✅ Đã xử lý thành công ${this.scannedItems.length} scans!`);
+      appAlert(`✅ Đã xử lý thành công ${this.scannedItems.length} scans!`);
       this.backToMainView();
 
     } catch (error) {
       console.error('❌ Error processing scan results:', error);
-      alert('❌ Lỗi khi xử lý scan results!');
+      appAlert('❌ Lỗi khi xử lý scan results!');
     } finally {
       this.isProcessingScan = false;
     }

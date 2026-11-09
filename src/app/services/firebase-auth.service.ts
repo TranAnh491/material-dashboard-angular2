@@ -15,7 +15,7 @@ export interface User {
   department?: string;
   factory?: string;
   role?: string;
-  password?: string; // Password (lưu trong Firestore)
+  password?: string; // Dữ liệu cũ — không còn lưu password trong Firestore
   createdAt?: Date;
   lastLoginAt?: Date;
 }
@@ -27,6 +27,19 @@ export class FirebaseAuthService {
   user$: Observable<User | null>;
   /** Hồ sơ users vừa đọc lúc đăng nhập — AuthGuard dùng lại, không đọc Firestore lần hai. */
   private primedUser: User | null = null;
+
+  /**
+   * Custom claims trong token Firebase Auth: `admin` (chỉ ASP0106), `scan` (đăng nhập bằng quét thẻ).
+   * Server gán, client không tự sửa được. Dùng để ẩn/hiện giao diện; quyền thật do rules + functions kiểm.
+   */
+  claims(): Observable<{ admin: boolean; scan: boolean }> {
+    return this.afAuth.idTokenResult.pipe(
+      map(result => ({
+        admin: result?.claims?.['admin'] === true,
+        scan: result?.claims?.['scan'] === true
+      }))
+    );
+  }
 
   constructor(
     private afAuth: AngularFireAuth,
@@ -192,82 +205,6 @@ export class FirebaseAuthService {
   }
 
   // Đăng nhập tài khoản đặc biệt
-  async signInSpecialUser(displayName: string, email: string, uid?: string): Promise<void> {
-    try {
-      console.log('🔐 Đăng nhập tài khoản đặc biệt:', displayName);
-      
-      // Xác định UID dựa trên displayName
-      let specialUID = uid || 'special-steve-uid';
-      if (displayName === 'ASP0001') {
-        specialUID = 'special-asp0001-uid';
-      }
-      
-      // Tạo user data cho tài khoản đặc biệt
-      const specialUserData: User = {
-        uid: specialUID,
-        email: email,
-        displayName: displayName,
-        department: 'ADMIN',
-        factory: 'ALL',
-        role: 'Quản lý',
-        createdAt: new Date(),
-        lastLoginAt: new Date()
-      };
-
-      // Lưu vào Firestore
-      const userRef = this.firestore.doc(`users/${specialUserData.uid}`);
-      await userRef.set(specialUserData);
-
-      // Lưu permissions đặc biệt
-      const permissionRef = this.firestore.collection('user-permissions').doc(specialUserData.uid);
-      await permissionRef.set({
-        uid: specialUserData.uid,
-        email: email,
-        displayName: displayName,
-        department: 'ADMIN',
-        factory: 'ALL',
-        role: 'Quản lý',
-        hasEditPermission: true,
-        isSpecialUser: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      // Lưu tab permissions cho tất cả tabs
-      const tabPermissionRef = this.firestore.collection('user-tab-permissions').doc(specialUserData.uid);
-      const allTabPermissions = {
-        dashboard: true,
-        'work-order': true,
-        shipment: true,
-        materials: true,
-        fg: true,
-        label: true,
-        bm: true,
-        utilization: true,
-        find: true,
-        layout: true,
-        checklist: true,
-        equipment: true,
-        task: true
-      };
-      
-      await tabPermissionRef.set({
-        uid: specialUserData.uid,
-        email: email,
-        displayName: displayName,
-        tabPermissions: allTabPermissions,
-        isSpecialUser: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      markAuthSessionStarted();
-      console.log('✅ Tài khoản đặc biệt đã được tạo và đăng nhập thành công');
-    } catch (error) {
-      console.error('❌ Lỗi đăng nhập tài khoản đặc biệt:', error);
-      throw error;
-    }
-  }
 
 
 

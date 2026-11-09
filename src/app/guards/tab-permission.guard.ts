@@ -5,6 +5,7 @@ import { map, catchError, switchMap, take } from 'rxjs/operators';
 import { TabPermissionService } from '../services/tab-permission.service';
 import { RolePermissionService } from '../services/role-permission.service';
 import { MobileDetectionService } from '../services/mobile-detection.service';
+import { getTabKeyForUrl, isAdminOnlyTabKey } from '../routes/app-tabs';
 
 @Injectable({
   providedIn: 'root'
@@ -33,7 +34,7 @@ export class TabPermissionGuard implements CanActivate {
     }
 
     // Lấy tab key từ route
-    const tabKey = this.getTabKeyFromRoute(state.url);
+    const tabKey = getTabKeyForUrl(state.url);
     
     if (!tabKey) {
       // Nếu không xác định được tab key, KHÔNG cho phép truy cập (để đảm bảo an toàn)
@@ -48,7 +49,7 @@ export class TabPermissionGuard implements CanActivate {
     }
 
     // Đặc biệt cho Settings - chỉ Admin và Quản lý mới có quyền
-    if (tabKey === 'settings' || tabKey === 'zalo') {
+    if (isAdminOnlyTabKey(tabKey)) {
       return this.rolePermissionService.canAccessSettings().pipe(
         switchMap(hasRoleAccess => {
           if (!hasRoleAccess) {
@@ -97,70 +98,4 @@ export class TabPermissionGuard implements CanActivate {
     );
   }
 
-  private getTabKeyFromRoute(url: string): string | null {
-    // Map URL paths to tab keys - đồng bộ với FilteredRoutesService và availableTabs
-    const tabKeyMap: { [key: string]: string } = {
-      '/dashboard': 'dashboard',
-      '/pd-control': 'pd-control',
-      '/materials-dashboard': 'materials-dashboard',
-      '/fgs-dashboard': 'fgs-dashboard',
-      '/work-order-status': 'work-order-status',
-      '/lich-lam-viec': 'lich-lam-viec',
-      '/shipment': 'shipment',
-      
-      // RM Inbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/inbound': 'inbound',
-      // RM Inventory Overview — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/inventory-overview': 'inventory-overview',
-
-      // RM Outbound — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/outbound': 'outbound',
-      // RM Inventory (Materials) — trang gộp dùng chung cho ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-      '/materials': 'materials',
-      '/quan-ly-nguyen-lieu': 'materials',
-
-      '/danh-muc-nvl-tp': 'danh-muc-nvl-tp',
-      '/bag-history': 'bag-history',
-      
-      // ASM FG routes
-      '/fg-in': 'fg-in',
-      '/fg-out': 'fg-out',
-      '/fg-check': 'fg-check',
-      '/fg-inventory': 'fg-inventory',
-      '/fg-inventory/tp-list': 'fg-inventory',
-      '/fg-overview': 'fg-overview',
-      '/fg-location': 'fg-location',
-      '/pallet-id': 'pallet-id',
-      
-      // Other routes
-      '/location': 'location',
-      '/j-warehouse': 'j-warehouse',
-      '/stock-check': 'stock-check',
-      '/bieu-mau': 'bieu-mau',
-      '/label': 'label',
-      '/index': 'index',
-      '/sxxk': 'sxxk',
-      '/scrap': 'scrap',
-      '/checklist': 'checklist',
-      '/equipment': 'equipment',
-      '/qc': 'qc',
-      '/qc-traceability': 'qc',
-      '/nhiet-do': 'nhiet-do',
-      '/equipment-checklist': 'equipment-checklist',
-      '/rm1-delivery': 'rm1-delivery',
-      // Xe Tải không dùng tab permission guard
-      // '/xe-tai': 'xe-tai',
-      '/report': 'report',
-      '/shorted-materials': 'shorted-materials',
-      '/settings': 'settings',
-      '/zalo': 'zalo',
-
-      // Menu route - cho phép truy cập (không cần permission)
-      '/menu': 'dashboard'
-    };
-
-    // Lấy path từ URL (bỏ query params và hash)
-    const path = url.split('?')[0].split('#')[0];
-    return tabKeyMap[path] || null;
-  }
 } 

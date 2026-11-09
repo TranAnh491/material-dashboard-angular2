@@ -7,6 +7,8 @@ interface ClientReloadDoc {
   requestedAt?: unknown;
   requestedBy?: string;
   message?: string;
+  /** Chức năng mới của lần deploy (mỗi dòng 1 ý) — hiện trong popup tải lại */
+  releaseNotes?: string;
 }
 
 @Injectable({
@@ -34,6 +36,9 @@ export class ClientReloadService implements OnDestroy {
   private readonly holds = new Map<string, () => boolean>();
   private holdTimer: ReturnType<typeof setInterval> | null = null;
   private readonly showPromptSubject = new BehaviorSubject<boolean>(false);
+  /** Danh sách chức năng mới của bản vừa deploy */
+  private readonly releaseNotesSubject = new BehaviorSubject<string[]>([]);
+  readonly releaseNotes$ = this.releaseNotesSubject.asObservable();
   readonly showPrompt$ = this.showPromptSubject.asObservable();
 
   constructor(private firestore: AngularFirestore) {}
@@ -66,6 +71,9 @@ export class ClientReloadService implements OnDestroy {
           const lastToken = Number(stored);
           if (token > 0 && token !== lastToken) {
             sessionStorage.setItem(ClientReloadService.STORAGE_KEY, String(token));
+            this.releaseNotesSubject.next(
+              String(data?.releaseNotes || '').split(/\r?\n/).map((l) => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean).slice(0, 15)
+            );
             this.updateAvailableSubject.next(true);
             this.evaluatePrompt();
           }

@@ -1,4 +1,8 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
+import { stripJ5Prefix } from '../../shared/location-prefix';
+import { autoKkFields, autoKkLog, isPassToShelf } from '../../shared/auto-kk';
+import { KkHistoryLogService } from '../../services/kk-history-log.service';
 import { Router } from '@angular/router';
 import firebase from 'firebase/compat/app';
 import { Subject, BehaviorSubject, Subscription } from 'rxjs';
@@ -12,12 +16,15 @@ import { FactoryAccessService } from '../../services/factory-access.service';
 import { LocationAddUnlockService } from '../../services/location-add-unlock.service';
 import { NvlkhCatalogService } from '../../services/nvlkh-catalog.service';
 import { KkCatalogService } from '../../services/kk-catalog.service';
+import { LocUpdDoneEvent } from '../../shared/loc-upd-scan/loc-upd-scan.component';
 import {
   blocksSingleLetterPrefixMatch,
   getDefaultLocationsForWarehouse,
   mergeWarehouseMapsFromFirestore
 } from '../../services/location-warehouse-defaults.util';
 import { trigger, state, style, transition, animate } from '@angular/animations';
+
+
 
 export interface LocationItem {
   id?: string;
@@ -392,7 +399,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   forcedAllowedDestinationPrefixes: string[] = [];
   forcedWarehouseType: WarehouseType | '' = '';
   forcedAllowedLocations: string[] = [];
-  forcedRuleSource: 'catalog' | 'legacy' | '' = '';
+  forcedRuleSource: 'catalog' | 'storageMap' | 'legacy' | '' = '';
   private kkTypeMap = new Map<string, string>();
   private kkHomeLocs = new Map<string, string>();
   private kkCatalogReady = false;
@@ -416,6 +423,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private locationByViTriMap: Record<string, WarehouseType> = {};
   private materialPrefixWarehouseMap: Record<string, WarehouseType> = {};
   private rulesSub?: Subscription;
+  /** Listener danh sách vị trí — hủy trước khi tạo lại (bấm Làm mới không chồng thêm listener đọc cả collection). */
+  private locationsSub?: Subscription;
 
   /**
    * Chuẩn hoá mã nguyên liệu:
@@ -431,7 +440,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async openRuleModal(): Promise<void> {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     this.expandedLocationRuleParent = null;
@@ -473,7 +482,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async upsertLegacyRuleFromInputs(): Promise<void> {
     if (!this.selectedFactory) {
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     const materialCode = this.normalizeMaterialCodeForRule(this.ruleMaterialCodeInput);
@@ -481,11 +490,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const destinationPrefixes = this.parseLegacyRuleDestinationInput(this.ruleDestinationLocationInput);
 
     if (!materialCode || (keyLen !== 4 && keyLen !== 7)) {
-      alert('Mã nguyên liệu phải đúng 4 ký tự (prefix) hoặc 7 ký tự (mã đầy đủ), VD: B034 hoặc B037005');
+      appAlert('Mã nguyên liệu phải đúng 4 ký tự (prefix) hoặc 7 ký tự (mã đầy đủ), VD: B034 hoặc B037005');
       return;
     }
     if (!destinationPrefixes.length) {
-      alert('Vui lòng nhập ít nhất một prefix vị trí đích (cách nhau bởi dấu phẩy), VD: Z, K hoặc FRIDGE hoặc IQC+F7');
+      appAlert('Vui lòng nhập ít nhất một prefix vị trí đích (cách nhau bởi dấu phẩy), VD: Z, K hoặc FRIDGE hoặc IQC+F7');
       return;
     }
 
@@ -515,11 +524,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       await this.reloadLocationRulesFromFirestore();
       this.buildMaterialLocationRuleDisplayRows();
     this.applyLocationRuleToSelectedMaterial();
-      alert('✅ Đã lưu rule cũ');
+      appAlert('✅ Đã lưu rule cũ');
       this.clearLegacyRuleForm();
     } catch (e: unknown) {
       console.error('❌ upsertLegacyRuleFromInputs:', e);
-      alert(`❌ Không lưu được rule cũ: ${(e as Error)?.message || e}`);
+      appAlert(`❌ Không lưu được rule cũ: ${(e as Error)?.message || e}`);
     } finally {
       this.isLegacyRulesSaving = false;
       this.cdr.markForCheck();
@@ -543,7 +552,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyLocationRuleToSelectedMaterial();
     } catch (e: unknown) {
       console.error('❌ deleteLegacyRule:', e);
-      alert(`❌ Không xóa được rule: ${(e as Error)?.message || e}`);
+      appAlert(`❌ Không xóa được rule: ${(e as Error)?.message || e}`);
     } finally {
       this.isLegacyRulesSaving = false;
       this.cdr.markForCheck();
@@ -684,6 +693,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return /^BOX-\d/.test(raw);
   }
 
+  /** Vị trí Locker (Locker, Locker1…) / Backup (BACKUP, BACKUP1…): không áp rule — mọi mã đều được cất. */
+  isLockerBackupExemptLocation(location: string): boolean {
+    const raw = String(location || '').replace(/\s/g, '').toUpperCase();
+    return /^LOCKER(?:\+?\d+)?$/.test(raw) || /^BACKUP(?:-?\d+)?$/.test(raw);
+  }
+
   /** Mã pallet F1-xxxx / F2-xxxx — luôn cho phép, không áp rule kệ. */
   private isPalletCodeLocation(location: string): boolean {
     const raw = String(location || '').replace(/\s/g, '').toUpperCase();
@@ -700,7 +715,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private normalizeTargetLocationInput(raw: string, useAsm3: boolean): string {
-    const compact = String(raw || '')
+    const compact = stripJ5Prefix(String(raw || '').trim())
       .trim()
       .replace(/\s+/g, '')
       .toUpperCase()
@@ -711,11 +726,22 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.formatViTriInput(compact);
   }
 
+  /**
+   * Vị trí kệ J-Warehouse (R15-16, S07-2-4, R05-5-3C, R03-4-1A…) — chưa có trong danh sách vị trí cũ
+   * nhưng là vị trí thật; Đổi vị trí hàng loạt / Dời kệ chấp nhận (rule đầu mã vẫn kiểm riêng).
+   */
+  private isJShelfSlot(loc: string): boolean {
+    const t = String(loc || '').replace(/\s/g, '').toUpperCase();
+    return t === 'PASS' || /^[RS]\d{1,2}(-\d{1,2}[A-Z]?){1,3}$/.test(t);
+  }
+
   private isTargetRuleExempt(targetLocation: string, useAsm3: boolean): boolean {
     const raw = String(targetLocation || '').replace(/\s/g, '').toUpperCase();
     if (useAsm3 || raw.startsWith('ASM3')) return true;
     if (this.isIqcExemptLocation(raw)) return true;
+    if (/^PASS(?![A-Z])/.test(raw)) return true; // PASS: mọi mã được scan vị trí / kiểm kê
     if (this.isBoxExemptLocation(raw)) return true;
+    if (this.isLockerBackupExemptLocation(raw)) return true;
     if (this.isPalletCodeLocation(raw)) return true;
     return false;
   }
@@ -730,6 +756,36 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
     if (resolved.locations.length === 0) return true;
     return this.locationMatchesForcedRule(targetLocation, resolved.locations, resolved.source);
+  }
+
+  /** Popup khi cất sai rule: nêu đúng rule đang chặn và vị trí được phép. */
+  private locationRuleViolationMessage(materialCode: string, targetLocation: string): string {
+    const code = String(materialCode || '').trim() || '(không rõ mã)';
+    const target = String(targetLocation || '').trim() || '(trống)';
+    const resolved = this.resolveAllowedDestinationsForMaterial(materialCode);
+    const allowed = resolved.locations.join(', ') || '(không có vị trí được phép)';
+
+    let ruleLine = 'Rule: không xác định';
+    if (resolved.source === 'storageMap') {
+      ruleLine = 'Rule: Sơ đồ lưu trữ (J-Warehouse)';
+    } else if (resolved.source === 'catalog') {
+      ruleLine = 'Rule: Danh mục vị trí';
+    } else if (resolved.source === 'legacy') {
+      const matched = this.findMatchedRuleFromList(materialCode);
+      const ruleCode = matched?.materialCode || '';
+      const kind = ruleCode.length >= 7 ? 'mã đầy đủ' : 'đầu mã';
+      ruleLine = ruleCode
+        ? `Rule: Mã → Vị trí (cũ) — ${kind} ${ruleCode}`
+        : 'Rule: Mã → Vị trí (cũ)';
+    }
+
+    return (
+      `⚠️ Sai rule vị trí\n\n` +
+      `Mã hàng: ${code}\n` +
+      `Vị trí scan: ${target}\n\n` +
+      `${ruleLine}\n` +
+      `Chỉ được cất tại: ${allowed}`
+    );
   }
 
   /** Chuẩn hoá prefix vị trí trong rule cũ — giữ nguyên IQC+ (không qua formatViTriInput). */
@@ -967,15 +1023,18 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private resolveAllowedDestinationsForMaterial(materialCode: string): {
     warehouseType: WarehouseType | '';
     locations: string[];
-    source: 'catalog' | 'legacy' | '';
+    source: 'catalog' | 'storageMap' | 'legacy' | '';
   } {
-    const catalogLocs = this.catalogLocationsForMaterial(materialCode);
-    if (catalogLocs.length) {
-      return { warehouseType: '', locations: catalogLocs, source: 'catalog' };
+    // Rule vị trí chỉ áp dụng ASM1 (layout kho J) — ASM2 không ép / không chặn vị trí (21/10/2026)
+    if (this.selectedFactory !== 'ASM1') return { warehouseType: '', locations: [], source: '' };
+    // ASM1 (27/10/2026): theo Sơ đồ lưu trữ ở J-Warehouse (kệ ghi đầu mã B018 / R029…);
+    // mã chưa ghi trên sơ đồ → vị trí Danh mục. Không dùng rule Mã → Vị trí (cũ) cho ASM1 nữa.
+    if (this.kkCatalogReady) {
+      const mapShelves = this.kkCatalog.shelvesOnStorageMap(materialCode);
+      if (mapShelves.length) return { warehouseType: '', locations: mapShelves, source: 'storageMap' };
     }
-    const legacy = this.findMatchedRuleFromList(materialCode);
-    const locations = legacy?.destinationLocationPrefixes || [];
-    return { warehouseType: '', locations, source: locations.length ? 'legacy' : '' };
+    const catalogLocs = this.catalogLocationsForMaterial(materialCode);
+    return { warehouseType: '', locations: catalogLocs, source: catalogLocs.length ? 'catalog' : '' };
   }
 
   private async loadKkCatalogForRules(): Promise<void> {
@@ -1014,9 +1073,23 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return s;
   }
 
+  /**
+   * Ngoại lệ chung cho rule vị trí (26/10/2026):
+   * - Kệ R01 (R1): mọi mã đều được để khi scan đổi vị trí.
+   * - Mã có vị trí R06 được đổi về R05.
+   */
+  private isRuleShelfException(target: string, allowed: string[]): boolean {
+    const t = this.normalizeCatalogLocation(target);
+    const onShelf = (shelf: string) => t === shelf || t.startsWith(shelf + '-');
+    if (onShelf('R01')) return true;
+    if (onShelf('R05') && allowed.some((a) => /^R06(?!\d)/.test(this.normalizeCatalogLocation(a)))) return true;
+    return false;
+  }
+
   /** Vị trí đích có nằm trong vị trí danh mục: cùng dãy (R02, S07-T3 → S07), cùng block (R05-2) hoặc trùng tên khu vực. */
   private locationMatchesCatalogLocations(target: string, allowed: string[]): boolean {
-    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target) || this.isLockerBackupExemptLocation(target)) return true;
+    if (this.isRuleShelfException(target, allowed)) return true;
     const t = this.normalizeCatalogLocation(target);
     if (!t) return false;
     for (const loc of allowed) {
@@ -1030,14 +1103,15 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     return false;
   }
 
-  private locationMatchesForcedRule(target: string, allowed: string[], source: 'catalog' | 'legacy' | ''): boolean {
-    return source === 'catalog'
+  private locationMatchesForcedRule(target: string, allowed: string[], source: 'catalog' | 'storageMap' | 'legacy' | ''): boolean {
+    return source === 'catalog' || source === 'storageMap'
       ? this.locationMatchesCatalogLocations(target, allowed)
       : this.locationMatchesAllowedDestinations(target, allowed);
   }
 
   private locationMatchesAllowedDestinations(target: string, allowed: string[]): boolean {
-    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target)) return true;
+    if (this.isIqcExemptLocation(target) || this.isBoxExemptLocation(target) || this.isLockerBackupExemptLocation(target)) return true;
+    if (this.isRuleShelfException(target, allowed)) return true;
     const targetRaw = String(target || '').replace(/\s/g, '').toUpperCase();
     const formatted = this.formatViTriInput(target || '');
     if (!allowed.length) return false;
@@ -1067,11 +1141,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   addMaterialPrefixRuleRow(): void {
     const prefix = this.normalizeMaterialPrefixKey(this.newMaterialPrefixInput);
     if (!prefix) {
-      alert('Đầu mã phải đúng định dạng B+3 số (VD: B034) hoặc B+6 số (VD: B034567).');
+      appAlert('Đầu mã phải đúng định dạng B+3 số (VD: B034) hoặc B+6 số (VD: B034567).');
       return;
     }
     if (this.materialPrefixRows.some(r => r.materialPrefix === prefix)) {
-      alert(`Đầu mã ${prefix} đã có trong danh sách.`);
+      appAlert(`Đầu mã ${prefix} đã có trong danh sách.`);
       return;
     }
     this.materialPrefixRows = [
@@ -1106,7 +1180,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Lưu ngay rule đầu mã B — không cần chờ bấm Lưu rule toàn bộ. */
   private async persistMaterialPrefixRules(): Promise<void> {
     if (!this.selectedFactory) {
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     const materialByPrefix = this.buildMaterialByPrefixForSave();
@@ -1127,7 +1201,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.applyLocationRuleToSelectedMaterial();
     } catch (e: unknown) {
       console.error('❌ persistMaterialPrefixRules:', e);
-      alert(`❌ Không lưu được rule đầu mã: ${(e as Error)?.message || e}`);
+      appAlert(`❌ Không lưu được rule đầu mã: ${(e as Error)?.message || e}`);
     } finally {
       this.isMaterialPrefixRulesSaving = false;
       this.cdr.markForCheck();
@@ -1136,7 +1210,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async saveWarehouseRules(): Promise<void> {
     if (!this.selectedFactory) {
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     const locationByViTri: Record<string, WarehouseType> = {};
@@ -1162,10 +1236,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.materialPrefixWarehouseMap = { ...materialByPrefix };
       this.rebuildRuleModalRows();
       this.applyLocationRuleToSelectedMaterial();
-      alert('✅ Đã lưu rule ép vị trí');
+      appAlert('✅ Đã lưu rule ép vị trí');
     } catch (e: unknown) {
       console.error('❌ saveWarehouseRules:', e);
-      alert(`❌ Không lưu được rule: ${(e as Error)?.message || e}`);
+      appAlert(`❌ Không lưu được rule: ${(e as Error)?.message || e}`);
     } finally {
       this.isWarehouseRulesSaving = false;
       this.cdr.markForCheck();
@@ -1233,6 +1307,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Gợi ý rule ngắn gọn — không liệt kê toàn bộ tên vị trí. */
   get storeMaterialForcedRuleLabel(): string {
     if (!this.isTargetLocationForced) return '';
+    if (this.forcedRuleSource === 'storageMap') {
+      return `Vị trí theo sơ đồ lưu trữ: ${this.forcedAllowedLocations.join(', ')}`;
+    }
     if (this.forcedRuleSource === 'catalog') {
       return `Vị trí theo danh mục: ${this.forcedAllowedLocations.join(', ')}`;
     }
@@ -1314,7 +1391,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   isDestinationAllowed(location: string): boolean {
-    if (this.isIqcExemptLocation(location) || this.isBoxExemptLocation(location)) return true;
+    if (this.isIqcExemptLocation(location) || this.isBoxExemptLocation(location) || this.isLockerBackupExemptLocation(location)) return true;
     const formatted = this.formatViTriInput(location || '');
     if (!formatted) return false;
     if (!this.isTargetLocationForced) return true;
@@ -1348,8 +1425,6 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Tick ASM3: ghép ASM3+ + vị trí scan; mọi vị trí ASM3 đều hợp lệ (không check rule). */
   bulkUseAsm3 = false;
 
-  private readonly LOCATION_RULE_ERROR = '⚠️ Sai rule vị trí';
-
   /** OTP thêm vị trí mới — mã gửi Zalo tới ASP0106 */
   showLocationAddOtpModal = false;
   locationAddOtpStep: 1 | 2 = 1;
@@ -1365,6 +1440,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /** Mobile shell (≤768px) */
   isMobile = false;
+  /** Ngày hiện trên thẻ Tổng quan kho (giao diện điện thoại). */
+  readonly locMToday = new Date();
   mobileBottomTab: 'location' | 'history' = 'location';
   private readonly locationMobileBodyClass = 'location-mobile-tab';
 
@@ -1392,6 +1469,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     private locationAddUnlock: LocationAddUnlockService,
     private nvlkhCatalog: NvlkhCatalogService,
     private kkCatalog: KkCatalogService,
+    private kkLog: KkHistoryLogService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) {
@@ -1478,6 +1556,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     this.cdr.markForCheck();
   }
 
+  /** Back trong thanh nút laptop (thay nút Back nổi dùng chung). */
+  goBackPage(): void {
+    if (window.history.length > 1) window.history.back();
+    else this.router.navigate(['/menu']);
+  }
+
   goMobileMenu(): void {
     this.router.navigate(['/menu']);
   }
@@ -1514,6 +1598,17 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const name = String(user.displayName || '').trim();
     if (name) return name.substring(0, 24);
     return email.substring(0, 24) || 'UNKNOWN';
+  }
+
+  /** Lịch sử KK khi tự tick do đổi vị trí PASS → kệ. */
+  private writePassToShelfKkLog(item: any, location: string, by: string, at: Date): void {
+    const log = autoKkLog({
+      inventoryDocId: String(item?.id || ''), factory: this.selectedFactory, materialCode: item?.materialCode || '',
+      poNumber: item?.poNumber || '', batchNumber: item?.batchNumber || '', location,
+      quantity: Number(item?.quantity) || 0, stock: Number(item?.stock) || 0, unit: item?.unit || '', by, at, source: 'pass-to-shelf'
+    });
+    void this.firestore.collection('inventory-kk-history').add(log).catch((e) => console.warn('KK log (pass-to-shelf)', e));
+    this.kkLog.enqueue(log);
   }
 
   private async logMaterialLocationChange(params: {
@@ -1602,7 +1697,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   private async loadLocationData() {
     this.isLoading = true;
     try {
-      this.firestore.collection('locations', ref => ref.orderBy('stt', 'asc'))
+      this.locationsSub?.unsubscribe();
+      this.locationsSub = this.firestore.collection('locations', ref => ref.orderBy('stt', 'asc'))
         .valueChanges({ idField: 'id' })
         .pipe(takeUntil(this.destroy$))
         .subscribe((items: any[]) => {
@@ -1833,6 +1929,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   // Format and validate viTri input
   formatViTriInput(input: string): string {
     if (!input) return '';
+    input = stripJ5Prefix(input.trim());
     
     // Remove all spaces and convert to uppercase
     let formatted = input.replace(/\s/g, '').toUpperCase();
@@ -1874,11 +1971,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     if (!this.newItem.viTri?.trim()) {
-      alert('Vui lòng nhập Vị Trí trước khi thêm');
+      appAlert('Vui lòng nhập Vị Trí trước khi thêm');
       return;
     }
     if (!this.validateViTriInput(this.newItem.viTri)) {
-      alert('Vị Trí không hợp lệ');
+      appAlert('Vị Trí không hợp lệ');
       return;
     }
     this.pendingLocationAddAction = 'add';
@@ -1961,19 +2058,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   addLocationItem() {
     if (!this.newItem.viTri) {
-      alert('Vui lòng nhập Vị Trí');
+      appAlert('Vui lòng nhập Vị Trí');
       return;
     }
 
     // Validate viTri format
     if (!this.validateViTriInput(this.newItem.viTri)) {
-      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
+      appAlert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
       return;
     }
 
     // Check if Vị Trí already exists (exact match)
     if (this.locationItems.find(item => item.viTri === this.newItem.viTri)) {
-      alert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
+      appAlert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
       return;
     }
 
@@ -1985,7 +2082,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     if (duplicateItem) {
-      alert(`Vị trí "${this.newItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
+      appAlert(`Vị trí "${this.newItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
       return;
     }
 
@@ -2017,13 +2114,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.editingItem) return;
 
     if (!this.editingItem.viTri) {
-      alert('Vui lòng nhập Vị Trí');
+      appAlert('Vui lòng nhập Vị Trí');
       return;
     }
 
     // Validate viTri format
     if (!this.validateViTriInput(this.editingItem.viTri)) {
-      alert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
+      appAlert('Vị Trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
       return;
     }
 
@@ -2031,7 +2128,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.locationItems.find(item => 
       item.viTri === this.editingItem!.viTri && item.id !== this.editingItem!.id
     )) {
-      alert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
+      appAlert('Vị Trí đã tồn tại, vui lòng chọn Vị Trí khác');
       return;
     }
 
@@ -2044,7 +2141,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     if (duplicateItem) {
-      alert(`Vị trí "${this.editingItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
+      appAlert(`Vị trí "${this.editingItem.viTri}" trùng với vị trí đã có "${duplicateItem.viTri}" (cả hai đều đọc là "${normalizedNewViTri}")`);
       return;
     }
 
@@ -2097,7 +2194,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     const boxCode = this.getNextBoxNumber();
 
     if (this.locationItems.find(item => item.viTri === boxCode)) {
-      alert(`Box ${boxCode} đã tồn tại. Vui lòng thử lại.`);
+      appAlert(`Box ${boxCode} đã tồn tại. Vui lòng thử lại.`);
       return;
     }
 
@@ -2166,7 +2263,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   deleteSelectedItems() {
     const ids = Array.from(this.selectedLocationIds);
     if (ids.length === 0) {
-      alert('Chưa chọn dòng nào để xóa');
+      appAlert('Chưa chọn dòng nào để xóa');
       return;
     }
     if (!confirm(`Bạn có chắc muốn xóa ${ids.length} vị trí đã chọn?`)) return;
@@ -2202,7 +2299,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Initialize sample data
+  /** Code thử nghiệm cũ: XÓA toàn bộ danh mục vị trí rồi tạo 5 vị trí mẫu — đã khóa (05/11/2026). */
   initializeSampleData() {
+    appAlert('Chức năng tạo dữ liệu mẫu đã bị khóa (sẽ xóa toàn bộ danh mục vị trí).');
+    return;
     const sampleData: Omit<LocationItem, 'id'>[] = [
       { stt: 0, viTri: 'A1-01', qrCode: this.generateQRCode('A1-01'), printCount: 0, createdAt: new Date() },
       { stt: 0, viTri: 'A1-02', qrCode: this.generateQRCode('A1-02'), printCount: 0, createdAt: new Date() },
@@ -2325,11 +2425,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         if (locations.length > 0) {
           this.saveImportedLocations(locations);
         } else {
-          alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề "Vị trí"\n- Từ dòng 2 trở đi phải có dữ liệu vị trí\n- Định dạng vị trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
+          appAlert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề "Vị trí"\n- Từ dòng 2 trở đi phải có dữ liệu vị trí\n- Định dạng vị trí chỉ được chứa chữ cái, số, dấu chấm (.), dấu gạch ngang (-) và dấu ngoặc đơn ()');
         }
       } catch (error) {
         console.error('Error processing file:', error);
-        alert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
+        appAlert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -2349,10 +2449,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     batch.commit().then(() => {
       console.log(`✅ Imported ${locations.length} new locations (added to existing data)`);
       this.refreshData();
-      alert(`✅ Đã import thành công ${locations.length} vị trí mới!\n\n📝 Lưu ý: Dữ liệu mới được THÊM VÀO dữ liệu cũ, không thay thế dữ liệu cũ.`);
+      appAlert(`✅ Đã import thành công ${locations.length} vị trí mới!\n\n📝 Lưu ý: Dữ liệu mới được THÊM VÀO dữ liệu cũ, không thay thế dữ liệu cũ.`);
     }).catch(error => {
       console.error('Error importing locations:', error);
-      alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
+      appAlert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
     });
   }
 
@@ -2385,7 +2485,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       XLSX.writeFile(wb, 'Location_Template.xlsx');
     } catch (error) {
       console.error('Error creating template:', error);
-      alert('Lỗi khi tạo template. Vui lòng thử lại.');
+      appAlert('Lỗi khi tạo template. Vui lòng thử lại.');
     }
   }
 
@@ -2401,10 +2501,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         batch.commit().then(() => {
           console.log('All locations deleted');
           this.refreshData();
-          alert('Đã xóa tất cả vị trí');
+          appAlert('Đã xóa tất cả vị trí');
         }).catch(error => {
           console.error('Error deleting all locations:', error);
-          alert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
+          appAlert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
         });
       });
     }
@@ -2438,7 +2538,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+        appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
         return;
       }
 
@@ -2460,7 +2560,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       printWindow.document.close();
     } catch (error) {
       console.error('Error generating QR code:', error);
-      alert('Lỗi khi tạo mã QR. Vui lòng thử lại.');
+      appAlert('Lỗi khi tạo mã QR. Vui lòng thử lại.');
     }
   }
 
@@ -2790,6 +2890,8 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.showFactorySelect = true;
       return;
     }
+    // Sơ đồ lưu trữ có thể vừa sửa ở J-Warehouse → nạp lại (1 doc) để rule ASM1 chạy theo
+    void this.kkCatalog.loadShelfMap().then(() => this.applyLocationRuleToSelectedMaterial());
     this.showStoreMaterialModal = true;
     this.storeMaterialStep = 'scan';
     this.storeMaterialQRInput = '';
@@ -2831,6 +2933,326 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         }, 200);
       }
     }, 150);
+  }
+
+  // ==================== CẬP NHẬT VỊ TRÍ (màn hình scan dùng chung <app-loc-upd-scan>) ====================
+  // Cùng 1 chức năng với nút "Kiểm kê" ở tab Quản lý NVL.
+
+  showLocUpdModal = false;
+  /** Kiểm kê đơn lẻ: scan tem 1 mã → scan vị trí */
+  showKkSingleModal = false;
+  /** Popup giải thích 4 chức năng (nút ⓘ) */
+  showLocHelp = false;
+
+  // ===== Tìm tủ Locker còn trống (mỗi tủ tối đa 5 mã) =====
+  static readonly LOCKER_MAX_CODES = 5;
+  showLockerModal = false;
+  lockerLoading = false;
+  lockerError = '';
+  /** Tủ còn chỗ (< 5 mã), tủ trống trước rồi theo số tủ */
+  lockerCandidates: { locker: string; codes: string[] }[] = [];
+  lockerIndex = 0;
+  lockerStats = { total: 0, empty: 0, full: 0 };
+
+  get lockerMax(): number {
+    return LocationComponent.LOCKER_MAX_CODES;
+  }
+
+  get currentLocker(): { locker: string; codes: string[] } | null {
+    return this.lockerCandidates[this.lockerIndex] || null;
+  }
+
+  /** LOCKER 130 / J5-LOCKER130 / locker-130 → LOCKER130; không phải locker → ''. */
+  private lockerKey(raw: string): string {
+    const m = /^(?:J5-)?LOCKER[\s\-_+]*0*(\d+)$/i.exec(String(raw || '').trim());
+    return m ? 'LOCKER' + m[1] : '';
+  }
+
+  openLockerFinder(): void {
+    this.showLockerModal = true;
+    void this.findLockers();
+  }
+
+  closeLockerModal(): void {
+    this.showLockerModal = false;
+  }
+
+  /** Đọc danh mục tủ Locker + tồn kho → danh sách tủ còn chỗ (dưới 5 mã). */
+  async findLockers(): Promise<void> {
+    this.lockerLoading = true;
+    this.lockerError = '';
+    this.lockerCandidates = [];
+    this.lockerIndex = 0;
+    this.cdr.detectChanges();
+    try {
+      const factory = this.selectedFactory || 'ASM1';
+      const lockers = new Map<string, Set<string>>();
+      for (const it of (this.locationItems || []) as any[]) {
+        const k = this.lockerKey(it?.viTri);
+        if (k && !lockers.has(k)) lockers.set(k, new Set());
+      }
+      const snap = await this.firestore.firestore.collection('inventory-materials')
+        .where('factory', '==', factory).get();
+      snap.forEach((doc) => {
+        const d = doc.data() as any;
+        const code = String(d.materialCode || '').trim().toUpperCase();
+        if (!code) return;
+        const opening = d.openingStock != null ? Number(d.openingStock) || 0 : 0;
+        const stock = opening + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+        if (!(stock > 1e-6)) return;
+        for (const tok of String(d.location ?? d.viTri ?? '').split(/[,;]+/)) {
+          const k = this.lockerKey(tok);
+          if (!k) continue;
+          if (!lockers.has(k)) lockers.set(k, new Set());
+          lockers.get(k)!.add(code);
+        }
+      });
+      const max = LocationComponent.LOCKER_MAX_CODES;
+      const all = [...lockers.entries()].map(([locker, set]) => ({ locker, codes: [...set].sort() }));
+      this.lockerStats = {
+        total: all.length,
+        empty: all.filter((x) => !x.codes.length).length,
+        full: all.filter((x) => x.codes.length >= max).length
+      };
+      const num = (k: string) => Number(k.replace(/\D/g, '')) || 0;
+      this.lockerCandidates = all
+        .filter((x) => x.codes.length < max)
+        .sort((a, b) => a.codes.length - b.codes.length || num(a.locker) - num(b.locker));
+      if (!all.length) this.lockerError = 'Chưa có tủ Locker nào trong danh mục vị trí.';
+      else if (!this.lockerCandidates.length) this.lockerError = 'Tất cả tủ Locker đã đủ ' + max + ' mã.';
+    } catch (e: any) {
+      this.lockerError = 'Không đọc được tồn kho: ' + (e?.message || e);
+    } finally {
+      this.lockerLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Tủ này không vừa → gợi ý tủ khác (hết danh sách thì quay lại tủ đầu). */
+  nextLocker(): void {
+    if (!this.lockerCandidates.length) return;
+    this.lockerIndex = (this.lockerIndex + 1) % this.lockerCandidates.length;
+  }
+
+  openLocUpdModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      return;
+    }
+    this.showLocUpdModal = true;
+  }
+
+  openKkSingleModal(): void {
+    if (!this.selectedFactory) {
+      this.showFactorySelect = true;
+      return;
+    }
+    this.showKkSingleModal = true;
+  }
+
+  onLocUpdDone(e: LocUpdDoneEvent): void {
+    if (e.lines.length) this.setLastScannedMaterialForMobile({ ...e.lines[0], location: e.location });
+  }
+
+  // ==================== REPORT CẬP NHẬT VỊ TRÍ ====================
+
+  private static readonly LOC_UPD_SESSIONS = 'location-update-sessions';
+  isDownloadingLocUpdReport = false;
+
+  /** Mở tab mới dạng notepad: bảng ngày, người scan, mã, lượng, thùng, đủ/thiếu/thừa, vị trí — có tìm, lọc, sắp xếp. */
+  async downloadLocUpdReport(): Promise<void> {
+    if (this.isDownloadingLocUpdReport) return;
+    const raw = prompt('Report cập nhật vị trí — lấy dữ liệu bao nhiêu ngày gần nhất?', '7');
+    if (raw === null) return;
+    const days = Math.max(1, Math.min(365, parseInt(raw, 10) || 7));
+    this.isDownloadingLocUpdReport = true;
+    this.isDropdownOpen = false;
+    const win = window.open('', '_blank');
+    if (!win) {
+      this.isDownloadingLocUpdReport = false;
+      appAlert('Không mở được tab mới. Vui lòng cho phép popup cho trang này.');
+      return;
+    }
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Report cập nhật vị trí</title></head><body style="font:14px Consolas,monospace;padding:20px">Đang tải report…</body></html>');
+    win.document.close();
+    try {
+      const from = new Date();
+      from.setHours(0, 0, 0, 0);
+      from.setDate(from.getDate() - (days - 1));
+      const snap = await this.firestore.firestore
+        .collection(LocationComponent.LOC_UPD_SESSIONS)
+        .where('at', '>=', from)
+        .orderBy('at', 'desc')
+        .get();
+      const toDate = (v: any): Date => (v?.toDate ? v.toDate() : new Date(v));
+      const fmt = (d: Date) => {
+        const p = (n: number) => String(n).padStart(2, '0');
+        return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      };
+      const sessions = snap.docs
+        .map((d) => d.data() as any)
+        .filter((s) => !this.selectedFactory || !s.factory || s.factory === this.selectedFactory);
+      // Lần quét trước khi có nhật ký: dựng lại từ dòng tồn đã quét vị trí (locationScannedAt + Lượng quét)
+      const logged = new Set<string>();
+      sessions.forEach((s) => (s.lines || []).forEach((l: any) => logged.add(`${l.inventoryId}|${toDate(s.at).getTime()}`)));
+      const invSnap = await this.firestore.firestore
+        .collection('inventory-materials')
+        .where('locationScannedAt', '>=', from)
+        .get();
+      const rebuilt = new Map<string, any>();
+      invSnap.docs.forEach((doc) => {
+        const f = doc.data() as any;
+        if (f.kkScanQty == null) return;
+        if (this.selectedFactory && f.factory && f.factory !== this.selectedFactory) return;
+        const at = toDate(f.locationScannedAt);
+        if (logged.has(`${doc.id}|${at.getTime()}`)) return;
+        const loc = String(f.location || f.viTri || '').trim().toUpperCase();
+        const opening = f.openingStock != null ? Number(f.openingStock) || 0 : 0;
+        const stock = Math.round((opening + (Number(f.quantity) || 0) - (Number(f.exported) || 0) - (Number(f.xt) || 0)) * 10000) / 10000;
+        const qty = Number(f.kkScanQty) || 0;
+        const key = `${loc}|${at.getTime()}`;
+        const sess = rebuilt.get(key) || { factory: f.factory, location: loc, at, operator: f.modifiedBy || '', lines: [] as any[] };
+        sess.lines.push({
+          inventoryId: doc.id,
+          materialCode: f.materialCode || '',
+          poNumber: f.poNumber || '',
+          imd: f.batchNumber || '',
+          fromLocation: '',
+          boxes: Number(f.kkScanCount) || 0,
+          scannedQty: qty,
+          stock,
+          status: qty > stock + 1e-6 ? 'Thừa' : Math.abs(qty - stock) < 1e-6 ? 'Đủ' : 'Thiếu',
+          cartonLabel: !!f.kkCartonLabel,
+          kkTicked: !!f.kkChecked
+        });
+        rebuilt.set(key, sess);
+      });
+      sessions.push(...rebuilt.values());
+      sessions.sort((a, b) => toDate(b.at).getTime() - toDate(a.at).getTime());
+      if (!sessions.length) {
+        win.close();
+        appAlert(`Chưa có lần Cập nhật vị trí nào trong ${days} ngày gần nhất${this.selectedFactory ? ' (' + this.selectedFactory + ')' : ''}.`);
+        return;
+      }
+
+      // Mỗi dòng = 1 mã (mã + PO + IMD) trong 1 lần quét
+      const rows = sessions.flatMap((x) => (x.lines || []).map((l: any) => {
+        const qty = Number(l.scannedQty) || 0;
+        const stock = Number(l.stock) || 0;
+        return {
+          t: toDate(x.at).getTime(),
+          ngay: fmt(toDate(x.at)),
+          nguoi: String(x.operator || ''),
+          ma: String(l.materialCode || ''),
+          po: String(l.poNumber || ''),
+          luong: qty,
+          ton: stock,
+          thung: Number(l.boxes) || 0,
+          st: String(l.status || ''),
+          thieu: l.status === 'Thiếu' ? Math.round((stock - qty) * 10000) / 10000 : 0,
+          thua: l.status === 'Thừa' ? Math.round((qty - stock) * 10000) / 10000 : 0,
+          temThung: !!l.cartonLabel,
+          kk: !!l.kkTicked,
+          viTri: String(x.location || '')
+        };
+      }));
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      const title = `Report cập nhật vị trí — ${this.selectedFactory || 'Tất cả'} — ${days} ngày (từ ${fmt(from).slice(0, 10)})`;
+      const dataJson = JSON.stringify(rows).replace(/</g, '\\u003c');
+      win.document.open();
+      win.document.write(`<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>Report cập nhật vị trí ${this.selectedFactory || ''}</title>
+<style>
+  html,body{margin:0;background:#fff;color:#111;font:13px/1.45 Consolas,'Courier New',monospace}
+  .bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:#ececec;border-bottom:1px solid #c8c8c8}
+  .bar .ttl{font-weight:700;margin-right:8px}
+  .bar input,.bar select,.bar button{font:13px Consolas,monospace;padding:5px 8px;border:1px solid #9a9a9a;border-radius:3px;background:#fff;color:#111}
+  .bar input{width:240px}
+  .bar button{cursor:pointer}
+  .bar button.on{background:#111;color:#fff;border-color:#111}
+  .bar .sp{flex:1}
+  .sum{padding:6px 12px;border-bottom:1px dashed #bbb;white-space:pre-wrap}
+  table{border-collapse:collapse;margin:0 0 30px;min-width:100%}
+  th,td{padding:3px 10px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap}
+  th{position:sticky;top:46px;background:#f7f7f7;border-bottom:1px solid #bbb;cursor:pointer;user-select:none}
+  th:hover{background:#eaeaea}
+  td.n,th.n{text-align:right}
+  tr:hover td{background:#fffbe6}
+  .ok{color:#0a7a2f;font-weight:700}.low{color:#b45309;font-weight:700}.over{color:#c00;font-weight:700}
+  .muted{color:#999}
+  @media print{.bar{display:none}th{position:static}}
+</style></head><body>
+<div class="bar">
+  <span class="ttl">${title.replace(/</g, '&lt;')}</span>
+  <input id="q" placeholder="Tìm: mã, vị trí, người scan, PO…" autofocus>
+  <button data-f="">Tất cả</button><button data-f="Đủ">Đủ</button><button data-f="Thiếu">Thiếu</button><button data-f="Thừa">Thừa</button>
+  <select id="sort">
+    <option value="t:desc">Sắp xếp: Ngày mới → cũ</option>
+    <option value="t:asc">Ngày cũ → mới</option>
+    <option value="viTri:asc">Vị trí A → Z</option>
+    <option value="ma:asc">Mã hàng A → Z</option>
+    <option value="nguoi:asc">Người scan A → Z</option>
+    <option value="thung:desc">Thùng nhiều → ít</option>
+    <option value="luong:desc">Lượng nhiều → ít</option>
+    <option value="thieu:desc">Thiếu nhiều → ít</option>
+    <option value="thua:desc">Thừa nhiều → ít</option>
+  </select>
+  <span class="sp"></span>
+  <button id="cp">Copy</button><button id="csv">Tải Excel (CSV)</button><button onclick="window.print()">In</button>
+</div>
+<div class="sum" id="sum"></div>
+<table><thead><tr>
+  <th data-k="t">Ngày</th><th data-k="nguoi">Người scan</th><th data-k="ma">Mã</th><th data-k="po">PO</th>
+  <th data-k="luong" class="n">Lượng</th><th data-k="ton" class="n">Tồn</th><th data-k="thung" class="n">Thùng</th>
+  <th data-k="st">Đủ</th><th data-k="thieu" class="n">Thiếu</th><th data-k="thua" class="n">Thừa</th><th data-k="viTri">Vị trí</th>
+</tr></thead><tbody id="tb"></tbody></table>
+<script>
+var ROWS=${dataJson};
+var state={q:'',f:'',k:'t',dir:-1};
+function nf(n){return (Math.round(n*10000)/10000).toLocaleString('en-US',{maximumFractionDigits:4});}
+function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function view(){
+  var q=state.q.trim().toLowerCase();
+  var r=ROWS.filter(function(x){
+    if(state.f&&x.st!==state.f)return false;
+    if(!q)return true;
+    return (x.ngay+' '+x.nguoi+' '+x.ma+' '+x.po+' '+x.viTri+' '+x.st).toLowerCase().indexOf(q)>=0;
+  });
+  r.sort(function(a,b){var A=a[state.k],B=b[state.k];var c=(typeof A==='number')?A-B:String(A).localeCompare(String(B),'en',{numeric:true});return c*state.dir||(b.t-a.t);});
+  return r;
+}
+function render(){
+  var r=view(),h=[];
+  r.forEach(function(x){
+    var du=x.st==='Đủ'?'<span class="ok">✓'+(x.temThung?' tem thùng':'')+'</span>':'';
+    h.push('<tr><td>'+x.ngay+'</td><td>'+esc(x.nguoi||'—')+'</td><td>'+esc(x.ma)+'</td><td>'+esc(x.po||'—')+'</td><td class="n">'+nf(x.luong)+'</td><td class="n muted">'+nf(x.ton)+'</td><td class="n">'+x.thung+'</td><td>'+du+'</td><td class="n">'+(x.thieu?'<span class="low">'+nf(x.thieu)+'</span>':'')+'</td><td class="n">'+(x.thua?'<span class="over">'+nf(x.thua)+' in lại tem</span>':'')+'</td><td>'+esc(x.viTri)+'</td></tr>');
+  });
+  document.getElementById('tb').innerHTML=h.join('')||'<tr><td colspan="11" class="muted">Không có dòng nào khớp.</td></tr>';
+  var ma={},vt={},th=0,du=0,thi=0,tha=0;
+  r.forEach(function(x){ma[x.ma]=1;vt[x.viTri]=1;th+=x.thung;if(x.st==='Đủ')du++;else if(x.st==='Thiếu')thi++;else if(x.st==='Thừa')tha++;});
+  document.getElementById('sum').textContent='Đang hiện '+r.length+'/'+ROWS.length+' dòng · '+Object.keys(vt).length+' vị trí · '+Object.keys(ma).length+' mã · '+th+' thùng · Đủ '+du+' · Thiếu '+thi+' · Thừa '+tha;
+  document.querySelectorAll('.bar button[data-f]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-f')===state.f);});
+  document.getElementById('sort').value=state.k+':'+(state.dir<0?'desc':'asc');
+}
+document.getElementById('q').oninput=function(e){state.q=e.target.value;render();};
+document.querySelectorAll('.bar button[data-f]').forEach(function(b){b.onclick=function(){state.f=b.getAttribute('data-f');render();};});
+document.getElementById('sort').onchange=function(e){var p=e.target.value.split(':');state.k=p[0];state.dir=p[1]==='desc'?-1:1;render();};
+document.querySelectorAll('th[data-k]').forEach(function(th){th.onclick=function(){var k=th.getAttribute('data-k');if(state.k===k)state.dir=-state.dir;else{state.k=k;state.dir=(k==='t'||k==='luong'||k==='thung'||k==='thieu'||k==='thua'||k==='ton')?-1:1;}render();};});
+function rowsOut(){return view().map(function(x){return [x.ngay,x.nguoi,x.ma,x.po,x.luong,x.ton,x.thung,x.st==='Đủ'?'Đủ':'',x.thieu||'',x.thua||'',x.viTri];});}
+var HEAD=['Ngày','Người scan','Mã','PO','Lượng','Tồn','Thùng','Đủ','Thiếu','Thừa','Vị trí'];
+document.getElementById('cp').onclick=function(){var t=[HEAD].concat(rowsOut()).map(function(r){return r.join('\\t');}).join('\\n');navigator.clipboard.writeText(t).then(function(){document.getElementById('cp').textContent='Đã copy';setTimeout(function(){document.getElementById('cp').textContent='Copy';},1500);});};
+document.getElementById('csv').onclick=function(){var t='\\ufeff'+[HEAD].concat(rowsOut()).map(function(r){return r.map(function(c){c=String(c);return /[",\\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\\r\\n');var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv;charset=utf-8'}));a.download=${JSON.stringify(`Report-cap-nhat-vi-tri-${this.selectedFactory || 'ALL'}-${stamp}.csv`)};a.click();};
+render();
+</script></body></html>`);
+      win.document.close();
+    } catch (e) {
+      console.error('downloadLocUpdReport', e);
+      try { win.close(); } catch { /* ignore */ }
+      appAlert(`❌ Lỗi tải report: ${(e as any)?.message || e}`);
+    } finally {
+      this.isDownloadingLocUpdReport = false;
+      this.cdr.markForCheck();
+    }
   }
 
   closeStoreMaterialModal(): void {
@@ -2890,7 +3312,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       if (!materialCode) {
-        alert('❌ Không thể đọc mã hàng từ QR code');
+        appAlert('❌ Không thể đọc mã hàng từ QR code');
       return null;
     }
 
@@ -2904,7 +3326,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .toPromise();
 
       if (!allMaterialsSnapshot || allMaterialsSnapshot.empty) {
-        alert(`❌ Không tìm thấy material với mã: ${materialCode}`);
+        appAlert(`❌ Không tìm thấy material với mã: ${materialCode}`);
       return null;
       }
 
@@ -2958,10 +3380,10 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       if (!matchedMaterial) {
         if (!poNumber) {
-          alert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
+          appAlert(`❌ Không tìm thấy material khớp với QR code (Mã: ${materialCode})`);
         } else {
         const imdLine = imdKey ? `\nIMD: ${imdKey}` : '';
-        alert(
+        appAlert(
           `❌ Không tìm thấy material đúng theo Mã + PO${imdKey ? ' + IMD' : ''}.\n\nMã: ${materialCode}\nPO: ${poNumber}${imdLine}`
         );
       }
@@ -3096,7 +3518,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.storeMaterialMultiCode) return;
     const next = this.storeMaterialBatchItems.filter(m => m.id !== materialId);
     if (next.length === 0) {
-      alert('⚠️ Cần ít nhất 1 mã trong danh sách. Tắt "Nhiều mã" nếu chỉ đổi một mã.');
+      appAlert('⚠️ Cần ít nhất 1 mã trong danh sách. Tắt "Nhiều mã" nếu chỉ đổi một mã.');
       return;
     }
     this.storeMaterialBatchItems = next;
@@ -3115,12 +3537,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async processStoreMaterialBatchQR(): Promise<void> {
     if (!this.storeMaterialMultiCode) return;
     if (!this.storeMaterialBatchCanAddMore) {
-      alert(`⚠️ Đã đủ ${this.STORE_MATERIAL_BATCH_MAX} mã. Scan vị trí mới rồi xác nhận.`);
+      appAlert(`⚠️ Đã đủ ${this.STORE_MATERIAL_BATCH_MAX} mã. Scan vị trí mới rồi xác nhận.`);
       return;
     }
     const qrCode = this.storeMaterialBatchQRInput.trim();
     if (!qrCode) {
-      alert('⚠️ Vui lòng scan mã QR tiếp theo');
+      appAlert('⚠️ Vui lòng scan mã QR tiếp theo');
       return;
     }
 
@@ -3131,7 +3553,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const { matchedMaterial } = result;
       if (this.storeMaterialBatchItems.some(m => m.id === matchedMaterial.id)) {
-        alert(`⚠️ Mã đã có trong danh sách: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber})`);
+        appAlert(`⚠️ Mã đã có trong danh sách: ${matchedMaterial.materialCode} (PO: ${matchedMaterial.poNumber})`);
         this.storeMaterialBatchQRInput = '';
         this.focusStoreMaterialBatchInput();
         return;
@@ -3148,7 +3570,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     } catch (error) {
       console.error('❌ Error adding batch material:', error);
-      alert(`❌ Lỗi khi thêm mã: ${error}`);
+      appAlert(`❌ Lỗi khi thêm mã: ${error}`);
     } finally {
       this.isSearchingMaterial = false;
     }
@@ -3157,12 +3579,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async processStoreMaterialQR(): Promise<void> {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     const qrCode = this.storeMaterialQRInput.trim();
     if (!qrCode) {
-      alert('⚠️ Vui lòng nhập hoặc scan mã QR');
+      appAlert('⚠️ Vui lòng nhập hoặc scan mã QR');
       return;
     }
 
@@ -3192,7 +3614,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }, 200);
     } catch (error) {
       console.error('❌ Error searching material:', error);
-      alert(`❌ Lỗi khi tìm kiếm material: ${error}`);
+      appAlert(`❌ Lỗi khi tìm kiếm material: ${error}`);
     } finally {
       this.isSearchingMaterial = false;
     }
@@ -3212,7 +3634,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
           : [];
 
     if (items.length === 0 || !this.selectedTargetLocation.trim()) {
-      alert('⚠️ Vui lòng chọn material và vị trí đích');
+      appAlert('⚠️ Vui lòng chọn material và vị trí đích');
       return;
     }
 
@@ -3222,13 +3644,13 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         this.storeMaterialUseAsm3
       );
       if (!targetFormatted) {
-        alert('⚠️ Vị trí đích không hợp lệ');
+        appAlert('⚠️ Vị trí đích không hợp lệ');
         return;
       }
 
       const ruleExempt = this.isTargetRuleExempt(targetFormatted, this.storeMaterialUseAsm3);
       if (!ruleExempt && !this.validateViTriInput(targetFormatted)) {
-        alert('⚠️ Vị trí đích không hợp lệ');
+        appAlert('⚠️ Vị trí đích không hợp lệ');
         return;
       }
 
@@ -3243,19 +3665,25 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             useAsm3: this.storeMaterialUseAsm3
           })
         ) {
-          alert(this.LOCATION_RULE_ERROR);
+          appAlert(this.locationRuleViolationMessage(item.materialCode || '', targetFormatted));
           return;
         }
 
         updates.push({ item, fromLocation, targetFormatted });
       }
 
+      const kkOperator = this.activeEmployeeId || (await this.resolveOperatorId());
       for (const { item, fromLocation, targetFormatted } of updates) {
+        // Từ PASS vào kệ → tự tick KK bởi người đổi vị trí
+        const kkAt = new Date();
+        const passToShelf = isPassToShelf(fromLocation, targetFormatted);
         await this.firestore.collection('inventory-materials').doc(item.id).update({
           location: targetFormatted,
           lastModified: new Date(),
-          modifiedBy: 'store-material-scanner'
+          modifiedBy: 'store-material-scanner',
+          ...(passToShelf ? autoKkFields(kkOperator, kkAt, 'pass-to-shelf') : {})
         });
+        if (passToShelf) this.writePassToShelfKkLog(item, targetFormatted, kkOperator, kkAt);
 
         await this.logMaterialLocationChange({
           materialId: item.id,
@@ -3275,14 +3703,14 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
       if (updates.length === 1) {
         const u = updates[0];
-        alert(
+        appAlert(
           `✅ Đã cất material thành công!\n\n` +
             `Mã hàng: ${u.item.materialCode}\n` +
             `PO: ${u.item.poNumber}\n` +
             `Vị trí mới: ${u.targetFormatted}`
         );
       } else {
-        alert(
+        appAlert(
           `✅ Đã chuyển ${updates.length} mã sang vị trí mới!\n\n` +
             `Vị trí: ${targetFormatted}\n` +
             updates.map(u => `• ${u.item.materialCode} (PO: ${u.item.poNumber})`).join('\n')
@@ -3292,7 +3720,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.closeStoreMaterialModal();
     } catch (error) {
       console.error('❌ Error storing material:', error);
-      alert(`❌ Lỗi khi cất material: ${error}`);
+      appAlert(`❌ Lỗi khi cất material: ${error}`);
     }
   }
 
@@ -3382,11 +3810,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         if (customers.length > 0) {
           this.saveImportedCustomerCodes(customers);
         } else {
-          alert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề: No, Customer, Group, Code\n- Từ dòng 2 trở đi phải có dữ liệu đầy đủ');
+          appAlert('Không tìm thấy dữ liệu hợp lệ để import. Vui lòng kiểm tra:\n- Dòng 1 phải là tiêu đề: No, Customer, Group, Code\n- Từ dòng 2 trở đi phải có dữ liệu đầy đủ');
         }
       } catch (error) {
         console.error('Error processing customer file:', error);
-        alert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
+        appAlert('Lỗi khi đọc file. Vui lòng kiểm tra định dạng file.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -3430,11 +3858,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     
     batch.commit().then(() => {
       console.log(`✅ Import complete: ${addCount} added, ${updateCount} updated`);
-      alert(`✅ Import thành công!\n- Thêm mới: ${addCount} mã\n- Cập nhật: ${updateCount} mã\n- Tổng: ${customers.length} mã`);
+      appAlert(`✅ Import thành công!\n- Thêm mới: ${addCount} mã\n- Cập nhật: ${updateCount} mã\n- Tổng: ${customers.length} mã`);
       this.loadCustomerCodes();
     }).catch(error => {
       console.error('Error importing customer codes:', error);
-      alert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
+      appAlert('Lỗi khi import dữ liệu. Vui lòng thử lại.');
     });
   }
 
@@ -3445,19 +3873,19 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (!customer.id) {
-      alert('❌ Không tìm thấy ID của mã khách hàng!');
+      appAlert('❌ Không tìm thấy ID của mã khách hàng!');
       return;
     }
 
     this.firestore.collection('customer-codes').doc(customer.id).delete()
       .then(() => {
         console.log(`✅ Deleted customer code: ${customer.code}`);
-        alert(`✅ Đã xóa mã khách hàng: ${customer.code}`);
+        appAlert(`✅ Đã xóa mã khách hàng: ${customer.code}`);
         // Data will auto-reload via subscription in loadCustomerCodes()
       })
       .catch(error => {
         console.error('❌ Error deleting customer code:', error);
-        alert('Lỗi khi xóa. Vui lòng thử lại.');
+        appAlert('Lỗi khi xóa. Vui lòng thử lại.');
       });
   }
 
@@ -3494,7 +3922,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       XLSX.writeFile(wb, 'Customer_Code_Template.xlsx');
     } catch (error) {
       console.error('Error creating customer template:', error);
-      alert('Lỗi khi tạo template. Vui lòng thử lại.');
+      appAlert('Lỗi khi tạo template. Vui lòng thử lại.');
     }
   }
 
@@ -3723,7 +4151,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async processBulkAsm1Location(): Promise<void> {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     // Bulk ASM1: location có thể chứa prefix "IQC+" nên không dùng formatViTriInput (vì hàm đó loại bỏ dấu '+')
@@ -3733,7 +4161,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       .toUpperCase()
       .replace(/[^A-Z0-9.\-()+]/g, '');
     if (!loc) {
-      alert(`⚠️ Vui lòng scan vị trí (${this.selectedFactory})`);
+      appAlert(`⚠️ Vui lòng scan vị trí (${this.selectedFactory})`);
       return;
     }
 
@@ -3770,7 +4198,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       if (!snapshot || snapshot.empty) {
-        alert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${loc}`);
+        appAlert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${loc}`);
         this.isBulkLoading = false;
         return;
       }
@@ -3781,7 +4209,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       void this.applyFactoryInUseToBulkItems(this.bulkItems);
     } catch (error) {
       console.error(`❌ Error loading ${this.selectedFactory} items by location:`, error);
-      alert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');
+      appAlert('❌ Lỗi khi tải mã hàng theo vị trí. Vui lòng thử lại.');
     } finally {
       this.isBulkLoading = false;
     }
@@ -3790,12 +4218,12 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async processBulkByPallet(): Promise<void> {
     if (!this.selectedFactory) {
       this.showFactorySelect = true;
-      alert('Vui lòng chọn ASM1 hoặc ASM2 trước');
+      appAlert('Vui lòng chọn ASM1 hoặc ASM2 trước');
       return;
     }
     const pallet = this.normalizePalletScan(this.bulkScanPalletInput);
     if (!pallet) {
-      alert('⚠️ Vui lòng scan số pallet');
+      appAlert('⚠️ Vui lòng scan số pallet');
       return;
     }
 
@@ -3825,7 +4253,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       if (!docs.length) {
-        alert(`❌ Không tìm thấy mã hàng nào trên pallet: ${pallet}`);
+        appAlert(`❌ Không tìm thấy mã hàng nào trên pallet: ${pallet}`);
         this.isBulkLoading = false;
         return;
       }
@@ -3836,7 +4264,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       void this.applyFactoryInUseToBulkItems(this.bulkItems);
     } catch (error) {
       console.error('❌ Error loading items by pallet:', error);
-      alert('❌ Lỗi khi tải mã hàng theo pallet. Vui lòng thử lại.');
+      appAlert('❌ Lỗi khi tải mã hàng theo pallet. Vui lòng thử lại.');
     } finally {
       this.isBulkLoading = false;
     }
@@ -3861,7 +4289,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   proceedToBulkTargets(): void {
     if (this.bulkSelectedItems.size === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
+      appAlert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
       return;
     }
     this.bulkStep = 'scan-targets';
@@ -3912,7 +4340,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async confirmBulkChange(): Promise<void> {
     if (!this.canConfirmBulkTargets()) {
-      alert('⚠️ Vui lòng scan đủ thông tin hoặc tick bỏ qua.');
+      appAlert('⚠️ Vui lòng scan đủ thông tin hoặc tick bỏ qua.');
       return;
     }
 
@@ -3923,21 +4351,21 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!this.skipBulkNewLocation) {
       if (!newLocationRaw) {
-        alert('❌ Vị trí mới không hợp lệ');
+        appAlert('❌ Vị trí mới không hợp lệ');
         return;
       }
 
       const ruleExempt = this.isTargetRuleExempt(newLocationRaw, this.bulkUseAsm3);
       if (!ruleExempt) {
       if (!this.validateViTriInput(newLocationRaw)) {
-        alert('❌ Vị trí mới không hợp lệ');
+        appAlert('❌ Vị trí mới không hợp lệ');
         return;
       }
-      const locationExists = this.locationItems.some(item =>
+      const locationExists = this.isJShelfSlot(newLocationRaw) || this.locationItems.some(item =>
         this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocationRaw)
       );
       if (!locationExists) {
-        alert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
+        appAlert(`❌ Vị trí "${newLocationRaw}" không tồn tại trong danh sách vị trí`);
         return;
         }
       }
@@ -3952,7 +4380,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
             useAsm3: this.bulkUseAsm3
           })
         ) {
-          alert(this.LOCATION_RULE_ERROR);
+          appAlert(this.locationRuleViolationMessage(bulkItem.materialCode || '', newLocationRaw));
           return;
         }
       }
@@ -3978,6 +4406,9 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         toLocation: string;
       }> = [];
 
+      const kkOperator = this.activeEmployeeId || (await this.resolveOperatorId());
+      const kkAt = new Date();
+      const kkLogs: Array<{ item: any; location: string }> = [];
       for (const id of selectedIds) {
         const bulkItem = this.bulkItems.find(i => i.id === id);
         const fromLocation = bulkItem?.location || this.bulkCurrentLocation || '';
@@ -3991,6 +4422,11 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!this.skipBulkNewLocation || !this.skipBulkNewPallet) {
           updateData.location = locationToSave;
           if (!this.skipBulkNewPallet) updateData.palletId = newPalletId;
+          // Từ PASS vào kệ → tự tick KK bởi người đổi vị trí
+          if (!this.skipBulkNewLocation && isPassToShelf(fromLocation, locationToSave)) {
+            Object.assign(updateData, autoKkFields(kkOperator, kkAt, 'pass-to-shelf'));
+            kkLogs.push({ item: { id, ...(bulkItem || {}) }, location: locationToSave });
+          }
         }
         batch.update(docRef, updateData);
         if (bulkItem && (!this.skipBulkNewLocation || !this.skipBulkNewPallet)) {
@@ -4005,6 +4441,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       await batch.commit();
+      kkLogs.forEach((k) => this.writePassToShelfKkLog(k.item, k.location, kkOperator, kkAt));
 
       for (const log of historyLogs) {
         await this.logMaterialLocationChange({
@@ -4015,7 +4452,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.bulkStep = 'complete';
     } catch (error) {
       console.error('❌ Error bulk updating items:', error);
-      alert('❌ Lỗi cập nhật vị trí/pallet. Vui lòng thử lại.');
+      appAlert('❌ Lỗi cập nhật vị trí/pallet. Vui lòng thử lại.');
     } finally {
       this.isBulkLoading = false;
     }
@@ -4024,7 +4461,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async processMoveShelfLocation(): Promise<void> {
     const location = this.moveShelfCurrentLocation.trim().toUpperCase();
     if (!location) {
-      alert('⚠️ Vui lòng nhập hoặc scan vị trí');
+      appAlert('⚠️ Vui lòng nhập hoặc scan vị trí');
       return;
     }
 
@@ -4040,7 +4477,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
         .toPromise();
 
       if (!snapshot || snapshot.empty) {
-        alert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${location}`);
+        appAlert(`❌ Không tìm thấy mã hàng nào ở vị trí: ${location}`);
         this.isMoveShelfLoading = false;
         return;
       }
@@ -4076,7 +4513,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     } catch (error) {
       console.error('❌ Error loading items:', error);
-      alert(`❌ Lỗi khi tải dữ liệu: ${error}`);
+      appAlert(`❌ Lỗi khi tải dữ liệu: ${error}`);
       this.isMoveShelfLoading = false;
     }
   }
@@ -4107,7 +4544,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
   proceedToNewLocationScan(): void {
     if (this.moveShelfSelectedItems.size === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
+      appAlert('⚠️ Vui lòng chọn ít nhất 1 mã hàng');
       return;
     }
     
@@ -4124,23 +4561,23 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
   async confirmMoveShelf(): Promise<void> {
     const newLocation = this.moveShelfNewLocation.trim().toUpperCase();
     if (!newLocation) {
-      alert('⚠️ Vui lòng nhập hoặc scan vị trí mới');
+      appAlert('⚠️ Vui lòng nhập hoặc scan vị trí mới');
       return;
     }
 
     // Validate location format
     if (!this.validateViTriInput(newLocation)) {
-      alert('❌ Vị trí không hợp lệ');
+      appAlert('❌ Vị trí không hợp lệ');
       return;
     }
 
     // Check if location exists
-    const locationExists = this.locationItems.some(item =>
+    const locationExists = this.isJShelfSlot(newLocation) || this.locationItems.some(item =>
       this.normalizeLocationCode(item.viTri) === this.normalizeLocationCode(newLocation)
     );
 
     if (!locationExists) {
-      alert(`❌ Vị trí "${newLocation}" không tồn tại trong danh sách vị trí`);
+      appAlert(`❌ Vị trí "${newLocation}" không tồn tại trong danh sách vị trí`);
       return;
     }
 
@@ -4167,7 +4604,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       this.moveShelfStep = 'complete';
       this.isMoveShelfLoading = false;
 
-      alert(`✅ Đã dời ${selectedItemIds.length} mã hàng từ ${this.moveShelfCurrentLocation} đến ${newLocation}`);
+      appAlert(`✅ Đã dời ${selectedItemIds.length} mã hàng từ ${this.moveShelfCurrentLocation} đến ${newLocation}`);
       
       // Close modal after short delay
       setTimeout(() => {
@@ -4176,7 +4613,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
 
     } catch (error) {
       console.error('❌ Error moving items:', error);
-      alert(`❌ Lỗi khi dời kệ: ${error}`);
+      appAlert(`❌ Lỗi khi dời kệ: ${error}`);
       this.isMoveShelfLoading = false;
     }
   }
@@ -4380,7 +4817,7 @@ export class LocationComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     } catch (error) {
       console.error('Error printing customer label:', error);
-      alert('❌ Lỗi khi in tem khách hàng');
+      appAlert('❌ Lỗi khi in tem khách hàng');
     }
   }
 }

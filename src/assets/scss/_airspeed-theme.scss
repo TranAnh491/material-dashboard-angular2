@@ -1,0 +1,170 @@
+// Airspeed theme — ghi đè Material Dashboard (nhập CUỐI material-dashboard.scss)
+:root {
+  --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F4F4F2; --gr-bg: #F5F5F3;
+  --beige: #E9DFCF; --beige-l: #F5EFE5; --line: #B8B8B1;
+  --bx-bg: #FFFFFF; --bx-bd: #6B6B66; --bd: #6B6B66;
+  --fg: #252823; --muted: #747770; --muted-2: #9A9D95;
+  --brand-blue: #0050C8; --brand-red: #D80008;
+  --blue: #3478F6; --blue-l: #EAF2FF; --blue-d: #2057B5;
+  --green: #269B62; --green-l: #E5F5EB; --green-d: #176B43;
+  --orange: #F28C28; --orange-l: #FFF0DE; --orange-d: #B95E0C;
+  --yellow: #F4C542; --yellow-l: #FFF7D6; --yellow-d: #8A6900;
+  --red: #E05252; --red-l: #FDEAEA; --red-d: #A92F2F;
+  --accent: var(--blue);
+  --r: 12px; --r-lg: 14px;
+  --shadow: 0 12px 32px rgba(37,40,35,.12), 0 2px 6px rgba(37,40,35,.05);
+  --font: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+}
+
+html, body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+h1, .h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+h3, .h3 { font-size: 15px; font-weight: 650; }
+.mono, code, kbd { font-family: var(--mono); }
+
+// ---- Nút (viên thuốc 34px) ----
+.btn, .mat-button, .mat-stroked-button, .mat-flat-button, .mat-raised-button {
+  min-height: 34px;
+  padding: 0 14px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  border-radius: 980px;
+  box-shadow: none !important;
+  background: #fff;
+  color: var(--fg);
+  border: 1px solid var(--bd);
+  line-height: 32px;
+  &:hover, &:focus { border-color: var(--blue); background: #fff; color: var(--fg); }
+  &:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  &[disabled], &:disabled, &.disabled { opacity: .5; }
+}
+.btn-primary, .btn-info, .btn.btn-success,
+.mat-flat-button.mat-primary, .mat-raised-button.mat-primary, .mat-flat-button.mat-accent, .mat-raised-button.mat-accent {
+  background: var(--blue) !important; border-color: var(--blue) !important; color: #fff !important; font-weight: 600;
+  &:hover, &:focus { background: var(--blue-d) !important; border-color: var(--blue-d) !important; color: #fff !important; }
+}
+.btn-danger, .mat-flat-button.mat-warn, .mat-raised-button.mat-warn {
+  background: #fff !important; color: var(--red-d) !important; border-color: rgba(224,82,82,.35) !important;
+}
+.btn-link { border-color: transparent; background: transparent; }
+.btn.btn-just-icon { padding: 0; min-width: 34px; }
+
+// ---- Input / select / textarea ----
+.form-control, input.form-control, select.form-control, textarea.form-control {
+  min-height: 34px; padding: 8px 10px; background: #fff !important;
+  background-image: none !important;
+  border: 1px solid var(--bd) !important; border-radius: 8px; font-size: 13px; color: var(--fg);
+  &::placeholder { color: var(--muted-2); }
+  &:focus { border-color: var(--blue) !important; box-shadow: none; }
+}
+.has-danger .form-control, .form-control.is-invalid { border-color: var(--red) !important; background: var(--red-l) !important; }
+.mat-form-field-appearance-outline .mat-form-field-outline { color: var(--bd) !important; opacity: 1 !important; }
+/* Viền outline lấy màu từ `color` (currentColor). Không ép border-color cho outline-gap:
+   Material làm đoạn gap trong suốt để chừa chỗ cho nhãn nổi — ép màu sẽ kẻ đường viền xuyên qua nhãn. */
+.mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick { color: var(--blue) !important; }
+.mat-form-field.mat-focused .mat-form-field-label { color: var(--blue); }
+
+// ---- Card phẳng ----
+.card {
+  background: var(--bx-bg) !important;
+  border: 1px solid var(--bx-bd);
+  border-radius: var(--r);
+  box-shadow: none !important;
+  margin-top: 0;
+  margin-bottom: 14px;
+  .card-header, .card-header[class*='card-header-'] {
+    background: transparent !important;
+    color: var(--fg);
+    box-shadow: none !important;
+    border-radius: 0;
+    margin: 0;
+    padding: 12px 14px 0;
+    .card-title { color: var(--fg); font-size: 14.5px; font-weight: 650; margin: 0; }
+    .card-category { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+  }
+  .card-body { padding: 12px 14px; }
+  .card-footer { border-top: 1px solid var(--line); }
+  &.card-stats {
+    padding: 12px 16px;
+    .card-header .card-icon, .card-icon {
+      float: none; background: transparent !important; box-shadow: none !important; padding: 0; margin: 0;
+      i { color: var(--blue); font-size: 22px; }
+    }
+    .card-title { font-size: 26px; font-weight: 700; color: var(--blue); }
+  }
+}
+.dropdown-menu, .mat-menu-panel, .mat-select-panel, .mat-autocomplete-panel {
+  background: #fff; border: 1px solid var(--bd); border-radius: 10px; box-shadow: var(--shadow) !important;
+}
+.dropdown-menu .dropdown-item:hover, .dropdown-menu a:hover { background: var(--surface-2) !important; color: var(--fg) !important; box-shadow: none !important; }
+.mat-option.mat-selected:not(.mat-option-disabled) { color: var(--blue-d); background: var(--blue-l); }
+
+// ---- Bảng ----
+.table, .mat-table {
+  font-size: 13px; background: transparent;
+  thead th, .mat-header-cell {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted) !important; border-bottom: 1px solid var(--line) !important; border-top: 0; padding: 6px 8px;
+  }
+  td, .mat-cell { padding: 8px; border-top: 0; border-bottom: 1px solid var(--line); color: var(--fg); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: #F6F2EA; }
+}
+.table-hover tbody tr:hover { background: #F6F2EA; }
+
+// ---- Tab ----
+.nav-pills {
+  background: var(--gr-bg); border: 1px solid var(--bd); border-radius: 9px; padding: 2px; display: inline-flex; gap: 2px;
+  .nav-link { color: var(--fg); font-size: 13px; font-weight: 500; text-transform: none; border-radius: 7px; padding: 6px 16px; }
+  .nav-link.active, .nav-item.show .nav-link {
+    background: #fff !important; color: var(--fg) !important; box-shadow: 0 1px 3px rgba(0,0,0,.12) !important; font-weight: 600;
+  }
+}
+.mat-tab-label { font-family: var(--font); font-size: 13px; text-transform: none; opacity: .8; }
+.mat-tab-label-active { opacity: 1; font-weight: 600; color: var(--fg); }
+.mat-ink-bar { background-color: var(--blue) !important; height: 2px; }
+
+// ---- Dialog ----
+.mat-dialog-container { border-radius: var(--r-lg); box-shadow: var(--shadow) !important; }
+.mat-dialog-title { font-size: 18px; font-weight: 700; }
+.cdk-overlay-dark-backdrop { background: rgba(8,13,23,.4); }
+.modal-content { border-radius: var(--r-lg); box-shadow: var(--shadow); border: 1px solid var(--bd); }
+
+// ---- Chip / badge ----
+.badge, .mat-chip { font-size: 11.5px; font-weight: 600; border-radius: 980px; text-transform: none; }
+.badge-primary, .badge-info { background: var(--blue-l); color: var(--blue-d); }
+.badge-success { background: var(--green-l); color: var(--green-d); }
+.badge-warning { background: var(--yellow-l); color: var(--yellow-d); }
+.badge-danger { background: var(--red-l); color: var(--red-d); }
+
+// ---- Angular Material: bỏ indigo/hồng, dùng xanh/cam/đỏ ----
+.mat-checkbox-checked.mat-accent .mat-checkbox-background,
+.mat-checkbox-checked.mat-primary .mat-checkbox-background,
+.mat-radio-button.mat-accent .mat-radio-inner-circle,
+.mat-radio-button.mat-primary .mat-radio-inner-circle,
+.mat-slide-toggle.mat-checked .mat-slide-toggle-thumb,
+.mat-primary .mat-pseudo-checkbox-checked,
+.mat-primary .mat-pseudo-checkbox-indeterminate { background-color: var(--blue); }
+.mat-radio-button.mat-accent.mat-radio-checked .mat-radio-outer-circle,
+.mat-radio-button.mat-primary.mat-radio-checked .mat-radio-outer-circle { border-color: var(--blue); }
+.mat-progress-spinner circle, .mat-spinner circle { stroke: var(--blue); }
+.mat-progress-bar-fill::after { background-color: var(--blue); }
+.mat-slide-toggle.mat-checked .mat-slide-toggle-bar { background-color: rgba(52,120,246,.5); }
+.mat-datepicker-content .mat-calendar-body-selected { background-color: var(--blue); }
+a { color: var(--blue-d); }
+
+// ---- Thanh cuộn gọn ----
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #D6D6D0; border-radius: 4px; }
+
+// ---- Nền dịu mắt (giảm độ trắng) ----
+html, body, .wrapper, .main-panel, .content-area { background-color: #FFFFFF !important; }
+.card, .modal-content { background: #FFFFFF !important; }

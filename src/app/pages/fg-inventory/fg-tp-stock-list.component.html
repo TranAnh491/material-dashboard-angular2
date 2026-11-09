@@ -85,7 +85,7 @@
       <div class="tp-list-grid" *ngIf="displayRows.length > 0">
         <button type="button"
                 class="tp-list-card"
-                *ngFor="let row of displayRows"
+                *ngFor="let row of displayRows; trackBy: trackById"
                 (click)="selectMaterial(row.materialCode)"
                 [title]="'Bấm để lọc ' + row.materialCode + ' ở FG Inventory'">
           <div class="tp-list-card__code">{{ row.materialCode }}</div>

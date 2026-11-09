@@ -1,8 +1,64 @@
-<app-tab-back-button variant="floating"></app-tab-back-button>
-<div class="bag-history-page">
-  <header class="page-header">
-    <h1 class="page-title">Control Batch</h1>
-  </header>
+<div class="cb-np-page">
+  <div class="cb-np">
+    <div class="cb-np__title">
+      <span class="cb-np__icon">📄</span>
+      <span class="cb-np__name">Control_Batch{{ lastSearchedMaterialCode ? '_' + lastSearchedMaterialCode : '' }}.log - Notepad</span>
+    </div>
+
+    <div class="cb-np__menu">
+      <button type="button" class="cb-nav" (click)="goBack()" title="Quay lại">Back</button>
+      <button type="button" class="cb-nav" (click)="goMenu()" title="Về Menu">Menu</button>
+      <span class="cb-np__sep"></span>
+      <label>Nhà máy
+        <select [(ngModel)]="factoryFilter" (ngModelChange)="onFactoryFilterChange()">
+          <option value="ALL">Tất cả</option>
+          <option value="ASM1">ASM1</option>
+          <option value="ASM2">ASM2</option>
+        </select>
+      </label>
+      <label>Loại
+        <select [(ngModel)]="eventFilter" (ngModelChange)="onFilterChange()">
+          <option value="">Tất cả</option>
+          <option value="NHẬP">Nhập kho</option>
+          <option value="XUẤT">Xuất kho</option>
+          <option value="TỒN">Tồn</option>
+        </select>
+      </label>
+      <label>Mã
+        <input type="search"
+               [(ngModel)]="search"
+               (ngModelChange)="onSearchModelChange($event)"
+               (keydown)="onSearchKeydown($event)"
+               placeholder="A005006"
+               maxlength="7"
+               autocomplete="off"
+               title="Nhập mã A/B + 6 số rồi Enter. Xóa trống rồi Enter để bỏ tra cứu.">
+      </label>
+      <button type="button" (click)="executeSearch()" [disabled]="isQueryRunning">{{ isQueryRunning ? 'Đang tìm…' : 'Tìm' }}</button>
+      <span class="cb-np__sep"></span>
+      <button type="button" (click)="reloadAll()" [disabled]="outboundDupLoading">Tải lại</button>
+      <button type="button" (click)="copyLog()">Copy</button>
+      <button type="button" (click)="downloadLog()">Tải .txt</button>
+      <span class="cb-np__sep"></span>
+      <button type="button" (click)="openControlBatchMoreModal()" title="Ngày bắt đầu tính + loại trừ mã">Cài đặt</button>
+      <button type="button" (click)="onSendControlBatchMail()" [disabled]="sendMailBusy || outboundDupLoading"
+              title="Gửi email báo cáo trùng — cùng mốc ngày và loại trừ đang hiển thị">{{ sendMailBusy ? 'Đang gửi…' : 'Gửi mail' }}</button>
+      <button type="button" (click)="openPageInfoModal()" title="Hướng dẫn">?</button>
+    </div>
+
+    <div class="cb-np__body">
+      <div *ngFor="let l of logLines; trackBy: trackByIndex" class="cb-np__line" [class.is-head]="l.kind === 'head'" [class.is-warn]="l.kind === 'warn'" [class.is-muted]="l.kind === 'muted'" [class.is-ignored]="l.row && isOutboundDupGroupIgnored(l.row)"><span
+          *ngIf="l.row" class="cb-np__tick" role="checkbox" [attr.aria-checked]="isOutboundDupGroupIgnored(l.row)"
+          title="Bỏ qua nhóm trùng này"
+          (click)="onToggleIgnoreOutboundDupGroup(l.row, !isOutboundDupGroupIgnored(l.row))">{{ isOutboundDupGroupIgnored(l.row) ? '[x]' : '[ ]' }}</span>{{ l.text }}</div>
+    </div>
+
+    <div class="cb-np__status">
+      <span>{{ outboundDupLoading ? 'Đang quét trùng…' : ('Trùng: ' + outboundDupRows.length + ' nhóm') }}</span>
+      <span>{{ lastSearchedMaterialCode ? ('Tra cứu: ' + lastSearchedMaterialCode + ' · ' + searchSummaryRows.length + ' dòng') : 'Chưa tra cứu mã' }}</span>
+      <span>UTF-8</span>
+    </div>
+  </div>
 
   <div
     class="page-info-overlay"
@@ -22,93 +78,6 @@
       </div>
     </div>
   </div>
-
-  <section class="outbound-dup-panel" aria-label="Kiểm tra trùng xuất kho">
-    <div class="outbound-dup-head">
-      <h2 class="outbound-dup-title">Kiểm tra trùng xuất kho (outbound)</h2>
-      <div class="outbound-dup-actions">
-        <button
-          type="button"
-          class="btn-page-info"
-          (click)="openPageInfoModal()"
-          aria-label="Hướng dẫn Control Batch"
-          title="Hướng dẫn">
-          <mat-icon aria-hidden="true">info</mat-icon>
-        </button>
-        <button
-          type="button"
-          class="btn-more"
-          (click)="openControlBatchMoreModal()"
-          title="Cài đặt loại trừ mã khỏi báo cáo trùng">
-          More
-        </button>
-        <button
-          type="button"
-          class="btn-send-mail"
-          (click)="onSendControlBatchMail()"
-          [disabled]="sendMailBusy || outboundDupLoading"
-          title="Gửi email báo cáo trùng — cùng mốc Từ ngày và Loại trừ đang hiển thị phía trên (khớp bảng). SMTP cấu hình trên Functions.">
-          {{ sendMailBusy ? 'Đang gửi…' : 'Send Mail' }}
-        </button>
-      </div>
-    </div>
-    <p class="outbound-dup-loading" *ngIf="outboundDupLoading">Đang đọc outbound-materials…</p>
-    <p class="outbound-dup-error" *ngIf="!outboundDupLoading && outboundDupError">{{ outboundDupError }}</p>
-    <ng-container *ngIf="!outboundDupLoading && !outboundDupError">
-      <p class="outbound-dup-exclude-hint" *ngIf="excludeEnabled && excludeCodeCount > 0">
-        Đang <strong>bật loại trừ</strong>: {{ excludeCodeCount }} dòng danh mục — mã đủ hoặc <strong>4 ký tự = tiền tố</strong> (vd. B034 loại cả B034xxx); áp dụng trên bảng và email.
-      </p>
-      <p class="outbound-dup-exclude-hint muted" *ngIf="excludeEnabled && excludeCodeCount === 0">
-        Loại trừ đang <strong>bật</strong> nhưng danh sách mã trống — mọi mã vẫn được tính.
-      </p>
-      <p class="outbound-dup-summary ok" *ngIf="outboundDupRows.length === 0">
-        Từ {{ outboundDupSinceLabel }}: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện định dạng — <strong>không có</strong> nhóm trùng (mã + PO + IMD + Bịch + Bag).
-      </p>
-      <p class="outbound-dup-summary warn" *ngIf="outboundDupRows.length > 0">
-        Từ {{ outboundDupSinceLabel }}: <strong>{{ outboundDupTotalScanned }}</strong> bản ghi trong phạm vi; <strong>{{ outboundDupEligibleCount }}</strong> bản ghi đủ điều kiện — <strong>{{ outboundDupRows.length }}</strong> nhóm trùng (cùng mã + PO + IMD + Bịch + Bag, số lần &gt; 1).
-      </p>
-      <div class="table-wrap outbound-dup-table-wrap" *ngIf="outboundDupRows.length > 0">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Nhà máy</th>
-              <th>Mã</th>
-              <th>PO</th>
-              <th>IMD</th>
-              <th>Bịch</th>
-              <th>Bag</th>
-              <th class="num">Số lần xuất</th>
-              <th>Lệnh sản xuất</th>
-              <th>Ngày</th>
-              <th>Bỏ qua</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let r of outboundDupRows; trackBy: trackByBagId">
-              <td>{{ r.factory }}</td>
-              <td>{{ r.materialCode }}</td>
-              <td>{{ r.poNumber }}</td>
-              <td>{{ r.imd || '—' }}</td>
-              <td class="bag-batch-col">{{ r.bagBatch || '—' }}</td>
-              <td class="bag-batch-col">{{ getBagColumnDisplay(r) }}</td>
-              <td class="num">{{ r.count }}</td>
-              <td class="lsx-col">
-                {{ r.productionOrderSummary }}
-                <span *ngIf="r.revivedAfterIgnore" class="revived-badge" title="Nhóm này đã phát sinh thêm lần xuất nên hiện lại.">mới</span>
-              </td>
-              <td class="date-col">{{ r.latestExportAtLabel || '—' }}</td>
-              <td class="ignore-col">
-                <mat-checkbox
-                  [checked]="isOutboundDupGroupIgnored(r)"
-                  (change)="onToggleIgnoreOutboundDupGroup(r, $event.checked)">
-                </mat-checkbox>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </ng-container>
-  </section>
 
   <div
     class="cb-more-overlay"
@@ -161,80 +130,4 @@
     </div>
   </div>
 
-  <section class="toolbar-panel" *ngIf="!isLoading" aria-label="Bộ lọc và tìm kiếm">
-  <div class="toolbar">
-    <label>
-      Nhà máy
-      <select [(ngModel)]="factoryFilter" (ngModelChange)="onFactoryFilterChange()">
-        <option value="ALL">Tất cả</option>
-        <option value="ASM1">ASM1</option>
-        <option value="ASM2">ASM2</option>
-      </select>
-    </label>
-    <label>
-      Loại
-      <select [(ngModel)]="eventFilter" (ngModelChange)="onFilterChange()">
-        <option value="">Tất cả</option>
-        <option value="NHẬP">Nhập kho</option>
-        <option value="XUẤT">Xuất kho</option>
-        <option value="TỒN">Tồn (snapshot)</option>
-      </select>
-    </label>
-    <div class="search-wrap search-row">
-      <label class="search-label">
-        Tìm mã hàng (Enter hoặc nút Tìm)
-        <input
-          type="search"
-          [(ngModel)]="search"
-          (ngModelChange)="onSearchModelChange($event)"
-          (keydown)="onSearchKeydown($event)"
-          placeholder="VD: A005006, B001033"
-          maxlength="7"
-          autocomplete="off" />
-      </label>
-      <button type="button" class="btn-search" (click)="executeSearch()" [disabled]="isQueryRunning">Tìm</button>
-      <button type="button" class="btn-clear" *ngIf="queryResultRows !== null" (click)="clearMaterialSearch()">Xóa tìm</button>
-    </div>
-  </div>
-  </section>
-
-  <p class="search-hint" *ngIf="!isLoading && (searchHint || isQueryRunning)">
-    <span *ngIf="isQueryRunning">Đang tìm…</span>
-    <span *ngIf="!isQueryRunning">{{ searchHint }}</span>
-  </p>
-  <p class="search-tip" *ngIf="!isLoading && !searchHint && queryResultRows === null">
-    Nhập mã <strong>A/B + 6 số</strong> (tối đa 7 ký tự, tự viết hoa), rồi <strong>Enter</strong> hoặc <strong>Tìm</strong>: log tối đa 2000 bản ghi; kho tải <strong>tất cả</strong> document <code>inventory-materials</code> khớp mã (lọc <strong>Nhà máy</strong>).
-  </p>
-
-  <div class="loading" *ngIf="isLoading">Đang tải…</div>
-
-  <div class="table-wrap" *ngIf="!isLoading && queryResultRows !== null">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Nhà máy</th>
-          <th>Mã</th>
-          <th>PO</th>
-          <th>IMD</th>
-          <th>Batch</th>
-          <th class="num">Nhập</th>
-          <th class="num">Xuất</th>
-          <th class="num">Tồn</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let r of searchSummaryRows; trackBy: trackByIndex">
-          <td>{{ r.factory }}</td>
-          <td>{{ r.materialCode }}</td>
-          <td>{{ r.poNumber }}</td>
-          <td>{{ r.imd || '—' }}</td>
-          <td class="bag-batch-col">{{ getBagColumnDisplay(r) }}</td>
-          <td class="num">{{ r.nhapBags > 0 ? r.nhapBags : '' }}</td>
-          <td class="num">{{ r.xuatBags > 0 ? r.xuatBags : '' }}</td>
-          <td class="num">{{ r.tonKho > 0 || r.nhapBags > 0 ? r.tonKho : '' }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <p class="empty" *ngIf="searchSummaryRows.length === 0">Không có dòng tổng hợp (thử đổi bộ lọc Loại / Nhà máy hoặc kiểm tra tab Vật tư).</p>
-  </div>
 </div>

@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { TrainingReportService, TrainingRecord } from '../../services/training-report.service';
@@ -218,7 +219,34 @@ export class EquipmentComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.restoreFormDraft();
     void this.loadDashboardData();
+  }
+
+  private readonly FORM_DRAFT_KEY = 'warehouse-training-form-draft';
+
+  /** Giữ bản nháp biểu mẫu trên máy để tải lại trang không mất dữ liệu đang nhập. */
+  saveFormDraft(): void {
+    try {
+      localStorage.setItem(this.FORM_DRAFT_KEY, JSON.stringify(this.warehouseTrainingForm));
+    } catch { /* bộ nhớ trình duyệt bị chặn hoặc đầy: bỏ qua */ }
+  }
+
+  private restoreFormDraft(): void {
+    try {
+      const raw = localStorage.getItem(this.FORM_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      const labels = this.warehouseTrainingForm.jobTraining.map(i => i.label);
+      const sameShape = Array.isArray(draft?.jobTraining)
+        && draft.jobTraining.length === labels.length
+        && draft.jobTraining.every((i: { label: string }, n: number) => i.label === labels[n]);
+      if (sameShape && draft.trainingCommitment && draft.workerOpinion) this.warehouseTrainingForm = draft;
+    } catch { /* bản nháp hỏng: bỏ qua */ }
+  }
+
+  private clearFormDraft(): void {
+    try { localStorage.removeItem(this.FORM_DRAFT_KEY); } catch { /* bỏ qua */ }
   }
 
   dashboardSearch = '';
@@ -242,6 +270,29 @@ export class EquipmentComponent implements OnInit {
 
   get dashGreetingName(): string {
     return 'Admin';
+  }
+
+  /** Tài liệu hướng dẫn tải về (file trong src/assets/training). */
+  readonly trainingDocs: Array<{ title: string; desc: string; file: string; type: string; pages: number; updated: string }> = [
+    {
+      title: 'Hướng dẫn Nhập kho (Inbound)',
+      desc: 'Scan nhập kho: chọn lô, quét vị trí, quét tem bag / tem thùng, Lượng trong thùng, GW bag.',
+      file: 'assets/training/Huong-dan-Inbound.pptx', type: 'PPT', pages: 2, updated: '10/2026'
+    },
+    {
+      title: 'Hướng dẫn Xuất kho (Outbound)',
+      desc: 'Scan xuất kho theo LSX / PXK, cân bag lẻ, tem lẻ trên PXK, Xuất BS.',
+      file: 'assets/training/Huong-dan-Outbound.pptx', type: 'PPT', pages: 2, updated: '10/2026'
+    },
+    {
+      title: 'Trọn bộ Inbound + Outbound',
+      desc: 'Gộp 2 tài liệu trên trong 1 file để đào tạo nhân viên mới.',
+      file: 'assets/training/Huong-dan-Inbound-Outbound.pptx', type: 'PPT', pages: 4, updated: '10/2026'
+    }
+  ];
+
+  trainingDocFileName(file: string): string {
+    return file.split('/').pop() || file;
   }
 
   get dashTotalSop(): number {
@@ -333,6 +384,19 @@ export class EquipmentComponent implements OnInit {
     return this.activeSection === section;
   }
 
+  /** Điều hướng từ thanh tab: không bật/tắt như openSection — bấm lại mục đang mở vẫn giữ nguyên. */
+  goSection(section: 'templates' | 'report' | 'matrix' | 'test' | null): void {
+    if (section === null) { this.closeAll(); return; }
+    if (this.activeSection !== section) this.openSection(section);
+  }
+
+  readonly navItems: Array<{ key: 'templates' | 'report' | 'matrix' | 'test'; icon: string; vi: string; en: string }> = [
+    { key: 'templates', icon: 'description', vi: 'SOP / Mẫu đào tạo', en: 'SOP / Templates' },
+    { key: 'report', icon: 'assessment', vi: 'Báo cáo đào tạo', en: 'Training reports' },
+    { key: 'matrix', icon: 'grid_view', vi: 'Training Matrix', en: 'Training Matrix' },
+    { key: 'test', icon: 'quiz', vi: 'Knowledge Test', en: 'Knowledge Test' }
+  ];
+
   toggleLanguage() {
     this.isEnglish = !this.isEnglish;
   }
@@ -356,7 +420,7 @@ export class EquipmentComponent implements OnInit {
       window.open(url, '_blank');
       console.log(`Downloading WH-WI0005 ${part} document`);
     } else {
-      alert(this.isEnglish ? 
+      appAlert(this.isEnglish ? 
         'Document link not configured yet. Please contact administrator.' :
         'Liên kết tài liệu chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
     }
@@ -370,7 +434,7 @@ export class EquipmentComponent implements OnInit {
       window.open(documentUrl, '_blank');
       console.log('Opening WH-WI0005 Ver08 document');
     } else {
-      alert(this.isEnglish ? 
+      appAlert(this.isEnglish ? 
         'WH-WI0005 Ver08 document link not configured yet. Please contact administrator.' :
         'Liên kết tài liệu WH-WI0005 Ver08 chưa được cấu hình. Vui lòng liên hệ quản trị viên.');
     }
@@ -444,7 +508,7 @@ export class EquipmentComponent implements OnInit {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert('Không tạo được file hình. Vui lòng thử lại.');
+      appAlert('Không tạo được file hình. Vui lòng thử lại.');
     } finally {
       this.isExportingTrainingForm = false;
       this.cdr.markForCheck();
@@ -556,7 +620,7 @@ export class EquipmentComponent implements OnInit {
   downloadTrainingFormSavedRecord(record: WarehouseTrainingFormSavedRecord): void {
     try {
       if (!record.imageDataUrl) {
-        alert('Không tìm thấy file hình trong bản ghi này.');
+        appAlert('Không tìm thấy file hình trong bản ghi này.');
         return;
       }
       const ext = record.imageDataUrl.startsWith('data:image/jpeg') ? 'jpg' : 'png';
@@ -567,7 +631,7 @@ export class EquipmentComponent implements OnInit {
       a.click();
     } catch (e) {
       console.error(e);
-      alert('Không tải được file hình. Vui lòng thử lại.');
+      appAlert('Không tải được file hình. Vui lòng thử lại.');
     }
   }
 
@@ -583,7 +647,7 @@ export class EquipmentComponent implements OnInit {
       this.trainingFormSavedRecords = this.trainingFormSavedRecords.filter(r => r.id !== record.id);
     } catch (e) {
       console.error(e);
-      alert('Không xóa được bản ghi. Vui lòng thử lại.');
+      appAlert('Không xóa được bản ghi. Vui lòng thử lại.');
     } finally {
       this.deletingTrainingFormRecordId = '';
       this.cdr.markForCheck();
@@ -601,18 +665,18 @@ export class EquipmentComponent implements OnInit {
     if (!el) return;
 
     if (!this.isJobTrainingComplete()) {
-      alert('Vui lòng đánh dấu Đạt/Chưa đạt cho tất cả mục đào tạo công việc.');
+      appAlert('Vui lòng đánh dấu Đạt/Chưa đạt cho tất cả mục đào tạo công việc.');
       return;
     }
     if (
       !this.warehouseTrainingForm.trainingCommitment.guided ||
       !this.warehouseTrainingForm.trainingCommitment.safetyRules
     ) {
-      alert('Vui lòng tick đủ 2 cam kết trong Box đào tạo.');
+      appAlert('Vui lòng tick đủ 2 cam kết trong Box đào tạo.');
       return;
     }
     if (!this.workerSignature) {
-      alert('Vui lòng ký tên Người lao động trước khi hoàn thành.');
+      appAlert('Vui lòng ký tên Người lao động trước khi hoàn thành.');
       return;
     }
 
@@ -652,10 +716,11 @@ export class EquipmentComponent implements OnInit {
         ...this.trainingFormSavedRecords
       ].slice(0, 50);
 
-      alert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
+      this.clearFormDraft();
+      appAlert('✅ Đã hoàn thành. File hình đã lưu trên Firebase — có thể tải lại ở danh sách bên dưới.');
     } catch (e: any) {
       console.error(e);
-      alert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
+      appAlert(`❌ Không lưu được file hình.\n\n${e?.message || e}`);
     } finally {
       this.isExportingTrainingForm = false;
       this.cdr.markForCheck();
@@ -720,10 +785,11 @@ export class EquipmentComponent implements OnInit {
     };
     this.workerSignature = '';
     this.clearWorkerSignature();
+    this.clearFormDraft();
     this.cdr.markForCheck();
   }
 
-  private getWorkerSignCtx(): CanvasRenderingContext2D | null {
+private getWorkerSignCtx(): CanvasRenderingContext2D | null {
     const canvas = this.workerSignCanvas?.nativeElement;
     if (!canvas) return null;
     const ctx = canvas.getContext('2d');
@@ -851,7 +917,7 @@ export class EquipmentComponent implements OnInit {
 
   async deleteEmployee(record: TrainingRecord) {
     if (!record.id) {
-      alert('Không thể xóa: Thiếu ID bản ghi');
+      appAlert('Không thể xóa: Thiếu ID bản ghi');
       return;
     }
 
@@ -877,18 +943,18 @@ export class EquipmentComponent implements OnInit {
             await this.refreshReportData();
           }
         } else {
-          alert('Có lỗi xảy ra khi xóa bản ghi!\n\nVui lòng thử lại hoặc liên hệ quản trị viên nếu vấn đề vẫn tiếp tục.');
+          appAlert('Có lỗi xảy ra khi xóa bản ghi!\n\nVui lòng thử lại hoặc liên hệ quản trị viên nếu vấn đề vẫn tiếp tục.');
         }
       } catch (error) {
         console.error('Error deleting record:', error);
-        alert('Có lỗi xảy ra khi xóa bản ghi!');
+        appAlert('Có lỗi xảy ra khi xóa bản ghi!');
       }
     }
   }
 
   async downloadEmployeeReport(record: TrainingRecord) {
     if (!record.id) {
-      alert('Không thể tải file: Thiếu ID bản ghi');
+      appAlert('Không thể tải file: Thiếu ID bản ghi');
       return;
     }
 
@@ -896,7 +962,7 @@ export class EquipmentComponent implements OnInit {
       // Get full record data from Firebase
       const fullRecord = await this.trainingReportService.getTrainingRecordById(record.id);
       if (!fullRecord) {
-        alert('Không tìm thấy dữ liệu chi tiết của bản ghi này!');
+        appAlert('Không tìm thấy dữ liệu chi tiết của bản ghi này!');
         return;
       }
 
@@ -926,7 +992,7 @@ export class EquipmentComponent implements OnInit {
 
     } catch (error) {
       console.error('Error downloading employee report:', error);
-      alert('Có lỗi xảy ra khi tải file báo cáo!');
+      appAlert('Có lỗi xảy ra khi tải file báo cáo!');
     }
   }
 
@@ -1021,7 +1087,7 @@ export class EquipmentComponent implements OnInit {
 
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Có lỗi xảy ra khi tạo file PDF!');
+      appAlert('Có lỗi xảy ra khi tạo file PDF!');
     }
   }
 

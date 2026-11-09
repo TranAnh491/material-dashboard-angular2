@@ -1,0 +1,796 @@
+import { AgingCorrection, AgingFactory, AgingRow, InventoryRow, LedgerRow } from '../../services/aging-report.parse';
+
+/**
+ * Đối chiếu Báo cáo tuổi hàng TP với bảng kê nhập / xuất (theo Mã TP + Mã lô + Kho).
+ *
+ * Quy tắc:
+ * - Tồn lot theo bảng kê = Σ nhập − Σ xuất (chứng từ có ngày ≤ ngày cuối kỳ của báo cáo).
+ * - Phiếu xuất không ghi lô → phân bổ FIFO vào các lot còn tồn của cùng mã + kho (lot nhập trước xuất trước).
+ * - Lot có phiếu nhập thành phẩm (TP) / nhập điều chuyển (PN) trong bảng kê → tồn đầu = 0, tồn Aging phải = tồn bảng kê,
+ *   ngày nhập Aging phải = ngày phiếu nhập đầu tiên.
+ * - Lot không có phiếu nhập trong bảng kê (tồn từ trước kỳ): chỉ kiểm được Aging ≥ phát sinh
+ *   (tồn đầu suy ra = Aging − phát sinh, phải ≥ 0).
+ * - Số tháng = (ngày cuối kỳ − Inbound Date) / 30, làm tròn 1 số lẻ; nhóm tuổi theo mốc 4 / 8 / 12 / 24 tháng.
+ * - Kho ngoài bảng kê (BTP1, TP_NG, TP SAMPLE…) chỉ kiểm số tháng, nhóm tuổi, giá trị.
+ */
+
+export type AgingLevel = 'error' | 'ok' | 'info' | 'scope';
+
+export const AGING_BUCKETS = [
+  'Under 4 month',
+  'From 4 to 8 month',
+  'From 8 to 12 month',
+  'From 12 to 24 month',
+  'Over 24 month',
+] as const;
+
+export interface LotCompareRow {
+  id: string;
+  factory: AgingFactory;
+  sku: string;
+  name: string;
+  cus: string;
+  lot: string;
+  wh: string;
+  inAging: boolean;
+  agingInb: string;
+  ledgerInb: string;
+  agingMonths: number | null;
+  calcMonths: number | null;
+  agingType: string;
+  calcType: string;
+  agingQty: number;
+  /** Tồn theo bảng kê (null khi kho ngoài bảng kê) */
+  ledgerQty: number | null;
+  /** Aging − bảng kê */
+  diffQty: number | null;
+  /** Tồn đầu suy ra cho lot trước kỳ */
+  openingQty: number | null;
+  inQty: number;
+  outQty: number;
+  price: number;
+  value: number;
+  issues: string[];
+  /** Số tháng Aging lệch số tháng tính lại (tô ô) */
+  monthsWrong: boolean;
+  level: AgingLevel;
+  statusText: string;
+  searchText: string;
+  /** Khóa chỉnh sửa của dòng (xem AgingCorrection.key) */
+  key: string;
+  /** Trạng thái chỉnh sửa: chưa sửa / đã sửa dòng / đã thêm lot / bỏ qua lỗi */
+  fix: FixState;
+  /** Giá trị gốc trong file Aging trước khi sửa (null nếu chưa sửa hoặc lot thêm mới) */
+  orig: AgingRow | null;
+  fixNote: string;
+}
+
+export type FixState = 'none' | 'edited' | 'added' | 'ignored';
+
+/** Dòng Aging sau khi áp chỉnh sửa. */
+export interface WorkAgingRow extends AgingRow {
+  key: string;
+  fix: 'none' | 'edited' | 'added';
+  orig: AgingRow | null;
+  fixNote: string;
+}
+
+export interface SkuCompareRow {
+  id: string;
+  factory: AgingFactory;
+  sku: string;
+  name: string;
+  cus: string;
+  /** Tồn BC tồn kho (kho 21), null nếu chưa import */
+  invQty: number | null;
+  /** Tổng Aging các kho trong bảng kê (TP, DL…) */
+  agingQtyScope: number;
+  agingQtyAll: number;
+  agingValue: number;
+  diffQty: number | null;
+  lotErrors: number;
+  issues: string[];
+  level: AgingLevel;
+  statusText: string;
+  searchText: string;
+}
+
+export interface FactoryCompareResult {
+  factory: AgingFactory;
+  reportTo: string;
+  ledgerFrom: string;
+  ledgerTo: string;
+  inventoryTo: string;
+  /** Số mã có phát sinh sau ngày cuối bảng kê (chưa kiểm được tồn lot) */
+  gapSkuCount: number;
+  scopeWh: string[];
+  lots: LotCompareRow[];
+  skus: SkuCompareRow[];
+  /** Tổng giá trị theo nhóm tuổi (theo file / tính lại) */
+  bucketFile: Record<string, number>;
+  bucketCalc: Record<string, number>;
+  valueByWh: Record<string, number>;
+  totalValue: number;
+  totalQty: number;
+  unallocatedOut: number;
+}
+
+const EPS = 0.0001;
+const DAY_MS = 86400000;
+
+export const ISSUE = {
+  qty: 'Sai tồn',
+  inb: 'Sai ngày nhập',
+  months: 'Sai số tháng',
+  type: 'Sai nhóm tuổi',
+  value: 'Sai giá trị',
+  noInb: 'Thiếu ngày nhập',
+  noReceipt: 'Không có phiếu nhập',
+  belowMovement: 'Tồn Aging < phát sinh',
+  missingInAging: 'Thiếu trong Aging',
+  overExport: 'Xuất vượt nhập',
+  invDiff: 'Lệch BC tồn kho',
+  lotErr: 'Có lot sai',
+  zeroValue: 'Giá trị = 0',
+  /** Aging chốt sau ngày cuối bảng kê và mã có phát sinh sau ngày đó → chưa kiểm được tồn */
+  afterLedger: 'Phát sinh sau ngày bảng kê',
+  /** BC tồn kho khác ngày Aging → chênh lệch chỉ để tham khảo */
+  invOtherDay: 'Lệch BC tồn kho khác ngày',
+} as const;
+
+/** Vấn đề chỉ để lưu ý (không tính là sai). */
+const INFO_ISSUES = new Set<string>([ISSUE.afterLedger, ISSUE.invOtherDay]);
+/** Vấn đề về tồn lot — bỏ qua khi mã có phát sinh sau ngày bảng kê. */
+const QTY_ISSUES = new Set<string>([ISSUE.qty, ISSUE.missingInAging, ISSUE.overExport, ISSUE.belowMovement, ISSUE.noReceipt]);
+
+function levelOf(issues: string[], fallback: AgingLevel): AgingLevel {
+  if (issues.some(i => !INFO_ISSUES.has(i))) return 'error';
+  return issues.length ? 'info' : fallback;
+}
+
+export interface CompareOptions {
+  /** Ngày cuối của bảng kê đã lưu (nhập / xuất, lấy ngày nhỏ hơn) */
+  ledgerTo?: string;
+  /** Ngày của BC tồn kho dùng để đối chiếu */
+  inventoryTo?: string;
+  /** Dòng được đánh dấu bỏ qua: key → ghi chú */
+  ignored?: Record<string, string>;
+  /** false → không tính lỗi về tiền (Sai giá trị, Giá trị = 0) */
+  moneyIssues?: boolean;
+}
+
+/** Khóa dòng Aging theo nội dung (SKU + lô + kho + lần xuất hiện) — không đổi khi import lại cùng báo cáo. */
+export function agingRowKeys(rows: AgingRow[]): string[] {
+  const seen = new Map<string, number>();
+  return rows.map(r => {
+    const base = `${r.sku}|${r.lot}|${r.wh}`;
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    return `r:${base}|${n}`;
+  });
+}
+
+export function addedLotKey(sku: string, lot: string, wh: string): string {
+  return `n:${sku}|${lot}|${wh}`;
+}
+
+/**
+ * Áp chỉnh sửa vào báo cáo tuổi hàng. Dòng đã sửa / thêm: số tháng, nhóm tuổi, giá trị tính lại
+ * từ ngày nhập, tồn, đơn giá mới (theo ngày cuối kỳ `end`).
+ */
+export function applyCorrections(rows: AgingRow[], items: Record<string, AgingCorrection>, end: string): WorkAgingRow[] {
+  const keys = agingRowKeys(rows);
+  const recalc = (r: AgingRow): AgingRow => {
+    const months = agingMonths(r.inb, end);
+    return { ...r, aging: months, type: months == null ? '' : agingBucket(months), value: Math.round(r.qty * r.price * 100) / 100 };
+  };
+  const out: WorkAgingRow[] = rows.map((r, i) => {
+    const c = items[keys[i]];
+    if (!c || c.action !== 'edit') return { ...r, key: keys[i], fix: 'none', orig: null, fixNote: '' };
+    const next = recalc({
+      ...r,
+      lot: c.lot ?? r.lot,
+      inb: c.inb ?? r.inb,
+      qty: c.qty ?? r.qty,
+      price: c.price ?? r.price,
+    });
+    return { ...next, key: keys[i], fix: 'edited', orig: r, fixNote: c.note || '' };
+  });
+  Object.values(items).forEach(c => {
+    if (c.action !== 'add' || !c.sku) return;
+    const r = recalc({
+      sku: c.sku, name: c.name || '', unit: c.unit || 'PCS', lot: c.lot || '', wh: c.wh || '', inb: c.inb || '',
+      aging: null, qty: c.qty || 0, price: c.price || 0, value: 0, type: '', cus: c.cus || '',
+    });
+    out.push({ ...r, key: c.key, fix: 'added', orig: null, fixNote: c.note || '' });
+  });
+  return out;
+}
+
+/** Đề xuất sửa cho 1 lot sai: giá trị mới + mô tả. null = không tự đề xuất được (cần sửa tay / kiểm tra phiếu). */
+export interface FixSuggestion {
+  action: 'edit' | 'add';
+  lot?: string;
+  inb?: string;
+  qty?: number;
+  price?: number;
+  text: string;
+}
+
+export function suggestFix(l: LotCompareRow, end: string, priceBySku: Map<string, number>): FixSuggestion | null {
+  if (l.fix !== 'none') return null;
+  if (!l.inAging) {
+    if (!l.issues.includes(ISSUE.missingInAging) || l.ledgerQty == null || l.ledgerQty <= 0) return null;
+    const price = priceBySku.get(`${l.factory}|${l.sku}`) || 0;
+    const m = agingMonths(l.ledgerInb, end);
+    return {
+      action: 'add', qty: l.ledgerQty, inb: l.ledgerInb, price,
+      text: `Thêm lot vào Aging: tồn ${l.ledgerQty}, nhập ${fmtIso(l.ledgerInb)} (${m ?? ''} tháng)`,
+    };
+  }
+  const s: FixSuggestion = { action: 'edit', text: '' };
+  const parts: string[] = [];
+  let inb = l.agingInb;
+  if (l.issues.includes(ISSUE.inb) && l.ledgerInb) {
+    s.inb = l.ledgerInb;
+    inb = l.ledgerInb;
+    parts.push(`ngày nhập ${fmtIso(l.agingInb)} → ${fmtIso(l.ledgerInb)}`);
+  }
+  if (l.issues.includes(ISSUE.qty) && l.ledgerQty != null && l.ledgerQty >= 0) {
+    s.qty = l.ledgerQty;
+    parts.push(`tồn ${l.agingQty} → ${l.ledgerQty}`);
+  }
+  const months = agingMonths(inb, end);
+  if (months != null && (parts.length || l.issues.includes(ISSUE.months) || l.issues.includes(ISSUE.type))) {
+    parts.push(`số tháng ${l.agingMonths ?? '(trống)'} → ${months}, nhóm ${agingBucket(months)}`);
+  }
+  if (!parts.length) return null;
+  s.text = 'Sửa ' + parts.join('; ');
+  return s;
+}
+
+function fmtIso(iso: string): string {
+  if (!iso) return '(trống)';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/** Chế độ đối chiếu: tp = thành phẩm (theo lô), nvl = nguyên liệu (theo PO). */
+let LOGIC_MODE: 'tp' | 'nvl' = 'tp';
+export function setAgingLogicMode(mode: 'tp' | 'nvl'): void {
+  LOGIC_MODE = mode;
+}
+
+/** Mã bắt đầu bằng A (bán thành phẩm) không tính vào Aging Report thành phẩm (NVL tính hết). */
+export function isExcludedSku(sku: string): boolean {
+  if (LOGIC_MODE === 'nvl') return false;
+  return /^A/i.test(String(sku || '').trim());
+}
+
+export function agingBucket(months: number): string {
+  if (months < 4) return AGING_BUCKETS[0];
+  if (months < 8) return AGING_BUCKETS[1];
+  if (months < 12) return AGING_BUCKETS[2];
+  if (months < 24) return AGING_BUCKETS[3];
+  return AGING_BUCKETS[4];
+}
+
+export function agingMonths(inb: string, end: string): number | null {
+  if (!inb || !end) return null;
+  const days = (Date.parse(end + 'T00:00:00Z') - Date.parse(inb + 'T00:00:00Z')) / DAY_MS;
+  return Math.round((days / 30) * 10) / 10;
+}
+
+const round = (n: number) => Math.round(n * 1000) / 1000;
+
+interface LotAcc {
+  sku: string;
+  lot: string;
+  wh: string;
+  net: number;
+  inQty: number;
+  outQty: number;
+  firstIn: string;
+  /** Ngày phiếu nhập TP / PN đầu tiên */
+  firstReceipt: string;
+}
+
+export function compareFactory(
+  factory: AgingFactory,
+  ledger: { N: LedgerRow[]; X: LedgerRow[] },
+  ledgerFrom: string,
+  reportTo: string,
+  agingRowsIn: (AgingRow | WorkAgingRow)[],
+  inventoryRows: InventoryRow[] | null,
+  opts: CompareOptions = {}
+): FactoryCompareResult {
+  const end = reportTo;
+  const plainKeys = agingRowKeys(agingRowsIn);
+  const agingRows: WorkAgingRow[] = agingRowsIn
+    .map((a, i) => ('key' in a ? a : { ...a, key: plainKeys[i], fix: 'none' as const, orig: null, fixNote: '' }))
+    .filter(a => !isExcludedSku(a.sku));
+  inventoryRows = inventoryRows ? inventoryRows.filter(r => !isExcludedSku(r.sku)) : null;
+  ledger = { N: ledger.N.filter(r => !isExcludedSku(r.sku)), X: ledger.X.filter(r => !isExcludedSku(r.sku)) };
+  type Tx = { r: LedgerRow; sign: 1 | -1 };
+  const txs: Tx[] = [];
+  for (const r of ledger.N) if (!end || r.d <= end) txs.push({ r, sign: 1 });
+  for (const r of ledger.X) if (!end || r.d <= end) txs.push({ r, sign: -1 });
+  // Cùng ngày: nhập trước xuất
+  txs.sort((a, b) => a.r.d.localeCompare(b.r.d) || b.sign - a.sign);
+
+  const scopeWh = new Set<string>();
+  const lots = new Map<string, LotAcc>();
+  const bySkuWh = new Map<string, LotAcc[]>();
+  const key = (sku: string, lot: string, wh: string) => `${sku}|${lot}|${wh}`;
+  const getLot = (sku: string, lot: string, wh: string): LotAcc => {
+    const k = key(sku, lot, wh);
+    let acc = lots.get(k);
+    if (!acc) {
+      acc = { sku, lot, wh, net: 0, inQty: 0, outQty: 0, firstIn: '', firstReceipt: '' };
+      lots.set(k, acc);
+      const g = `${sku}|${wh}`;
+      if (!bySkuWh.has(g)) bySkuWh.set(g, []);
+      bySkuWh.get(g)!.push(acc);
+    }
+    return acc;
+  };
+
+  let unallocatedOut = 0;
+  for (const { r, sign } of txs) {
+    if (r.wh) scopeWh.add(r.wh);
+    const q = sign * r.q;
+    if (q >= 0 || r.lot) {
+      const acc = getLot(r.sku, r.lot, r.wh);
+      acc.net += q;
+      if (q > 0) {
+        acc.inQty += q;
+        if (!acc.firstIn) acc.firstIn = r.d;
+        // TP: phiếu nhập thành phẩm (TP) / điều chuyển (PN). NVL: mọi phiếu nhập trong bảng kê nhập.
+        if (sign > 0 && (LOGIC_MODE === 'nvl' || r.ct === 'TP' || r.ct === 'PN') && !acc.firstReceipt) acc.firstReceipt = r.d;
+      } else acc.outQty -= q;
+      continue;
+    }
+    // Xuất không ghi lô → FIFO
+    let need = -q;
+    const candidates = (bySkuWh.get(`${r.sku}|${r.wh}`) || [])
+      .filter(a => a.net > EPS)
+      .sort((a, b) => (a.firstIn || '9999').localeCompare(b.firstIn || '9999'));
+    for (const a of candidates) {
+      const take = Math.min(need, a.net);
+      a.net -= take;
+      a.outQty += take;
+      need -= take;
+      if (need <= EPS) break;
+    }
+    if (need > EPS) {
+      unallocatedOut += need;
+      const a = getLot(r.sku, '', r.wh);
+      a.net -= need;
+      a.outQty += need;
+    }
+  }
+
+  const bucketFile: Record<string, number> = {};
+  const bucketCalc: Record<string, number> = {};
+  const valueByWh: Record<string, number> = {};
+  let totalValue = 0;
+  let totalQty = 0;
+  const used = new Set<string>();
+  const out: LotCompareRow[] = [];
+
+  for (const a of agingRows) {
+    const issues: string[] = [];
+    let level: AgingLevel = 'ok';
+    const calcMonths = agingMonths(a.inb, end);
+    const calcType = calcMonths == null ? '' : agingBucket(calcMonths);
+    if (!a.inb) issues.push(ISSUE.noInb);
+    if (calcMonths != null && (a.aging == null || Math.abs(a.aging - calcMonths) > 0.15)) issues.push(ISSUE.months);
+    if (calcType && a.type !== calcType) issues.push(ISSUE.type);
+    if (opts.moneyIssues !== false) {
+      if (a.price && Math.abs(a.qty * a.price - a.value) > Math.max(1, Math.abs(a.value) * 0.0005)) issues.push(ISSUE.value);
+      if (a.qty > 0 && !(a.value > 0)) issues.push(ISSUE.zeroValue);
+    }
+
+    bucketFile[a.type || '(trống)'] = (bucketFile[a.type || '(trống)'] || 0) + a.value;
+    bucketCalc[calcType || '(trống)'] = (bucketCalc[calcType || '(trống)'] || 0) + a.value;
+    valueByWh[a.wh] = (valueByWh[a.wh] || 0) + a.value;
+    totalValue += a.value;
+    totalQty += a.qty;
+
+    let ledgerQty: number | null = null;
+    let diffQty: number | null = null;
+    let openingQty: number | null = null;
+    let ledgerInb = '';
+    let inQty = 0;
+    let outQty = 0;
+    const inScope = scopeWh.has(a.wh);
+    if (!inScope) {
+      level = 'scope';
+    } else {
+      const k = key(a.sku, a.lot, a.wh);
+      used.add(k);
+      const acc = lots.get(k);
+      const net = acc ? round(acc.net) : 0;
+      ledgerQty = net;
+      inQty = acc ? acc.inQty : 0;
+      outQty = acc ? acc.outQty : 0;
+      ledgerInb = acc ? acc.firstReceipt || acc.firstIn : '';
+      if (acc && acc.firstReceipt) {
+        diffQty = round(a.qty - net);
+        if (Math.abs(diffQty) > EPS) issues.push(ISSUE.qty);
+        if (a.inb && a.inb !== acc.firstReceipt) issues.push(ISSUE.inb);
+      } else if (a.inb && ledgerFrom && a.inb >= ledgerFrom) {
+        diffQty = round(a.qty - net);
+        issues.push(ISSUE.noReceipt);
+        if (Math.abs(diffQty) > EPS) issues.push(ISSUE.qty);
+      } else {
+        // Lot tồn trước kỳ bảng kê
+        openingQty = round(a.qty - net);
+        if (openingQty < -EPS) issues.push(ISSUE.belowMovement);
+        else if (!issues.length) level = 'info';
+      }
+    }
+    if (issues.length) level = 'error';
+    out.push(makeLotRow({
+      key: a.key, fix: a.fix, orig: a.orig, fixNote: a.fixNote,
+      factory, sku: a.sku, name: a.name, cus: a.cus, lot: a.lot, wh: a.wh, inAging: true,
+      agingInb: a.inb, ledgerInb, agingMonths: a.aging, calcMonths, agingType: a.type, calcType,
+      agingQty: a.qty, ledgerQty, diffQty, openingQty, inQty, outQty, price: a.price, value: a.value, issues, level,
+    }));
+  }
+
+  // Lot còn tồn theo bảng kê nhưng không có trong Aging
+  const nameBySku = new Map<string, { name: string; cus: string }>();
+  agingRows.forEach(a => nameBySku.set(a.sku, { name: a.name, cus: a.cus }));
+  inventoryRows?.forEach(r => { if (!nameBySku.has(r.sku)) nameBySku.set(r.sku, { name: r.name, cus: r.cus }); });
+  lots.forEach((acc, k) => {
+    if (used.has(k)) return;
+    const net = round(acc.net);
+    if (Math.abs(net) <= EPS) return;
+    let issue: string | null = null;
+    if (acc.firstReceipt) issue = net > 0 ? ISSUE.missingInAging : ISSUE.overExport;
+    else if (net > 0) issue = ISSUE.missingInAging; // tồn đầu ≥ 0 nên tồn thực ≥ net > 0
+    if (!issue) return;
+    const nm = nameBySku.get(acc.sku);
+    out.push(makeLotRow({
+      key: addedLotKey(acc.sku, acc.lot, acc.wh), fix: 'none', orig: null, fixNote: '',
+      factory, sku: acc.sku, name: nm?.name || '', cus: nm?.cus || '', lot: acc.lot, wh: acc.wh, inAging: false,
+      agingInb: '', ledgerInb: acc.firstReceipt || acc.firstIn, agingMonths: null,
+      calcMonths: agingMonths(acc.firstReceipt || acc.firstIn, end), agingType: '', calcType: '',
+      agingQty: 0, ledgerQty: net, diffQty: round(-net), openingQty: null, inQty: acc.inQty, outQty: acc.outQty,
+      price: 0, value: 0, issues: [issue], level: 'error',
+    }));
+  });
+  // Aging chốt sau ngày cuối bảng kê → mã có phiếu sau ngày đó chưa kiểm được tồn lot.
+  // Có BC tồn kho cùng thời điểm bảng kê: mã có tổng Aging (kho trong bảng kê) ≠ BC tồn kho là mã có phát sinh sau.
+  // Không có: coi mọi mã đang lệch tồn lot là chưa kiểm được.
+  const gapSkus = new Set<string>();
+  if (opts.ledgerTo && end && opts.ledgerTo < end) {
+    if (inventoryRows && opts.inventoryTo && opts.inventoryTo < end) {
+      const diff = new Map<string, number>();
+      agingRows.forEach(a => { if (scopeWh.has(a.wh)) diff.set(a.sku, (diff.get(a.sku) || 0) + a.qty); });
+      inventoryRows.forEach(r => diff.set(r.sku, (diff.get(r.sku) || 0) - r.qty));
+      diff.forEach((d, sku) => { if (Math.abs(d) > EPS) gapSkus.add(sku); });
+    } else {
+      out.forEach(r => { if (r.issues.some(i => QTY_ISSUES.has(i))) gapSkus.add(r.sku); });
+    }
+    for (let i = 0; i < out.length; i++) {
+      const r = out[i];
+      if (!gapSkus.has(r.sku) || r.level === 'scope') continue;
+      const issues = r.issues.filter(x => !QTY_ISSUES.has(x)).concat(ISSUE.afterLedger);
+      const { id, statusText, searchText, monthsWrong, ...rest } = r;
+      out[i] = makeLotRow({ ...rest, issues, level: levelOf(issues, r.level) });
+    }
+  }
+  // Lỗi được đánh dấu bỏ qua → chỉ còn là lưu ý
+  const ignored = opts.ignored || {};
+  for (let i = 0; i < out.length; i++) {
+    const r = out[i];
+    if (!(r.key in ignored) || r.level !== 'error') continue;
+    const { id, statusText, searchText, monthsWrong, ...rest } = r;
+    out[i] = makeLotRow({ ...rest, fix: 'ignored', fixNote: ignored[r.key] || '', level: 'info' });
+  }
+  out.sort((x, y) => x.sku.localeCompare(y.sku) || x.lot.localeCompare(y.lot) || x.wh.localeCompare(y.wh));
+
+  return {
+    factory, reportTo: end, ledgerFrom, ledgerTo: opts.ledgerTo || '', inventoryTo: opts.inventoryTo || '',
+    gapSkuCount: gapSkus.size, scopeWh: Array.from(scopeWh).sort(), lots: out,
+    skus: buildSkuRows(factory, out, scopeWh, inventoryRows, !!opts.inventoryTo && opts.inventoryTo !== end, gapSkus),
+    bucketFile, bucketCalc, valueByWh, totalValue, totalQty, unallocatedOut,
+  };
+}
+
+function buildSkuRows(
+  factory: AgingFactory, lots: LotCompareRow[], scopeWh: Set<string>, inventoryRows: InventoryRow[] | null,
+  inventoryOtherDay: boolean, gapSkus: Set<string>
+): SkuCompareRow[] {
+  type Acc = { name: string; cus: string; scope: number; all: number; value: number; lotErrors: number; inv: number | null };
+  const map = new Map<string, Acc>();
+  const get = (sku: string, name: string, cus: string) => {
+    let a = map.get(sku);
+    if (!a) {
+      a = { name, cus, scope: 0, all: 0, value: 0, lotErrors: 0, inv: inventoryRows ? 0 : null };
+      map.set(sku, a);
+    }
+    if (!a.name && name) a.name = name;
+    if (!a.cus && cus) a.cus = cus;
+    return a;
+  };
+  for (const l of lots) {
+    const a = get(l.sku, l.name, l.cus);
+    if (l.inAging) {
+      a.all += l.agingQty;
+      a.value += l.value;
+      if (scopeWh.has(l.wh)) a.scope += l.agingQty;
+    }
+    if (l.level === 'error') a.lotErrors++;
+  }
+  inventoryRows?.forEach(r => { const a = get(r.sku, r.name, r.cus); a.inv = (a.inv || 0) + r.qty; });
+
+  const rows: SkuCompareRow[] = [];
+  map.forEach((a, sku) => {
+    const issues: string[] = [];
+    const diffQty = a.inv == null ? null : round(a.scope - a.inv);
+    if (diffQty != null && Math.abs(diffQty) > EPS) issues.push(inventoryOtherDay ? ISSUE.invOtherDay : ISSUE.invDiff);
+    if (gapSkus.has(sku)) issues.push(ISSUE.afterLedger);
+    if (a.lotErrors) issues.push(`${ISSUE.lotErr} (${a.lotErrors})`);
+    const level = levelOf(issues, 'ok');
+    rows.push({
+      id: `${factory}|${sku}`, factory, sku, name: a.name, cus: a.cus, invQty: a.inv, agingQtyScope: round(a.scope),
+      agingQtyAll: round(a.all), agingValue: a.value, diffQty, lotErrors: a.lotErrors, issues, level,
+      statusText: issues.length ? issues.join(', ') : 'Khớp',
+      searchText: `${factory} ${sku} ${a.name} ${a.cus}`.toLowerCase(),
+    });
+  });
+  return rows.sort((x, y) => x.sku.localeCompare(y.sku));
+}
+
+let lotRowSeq = 0;
+
+function makeLotRow(r: Omit<LotCompareRow, 'id' | 'statusText' | 'searchText' | 'monthsWrong'>): LotCompareRow {
+  const base = r.issues.length
+    ? r.issues.join(', ')
+    : r.level === 'scope' ? 'Kho ngoài bảng kê'
+    : r.level === 'info' ? 'Lot trước kỳ' : 'Khớp';
+  const rest = r.issues.length ? ' — còn: ' + base : '';
+  const statusText = r.fix === 'ignored' ? `Bỏ qua: ${base}`
+    : r.fix === 'edited' ? `Đã sửa${rest}`
+    : r.fix === 'added' ? `Đã thêm lot${rest}`
+    : base;
+  return {
+    ...r,
+    id: `${r.factory}|${r.sku}|${r.lot}|${r.wh}|${r.inAging ? 'a' : 'l'}|${++lotRowSeq}`,
+    monthsWrong: r.issues.includes(ISSUE.months),
+    statusText,
+    searchText: `${r.factory} ${r.sku} ${r.lot} ${r.wh} ${r.name} ${r.cus} ${statusText}`.toLowerCase(),
+  };
+}
+
+// ───────────────────────── Aging tính từ bảng kê ─────────────────────────
+
+/** 1 lot còn tồn trong Aging tự tính từ bảng kê nhập / xuất. */
+export interface GenAgingRow {
+  id: string;
+  factory: AgingFactory;
+  sku: string;
+  name: string;
+  cus: string;
+  lot: string;
+  wh: string;
+  /** Inbound Date (YYYY-MM-DD) */
+  inb: string;
+  months: number | null;
+  type: string;
+  qty: number;
+  price: number;
+  value: number;
+  /** base = tồn đầu từ báo cáo Aging gốc · ledger = nhập trong bảng kê */
+  src: 'base' | 'ledger';
+  /** Diễn biến tồn của lot: tồn gốc → từng phiếu nhập / xuất (để xem vì sao âm) */
+  trace: GenTraceStep[];
+  /** Tồn đầu (Aging gốc) */
+  baseQty: number;
+  /** Tổng nhập trong kỳ */
+  inQty: number;
+  /** Tổng xuất trong kỳ */
+  outQty: number;
+}
+
+/** 1 bước diễn biến tồn của lot. */
+export interface GenTraceStep {
+  /** YYYY-MM-DD */
+  d: string;
+  /** Gốc | Nhập | Xuất | Xuất FIFO */
+  kind: string;
+  /** Số phiếu / loại chứng từ */
+  doc: string;
+  /** + nhập / − xuất */
+  q: number;
+  /** Tồn sau bước này */
+  bal: number;
+  /** Phiếu gốc trong bảng kê (để sửa) */
+  ref?: LedgerRow;
+  refKind?: 'N' | 'X';
+}
+
+export interface GenAgingResult {
+  factory: AgingFactory;
+  end: string;
+  baseTo: string;
+  ledgerFrom: string;
+  ledgerTo: string;
+  rows: GenAgingRow[];
+  /** Lot xuất vượt tồn (âm) — cần kiểm */
+  negatives: GenAgingRow[];
+  /** Lot có tồn đầu / phát sinh nhưng tồn cuối = 0 (đã xuất hết) — để đối chiếu tồn đầu */
+  zeros: GenAgingRow[];
+  /** Xuất không ghi lô không trừ được (không còn lot tồn) */
+  unallocatedOut: number;
+  notes: string[];
+}
+
+/**
+ * Tự tính Aging từ bảng kê: tồn đầu = báo cáo Aging gốc (nếu có, ngày ≤ ngày tính) + phiếu nhập − phiếu xuất
+ * sau ngày gốc đến ngày tính. Xuất không ghi lô trừ FIFO theo Inbound Date. Inbound Date của lot mới = ngày phiếu nhập đầu tiên.
+ */
+export function generateAging(
+  factory: AgingFactory,
+  ledger: { N: LedgerRow[]; X: LedgerRow[] },
+  ledgerRange: { from: string; to: string; nTo?: string; xTo?: string },
+  end: string,
+  base: { to: string; rows: (AgingRow | WorkAgingRow)[] } | null,
+  /** true = tính cả mã bắt đầu bằng A (tồn đầu lấy đủ file Aging) */
+  includeA = false
+): GenAgingResult {
+  const notes: string[] = [];
+  const excluded = (sku: string) => !includeA && isExcludedSku(sku);
+  type Acc = { sku: string; lot: string; wh: string; net: number; inb: string; price: number; name: string; cus: string; src: 'base' | 'ledger'; trace: GenTraceStep[] };
+  const lots = new Map<string, Acc>();
+  const step = (a: Acc, d: string, kind: string, doc: string, q: number, ref?: LedgerRow, refKind?: 'N' | 'X') =>
+    a.trace.push({ d, kind, doc, q: round(q), bal: round(a.net), ref, refKind });
+  const bySkuWh = new Map<string, Acc[]>();
+  const nameBySku = new Map<string, { name: string; cus: string }>();
+  const priceBySku = new Map<string, number>();
+  const k = (s: string, l: string, w: string) => `${s}|${l}|${w}`;
+  const get = (sku: string, lot: string, wh: string, src: 'base' | 'ledger'): Acc => {
+    const key = k(sku, lot, wh);
+    let a = lots.get(key);
+    if (!a) {
+      a = { sku, lot, wh, net: 0, inb: '', price: 0, name: '', cus: '', src, trace: [] };
+      lots.set(key, a);
+      const g = `${sku}|${wh}`;
+      if (!bySkuWh.has(g)) bySkuWh.set(g, []);
+      bySkuWh.get(g)!.push(a);
+    }
+    return a;
+  };
+  const baseTo = base?.to || '';
+  for (const r of base?.rows || []) {
+    if (excluded(r.sku) || !(r.qty > 0)) continue;
+    const a = get(r.sku, r.lot, r.wh, 'base');
+    a.net += r.qty;
+    step(a, baseTo, 'Tồn gốc', `Aging gốc (số liệu tới ${fmtYmd(baseTo)})`, r.qty);
+    if (!a.inb || (r.inb && r.inb < a.inb)) a.inb = r.inb;
+    if (r.price > 0) a.price = r.price;
+    a.name = r.name || a.name;
+    a.cus = r.cus || a.cus;
+    if (r.name && !nameBySku.has(r.sku)) nameBySku.set(r.sku, { name: r.name, cus: r.cus });
+    if (r.price > 0) priceBySku.set(r.sku, r.price);
+  }
+  if (base && ledgerRange.from && ledgerRange.from > addDays(baseTo, 1)) {
+    notes.push(`Bảng kê bắt đầu ${fmtYmd(ledgerRange.from)}, sau ngày Aging gốc ${fmtYmd(baseTo)} — thiếu phiếu từ ${fmtYmd(addDays(baseTo, 1))}.`);
+  }
+  if (!base) notes.push(`Không có báo cáo Aging gốc: chỉ tính lot có phiếu nhập trong bảng kê (từ ${fmtYmd(ledgerRange.from) || '—'}); tồn trước đó không có.`);
+  if (ledgerRange.nTo && ledgerRange.xTo && ledgerRange.nTo !== ledgerRange.xTo) notes.push(`Bảng kê nhập tới ${fmtYmd(ledgerRange.nTo)}, bảng kê xuất tới ${fmtYmd(ledgerRange.xTo)} — tính tới ${fmtYmd(ledgerRange.to)} (ngày cả nhập và xuất đều có). Import bảng kê còn thiếu để tính tới ngày mới hơn.`);
+  if (end > ledgerRange.to && ledgerRange.to) notes.push(`Bảng kê mới tới ${fmtYmd(ledgerRange.to)} — phiếu sau ngày này chưa có.`);
+
+  type Tx = { r: LedgerRow; sign: 1 | -1; pre?: boolean };
+  const txs: Tx[] = [];
+  const inRange = (d: string) => (!baseTo || d > baseTo) && (!end || d <= end);
+  // Lot KHÔNG có trong Aging gốc nhưng có phiếu sau ngày gốc → Aging gốc thiếu lot này (vd nhập sát ngày chốt):
+  // tính lại lot đó theo toàn bộ bảng kê (cả phiếu trước ngày gốc).
+  const baseKeys = new Set((base?.rows || []).filter(r => r.qty > 0).map(r => k(r.sku, r.lot, r.wh)));
+  const touchedAfter = new Set<string>();
+  if (baseTo) {
+    for (const r of [...ledger.N, ...ledger.X]) {
+      if (r.lot && inRange(r.d) && !excluded(r.sku)) touchedAfter.add(k(r.sku, r.lot, r.wh));
+    }
+  }
+  // Phiếu nhập ĐÚNG ngày chốt mà lot chưa có trong Aging gốc (nhập sau giờ xuất báo cáo) → cộng vào
+  const baseDayReceipt = new Set<string>();
+  if (baseTo) for (const r of ledger.N) if (r.lot && r.d === baseTo && !baseKeys.has(k(r.sku, r.lot, r.wh))) baseDayReceipt.add(k(r.sku, r.lot, r.wh));
+  const preForMissing = (r: LedgerRow) => {
+    if (!baseTo || !r.lot || r.d > baseTo) return false;
+    const key = k(r.sku, r.lot, r.wh);
+    if (baseKeys.has(key)) return false;
+    return touchedAfter.has(key) || baseDayReceipt.has(key);
+  };
+  let missingLots = 0;
+  const missingSeen = new Set<string>();
+  for (const r of ledger.N) {
+    if (r.price > 0) priceBySku.set(r.sku, r.price);
+    if (excluded(r.sku)) continue;
+    if (inRange(r.d)) txs.push({ r, sign: 1 });
+    else if (preForMissing(r)) {
+      txs.push({ r, sign: 1, pre: true });
+      const key = k(r.sku, r.lot, r.wh);
+      if (!missingSeen.has(key)) { missingSeen.add(key); missingLots++; }
+    }
+  }
+  for (const r of ledger.X) {
+    if (excluded(r.sku)) continue;
+    if (inRange(r.d)) txs.push({ r, sign: -1 });
+    else if (preForMissing(r)) txs.push({ r, sign: -1, pre: true });
+  }
+  txs.sort((a, b) => a.r.d.localeCompare(b.r.d) || b.sign - a.sign);
+  if (missingLots) notes.push(`${missingLots} ${LOGIC_MODE === 'nvl' ? 'PO' : 'lot'} có phiếu nhập trước ngày Aging gốc nhưng Aging gốc không có — đã tính theo bảng kê.`);
+
+  let unallocatedOut = 0;
+  for (const { r, sign, pre } of txs) {
+    const tag = pre ? ' (trước Aging gốc)' : '';
+    if (sign > 0) {
+      const a = get(r.sku, r.lot, r.wh, 'ledger');
+      a.net += r.q;
+      step(a, r.d, 'Nhập' + tag, [r.ct, r.no].filter(Boolean).join(' '), r.q, r, 'N');
+      if (!a.inb) a.inb = r.d;
+      if (r.price > 0) a.price = r.price;
+      continue;
+    }
+    if (r.lot) {
+      const a = get(r.sku, r.lot, r.wh, 'ledger');
+      a.net -= r.q;
+      step(a, r.d, 'Xuất' + tag, [r.ct, r.no, r.lsx].filter(Boolean).join(' '), -r.q, r, 'X');
+      continue;
+    }
+    let need = r.q;
+    const cands = (bySkuWh.get(`${r.sku}|${r.wh}`) || []).filter(a => a.net > EPS)
+      .sort((a, b) => (a.inb || '9999').localeCompare(b.inb || '9999'));
+    for (const a of cands) {
+      const t = Math.min(need, a.net);
+      a.net -= t;
+      step(a, r.d, 'Xuất (không ghi lô → FIFO)', [r.ct, r.no, r.lsx].filter(Boolean).join(' '), -t, r, 'X');
+      need -= t;
+      if (need <= EPS) break;
+    }
+    if (need > EPS) unallocatedOut += need;
+  }
+
+  const rows: GenAgingRow[] = [];
+  const negatives: GenAgingRow[] = [];
+  const zeros: GenAgingRow[] = [];
+  let i = 0;
+  lots.forEach(a => {
+    let qty = round(a.net);
+    const isZero = Math.abs(qty) <= EPS;
+    if (isZero && !a.trace.length) return;
+    if (isZero) qty = 0;
+    const nm = nameBySku.get(a.sku);
+    const price = a.price || priceBySku.get(a.sku) || 0;
+    const months = agingMonths(a.inb, end);
+    const row: GenAgingRow = {
+      id: `${factory}-g${i++}`, factory, sku: a.sku, name: a.name || nm?.name || '', cus: a.cus || nm?.cus || '',
+      lot: a.lot, wh: a.wh, inb: a.inb, months, type: months == null ? '' : agingBucket(months),
+      qty, price, value: Math.round(qty * price), src: a.src, trace: a.trace,
+      baseQty: round(a.trace.filter(x => x.kind === 'Tồn gốc').reduce((n, x) => n + x.q, 0)),
+      inQty: round(a.trace.filter(x => x.kind !== 'Tồn gốc' && x.q > 0).reduce((n, x) => n + x.q, 0)),
+      outQty: round(-a.trace.filter(x => x.q < 0).reduce((n, x) => n + x.q, 0)),
+    };
+    (isZero ? zeros : qty > 0 ? rows : negatives).push(row);
+  });
+  rows.sort((a, b) => a.sku.localeCompare(b.sku) || a.inb.localeCompare(b.inb) || a.lot.localeCompare(b.lot));
+  if (negatives.length) notes.push(`${negatives.length} ${LOGIC_MODE === 'nvl' ? 'PO' : 'lot'} xuất nhiều hơn tồn (âm) — xem cuối bảng.`);
+  if (unallocatedOut > EPS) notes.push(`${round(unallocatedOut).toLocaleString('en-US')} xuất không ghi lô không còn tồn để trừ.`);
+  return { factory, end, baseTo, ledgerFrom: ledgerRange.from, ledgerTo: ledgerRange.to, rows, negatives, zeros, unallocatedOut: round(unallocatedOut), notes };
+}
+
+function addDays(ymd: string, n: number): string {
+  if (!ymd) return '';
+  const t = Date.parse(ymd + 'T00:00:00Z');
+  return isNaN(t) ? '' : new Date(t + n * DAY_MS).toISOString().slice(0, 10);
+}
+
+function fmtYmd(ymd: string): string {
+  if (!ymd) return '';
+  const [y, m, d] = ymd.split('-');
+  return `${d}/${m}/${y}`;
+}

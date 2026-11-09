@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { FirebaseAuthService, User } from '../../services/firebase-auth.service';
@@ -8,6 +9,8 @@ import { EmployeeCleanupService, CleanupResult, EmployeeComparison } from '../..
 import { ClientReloadService } from '../../services/client-reload.service';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
+import * as XLSX from 'xlsx';
+import { TAB_PERMISSION_OPTIONS } from '../../routes/app-tabs';
 
 @Component({
   selector: 'app-settings',
@@ -30,55 +33,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Firebase user passwords
   firebaseUserPasswords: { [key: string]: string } = {};
   // Available tabs for permissions - đồng bộ với sidebar routes hiện tại (nhóm để hiển thị rõ ràng hơn trong popup quyền)
-  availableTabs: Array<{ key: string; name: string; category: string }> = [
-    // Main tabs
-    { key: 'dashboard', name: 'Dashboard', category: 'Chính' },
-    { key: 'task', name: 'Task', category: 'Chính' },
-    { key: 'materials-dashboard', name: 'Materials Dashboard', category: 'Chính' },
-    { key: 'fgs-dashboard', name: 'FGs Dashboard', category: 'Chính' },
-    { key: 'pd-control', name: 'PD Control', category: 'Chính' },
-    { key: 'work-order-status', name: 'Work Order', category: 'Chính' },
-    { key: 'lich-lam-viec', name: 'Lịch Làm Việc', category: 'Chính' },
-    { key: 'shipment', name: 'Shipment', category: 'Chính' },
-
-    // RM tabs — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-    { key: 'inbound', name: 'RM Inbound (ASM1 + ASM2)', category: 'RM' },
-    { key: 'outbound', name: 'RM Outbound (ASM1 + ASM2)', category: 'RM' },
-    { key: 'materials', name: 'RM Inventory (ASM1 + ASM2)', category: 'RM' },
-    { key: 'inventory-overview', name: 'RM Overview (ASM1 + ASM2)', category: 'RM' },
-    { key: 'bag-history', name: 'Control Batch', category: 'RM' },
-    { key: 'danh-muc-nvl-tp', name: 'Danh mục NVL & TP', category: 'RM' },
-
-    // ASM FG tabs
-    { key: 'fg-in', name: 'FG In', category: 'FG' },
-    { key: 'fg-out', name: 'FG Out', category: 'FG' },
-    { key: 'fg-check', name: 'FG Check', category: 'FG' },
-    { key: 'fg-inventory', name: 'FG Inventory', category: 'FG' },
-    { key: 'fg-overview', name: 'FG Overview', category: 'FG' },
-    { key: 'fg-location', name: 'FG Location', category: 'FG' },
-    { key: 'pallet-id', name: 'In tem nội bộ', category: 'FG' },
-
-    // Other tabs
-    { key: 'location', name: 'Materials', category: 'Khác' },
-    { key: 'j-warehouse', name: 'J Warehouse', category: 'Khác' },
-    { key: 'manage', name: 'Manage', category: 'Khác' },
-    { key: 'stock-check', name: 'Stock Check', category: 'Khác' },
-    { key: 'bieu-mau', name: 'Biểu mẫu', category: 'Khác' },
-    { key: 'label', name: 'Label', category: 'Khác' },
-    { key: 'index', name: 'Bonded Report', category: 'Khác' },
-    { key: 'sxxk', name: 'SXXK', category: 'Khác' },
-    { key: 'scrap', name: 'SCRAP', category: 'Khác' },
-    { key: 'checklist', name: 'Safety & Quality', category: 'Khác' },
-    { key: 'equipment', name: 'Training', category: 'Khác' },
-    { key: 'qc', name: 'Quality', category: 'Khác' },
-    { key: 'nhiet-do', name: 'Nhiệt Độ', category: 'Khác' },
-    { key: 'equipment-checklist', name: 'Quản lý thiết bị', category: 'Khác' },
-    { key: 'rm1-delivery', name: 'RM Delivery', category: 'Khác' },
-    { key: 'report', name: 'Report', category: 'Khác' },
-    { key: 'shorted-materials', name: 'Shorted materials', category: 'Khác' },
-    { key: 'settings', name: 'Settings', category: 'Khác' },
-    { key: 'zalo', name: 'Zalo', category: 'Khác' }
-  ];
+  availableTabs: Array<{ key: string; name: string; category: string }> = TAB_PERMISSION_OPTIONS;
   // Firebase user tab permissions
   firebaseUserTabPermissions: { [key: string]: { [key: string]: boolean } } = {};
   // Notifications
@@ -105,10 +60,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   isResettingPassword: boolean = false;
   showChangePasswordForm: boolean = false; // Hiển thị form đổi password
 
-  /** Reset mật khẩu tài khoản theo mã nhân viên → 123456 */
+  /** Reset mật khẩu tài khoản theo mã nhân viên → 6 số ngẫu nhiên (hiện cho admin một lần). */
   resetAccountInput = '';
   isResettingAccountPassword = false;
-  private static readonly DEFAULT_RESET_PASSWORD = '123456';
+
+  private static randomSixDigitPassword(): string {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return String(100000 + (buf[0] % 900000));
+  }
 
   /** Đăng ký tài khoản (Cloud Function: mật khẩu 6 số gửi email) */
   createAccountEmployeeId = '';
@@ -118,6 +78,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
   isRegisteringUser = false;
   isDeletingAccountByEmployeeId = false;
   isReleasingRegistrationEmail = false;
+
+  /** Import mã + tên: tạo tài khoản chưa có, mật khẩu = 4 số cuối mã. */
+  isImportingEmployees = false;
+  importEmployeesFileName = '';
+  importEmployeesPreview = '';
+  importEmployeesCount = 0;
+  private importEmployeeRows: Array<{ employeeId: string; fullName: string; department: string }> = [];
 
   /** Bộ phận — đồng bộ với bảng user cũ */
   readonly departmentOptions = ['WH', 'QA', 'ENG', 'PLAN', 'PD', 'CS', 'ACC'];
@@ -190,10 +157,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
     try {
       const token = await this.clientReloadService.requestReloadAll('SETTINGS_ADMIN');
-      alert(`Đã gửi lệnh làm mới (token #${token}).\nCác tab đang mở sẽ F5 trong vài giây.`);
+      appAlert(`Đã gửi lệnh làm mới (token #${token}).\nCác tab đang mở sẽ F5 trong vài giây.`);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      alert(`Không gửi được lệnh F5: ${msg}`);
+      appAlert(`Không gửi được lệnh F5: ${msg}`);
     } finally {
       this.isRequestingClientReload = false;
       this.cdr.markForCheck();
@@ -242,31 +209,31 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const useEmail = !!email;
 
     if (!employeeId) {
-      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0054 hoặc 0054).');
       return;
     }
     if (!fullName) {
-      alert('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
+      appAlert('Vui lòng nhập họ tên (khác ID đăng nhập ASP).');
       return;
     }
     if (!department) {
-      alert('Vui lòng chọn bộ phận.');
+      appAlert('Vui lòng chọn bộ phận.');
       return;
     }
     if (useEmail) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        alert('Email không hợp lệ.');
+        appAlert('Email không hợp lệ.');
         return;
       }
       if (!this.isAllowedRegistrationEmail(email)) {
-        alert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+        appAlert('Email đăng ký phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
         return;
       }
     }
 
     const dup = this.firebaseUsers.some((u) => this.getEmployeeIdOnly(u) === employeeId);
     if (dup) {
-      alert(`Mã ${employeeId} đã có trong danh sách người dùng.`);
+      appAlert(`Mã ${employeeId} đã có trong danh sách người dùng.`);
       return;
     }
 
@@ -298,12 +265,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await this.refreshFirebaseUsers();
 
       if (useEmail) {
-        alert(
+        appAlert(
           `✅ Đã tạo tài khoản và gửi mật khẩu 6 số tới email:\n${email}\n\n` +
             `Người dùng đăng nhập app bằng ID ${employeeId} và mật khẩu trong thư (không nhập email ở màn đăng nhập).`
         );
       } else {
-        alert(
+        appAlert(
           `✅ Đã tạo tài khoản ${employeeId}.\n\n` +
             `Mật khẩu (6 số): ${password || '(xem trong Settings)'}\n\n` +
             `Người dùng đăng nhập bằng mã ASP + mật khẩu trên (không cần email).`
@@ -322,7 +289,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không đăng ký được: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -338,7 +305,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.createAccountEmployeeId);
     if (!employeeId) {
-      alert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0609 hoặc 0609).');
+      appAlert('Vui lòng nhập mã nhân viên đúng dạng (VD: ASP0609 hoặc 0609).');
       return;
     }
 
@@ -357,14 +324,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
 
       await this.refreshFirebaseUsers();
-      alert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
+      appAlert(`✅ Đã xóa tài khoản ${employeeId}. Bây giờ bạn có thể tạo lại.`);
     } catch (error: any) {
       console.error('❌ deleteAccountByEmployeeId:', error);
       const code = typeof error?.code === 'string' ? error.code : '';
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không xóa được tài khoản: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -381,11 +348,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     const email = (this.createAccountEmail || '').trim().toLowerCase();
     if (!email) {
-      alert('Vui lòng nhập email cần giải phóng vào ô Email đăng ký.');
+      appAlert('Vui lòng nhập email cần giải phóng vào ô Email đăng ký.');
       return;
     }
     if (!this.isAllowedRegistrationEmail(email)) {
-      alert('Email phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
+      appAlert('Email phải có đuôi @airspeedmfgvn.com hoặc @airspeedmfg.com.');
       return;
     }
 
@@ -401,12 +368,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const result: any = await firstValueFrom(
         this.fns.httpsCallable('adminReleaseRegistrationEmailFn')({ email })
       );
-      alert(`✅ ${result?.message || 'Đã giải phóng email.'}`);
+      appAlert(`✅ ${result?.message || 'Đã giải phóng email.'}`);
     } catch (error: any) {
       console.error('❌ releaseRegistrationEmail:', error);
       const code = typeof error?.code === 'string' ? error.code : '';
       const msg = (error?.message as string) || '';
-      alert('❌ Không giải phóng được email: ' + (code ? `${code} — ` : '') + (msg || '(không có chi tiết)'));
+      appAlert('❌ Không giải phóng được email: ' + (code ? `${code} — ` : '') + (msg || '(không có chi tiết)'));
     } finally {
       this.isReleasingRegistrationEmail = false;
       this.cdr.markForCheck();
@@ -417,6 +384,199 @@ export class SettingsComponent implements OnInit, OnDestroy {
   private isAllowedRegistrationEmail(email: string): boolean {
     const e = email.trim().toLowerCase();
     return e.endsWith('@airspeedmfgvn.com') || e.endsWith('@airspeedmfg.com');
+  }
+
+  onImportEmployeesFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files[0];
+    this.importEmployeeRows = [];
+    this.importEmployeesCount = 0;
+    this.importEmployeesPreview = '';
+    this.importEmployeesFileName = file ? file.name : '';
+    if (!file) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = reader.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' }) as unknown[][];
+        const parsed = this.parseEmployeeImportGrid(grid);
+        this.importEmployeeRows = parsed.rows;
+        this.importEmployeesCount = parsed.rows.length;
+        const parts = [`Đọc được ${parsed.rows.length} dòng hợp lệ.`];
+        if (parsed.invalid) {
+          parts.push(`${parsed.invalid} dòng bỏ qua vì thiếu mã hoặc tên.`);
+        }
+        this.importEmployeesPreview = parts.join(' ');
+      } catch (e: any) {
+        this.importEmployeeRows = [];
+        this.importEmployeesCount = 0;
+        this.importEmployeesPreview = e?.message || 'Không đọc được file.';
+      }
+      this.cdr.markForCheck();
+    };
+    reader.onerror = () => {
+      this.importEmployeeRows = [];
+      this.importEmployeesCount = 0;
+      this.importEmployeesPreview = 'Không đọc được file.';
+      this.cdr.markForCheck();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  async importEmployeesFromFile(): Promise<void> {
+    if (this.isImportingEmployees) return;
+    const rows = this.importEmployeeRows.slice();
+    if (!rows.length) {
+      appAlert('Chọn file Excel hoặc CSV có cột mã nhân viên và tên.');
+      return;
+    }
+
+    this.isImportingEmployees = true;
+    this.importEmployeesPreview = `Đang tạo tài khoản 0/${rows.length}…`;
+    this.cdr.markForCheck();
+
+    const created: string[] = [];
+    const skipped: string[] = [];
+    const failed: string[] = [];
+    const chunkSize = 25;
+
+    try {
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const result: any = await firstValueFrom(
+          this.fns.httpsCallable('importAspUsersFn')({ users: chunk })
+        );
+        const payload = result?.data !== undefined ? result.data : result;
+        for (const item of payload?.created || []) {
+          created.push(`${item.employeeId} (${item.password})`);
+        }
+        for (const item of payload?.skipped || []) {
+          skipped.push(`${item.employeeId}: ${item.reason}`);
+        }
+        for (const item of payload?.failed || []) {
+          failed.push(`${item.employeeId}: ${item.reason}`);
+        }
+        this.importEmployeesPreview = `Đang tạo tài khoản ${Math.min(i + chunk.length, rows.length)}/${rows.length}…`;
+        this.cdr.markForCheck();
+      }
+
+      await this.refreshFirebaseUsers();
+
+      const summary = [
+        `Đã tạo ${created.length} tài khoản.`,
+        `Bỏ qua ${skipped.length} (đã có hoặc trùng).`,
+        failed.length ? `Lỗi ${failed.length}.` : ''
+      ]
+        .filter(Boolean)
+        .join(' ');
+      this.importEmployeesPreview = summary;
+      const detail = [
+        summary,
+        created.length ? `\nMật khẩu là 4 số cuối mã:\n${created.slice(0, 30).join('\n')}${created.length > 30 ? '\n…' : ''}` : '',
+        failed.length ? `\nLỗi:\n${failed.slice(0, 15).join('\n')}` : ''
+      ].join('');
+      appAlert(detail);
+    } catch (error: any) {
+      const msg = error?.message || error?.details || 'Import thất bại.';
+      this.importEmployeesPreview = msg;
+      appAlert(msg);
+    } finally {
+      this.isImportingEmployees = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private parseEmployeeImportGrid(grid: unknown[][]): {
+    rows: Array<{ employeeId: string; fullName: string; department: string }>;
+    invalid: number;
+  } {
+    const cells = (grid || []).map((row) => (Array.isArray(row) ? row : []).map((c) => String(c ?? '').trim()));
+    const nonEmpty = cells.filter((row) => row.some((c) => c));
+    if (!nonEmpty.length) return { rows: [], invalid: 0 };
+
+    let headerIndex = -1;
+    let idCol = 0;
+    let nameCol = 1;
+    let deptCol = -1;
+    for (let i = 0; i < Math.min(nonEmpty.length, 8); i++) {
+      const kinds = nonEmpty[i].map((c) => this.employeeImportHeaderKind(c));
+      const idAt = kinds.indexOf('id');
+      const nameAt = kinds.indexOf('name');
+      if (idAt >= 0 && nameAt >= 0) {
+        headerIndex = i;
+        idCol = idAt;
+        nameCol = nameAt;
+        deptCol = kinds.indexOf('dept');
+        break;
+      }
+    }
+
+    const data = headerIndex >= 0 ? nonEmpty.slice(headerIndex + 1) : nonEmpty;
+    const rows: Array<{ employeeId: string; fullName: string; department: string }> = [];
+    const seen = new Set<string>();
+    let invalid = 0;
+
+    for (const row of data) {
+      let department = '';
+      let employeeRaw = '';
+      let nameRaw = '';
+      if (headerIndex >= 0) {
+        employeeRaw = row[idCol] || '';
+        nameRaw = row[nameCol] || '';
+        department = deptCol >= 0 ? row[deptCol] || '' : '';
+      } else if (row.length >= 3 && /^\d{2,6}$/.test(row[1] || '') && (row[2] || '')) {
+        employeeRaw = row[0] || '';
+        department = row[1] || '';
+        nameRaw = row.slice(2).join(' ').trim();
+      } else {
+        employeeRaw = row[0] || '';
+        nameRaw = row[1] || '';
+      }
+
+      const employeeId = this.parseAspEmployeeIdFromResetInput(this.normalizeImportEmployeeId(employeeRaw));
+      const fullName = nameRaw.replace(/\s+/g, ' ').trim();
+      if (!employeeId || !fullName || fullName.toUpperCase() === employeeId) {
+        if (employeeRaw || nameRaw) invalid += 1;
+        continue;
+      }
+      if (seen.has(employeeId)) continue;
+      seen.add(employeeId);
+      rows.push({ employeeId, fullName, department: department.trim() });
+    }
+
+    return { rows, invalid };
+  }
+
+  private normalizeImportEmployeeId(raw: string): string {
+    const t = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    const digits = t.match(/^(\d{1,4})$/);
+    if (digits) return digits[1].padStart(4, '0');
+    const asp = t.match(/^ASP(\d{1,4})$/);
+    if (asp) return `ASP${asp[1].padStart(4, '0')}`;
+    return t;
+  }
+
+  private employeeImportHeaderKind(cell: string): 'id' | 'name' | 'dept' | '' {
+    const k = String(cell || '')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    if (!k) return '';
+    if (k.includes('bophan') || k === 'department' || k === 'phongban') return 'dept';
+    if (k.includes('manhanvien') || k === 'employeeid' || k === 'masp' || k === 'manv' || k === 'iddangnhap' || k === 'ma' || k === 'id') {
+      return 'id';
+    }
+    if (k.includes('tennhanvien') || k.includes('hoten') || k === 'hovaten' || k === 'fullname' || k === 'name' || k === 'ten') {
+      return 'name';
+    }
+    return '';
   }
 
   /** Chuẩn hóa nhập: ASP0054 hoặc 0054 → ASP0054 */
@@ -499,19 +659,20 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async resetAccountPasswordToDefault(): Promise<void> {
     const employeeId = this.parseAspEmployeeIdFromResetInput(this.resetAccountInput);
     if (!employeeId) {
-      alert('Vui lòng nhập mã tài khoản đúng dạng (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập mã tài khoản đúng dạng (VD: ASP0054 hoặc 0054).');
       return;
     }
 
     if (
       !confirm(
-        `Đặt lại mật khẩu tài khoản ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}?\n\n` +
-          'Thao tác này áp dụng ngay trên Firebase Authentication.'
+        `Đặt lại mật khẩu tài khoản ${employeeId} thành mật khẩu 6 số ngẫu nhiên?\n\n` +
+          'Thao tác này áp dụng ngay trên Firebase Authentication. Mật khẩu mới chỉ hiện một lần.'
       )
     ) {
       return;
     }
 
+    const newPassword = SettingsComponent.randomSixDigitPassword();
     this.isResettingAccountPassword = true;
     try {
       // Ưu tiên reset theo employeeId (lookup thẳng Firebase Auth), không phụ thuộc Firestore list.
@@ -519,17 +680,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
         const result: any = await firstValueFrom(
           this.fns.httpsCallable('adminSetUserPasswordByEmployeeIdFn')({
             employeeId,
-            newPassword: SettingsComponent.DEFAULT_RESET_PASSWORD
+            newPassword
           })
         );
 
         const uid = result?.uid as string | undefined;
         if (uid) {
-          this.firebaseUserPasswords[uid] = SettingsComponent.DEFAULT_RESET_PASSWORD;
+          this.firebaseUserPasswords[uid] = newPassword;
         }
 
-        alert(
-          `✅ Đã đặt mật khẩu ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}.`
+        appAlert(
+          `✅ Mật khẩu mới của ${employeeId}: ${newPassword}\n\n` +
+            (result?.zaloSent
+              ? 'Đã gửi về Zalo ASP0106 để chuyển cho nhân viên.'
+              : '⚠️ Chưa gửi được Zalo ASP0106 — ghi lại và báo cho nhân viên.') +
+            '\nHệ thống không lưu mật khẩu này.'
         );
       } catch (callErr: any) {
         // Nếu function mới chưa deploy/không tồn tại, fallback theo uid dựa trên Firestore list hiện có.
@@ -537,19 +702,19 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
         const uid = await this.resolveUidByAspEmployeeId(employeeId);
         if (!uid) {
-          alert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
+          appAlert(`Không tìm thấy tài khoản ${employeeId} trong hệ thống.`);
           return;
         }
 
         await firstValueFrom(
           this.fns.httpsCallable('adminUpdateUserPasswordFn')({
             uid,
-            newPassword: SettingsComponent.DEFAULT_RESET_PASSWORD
+            newPassword
           })
         );
-        this.firebaseUserPasswords[uid] = SettingsComponent.DEFAULT_RESET_PASSWORD;
-        alert(
-          `✅ Đã đặt mật khẩu ${employeeId} về ${SettingsComponent.DEFAULT_RESET_PASSWORD}.`
+        this.firebaseUserPasswords[uid] = newPassword;
+        appAlert(
+          `✅ Mật khẩu mới của ${employeeId}: ${newPassword}\n\nGhi lại và báo cho nhân viên — hệ thống không lưu mật khẩu này.`
         );
       }
 
@@ -561,7 +726,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (error?.message as string) || '';
       const details = error?.details ? String(error.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert(
+      appAlert(
         '❌ Không reset được mật khẩu: ' +
           (code ? `${code} — ` : '') +
           (suffix || '(không có chi tiết)')
@@ -591,7 +756,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       );
       const deleted = result?.deletedCount ?? 0;
       const sample = Array.isArray(result?.deletedUidsSample) ? result.deletedUidsSample : [];
-      alert(
+      appAlert(
         `✅ Đã xóa ${deleted} user khỏi Firebase Auth.\n` +
           (sample.length ? `Mẫu uid bị xóa: ${sample.slice(0, 5).join(', ')}` : '')
       );
@@ -600,7 +765,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       console.error('❌ cleanupAuthUsersNotInSettings:', error);
       const msg = (error?.message as string) || 'Có lỗi xảy ra khi xóa user.';
-      alert('❌ ' + msg);
+      appAlert('❌ ' + msg);
     } finally {
       this.isCleaningAuthUsers = false;
     }
@@ -742,7 +907,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.firebaseUserCompletePermissions[user.uid] = perm.hasCompletePermission || false;
         this.firebaseUserReadOnlyPermissions[user.uid] = perm.hasReadOnlyPermission || false;
         this.firebaseUserDepartments[user.uid]         = user.department || '';
-        this.firebaseUserPasswords[user.uid]           = user.password   || perm.password || '';
 
         const tabPerms = tabPermMap.get(user.uid);
         const merged: { [k: string]: boolean } = {};
@@ -879,12 +1043,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
         delete this.firebaseUserTabPermissions[user.uid];
         
         // Show success message
-        alert(`✅ Đã xóa thành công user ${user.email}!`);
+        appAlert(`✅ Đã xóa thành công user ${user.email}!`);
         
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
-        alert(`❌ Có lỗi xảy ra khi xóa user ${user.email}:\n${error}`);
+        appAlert(`❌ Có lỗi xảy ra khi xóa user ${user.email}:\n${error}`);
       }
     }
   }
@@ -1340,12 +1504,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const isAdminAccount = (this.selectedUser.email || '').toLowerCase() === 'admin@asp.com';
 
     if (!isAdminAccount && !employeeId) {
-      alert('Vui lòng nhập ID đăng nhập ASP (VD: ASP0054 hoặc 0054).');
+      appAlert('Vui lòng nhập ID đăng nhập ASP (VD: ASP0054 hoặc 0054).');
       return;
     }
 
     if (!email) {
-      alert('Email tài khoản (Firebase) không được để trống.');
+      appAlert('Email tài khoản (Firebase) không được để trống.');
       return;
     }
 
@@ -1429,7 +1593,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
       const granted = this.availableTabs.filter(t => tabPermissionsToSave[t.key]).map(t => t.name);
       const idLabel = employeeId || this.getEmployeeIdOnly(prev) || email;
-      alert(
+      appAlert(
         `✅ Đã lưu quyền cho ${idLabel}.` +
           (granted.length ? `\nTab được phép: ${granted.join(', ')}` : '\nChưa cấp tab nào (chờ duyệt).') +
           profileWarning
@@ -1438,7 +1602,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.closePermissionModal();
     } catch (error) {
       console.error('❌ Error saving user permissions:', error);
-      alert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
+      appAlert('❌ Có lỗi xảy ra khi lưu quyền hạn!');
     }
   }
 
@@ -1461,7 +1625,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         delete this.firebaseUserTabPermissions[this.selectedUser.uid];
         
         // Show success message
-        alert(`✅ Đã xóa thành công user ${deletedEmail}!`);
+        appAlert(`✅ Đã xóa thành công user ${deletedEmail}!`);
         
         // Đóng modal
         this.closePermissionModal();
@@ -1469,7 +1633,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         
       } catch (error) {
         console.error('❌ Error deleting Firebase user:', error);
-        alert(`❌ Có lỗi xảy ra khi xóa user ${this.selectedUser.email}:\n${error}`);
+        appAlert(`❌ Có lỗi xảy ra khi xóa user ${this.selectedUser.email}:\n${error}`);
       }
     }
   }
@@ -1522,7 +1686,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.generatedNewPassword = newPassword;
       this.firebaseUserPasswords[this.selectedUser.uid] = newPassword;
 
-      alert(`✅ Mật khẩu mới (6 số) cho ${this.selectedUser.email}: ${newPassword}`);
+      appAlert(`✅ Mật khẩu mới (6 số) cho ${this.selectedUser.email}: ${newPassword}`);
 
       this.isResettingPassword = false;
       this.changePasswordValue = '';
@@ -1533,7 +1697,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const msg = (anyErr?.message as string) || '';
       const details = anyErr?.details ? String(anyErr.details) : '';
       const suffix = [msg, details].filter(Boolean).join(' | ');
-      alert('❌ Có lỗi xảy ra khi đổi password: ' + (code ? `${code} - ` : '') + (suffix || '(không có message chi tiết)'));
+      appAlert('❌ Có lỗi xảy ra khi đổi password: ' + (code ? `${code} - ` : '') + (suffix || '(không có message chi tiết)'));
     } finally {
       this.isResettingPassword = false;
     }
@@ -1565,7 +1729,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Lỗi khi so sánh mã nhân viên:', error);
-      alert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
+      appAlert('❌ Có lỗi xảy ra khi so sánh mã nhân viên!');
     } finally {
       this.isComparingEmployees = false;
     }
@@ -1586,7 +1750,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
    */
   async cleanupSelectedEmployees(): Promise<void> {
     if (this.selectedRedundantEmployees.length === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất một mã nhân viên để xóa!');
+      appAlert('⚠️ Vui lòng chọn ít nhất một mã nhân viên để xóa!');
       return;
     }
 
@@ -1602,7 +1766,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       const result = await this.employeeCleanupService.cleanupRedundantEmployees(this.selectedRedundantEmployees);
       
-      alert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
+      appAlert(`✅ Đã xóa thành công ${result.success} mã nhân viên!\n` +
             `❌ Lỗi: ${result.errors}\n\n` +
             `Chi tiết:\n${result.details.join('\n')}`);
       
@@ -1612,7 +1776,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Lỗi khi xóa mã nhân viên:', error);
-      alert('❌ Có lỗi xảy ra khi xóa mã nhân viên!');
+      appAlert('❌ Có lỗi xảy ra khi xóa mã nhân viên!');
     } finally {
       this.isCleaningUp = false;
     }
@@ -1623,7 +1787,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
    */
   async cleanupAllRedundantEmployees(): Promise<void> {
     if (!this.employeeComparisonResult || this.employeeComparisonResult.redundantEmployees.length === 0) {
-      alert('⚠️ Không có mã nhân viên dư thừa để xóa!');
+      appAlert('⚠️ Không có mã nhân viên dư thừa để xóa!');
       return;
     }
 

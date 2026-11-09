@@ -1,9 +1,9 @@
 :host {
   --sg-bg: #f8fafc;
-  --sg-surface: #ffffff;
+  --sg-surface: #FFFFFF;
   --sg-text: rgba(15, 23, 42, 0.92);
   --sg-muted: rgba(15, 23, 42, 0.55);
-  --sg-border: rgba(15, 23, 42, 0.10);
+  --sg-border: #6B6B66;
   --sg-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
   --sg-primary: #1e40af;
   --sg-primary-hover: #1d3ba3;
@@ -764,7 +764,7 @@
 
   tbody td {
     padding: 14px 16px;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+    border-bottom: 1px solid #8F8F89;
     vertical-align: middle;
     color: var(--sg-text);
   }
@@ -826,8 +826,8 @@
 }
 
 .avatar-tone--4 {
-  background: rgba(139, 92, 246, 0.22);
-  color: #6d28d9;
+  background: rgba(52, 120, 246, 0.22);
+  color: #2057B5;
 }
 
 .avatar-tone--5 {
@@ -1980,8 +1980,8 @@
   }
 
   &--purple {
-    background: rgba(147, 51, 234, 0.14);
-    color: #7c3aed;
+    background: rgba(52, 120, 246, 0.14);
+    color: #3478F6;
   }
 }
 
@@ -2065,8 +2065,8 @@
 
     &:focus {
       outline: none;
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+      border-color: #3478F6;
+      box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
     }
 
     &:disabled {
@@ -2082,7 +2082,7 @@
   justify-content: center;
   gap: 6px;
   padding: 10px 18px;
-  background: #7c3aed;
+  background: #3478F6;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -2099,7 +2099,7 @@
   }
 
   &:hover:not(:disabled) {
-    background: #6d28d9;
+    background: #2057B5;
     transform: translateY(-1px);
   }
 
@@ -2191,6 +2191,15 @@
       background: var(--sg-bg);
     }
   }
+}
+
+.import-employees-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--sg-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .btn-register-green {
@@ -2459,4 +2468,108 @@
   .users-data-table {
     min-width: 720px;
   }
+}
+
+/* ═══════════ Giao diện kiểu Excel (05/11/2026) — đồng bộ với Danh mục NVL & TP ═══════════ */
+:host {
+  display: block;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+
+  .settings-container, .dashboard, .settings-dashboard { background: #fff !important; padding: 8px 12px !important; }
+
+  /* Bỏ trang trí: bóng, gradient, icon tròn, avatar */
+  * { box-shadow: none !important; text-shadow: none !important; }
+  .settings-topbar__icon-wrap, .register-card__icon-wrap, .stat-card__icon, .user-avatar-disc, .col-avatar { display: none !important; }
+
+  /* Thanh đầu trang */
+  .settings-topbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 0 0 8px !important; margin: 0 0 8px !important; border: none !important; border-bottom: 1px solid #d0d0d0 !important;
+    border-radius: 0 !important; background: #fff !important;
+  }
+  .settings-topbar__title { font-size: 18px !important; font-weight: 700 !important; margin: 0 !important; color: #111 !important; }
+  .settings-topbar__subtitle { font-size: 12px !important; color: #555 !important; margin: 2px 0 0 !important; }
+
+  /* Nút: chữ nhật bo nhẹ, cao 36px, viền xám */
+  button, .btn-outline, .btn-primary-menu, .btn-register-green, .btn-reset-purple, .btn-delete-outline, .btn-outline-danger,
+  .btn-users-refresh-outline, .btn-icon-square, .btn-page-nav, .btn-tool-row {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    min-height: 36px; height: 36px; padding: 0 12px; box-sizing: border-box;
+    border: 1px solid #b7b7b7 !important; border-radius: 4px !important;
+    background: #fff !important; color: #111 !important; font-size: 13px !important; font-weight: 600 !important;
+    background-image: none !important; cursor: pointer;
+    .material-icons { font-size: 18px !important; color: inherit !important; }
+    &:hover:not(:disabled) { background: #f2f2f2 !important; }
+    &:disabled { opacity: .5; cursor: default; }
+  }
+  .btn-primary-menu, .btn-register-green { background: #e8f0fe !important; border-color: #7a9cc6 !important; }
+  .btn-delete-outline, .btn-outline-danger, .btn-logout-outline { color: #b42318 !important; border-color: #e0a3a3 !important; }
+  .btn-icon-square { width: 36px; padding: 0; }
+  .btn-icon-square--active { background: #e3e3e3 !important; border-color: #7a7a7a !important; }
+
+  /* Ô nhập */
+  input[type=text], input[type=email], input[type=search], input[type=password], input[type=number], select, textarea {
+    height: 32px; box-sizing: border-box; border: 1px solid #b7b7b7 !important; border-radius: 3px !important;
+    background: #fff !important; padding: 0 8px; font-size: 13px; color: #111;
+  }
+  textarea { height: auto; padding: 6px 8px; }
+  input[type=file] { height: auto; border: none !important; }
+
+  /* Thẻ thống kê → ô số gọn */
+  .settings-stat-row { display: flex !important; flex-wrap: wrap; gap: 8px !important; margin: 0 0 8px !important; }
+  .stat-card {
+    flex: 0 1 auto !important; min-width: 0 !important; padding: 6px 10px !important; border: 1px solid #d0d0d0 !important;
+    border-radius: 4px !important; background: #fff !important;
+  }
+  .stat-card__value { font-size: 18px !important; font-weight: 700 !important; color: #111 !important; }
+  .stat-card__label { font-size: 12px !important; color: #333 !important; }
+  .stat-card__hint { display: none !important; }
+  .stat-card--reset { flex: 1 1 360px !important; }
+  .stat-card__reset-title { font-weight: 700 !important; font-size: 13px !important; color: #111 !important; }
+  .stat-card__reset-hint { font-size: 12px !important; color: #555 !important; margin: 4px 0 !important; }
+  .stat-card__reset-row { display: flex; gap: 6px; }
+
+  /* Khối Đăng ký / Import tài khoản → khung kẻ ô */
+  .register-card, .cleanup-section, .settings-tools-panel, .notifications, .users-section, .users-section--modern {
+    border: 1px solid #d0d0d0 !important; border-radius: 0 !important; background: #fff !important;
+    padding: 8px 10px !important; margin: 0 0 8px !important;
+  }
+  .register-card__head { display: block !important; margin-bottom: 6px !important; }
+  .register-card__title, .users-table-toolbar__title, .section-header h3, .notifications-header h3 {
+    font-size: 14px !important; font-weight: 700 !important; margin: 0 0 4px !important; color: #111 !important;
+  }
+  .register-card__desc { font-size: 12px !important; color: #555 !important; margin: 0 !important; line-height: 1.5; }
+  .register-card__form { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px !important; }
+
+  /* Bảng người dùng / bảng dọn dẹp: kiểu Excel */
+  table, .users-data-table, .cleanup-table {
+    width: 100%; border-collapse: collapse !important; border-spacing: 0 !important; background: #fff;
+    th, td { border: 1px solid #d0d0d0 !important; padding: 3px 6px !important; height: 26px; font-size: 13px !important;
+      text-align: left; vertical-align: middle; background: #fff; }
+    th { position: sticky; top: 0; z-index: 1; background: #f2f2f2 !important; font-weight: 700 !important; color: #111 !important;
+      font-size: 12px !important; text-transform: none !important; letter-spacing: 0 !important; border-color: #b7b7b7 !important; }
+    tbody tr:hover > td { background: #f7f9fc !important; }
+  }
+  .users-table-wrap { border: 1px solid #b7b7b7 !important; border-radius: 0 !important; overflow: auto; }
+  .users-table-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 0 0 6px !important; border: none !important; }
+  .users-search-wrap { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 8px; border: 1px solid #b7b7b7;
+    border-radius: 4px; background: #fff;
+    input { border: none !important; height: 30px; min-width: 240px; }
+    .material-icons { color: #555; font-size: 18px; } }
+  .users-table-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0 0 !important;
+    border: none !important; font-size: 12px; }
+
+  /* Chip / badge: chữ thường, ít màu */
+  .filter-chip { height: 28px; padding: 0 10px; border: 1px solid #b7b7b7 !important; border-radius: 3px !important;
+    background: #fff !important; color: #111 !important; font-weight: 500 !important; }
+  .user-status__dot { width: 8px !important; height: 8px !important; }
+
+  /* Cấp quyền tab */
+  .tab-category { border: 1px solid #d0d0d0 !important; border-radius: 0 !important; background: #fff !important; margin-bottom: 6px !important; }
+  .tab-category__header { background: #f2f2f2 !important; padding: 4px 8px !important; font-weight: 700 !important; border-bottom: 1px solid #d0d0d0; }
+  .tab-permission-item { border: none !important; border-bottom: 1px solid #eee !important; border-radius: 0 !important;
+    padding: 4px 8px !important; background: #fff !important; }
 }

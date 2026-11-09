@@ -1,0 +1,827 @@
+<div class="aging-report-page">
+  <div class="top-fixed-area">
+    <!-- ── TOOLBAR (cùng kiểu SXXK 2026) ── -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="page-title"><i class="material-icons">hourglass_bottom</i> {{ L.title }}</span>
+
+        <select class="sel" [ngModel]="factoryView" (ngModelChange)="setFactoryView($any($event))" name="factoryView" title="Nhà máy">
+          <option value="ALL">Tổng</option>
+          <option *ngFor="let f of factories" [value]="f">{{ factoryLabel[f] }}</option>
+        </select>
+
+        <ng-container *ngFor="let f of factories">
+          <ng-container *ngIf="!isLoading && (factoryView === 'ALL' || factoryView === f)">
+            <select
+              *ngIf="meta[f]?.reports?.length; else noReport"
+              class="sel"
+              [ngModel]="selectedReportId[f]"
+              (ngModelChange)="onReportChange(f, $event)"
+              [name]="'report' + f"
+              [title]="factoryLabel[f] + ' – Aging ngày'"
+            >
+              <option *ngFor="let r of meta[f]?.reports" [value]="r.id">{{ factoryLabel[f] }} · Aging {{ fmtDate(r.to) }}</option>
+            </select>
+            <ng-template #noReport><span class="row-count">{{ factoryLabel[f] }}: chưa import</span></ng-template>
+          </ng-container>
+        </ng-container>
+
+        <input
+          *ngIf="viewMode !== 'summary'"
+          type="text"
+          class="search-input"
+          [placeholder]="'🔍 Tìm ' + L.sku + ', ' + L.lotWord + ', kho…'"
+          [(ngModel)]="searchText"
+          (ngModelChange)="onSearchChange()"
+          name="agingSearch"
+          autocomplete="off"
+        />
+
+        <ng-container *ngIf="viewMode === 'gen'">
+          <label class="opt-item" title="Trống = ngày cuối bảng kê đã import của từng nhà máy">
+            Tính đến
+            <input type="date" class="sel" [(ngModel)]="genEnd" (change)="onGenOptionChange()" name="genEnd" />
+          </label>
+          <label class="opt-item" title="Tồn đầu lấy từ báo cáo Aging gần nhất (≤ ngày tính), cộng phiếu nhập − xuất sau ngày đó">
+            <input type="checkbox" [(ngModel)]="genUseBase" (ngModelChange)="onGenOptionChange()" name="genUseBase" />
+            Tồn đầu từ Aging gốc
+          </label>
+          <label class="opt-item" *ngIf="mode !== 'nvl'" title="Bật: tồn đầu lấy đủ file Aging, gồm mã bắt đầu bằng A · Tắt: không tính mã A">
+            <input type="checkbox" [(ngModel)]="genIncludeA" (ngModelChange)="onGenOptionChange()" name="genIncludeA" />
+            Gồm mã A
+          </label>
+          <label class="opt-item" title="Hiện cả lot đã xuất hết (tồn cuối 0) để cột Tồn đầu đủ như file Aging — không tính vào giá trị">
+            <input type="checkbox" [(ngModel)]="genShowZero" (ngModelChange)="applyGenFilters()" name="genShowZero" />
+            Hiện lot đã xuất hết
+          </label>
+        </ng-container>
+
+        <label class="opt-item" *ngIf="viewMode !== 'gen'" title="Bỏ tick: không tính các lỗi về tiền (Sai giá trị, Giá trị = 0)">
+          <input type="checkbox" [(ngModel)]="moneyIssues" (ngModelChange)="onMoneyIssuesChange()" name="moneyIssues" />
+          Lỗi tiền
+        </label>
+
+        <label class="opt-item" *ngIf="viewMode === 'summary' || viewMode === 'gen'">
+          Tỷ giá USD
+          <input type="number" class="rate-input" [(ngModel)]="usdRate" (ngModelChange)="onRateChange()" name="usdRate" min="1" />
+        </label>
+      </div>
+
+      <div class="toolbar-right">
+        <span class="saved-msg" *ngIf="isSaving || isGenSaving">Đang lưu…</span>
+        <button type="button" class="btn" (click)="openImportDialog()" title="Import bảng kê nhập / xuất, Aging, BC tồn kho">
+          <i class="material-icons">upload_file</i> Import
+        </button>
+        <button type="button" class="btn" *ngIf="viewMode === 'gen'" (click)="saveGenAsBase()" [disabled]="isGenSaving || !genFactories.length"
+                title="Lưu bản Aging tự tính (tới ngày đang tính) làm Aging gốc — tuần sau import bảng kê mới sẽ tính tiếp từ bản này">
+          <i class="material-icons">lock_clock</i> Chốt Aging
+        </button>
+        <button type="button" class="btn" (click)="exportExcel()" title="Tải Excel tab đang xem">
+          <i class="material-icons">download</i> Excel
+        </button>
+        <div class="tb-more">
+          <button type="button" class="btn" (click)="moreOpen = !moreOpen" title="Thêm">
+            <i class="material-icons">more_vert</i> More
+          </button>
+          <div class="tb-more__list" *ngIf="moreOpen" (click)="moreOpen = false">
+            <button type="button" (click)="loadAll()" [disabled]="isLoading"><i class="material-icons">refresh</i> Tải lại</button>
+            <button type="button" (click)="exportCorrected()"><i class="material-icons">task</i> Aging đã hiệu chỉnh (mẫu ERP)</button>
+            <button type="button" (click)="openHistory()"><i class="material-icons">history</i> Lịch sử import</button>
+          </div>
+        </div>
+        <button type="button" class="btn" (click)="goToMenu()" title="Về Menu">
+          <i class="material-icons">home</i> Menu
+        </button>
+      </div>
+    </div>
+
+    <!-- ── TABS ── -->
+    <div class="tab-bar">
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'gen'" (click)="setViewMode('gen')"
+              title="Tự tính tuổi hàng từ bảng kê nhập / xuất đã import (import mỗi tuần)">
+        <i class="material-icons">auto_graph</i><span>Aging tự tính</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'fix'" (click)="setViewMode('fix')">
+        <i class="material-icons">build</i><span>Cần sửa</span>
+        <span class="tab-count" *ngIf="fixCounts.todo">{{ fixCounts.todo }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'sku'" (click)="setViewMode('sku')">
+        <i class="material-icons">inventory_2</i><span>Theo {{ L.sku }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'lot'" (click)="setViewMode('lot')">
+        <i class="material-icons">view_list</i><span>Theo {{ L.lotWord }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="viewMode === 'summary'" (click)="setViewMode('summary')">
+        <i class="material-icons">summarize</i><span>Tổng hợp</span>
+      </button>
+    </div>
+
+    <!-- ── Lọc + nguồn dữ liệu ── -->
+    <div class="hint-bar">
+      <div class="chips" *ngIf="viewMode === 'fix'">
+        <button type="button" class="chip" [class.active]="fixFilter === 'todo'" (click)="setFixFilter('todo')">Chưa sửa ({{ fixCounts.todo }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'done'" (click)="setFixFilter('done')">Đã sửa ({{ fixCounts.done }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'ignored'" (click)="setFixFilter('ignored')">Bỏ qua ({{ fixCounts.ignored }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'note'" (click)="setFixFilter('note')"
+                title="Mã có phiếu sau ngày cuối bảng kê — chưa kiểm được tồn {{ L.lotWord }}">Lưu ý ({{ fixCounts.note }})</button>
+        <button type="button" class="chip" [class.active]="fixFilter === 'all'" (click)="setFixFilter('all')">Tất cả ({{ fixCounts.all }})</button>
+      </div>
+      <div class="chips" *ngIf="viewMode === 'lot' || viewMode === 'sku'">
+        <button type="button" class="chip" [class.active]="levelFilter === 'error'" (click)="setLevelFilter('error')">Sai ({{ levelCounts.error }})</button>
+        <button type="button" class="chip" [class.active]="levelFilter === 'ok'" (click)="setLevelFilter('ok')">Khớp ({{ levelCounts.ok }})</button>
+        <button *ngIf="viewMode === 'lot'" type="button" class="chip" [class.active]="levelFilter === 'info'" (click)="setLevelFilter('info')">{{ L.lotCap }} trước kỳ ({{ levelCounts.info }})</button>
+        <button *ngIf="viewMode === 'lot'" type="button" class="chip" [class.active]="levelFilter === 'scope'" (click)="setLevelFilter('scope')">Kho ngoài bảng kê ({{ levelCounts.scope }})</button>
+        <button type="button" class="chip" [class.active]="levelFilter === 'all'" (click)="setLevelFilter('all')">Tất cả ({{ levelCounts.all }})</button>
+      </div>
+      <div class="chips" *ngIf="viewMode === 'gen'">
+        <button type="button" class="chip" [class.active]="!genBucketFilter" (click)="setGenBucket('')">Tất cả</button>
+        <button *ngFor="let l of genBucketLines" type="button" class="chip" [class.active]="genBucketFilter === l.label"
+                (click)="setGenBucket(l.label)">{{ l.label }}</button>
+      </div>
+      <span class="hint-formula" [title]="statusLineText">{{ statusLineText }}</span>
+    </div>
+  </div>
+
+  <div class="loading" *ngIf="isLoading"><div class="spinner"></div> Đang tải dữ liệu Aging Report…</div>
+  <div class="error-banner" *ngIf="loadError">{{ loadError }}</div>
+  <div class="action-message" *ngIf="actionMessage && !isLoading">
+    {{ actionMessage }}
+    <button type="button" class="icon-btn" (click)="actionMessage = ''" title="Đóng"><i class="material-icons">close</i></button>
+  </div>
+
+  <!-- ─── Aging tự tính từ bảng kê ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'gen'">
+    <p class="empty" *ngIf="!genFactories.length && !isGenLoading">
+      Chưa có bảng kê. Mỗi tuần bấm <strong>Import</strong>, chọn bảng kê nhập và bảng kê xuất của từng nhà máy —
+      hệ thống tự tính tuổi hàng. (Có báo cáo Aging cũ thì import 1 lần để làm tồn đầu.)
+    </p>
+    <p class="empty" *ngIf="isGenLoading">Đang tính Aging…</p>
+
+    <!-- Tab nhà máy + KPI lot âm -->
+    <div class="gen-tabs">
+      <button type="button" *ngFor="let f of factories" class="gen-tab" [class.gen-tab--on]="genFactoryTab === f"
+              (click)="setGenFactoryTab(f)" [disabled]="!genResults[f]">
+        {{ factoryLabel[f] }}
+        <small *ngIf="genResults[f]">tới {{ fmtDate(genResults[f]!.end) }}</small>
+      </button>
+      <span class="gen-tabs__grow"></span>
+      <button type="button" class="gen-kpi" *ngIf="genResults[genFactoryTab] as g"
+              [class.gen-kpi--bad]="g.negatives.length" [class.gen-kpi--on]="genNegOnly" (click)="toggleGenNegOnly()"
+              title="Bấm để chỉ xem lot âm — bấm vào 1 lot để xem vì sao âm">
+        <span class="gen-kpi__label">{{ L.lotCap }} âm</span>
+        <b class="gen-kpi__num">{{ g.negatives.length | number }}</b>
+        <span class="gen-kpi__sub">tổng {{ genNegQty(genFactoryTab) | number : '1.0-3' }}</span>
+      </button>
+      <span class="gen-kpi gen-kpi--info" *ngIf="genResults[genFactoryTab] as g">
+        <span class="gen-kpi__label">{{ L.lotCap }} tồn</span>
+        <b class="gen-kpi__num">{{ g.rows.length | number }}</b>
+        <span class="gen-kpi__sub">{{ (genTotal.total || 0) | number : '1.0-0' }} VND</span>
+      </span>
+    </div>
+
+    <!-- Ô tóm tắt nhà máy đã bỏ theo yêu cầu (06/11/2026) -->
+
+    <table class="aging-table" *ngIf="genFactories.length">
+      <thead>
+        <tr>
+          <th>Type of Aging</th>
+          <th *ngFor="let f of genFactories" class="num-cell">{{ factoryLabel[f] }} (VND)</th>
+          <th class="num-cell">Tổng (VND)</th>
+          <th class="num-cell">Tổng (USD)</th>
+          <th class="num-cell">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of genBucketLines">
+          <td class="material-code-cell">{{ l.label }}</td>
+          <td *ngFor="let f of genFactories" class="num-cell">{{ (l.values[f] || 0) | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ l.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? l.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">{{ l.percent | number : '1.2-2' }}%</td>
+        </tr>
+        <tr class="total-row">
+          <td>Grand Total</td>
+          <td *ngFor="let f of genFactories" class="num-cell">{{ (genTotal.values[f] || 0) | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ genTotal.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? genTotal.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">100%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="aging-table" *ngIf="genFactories.length">
+      <thead>
+        <tr>
+          <th>Nhà máy</th><th>{{ L.sku }}</th><th>Tên</th><th>{{ L.lot }}</th><th>Kho</th><th>Inbound Date</th>
+          <th class="num-cell">Tháng</th><th>Type of Aging</th>
+          <th class="num-cell" title="Tồn đầu theo Aging gốc">Tồn đầu</th><th class="num-cell" title="Tổng phiếu nhập trong kỳ">Nhập</th>
+          <th class="num-cell" title="Tổng phiếu xuất trong kỳ">Xuất</th><th class="num-cell" title="Tồn cuối = Tồn đầu + Nhập − Xuất">Số lượng</th><th class="num-cell">Đơn giá</th>
+          <th class="num-cell">Giá trị</th><th>Nguồn</th>
+        </tr>
+        <tr class="gen-filter-row">
+          <th>
+            <button type="button" class="gen-neg-btn" [class.gen-neg-btn--on]="genNegOnly" (click)="toggleGenNegOnly()"
+                    title="Chỉ hiện mã / lot âm — bấm 1 dòng để xem lý do và sửa phiếu">{{ genNegOnly ? '✓ ' : '' }}Chỉ mã âm</button>
+          </th>
+          <th><input [(ngModel)]="genColFilter['sku']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfSku"></th>
+          <th><input [(ngModel)]="genColFilter['name']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfName"></th>
+          <th><input [(ngModel)]="genColFilter['lot']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfLot"></th>
+          <th><input [(ngModel)]="genColFilter['wh']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfWh"></th>
+          <th><input [(ngModel)]="genColFilter['inb']" (ngModelChange)="onGenColFilter()" placeholder="dd/mm/yyyy" name="gfInb"></th>
+          <th><input [(ngModel)]="genColFilter['months']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfMonths"></th>
+          <th><input [(ngModel)]="genColFilter['type']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfType"></th>
+          <th></th><th></th><th></th>
+          <th><input [(ngModel)]="genColFilter['qty']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfQty"></th>
+          <th></th>
+          <th><button type="button" class="gen-neg-btn" *ngIf="genHasColFilter" (click)="clearGenColFilter()">Xóa lọc</button></th>
+          <th><input [(ngModel)]="genColFilter['src']" (ngModelChange)="onGenColFilter()" placeholder="Lọc…" name="gfSrc"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of genRowsFiltered | slice : 0 : visibleCount; trackBy: trackById"
+            class="gen-row" [class.negative-row]="r.qty < 0" [class.gen-row--zero]="r.qty === 0" (click)="openGenTrace(r)" title="Bấm để xem diễn biến tồn của lot">
+          <td>{{ factoryLabel[r.factory] }}</td>
+          <td class="material-code-cell">{{ r.sku }}</td>
+          <td>{{ r.name }}</td>
+          <td>{{ r.lot }}</td>
+          <td>{{ r.wh }}</td>
+          <td>{{ fmtDate(r.inb) }}</td>
+          <td class="num-cell">{{ r.months ?? '' }}</td>
+          <td>{{ r.type }}</td>
+          <td class="num-cell">{{ r.baseQty ? (r.baseQty | number : '1.0-3') : '' }}</td>
+          <td class="num-cell">{{ r.inQty ? (r.inQty | number : '1.0-3') : '' }}</td>
+          <td class="num-cell">{{ r.outQty ? (r.outQty | number : '1.0-3') : '' }}</td>
+          <td class="num-cell"><b>{{ r.qty | number : '1.0-3' }}</b></td>
+          <td class="num-cell">{{ r.price | number : '1.0-4' }}</td>
+          <td class="num-cell">{{ r.value | number : '1.0-0' }}</td>
+          <td>{{ r.src === 'base' ? 'Tồn đầu' : 'Bảng kê' }}</td>
+        </tr>
+        <tr *ngIf="!genRowsFiltered.length"><td colspan="15" class="empty">Không có dòng.</td></tr>
+        <tr class="total-row" *ngIf="genRowsFiltered.length">
+          <td colspan="8">Tổng {{ genRowsFiltered.length | number }} dòng đang lọc</td>
+          <td class="num-cell">{{ genSums.base | number : '1.0-3' }}</td>
+          <td class="num-cell">{{ genSums.inQ | number : '1.0-3' }}</td>
+          <td class="num-cell">{{ genSums.outQ | number : '1.0-3' }}</td>
+          <td class="num-cell">{{ genSums.qty | number : '1.0-3' }}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tbody>
+    </table>
+    <button type="button" class="btn btn-read" *ngIf="genRowsFiltered.length > visibleCount" (click)="showMore()">
+      Xem thêm ({{ genRowsFiltered.length - visibleCount }})
+    </button>
+
+
+    <!-- Diễn biến tồn của lot (vì sao âm) -->
+    <div class="gen-trace-overlay" *ngIf="genTraceRow as t" (click)="genTraceRow = null">
+      <div class="gen-trace" (click)="$event.stopPropagation()">
+        <div class="gen-trace__head">
+          <b>{{ t.sku }} · {{ L.lot }} {{ t.lot || '(trống)' }} · Kho {{ t.wh || '—' }}</b>
+          <span [class.gen-trace__neg]="t.qty < 0">Tồn: {{ t.qty | number : '1.0-3' }}</span>
+          <button type="button" class="btn" (click)="genTraceRow = null"><i class="material-icons">close</i> Đóng</button>
+        </div>
+        <p class="gen-trace__why">{{ genTraceReason(t) }}</p>
+        <table class="aging-table">
+          <thead><tr><th>Ngày</th><th>Loại</th><th>Chứng từ / LSX</th><th>{{ L.lot }} / Kho trên phiếu</th><th class="num-cell">Lượng</th><th class="num-cell">Tồn sau</th><th></th></tr></thead>
+          <tbody>
+            <ng-container *ngFor="let x of t.trace">
+              <tr [class.negative-row]="x.bal < 0">
+                <td>{{ fmtDate(x.d) }}</td><td>{{ x.kind }}</td><td>{{ x.doc || '—' }}</td>
+                <td>{{ x.ref ? ((x.ref.lot || '(trống)') + ' / ' + (x.ref.wh || '—')) : '—' }}</td>
+                <td class="num-cell">{{ x.q > 0 ? '+' : '' }}{{ x.q | number : '1.0-3' }}</td>
+                <td class="num-cell">{{ x.bal | number : '1.0-3' }}</td>
+                <td><button type="button" class="gen-neg-btn" *ngIf="x.ref" (click)="startGenEdit(x)" title="Sửa phiếu này trong bảng kê">Sửa phiếu</button></td>
+              </tr>
+              <tr *ngIf="genEdit && genEdit.step === x" class="gen-edit-row">
+                <td colspan="7">
+                  <div class="gen-edit">
+                    <label>{{ L.lot }} <input [(ngModel)]="genEdit.lot" name="geLot"></label>
+                    <label>Kho <input [(ngModel)]="genEdit.wh" name="geWh"></label>
+                    <label>Lượng <input type="number" min="0" step="any" [(ngModel)]="genEdit.q" name="geQ"></label>
+                    <button type="button" class="gen-neg-btn" (click)="genEdit = null" [disabled]="genEdit.busy">Hủy</button>
+                    <button type="button" class="gen-neg-btn gen-neg-btn--on" (click)="saveGenEdit()" [disabled]="genEdit.busy">{{ genEdit.busy ? 'Đang lưu…' : 'Lưu & tính lại' }}</button>
+                    <span class="gen-edit__err" *ngIf="genEdit.err">{{ genEdit.err }}</span>
+                  </div>
+                  <small class="gen-edit__hint">Sửa thẳng phiếu trong bảng kê đã import (giữ lại giá trị cũ). Import lại bảng kê cùng kỳ sẽ ghi đè phần sửa.</small>
+                </td>
+              </tr>
+            </ng-container>
+            <tr *ngIf="!t.trace?.length"><td colspan="7" class="empty">Không có phiếu nào.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── Cần sửa: mỗi dòng là 1 lot sai — sai gì, sai ở đâu, đề xuất, thao tác ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'fix'">
+    <table class="aging-table fix-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th *ngIf="factoryView === 'ALL'">Nhà máy</th>
+          <th>{{ L.sku }}</th>
+          <th>{{ L.lot }}</th>
+          <th>Kho</th>
+          <th>Sai ở đâu</th>
+          <th>Đề xuất sửa</th>
+          <th>Trạng thái</th>
+          <th>Thao tác</th>
+        </tr>
+        <tr class="col-filter-row">
+          <th class="col-stt">
+            <button *ngIf="hasColFilter" type="button" class="icon-btn" (click)="clearColFilters()" title="Xóa các ô tìm kiếm cột">
+              <i class="material-icons">close</i>
+            </button>
+          </th>
+          <th *ngIf="factoryView === 'ALL'">
+            <input type="text" class="col-filter-input" [(ngModel)]="fixColFilter['factory']" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th *ngFor="let k of fixFilterKeys">
+            <input type="text" class="col-filter-input" [(ngModel)]="fixColFilter[k]" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of filteredFixRows | slice : 0 : visibleCount; let i = index; trackBy: trackById"
+            [class.negative-row]="r.state === 'todo'">
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td *ngIf="factoryView === 'ALL'">{{ r.lot.factory }}</td>
+          <td class="material-code-cell" [title]="r.lot.name">{{ r.lot.sku }}</td>
+          <td>{{ r.lot.lot || '(không lô)' }}</td>
+          <td>{{ r.lot.wh }}</td>
+          <td class="reason-cell">
+            <div *ngFor="let reason of r.reasons">{{ reason }}</div>
+            <div *ngIf="r.lot.orig" class="orig-note">
+              Gốc: lô {{ r.lot.orig.lot || '(trống)' }} · nhập {{ fmtDate(r.lot.orig.inb) }} · tồn {{ r.lot.orig.qty | number : '1.0-3' }} · giá {{ r.lot.orig.price | number : '1.0-2' }}
+            </div>
+            <div *ngIf="r.lot.fix === 'edited' || r.lot.fix === 'added'" class="fixed-note">
+              {{ r.lot.fix === 'added' ? 'Đã thêm' : 'Đã sửa thành' }}: lô {{ r.lot.lot || '(trống)' }} · nhập {{ fmtDate(r.lot.agingInb) }}
+              · tồn {{ r.lot.agingQty | number : '1.0-3' }} · giá {{ r.lot.price | number : '1.0-2' }} · {{ r.lot.agingMonths }} tháng
+            </div>
+            <div *ngIf="r.lot.fixNote" class="orig-note">Ghi chú: {{ r.lot.fixNote }}</div>
+          </td>
+          <td class="reason-cell suggest-cell" [class.suggest-manual]="!r.suggestion">{{ r.suggestText }}</td>
+          <td><span class="compare-badge" [ngClass]="'fix-' + r.state">{{ r.colText['status'] }}</span></td>
+          <td class="action-cell">
+            <button *ngIf="r.suggestion" type="button" class="act-btn act-primary" [disabled]="isSaving" (click)="applySuggestion(r)" title="Sửa theo bảng kê">
+              Áp dụng
+            </button>
+            <button *ngIf="r.state !== 'note'" type="button" class="act-btn" [disabled]="isSaving" (click)="openEdit(r.lot)">Sửa tay</button>
+            <button *ngIf="r.state === 'todo'" type="button" class="act-btn" [disabled]="isSaving" (click)="ignoreRow(r.lot)" title="Không sửa, đánh dấu đã xem">Bỏ qua</button>
+            <button *ngIf="r.lot.fix !== 'none'" type="button" class="act-btn" [disabled]="isSaving" (click)="revertRow(r.lot)" title="Về số liệu gốc của file">Hoàn tác</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredFixRows.length && !loadError">
+      {{ fixFilter === 'todo' ? 'Không còn lot nào cần sửa.' : 'Không có dòng nào.' }}
+    </p>
+    <button *ngIf="filteredFixRows.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
+      Xem thêm ({{ visibleCount }}/{{ filteredFixRows.length }})
+    </button>
+  </div>
+
+  <!-- ─── Tổng hợp ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'summary'">
+    <p class="empty" *ngIf="!factoryCards.length">
+      Chưa có báo cáo tuổi hàng. Bấm <strong>Import</strong> và chọn cùng lúc bảng kê nhập{{ mode === 'nvl' ? '' : ' (TP…)' }}, bảng kê xuất{{ mode === 'nvl' ? '' : ' (XP…)' }},
+      báo cáo tuổi hàng và báo cáo tồn kho của từng nhà máy.
+    </p>
+
+    <div class="fac-cards" *ngIf="factoryCards.length">
+      <div class="fac-card" *ngFor="let c of factoryCards">
+        <div class="fac-card-title">{{ factoryLabel[c.factory] }}</div>
+        <div class="fac-card-line">Aging ngày <strong>{{ fmtDate(c.reportTo) }}</strong></div>
+        <div class="fac-card-line">Bảng kê <strong>{{ c.ledgerRange }}</strong></div>
+        <div class="fac-card-line">BC tồn kho <strong>{{ c.inventoryTo ? fmtDate(c.inventoryTo) : 'chưa có' }}</strong></div>
+        <div class="fac-card-line">Số {{ L.lotWord }} <strong>{{ c.lots | number }}</strong> · Tồn <strong>{{ c.qty | number : '1.0-0' }}</strong></div>
+        <div class="fac-card-line">Giá trị <strong>{{ c.value | number : '1.0-0' }}</strong> VND</div>
+        <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.lotErrors">{{ L.lotCap }} sai: <strong>{{ c.lotErrors }}</strong></div>
+        <div class="fac-card-line fac-card-alert" [class.fac-card-ok]="!c.skuErrors">{{ L.sku }} sai: <strong>{{ c.skuErrors }}</strong></div>
+        <div class="fac-card-line" *ngIf="c.fixed || c.ignored">Đã sửa <strong>{{ c.fixed }}</strong> · Bỏ qua <strong>{{ c.ignored }}</strong></div>
+        <div class="fac-card-line fac-card-warn" *ngIf="c.gapNote">{{ c.gapNote }}</div>
+      </div>
+    </div>
+
+    <table class="aging-table" *ngIf="factoryCards.length">
+      <thead>
+        <tr>
+          <th>Type of Aging</th>
+          <th *ngFor="let c of factoryCards" class="num-cell">{{ factoryLabel[c.factory] }} (VND)</th>
+          <th class="num-cell">Tổng (VND)</th>
+          <th class="num-cell">Tổng (USD)</th>
+          <th class="num-cell">%</th>
+          <th class="num-cell" title="Nhóm tuổi tính lại từ Inbound Date và ngày cuối kỳ">Tính lại (VND)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of bucketLines" [class.negative-row]="l.total !== l.calcTotal">
+          <td class="material-code-cell">{{ l.label }}</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ l.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ l.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? l.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">{{ l.percent | number : '1.2-2' }}%</td>
+          <td class="num-cell">{{ l.calcTotal | number : '1.0-0' }}</td>
+        </tr>
+        <tr class="total-row" *ngIf="bucketTotal">
+          <td>Grand Total</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ bucketTotal.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ bucketTotal.total | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ (usdRate ? bucketTotal.total / usdRate : 0) | number : '1.2-2' }}</td>
+          <td class="num-cell">100%</td>
+          <td class="num-cell">{{ bucketTotal.calcTotal | number : '1.0-0' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="aging-table" *ngIf="whLines.length">
+      <thead>
+        <tr>
+          <th>WH</th>
+          <th *ngFor="let c of factoryCards" class="num-cell">{{ factoryLabel[c.factory] }} (VND)</th>
+          <th class="num-cell">Tổng (VND)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let l of whLines">
+          <td class="material-code-cell">{{ l.wh }}</td>
+          <td *ngFor="let c of factoryCards" class="num-cell">{{ l.values[c.factory] | number : '1.0-0' }}</td>
+          <td class="num-cell">{{ l.total | number : '1.0-0' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rule-notes" *ngIf="factoryCards.length">
+      <p class="import-notes-lead">Cách đối chiếu</p>
+      <ul>
+        <li *ngIf="mode !== 'nvl'"><strong>Không tính mã bắt đầu bằng A</strong> (số liệu, giá trị và đối chiếu đều đã bỏ các mã này).</li>
+        <li>Đọc theo <strong>{{ L.sku }} + {{ L.lot }} + Kho</strong>. Tồn bảng kê = Σ nhập − Σ xuất có ngày ≤ ngày cuối kỳ của Aging.</li>
+        <li>Phiếu xuất không ghi lô được trừ <strong>FIFO</strong> vào {{ L.lotWord }} nhập trước của cùng mã + kho.</li>
+        <li>{{ L.lotCap }} có phiếu nhập {{ mode === 'nvl' ? '' : 'TP / PN ' }}trong bảng kê: tồn Aging phải bằng tồn bảng kê, Inbound Date phải bằng ngày phiếu nhập đầu tiên.</li>
+        <li>{{ L.lotCap }} nhập trước kỳ bảng kê: chỉ kiểm tồn Aging ≥ phát sinh (tồn đầu suy ra không âm).</li>
+        <li>Số tháng = (ngày cuối kỳ − Inbound Date) / 30, làm tròn 1 số lẻ; nhóm tuổi theo mốc 4 / 8 / 12 / 24 tháng.</li>
+        <li>Theo {{ L.sku }}: tổng tồn Aging của kho trong bảng kê{{ mode === 'nvl' ? '' : ' (TP, DL)' }} so với Báo cáo tồn kho cùng ngày.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─── Theo lot ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'lot'">
+    <table class="aging-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th *ngIf="factoryView === 'ALL'">Nhà máy</th>
+          <th>{{ L.sku }}</th>
+          <th>{{ L.lot }}</th>
+          <th>Kho</th>
+          <th>Ngày nhập Aging</th>
+          <th>Ngày nhập bảng kê</th>
+          <th class="num-cell">Tháng Aging</th>
+          <th class="num-cell">Tháng tính lại</th>
+          <th class="num-cell">Tồn Aging</th>
+          <th class="num-cell">Tồn bảng kê</th>
+          <th class="num-cell">Chênh lệch</th>
+          <th class="num-cell" title="Nhập / xuất trong kỳ bảng kê">Nhập / Xuất</th>
+          <th class="num-cell">Giá trị</th>
+          <th>Kết quả</th>
+        </tr>
+        <tr class="col-filter-row">
+          <th class="col-stt">
+            <button *ngIf="hasColFilter" type="button" class="icon-btn" (click)="clearColFilters()" title="Xóa các ô tìm kiếm cột">
+              <i class="material-icons">close</i>
+            </button>
+          </th>
+          <th *ngIf="factoryView === 'ALL'">
+            <input type="text" class="col-filter-input" [(ngModel)]="lotColFilter['factory']" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th *ngFor="let k of lotFilterKeys">
+            <input type="text" class="col-filter-input" [(ngModel)]="lotColFilter[k]" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let r of filteredLots | slice : 0 : visibleCount; let i = index; trackBy: trackById"
+          [class.negative-row]="r.level === 'error'"
+        >
+          <td class="col-stt">{{ i + 1 }}</td>
+          <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
+          <td class="material-code-cell" [title]="r.name">{{ r.sku }}</td>
+          <td>{{ r.lot || '(không lô)' }}</td>
+          <td>{{ r.wh }}</td>
+          <td>{{ fmtDate(r.agingInb) }}</td>
+          <td [class.has-difference]="r.agingInb && r.ledgerInb && r.agingInb !== r.ledgerInb">{{ fmtDate(r.ledgerInb) }}</td>
+          <td class="num-cell">{{ r.agingMonths ?? '' }}</td>
+          <td class="num-cell" [class.has-difference]="r.monthsWrong">{{ r.calcMonths ?? '' }}</td>
+          <td class="num-cell">{{ r.inAging ? (r.agingQty | number : '1.0-3') : '' }}</td>
+          <td class="num-cell">{{ r.ledgerQty === null ? '' : (r.ledgerQty | number : '1.0-3') }}</td>
+          <td class="num-cell" [class.has-difference]="r.diffQty">
+            <ng-container *ngIf="r.diffQty !== null">{{ r.diffQty | number : '1.0-3' }}</ng-container>
+            <span class="sub-note" *ngIf="r.openingQty !== null">đầu kỳ {{ r.openingQty | number : '1.0-3' }}</span>
+          </td>
+          <td class="num-cell">
+            <ng-container *ngIf="r.ledgerQty !== null">{{ r.inQty | number : '1.0-0' }} / {{ r.outQty | number : '1.0-0' }}</ng-container>
+          </td>
+          <td class="num-cell">{{ r.value | number : '1.0-0' }}</td>
+          <td>
+            <span class="compare-badge" [ngClass]="'level-' + r.level">{{ r.statusText }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredLots.length && !loadError">Không có dòng nào.</p>
+    <button *ngIf="filteredLots.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
+      Xem thêm ({{ visibleCount }}/{{ filteredLots.length }})
+    </button>
+  </div>
+
+  <!-- ─── Theo mã TP ─── -->
+  <div class="table-container" *ngIf="!isLoading && viewMode === 'sku'">
+    <table class="aging-table">
+      <thead>
+        <tr>
+          <th class="col-stt">#</th>
+          <th *ngIf="factoryView === 'ALL'">Nhà máy</th>
+          <th>{{ L.sku }}</th>
+          <th>Tên</th>
+          <th>Khách hàng</th>
+          <th class="num-cell">Tồn BC tồn kho</th>
+          <th class="num-cell" title="Tổng tồn Aging của các kho có trong bảng kê">Tồn Aging {{ mode === 'nvl' ? '(kho bảng kê)' : '(TP, DL)' }}</th>
+          <th class="num-cell">Chênh lệch</th>
+          <th class="num-cell">Tồn Aging tất cả kho</th>
+          <th class="num-cell">Giá trị Aging</th>
+          <th>Kết quả</th>
+        </tr>
+        <tr class="col-filter-row">
+          <th class="col-stt">
+            <button *ngIf="hasColFilter" type="button" class="icon-btn" (click)="clearColFilters()" title="Xóa các ô tìm kiếm cột">
+              <i class="material-icons">close</i>
+            </button>
+          </th>
+          <th *ngIf="factoryView === 'ALL'">
+            <input type="text" class="col-filter-input" [(ngModel)]="skuColFilter['factory']" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+          <th *ngFor="let k of skuFilterKeys">
+            <input type="text" class="col-filter-input" [(ngModel)]="skuColFilter[k]" (ngModelChange)="onSearchChange()" placeholder="Tìm…" autocomplete="off" />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let r of filteredSkus | slice : 0 : visibleCount; let i = index; trackBy: trackById">
+          <tr
+            class="sku-row"
+            [class.negative-row]="r.level === 'error'"
+            [class.sku-row--open]="expandedSkuId === r.id"
+            (click)="toggleSkuDetail(r)"
+            title="Bấm để xem các {{ L.lotWord }} của mã này"
+          >
+            <td class="col-stt">
+              <i class="material-icons expand-icon">{{ expandedSkuId === r.id ? 'expand_less' : 'expand_more' }}</i>{{ i + 1 }}
+            </td>
+            <td *ngIf="factoryView === 'ALL'">{{ r.factory }}</td>
+            <td class="material-code-cell">{{ r.sku }}</td>
+            <td class="name-cell" [title]="r.name">{{ r.name }}</td>
+            <td>{{ r.cus }}</td>
+            <td class="num-cell">{{ r.invQty === null ? 'chưa có' : (r.invQty | number : '1.0-3') }}</td>
+            <td class="num-cell">{{ r.agingQtyScope | number : '1.0-3' }}</td>
+            <td class="num-cell" [class.has-difference]="r.diffQty">{{ r.diffQty === null ? '' : (r.diffQty | number : '1.0-3') }}</td>
+            <td class="num-cell">{{ r.agingQtyAll | number : '1.0-3' }}</td>
+            <td class="num-cell">{{ r.agingValue | number : '1.0-0' }}</td>
+            <td><span class="compare-badge badge-link" [ngClass]="'level-' + r.level">{{ r.statusText }}</span></td>
+          </tr>
+          <tr *ngIf="expandedSkuId === r.id" class="sku-detail-row">
+            <td [attr.colspan]="factoryView === 'ALL' ? 11 : 10">
+              <div class="sku-detail">
+                <div class="sku-detail-title">
+                  Các {{ L.lotWord }} của {{ r.sku }} ({{ expandedLots.length }})
+                  <span *ngIf="expandedSkuNote" class="sku-detail-note">— {{ expandedSkuNote }}</span>
+                </div>
+                <table class="aging-table sku-detail-table">
+                  <thead>
+                    <tr>
+                      <th>{{ L.lot }}</th>
+                      <th>Kho</th>
+                      <th>Ngày nhập Aging</th>
+                      <th>Ngày nhập bảng kê</th>
+                      <th>Tháng Aging</th>
+                      <th>Tháng tính lại</th>
+                      <th>Tồn Aging</th>
+                      <th>Tồn bảng kê</th>
+                      <th>Chênh lệch</th>
+                      <th>Giá trị</th>
+                      <th>Sai ở đâu</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let d of expandedLots" [class.negative-row]="d.lot.level === 'error'">
+                      <td>{{ d.lot.lot || '(không lô)' }}</td>
+                      <td>{{ d.lot.wh }}</td>
+                      <td>{{ fmtDate(d.lot.agingInb) }}</td>
+                      <td [class.has-difference]="d.lot.agingInb && d.lot.ledgerInb && d.lot.agingInb !== d.lot.ledgerInb">{{ fmtDate(d.lot.ledgerInb) }}</td>
+                      <td>{{ d.lot.agingMonths ?? '' }}</td>
+                      <td [class.has-difference]="d.lot.monthsWrong">{{ d.lot.calcMonths ?? '' }}</td>
+                      <td>{{ d.lot.inAging ? (d.lot.agingQty | number : '1.0-3') : 'không có' }}</td>
+                      <td>{{ d.lot.ledgerQty === null ? '' : (d.lot.ledgerQty | number : '1.0-3') }}</td>
+                      <td [class.has-difference]="d.lot.diffQty">{{ d.lot.diffQty === null ? '' : (d.lot.diffQty | number : '1.0-3') }}</td>
+                      <td>{{ d.lot.value | number : '1.0-0' }}</td>
+                      <td class="reason-cell">
+                        <div *ngFor="let reason of d.reasons">{{ reason }}</div>
+                        <span *ngIf="!d.reasons.length" class="compare-badge" [ngClass]="'level-' + d.lot.level">{{ d.lot.statusText }}</span>
+                      </td>
+                      <td class="action-cell" (click)="$event.stopPropagation()">
+                        <button *ngIf="d.lot.level !== 'scope' || d.lot.issues.length" type="button" class="act-btn" [disabled]="isSaving" (click)="openEdit(d.lot)">Sửa</button>
+                        <button *ngIf="d.lot.fix !== 'none'" type="button" class="act-btn" [disabled]="isSaving" (click)="revertRow(d.lot)">Hoàn tác</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+    <p class="empty" *ngIf="!filteredSkus.length && !loadError">Không có dòng nào.</p>
+    <button *ngIf="filteredSkus.length > visibleCount" type="button" class="io-btn show-more-btn" (click)="showMore()">
+      Xem thêm ({{ visibleCount }}/{{ filteredSkus.length }})
+    </button>
+  </div>
+
+  <!-- Popup sửa 1 lot -->
+  <div class="import-overlay" *ngIf="editRow" (click)="closeEdit()" role="dialog" aria-modal="true" aria-labelledby="aging-edit-title">
+    <div class="import-dialog edit-dialog" (click)="$event.stopPropagation()">
+      <h3 id="aging-edit-title" class="import-dialog-title">
+        {{ editRow.inAging && editRow.fix !== 'added' ? 'Sửa lot' : 'Thêm lot vào Aging' }}: {{ editRow.sku }}
+      </h3>
+      <p class="edit-sub">
+        {{ factoryLabel[editRow.factory] }} · lô {{ editRow.lot || '(không lô)' }} · kho {{ editRow.wh }}
+        <span *ngIf="editRow.name"> · {{ editRow.name }}</span>
+      </p>
+      <div class="edit-reasons" *ngIf="editRow.issues.length">
+        <strong>Đang sai:</strong> {{ editRow.statusText }}
+      </div>
+
+      <table class="aging-table edit-table">
+        <thead>
+          <tr><th></th><th>Aging gốc</th><th>Theo bảng kê</th><th>Giá trị mới</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="edit-label">{{ L.lot }}</td>
+            <td>{{ editRow.orig ? (editRow.orig.lot || '(trống)') : (editRow.inAging ? (editRow.lot || '(trống)') : '—') }}</td>
+            <td>{{ editRow.ledgerQty !== null ? (editRow.lot || '(trống)') : '—' }}</td>
+            <td><input type="text" class="edit-input" [(ngModel)]="editForm.lot" (ngModelChange)="onEditChange()" /></td>
+          </tr>
+          <tr>
+            <td class="edit-label">Ngày nhập</td>
+            <td>{{ editRow.orig ? fmtDate(editRow.orig.inb) : (editRow.inAging ? fmtDate(editRow.agingInb) : '—') }}</td>
+            <td>
+              {{ fmtDate(editRow.ledgerInb) || '—' }}
+              <button *ngIf="editRow.ledgerInb" type="button" class="act-btn act-mini" (click)="useLedger('inb')">Lấy</button>
+            </td>
+            <td><input type="date" class="edit-input" [(ngModel)]="editForm.inb" (ngModelChange)="onEditChange()" /></td>
+          </tr>
+          <tr>
+            <td class="edit-label">Tồn (pcs)</td>
+            <td>{{ editRow.orig ? (editRow.orig.qty | number : '1.0-3') : (editRow.inAging ? (editRow.agingQty | number : '1.0-3') : '—') }}</td>
+            <td>
+              {{ editRow.ledgerQty === null ? '—' : (editRow.ledgerQty | number : '1.0-3') }}
+              <button *ngIf="editRow.ledgerQty !== null" type="button" class="act-btn act-mini" (click)="useLedger('qty')">Lấy</button>
+            </td>
+            <td><input type="number" class="edit-input" [(ngModel)]="editForm.qty" (ngModelChange)="onEditChange()" min="0" /></td>
+          </tr>
+          <tr>
+            <td class="edit-label">Đơn giá (VND)</td>
+            <td>{{ editRow.orig ? (editRow.orig.price | number : '1.0-2') : (editRow.inAging ? (editRow.price | number : '1.0-2') : '—') }}</td>
+            <td>—</td>
+            <td><input type="number" class="edit-input" [(ngModel)]="editForm.price" (ngModelChange)="onEditChange()" min="0" /></td>
+          </tr>
+          <tr class="edit-result">
+            <td class="edit-label">Sau khi sửa</td>
+            <td colspan="3">
+              Số tháng <strong>{{ editPreview.months }}</strong> · nhóm <strong>{{ editPreview.type || '—' }}</strong>
+              · giá trị <strong>{{ editPreview.value | number : '1.0-0' }}</strong> VND
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <label class="edit-note">
+        Ghi chú (lý do sửa)
+        <textarea rows="2" [(ngModel)]="editForm.note" placeholder="Vd: ngày nhập theo phiếu KZPN1026/0097"></textarea>
+      </label>
+      <p class="edit-hint">Chỉ lưu chỉnh sửa trên hệ thống, file gốc giữ nguyên. Tải bản đã sửa ở More → Tải Aging đã hiệu chỉnh.</p>
+
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-primary" (click)="saveEdit()" [disabled]="isSaving">
+          {{ isSaving ? 'Đang lưu…' : 'Lưu' }}
+        </button>
+        <button type="button" class="btn-import-dialog-secondary" (click)="closeEdit()" [disabled]="isSaving">Hủy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup lịch sử import -->
+  <div class="import-overlay" *ngIf="showHistory" (click)="showHistory = false" role="dialog" aria-modal="true">
+    <div class="import-dialog import-dialog--wide" (click)="$event.stopPropagation()">
+      <h3 class="import-dialog-title">Lịch sử import</h3>
+      <div class="dialog-table-wrap">
+        <table class="aging-table">
+          <thead>
+            <tr><th>Thời gian</th><th>Nhà máy</th><th>Loại</th><th>File</th><th>Kỳ</th><th class="num-cell">Dòng</th><th>Người import</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let h of historyRows">
+              <td>{{ h.at | date : 'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ h.factory }}</td>
+              <td>{{ kindLabel[h.kind] }}</td>
+              <td>{{ h.fileName }}</td>
+              <td>{{ h.from ? fmtDate(h.from) + ' → ' : '' }}{{ fmtDate(h.to) }}</td>
+              <td class="num-cell">{{ h.rowCount | number }}</td>
+              <td>{{ h.by }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="empty" *ngIf="!historyRows.length">Chưa có lần import nào.</p>
+      </div>
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-secondary" (click)="showHistory = false">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup import -->
+  <div class="import-overlay" *ngIf="showImportDialog" (click)="closeImportDialog()" role="dialog" aria-modal="true" aria-labelledby="aging-import-title">
+    <div class="import-dialog import-dialog--wide" (click)="$event.stopPropagation()">
+      <h3 id="aging-import-title" class="import-dialog-title">Import {{ L.title }}</h3>
+      <div class="import-notes">
+        <p class="import-notes-lead">Chọn nhiều file cùng lúc (cả 2 nhà máy). Hệ thống tự nhận diện:</p>
+        <ul>
+          <li><strong>Bảng kê phiếu nhập</strong> {{ mode === 'nvl' ? '' : '(file TP…) ' }}và <strong>Bảng kê phiếu xuất</strong>{{ mode === 'nvl' ? '' : ' (file XP…)' }}: lưu lâu dài theo tháng. Import lại cùng kỳ chỉ thay các dòng trong khoảng "Từ ngày … đến ngày …" của file, không bị trùng.</li>
+          <li><strong>Báo cáo tuổi hàng</strong>: đọc sheet có cột SKU, {{ L.lot }}, Inbound Date; lưu theo ngày cuối kỳ.</li>
+          <li><strong>Báo cáo tồn kho</strong> (kho 21): dùng để đối chiếu tổng tồn theo {{ L.sku }}.</li>
+          <li>Nhà máy lấy theo tên file (<strong>KZ</strong> = ASM1, <strong>LH</strong> = ASM2) hoặc số chứng từ; nếu không nhận ra thì chọn tay.</li>
+        </ul>
+      </div>
+      <input
+        #agingFileInput
+        type="file"
+        multiple
+        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        (change)="onFilesSelected($event)"
+        hidden
+      />
+
+      <div class="dialog-table-wrap" *ngIf="pendingFiles.length">
+        <table class="aging-table">
+          <thead>
+            <tr><th>File</th><th>Loại</th><th>Nhà máy</th><th>Kỳ</th><th class="num-cell">Dòng</th><th>Trạng thái</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of pendingFiles" [class.negative-row]="p.status === 'loi'">
+              <td>{{ p.fileName }}</td>
+              <td>{{ p.kindLabel }}</td>
+              <td>
+                <select [(ngModel)]="p.factory" [name]="'fac' + p.fileName" [disabled]="p.status !== 'cho'">
+                  <option [ngValue]="null">— chọn —</option>
+                  <option *ngFor="let f of factories" [ngValue]="f">{{ factoryLabel[f] }}</option>
+                </select>
+              </td>
+              <td>{{ p.from ? fmtDate(p.from) + ' → ' : '' }}{{ fmtDate(p.to) }}</td>
+              <td class="num-cell">{{ p.rowCount | number }}</td>
+              <td>
+                <span *ngIf="p.status === 'cho'">Chờ lưu</span>
+                <span *ngIf="p.status === 'dang'">Đang lưu…</span>
+                <span *ngIf="p.status === 'xong'">Đã lưu</span>
+                <span *ngIf="p.status === 'loi'" class="error-text">{{ p.error }}</span>
+              </td>
+              <td>
+                <button *ngIf="p.status !== 'dang' && !isImporting" type="button" class="icon-btn" (click)="removePending(p)" title="Bỏ file">
+                  <i class="material-icons">close</i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="import-message" *ngIf="importMessage">{{ importMessage }}</p>
+
+      <div class="import-dialog-actions">
+        <button type="button" class="btn-import-dialog-secondary" (click)="agingFileInput.click()" [disabled]="isImporting">
+          Chọn file
+        </button>
+        <button type="button" class="btn-import-dialog-primary" (click)="saveImport()" [disabled]="!canSaveImport">
+          Lưu lên hệ thống
+        </button>
+        <button type="button" class="btn-import-dialog-secondary" (click)="closeImportDialog()" [disabled]="isImporting">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

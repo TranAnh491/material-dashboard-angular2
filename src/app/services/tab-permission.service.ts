@@ -4,6 +4,7 @@ import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { Observable, of } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { FactoryAccessService } from './factory-access.service';
+import { TAB_PERMISSION_OPTIONS } from '../routes/app-tabs';
 
 export interface TabPermission {
   uid: string;
@@ -142,55 +143,6 @@ export class TabPermissionService {
       );
   }
 
-  // Available tabs for permissions - đồng bộ với sidebar routes hiện tại
-  availableTabs = [
-    // Main tabs
-    { key: 'dashboard', name: 'Dashboard' },
-    { key: 'materials-dashboard', name: 'Materials Dashboard' },
-    { key: 'fgs-dashboard', name: 'FGs Dashboard' },
-    { key: 'work-order-status', name: 'Work Order' },
-    { key: 'shipment', name: 'Shipment' },
-    
-    // Inbound tab (gộp ASM1 + ASM2)
-    { key: 'inbound', name: 'RM Inbound' },
-
-    // Outbound tab (gộp ASM1 + ASM2)
-    { key: 'outbound', name: 'RM Outbound' },
-
-
-    // Inventory (Materials) tab (gộp ASM1 + ASM2)
-    { key: 'materials', name: 'RM Inventory' },
-    // Inventory Overview tab (gộp ASM1 + ASM2)
-    { key: 'inventory-overview', name: 'RM Inventory Overview' },
-    { key: 'bag-history', name: 'Control Batch' },
-    
-    // ASM FG tabs
-    { key: 'fg-in', name: 'FG In' },
-    { key: 'fg-out', name: 'FG Out' },
-    { key: 'fg-check', name: 'FG Check' },
-    { key: 'fg-inventory', name: 'FG Inventory' },
-    { key: 'fg-overview', name: 'FG Overview' },
-    { key: 'fg-location', name: 'FG Location' },
-    
-    // Location tab
-    { key: 'location', name: 'Materials' },
-    { key: 'j-warehouse', name: 'J Warehouse' },
-
-    // Other tabs
-    { key: 'stock-check', name: 'Stock Check' },
-    { key: 'bieu-mau', name: 'Biểu mẫu' },
-    { key: 'label', name: 'Label' },
-    { key: 'index', name: 'Bonded Report' },
-    { key: 'sxxk', name: 'SXXK' },
-    { key: 'scrap', name: 'SCRAP' },
-    { key: 'checklist', name: 'Safety & Quality' },
-    { key: 'equipment', name: 'Training' },
-    { key: 'qc', name: 'Quality' },
-    { key: 'nhiet-do', name: 'Nhiệt Độ' },
-    { key: 'equipment-checklist', name: 'Quản lý thiết bị' },
-    { key: 'rm1-delivery', name: 'RM Delivery' },
-    { key: 'report', name: 'Report' },
-    { key: 'shorted-materials', name: 'Shorted materials' },
-    { key: 'settings', name: 'Settings' }
-  ];
+  // Danh sách tab cấp quyền — nguồn chung ở routes/app-tabs.ts
+  availableTabs = TAB_PERMISSION_OPTIONS;
 } 

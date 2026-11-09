@@ -7,7 +7,7 @@
   flex-direction: column;
   width: 100%;
   max-height: 88vh;
-  background: #ffffff;
+  background: #FFFFFF;
   border-radius: 12px;
   overflow: hidden;
 }
@@ -18,7 +18,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #8F8F89;
   flex-shrink: 0;
 
   .dsf-title {
@@ -63,7 +63,7 @@
   flex-shrink: 0;
 
   .step-box {
-    border: 1.5px solid #e2e8f0;
+    border: 1.5px solid #6B6B66;
     border-radius: 8px;
     padding: 8px 4px 6px;
     text-align: center;
@@ -192,7 +192,7 @@
 
       &:focus {
         border-color: #2563eb;
-        background: #ffffff;
+        background: #FFFFFF;
       }
     }
 
@@ -243,7 +243,7 @@
     .pxk-table-scroll {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #6B6B66;
       border-radius: 6px;
 
       .pxk-table {
@@ -258,7 +258,7 @@
           font-weight: 700;
           color: #334155;
           text-align: left;
-          border-bottom: 1px solid #e2e8f0;
+          border-bottom: 1px solid #8F8F89;
           white-space: nowrap;
           font-size: 11px;
           position: sticky;
@@ -269,7 +269,7 @@
         tbody td {
           padding: 8px 8px;
           color: #1e293b;
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid #8F8F89;
           font-size: 12px;
         }
 
@@ -306,7 +306,7 @@
 // ---- Footer ----
 .dsf-footer {
   padding: 10px 14px 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #8F8F89;
   flex-shrink: 0;
 
   .btn-done {

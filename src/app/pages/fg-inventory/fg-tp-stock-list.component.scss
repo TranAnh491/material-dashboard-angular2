@@ -1,12 +1,12 @@
 $tp-blue: #2563eb;
-$tp-border: #e2e8f0;
+$tp-border: #6B6B66;
 $tp-text: #0f172a;
 $tp-muted: #64748b;
 
 .main-content {
   height: 100vh;
   overflow: hidden;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .tp-list-page {
@@ -63,7 +63,7 @@ $tp-muted: #64748b;
 
   &--outline {
     border: 1px solid #000;
-    background: #fff;
+    background: #FFFFFF;
     color: #000;
 
     &:hover {
@@ -110,9 +110,9 @@ $tp-muted: #64748b;
 .tp-list-factory-btn {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -148,10 +148,10 @@ $tp-muted: #64748b;
 .tp-list-select {
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   font-size: 13px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .tp-list-clear,
@@ -161,9 +161,9 @@ $tp-muted: #64748b;
   gap: 4px;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 12px;
   font-weight: 600;
   color: #475569;
@@ -231,9 +231,9 @@ $tp-muted: #64748b;
   gap: 4px;
   min-height: 118px;
   padding: 8px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   text-align: left;
   cursor: pointer;
   box-sizing: border-box;
@@ -341,9 +341,9 @@ $tp-muted: #64748b;
 .tp-modal__panel {
   width: min(640px, 96vw);
   max-height: min(80vh, 720px);
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
@@ -429,7 +429,7 @@ $tp-muted: #64748b;
 
   th, td {
     padding: 8px 10px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
     text-align: left;
   }
 
@@ -481,9 +481,9 @@ $tp-muted: #64748b;
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   color: #2563eb;
   cursor: pointer;
 
@@ -581,7 +581,7 @@ $tp-muted: #64748b;
   border: 1px solid #93c5fd;
   border-radius: 6px;
   font-size: 13px;
-  background: #fff;
+  background: #FFFFFF;
   color: #0f172a;
 
   &:focus {
@@ -606,7 +606,7 @@ $tp-muted: #64748b;
 .tp-storage__rack {
   border: 2px solid #38bdf8;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   padding: 8px;
   min-height: 168px;
   display: flex;
@@ -647,7 +647,7 @@ $tp-muted: #64748b;
   padding: 4px 6px;
   border-radius: 4px;
   border: 1px solid #38bdf8;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 0.62rem;
   color: #0f172a;
   transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
@@ -703,7 +703,7 @@ $tp-muted: #64748b;
   padding: 2px 1px;
   border: 1px solid #7dd3fc;
   border-radius: 3px;
-  background: #fff;
+  background: #FFFFFF;
   color: #0f172a;
   line-height: 1.1;
 

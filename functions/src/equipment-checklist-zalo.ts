@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { sendZaloToChat } from './zalo-notify.util';
 
-const KHO_GROUP_DOC = 'zalo_group_config/quanly_kho';
+const EQUIPMENT_GROUP_CHAT_ID = 'zgr-e8c5e8200360ea3eb371';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
@@ -166,9 +166,7 @@ export async function sendEquipmentChecklistZaloRemind(
   const due = offDay ? [] : active.filter(eq => isDue(eq, records, day));
   if (!late.length && !due.length) return { sent: 0, due: 0, offDay };
 
-  const groupSnap = await db.doc(KHO_GROUP_DOC).get();
-  const chatId = String(groupSnap.data()?.chatId || '').trim();
-  if (!chatId) throw new Error('Chưa gắn nhóm Kho trong zalo_group_config/quanly_kho.');
+  const chatId = EQUIPMENT_GROUP_CHAT_ID;
 
   const title = slot === '1315'
     ? `Nhắc lại kiểm tra thiết bị kho (${viDay(day)}/${day.slice(0, 4)})`

@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -98,6 +99,9 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private router: Router
   ) {}
+
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
 
   ngOnInit(): void {
     this.loadImportCacheFromFirebase();
@@ -314,7 +318,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
           this.resetTableColumnFill();
           this.rebuildRows();
           this.deleteImportCacheFromFirebase();
-          alert('Không có dòng hợp lệ trong file (kiểm tra dòng 7+, định dạng mã TP P/T/M/L + 6 số).');
+          appAlert('Không có dòng hợp lệ trong file (kiểm tra dòng 7+, định dạng mã TP P/T/M/L + 6 số).');
           return;
         }
         this.resetTableColumnFill();
@@ -329,7 +333,7 @@ export class FgOverviewComponent implements OnInit, OnDestroy {
         this.importCodesNormalized.clear();
         this.importLines = [];
         this.rebuildRows();
-        alert(
+        appAlert(
           'Không đọc được file. Kiểm tra định dạng .xlsx/.xls và đúng quy tắc: dữ liệu từ dòng 7, cột A = Mã TP, cột F = tồn kho.'
         );
       }

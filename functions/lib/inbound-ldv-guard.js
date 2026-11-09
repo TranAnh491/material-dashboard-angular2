@@ -131,11 +131,52 @@ async function verifyInboundLdvOtp(db, codeRaw) {
     await ref.delete();
     return { ok: true };
 }
+/** Danh mục đã tự đổi Standard theo lô mới nhất (>= 2 bịch) — mail báo, không cần duyệt. */
+async function sendStandardAutoUpdatedEmail(p, cfg, atStr) {
+    const text = `Standard Packing trong danh mục đã tự cập nhật theo lô nhập mới nhất.\n\n` +
+        `Thời điểm: ${atStr}\n` +
+        `Nhà máy: ${p.factory}\n` +
+        `Mã hàng: ${p.materialCode}\n` +
+        `P.O: ${p.poNumber}\n` +
+        `Lô: ${p.batchNumber}\n` +
+        `Standard cũ: ${p.standardPacking}\n` +
+        `Standard mới: ${p.rollsOrBags}\n` +
+        `Người nhập: ${p.reportedBy}\n`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body>
+<p><strong>Standard Packing đã tự cập nhật theo lô nhập mới nhất</strong></p>
+<p>Thời điểm: <strong>${(0, carton_packing_qty_alert_email_1.esc)(atStr)}</strong></p>
+<table style="border-collapse:collapse;font-family:sans-serif;font-size:14px" cellpadding="6" border="1">
+<tr><td>Nhà máy</td><td>${(0, carton_packing_qty_alert_email_1.esc)(p.factory)}</td></tr>
+<tr><td>Mã hàng</td><td><strong>${(0, carton_packing_qty_alert_email_1.esc)(p.materialCode)}</strong></td></tr>
+<tr><td>P.O</td><td>${(0, carton_packing_qty_alert_email_1.esc)(p.poNumber)}</td></tr>
+<tr><td>Lô</td><td>${(0, carton_packing_qty_alert_email_1.esc)(p.batchNumber)}</td></tr>
+<tr><td>Standard cũ</td><td>${(0, carton_packing_qty_alert_email_1.esc)(String(p.standardPacking))}</td></tr>
+<tr><td>Standard mới</td><td><strong>${(0, carton_packing_qty_alert_email_1.esc)(String(p.rollsOrBags))}</strong></td></tr>
+<tr><td>Người nhập</td><td>${(0, carton_packing_qty_alert_email_1.esc)(p.reportedBy)}</td></tr>
+</table>
+<p>Các lô cũ vẫn giữ Standard riêng của lô (PO) khi tính bịch chẵn / lẻ.</p>
+</body></html>`;
+    const transporter = nodemailer.createTransport({
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.port === 465,
+        auth: { user: cfg.user, pass: cfg.pass }
+    });
+    await transporter.sendMail({
+        from: cfg.from,
+        to: LDV_MISMATCH_RECIPIENTS,
+        subject: `[Nhận hàng] ${p.materialCode} đổi Standard ${p.standardPacking} → ${p.rollsOrBags}`.slice(0, 250),
+        text,
+        html
+    });
+}
 async function sendInboundLdvMismatchEmail(p) {
     const cfg = (0, carton_packing_qty_alert_email_1.getSmtpConfig)();
     if (!cfg)
         throw new Error('Thiếu SMTP (EMAIL_USER, EMAIL_PASS)');
     const atStr = vnNowLabel();
+    if (p.autoUpdated)
+        return sendStandardAutoUpdatedEmail(p, cfg, atStr);
     const text = `Lượng đơn vị khi nhận hàng khác Standard Packing.\n\n` +
         `Thời điểm: ${atStr}\n` +
         `Nhà máy: ${p.factory}\n` +

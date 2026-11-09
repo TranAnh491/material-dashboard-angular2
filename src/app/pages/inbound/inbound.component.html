@@ -3,6 +3,14 @@
     <!-- Topbar -->
     <div class="excel-header topbar" (click)="$event.stopPropagation()">
       <div class="topbar__left">
+        <div class="ib-nav">
+          <button type="button" class="ib-btn" title="Quay lại" (click)="goBack()">
+            <i class="material-icons">arrow_back</i>Back
+          </button>
+          <button type="button" class="ib-btn" title="Về Menu" (click)="goToMenu()">
+            <i class="material-icons">home</i>Menu
+          </button>
+        </div>
         <div class="topbar__brand">
           <img src="assets/img/rmin.png" alt="" class="topbar__logo">
           <div class="topbar__titles">
@@ -22,12 +30,6 @@
             {{ f }}
           </button>
         </div>
-        <button type="button" class="icon-btn" title="Back" (click)="goBack()">
-          <i class="material-icons">arrow_back</i>
-        </button>
-        <button type="button" class="icon-btn" title="Về Menu" (click)="goToMenu()">
-          <i class="material-icons">home</i>
-        </button>
       </div>
 
       <!-- Batch Filter Indicator -->
@@ -100,13 +102,14 @@
             More
           </button>
 
+          <!-- Danh mục lệch Standard: đã bỏ — Standard danh mục tự cập nhật theo lô mới nhất (≥ 2 bịch) -->
+
           <button type="button"
                   class="btn btn--ghost mobile-hide toolbar-tbhd-check-btn"
-                  (click)="openLdvMismatchCatalog()"
-                  title="Mã có lượng đơn vị khác Standard Packing — quản lý duyệt thì Standard đổi theo">
-            <i class="material-icons">rule</i>
-            Danh mục lệch Standard
-            <span class="toolbar-tbhd-check-badge" *ngIf="ldvMismatchPendingCount > 0">{{ ldvMismatchPendingCount }}</span>
+                  (click)="goToWeighCatalog()"
+                  title="Danh sách mã cần kiểm 100% (cân GW bag khi nhận hàng) — nằm trong Danh mục Check lượng / Cân">
+            <i class="material-icons">priority_high</i>
+            Kiểm 100%
           </button>
 
           <button type="button"
@@ -118,21 +121,6 @@
             <span class="toolbar-tbhd-check-badge" *ngIf="tbhdCheckPendingCount > 0">{{ tbhdCheckPendingCount }}</span>
           </button>
 
-          <button type="button"
-                  class="btn btn--ghost mobile-hide toolbar-back-menu-btn"
-                  (click)="goBack()"
-                  title="Back">
-            <i class="material-icons">arrow_back</i>
-            Back
-          </button>
-
-          <button type="button"
-                  class="btn btn--ghost mobile-hide toolbar-back-menu-btn"
-                  (click)="goToMenu()"
-                  title="Về Menu">
-            <i class="material-icons">home</i>
-            Về Menu
-          </button>
         </div>
           
         <!-- Scan Options - Ẩn vì không cần thiết trong bước "Đang kiểm" -->
@@ -275,7 +263,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -314,7 +302,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -349,7 +337,7 @@
               </span>
             </div>
             <div class="progress" aria-label="Receive progress">
-              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0"></div>
+              <div class="progress__bar" [style.width.%]="batch.count ? (batch.receivedCount / batch.count) * 100 : 0" [style.background]="receiveProgressColor(batch)"></div>
             </div>
             <div class="batch-card__footer">
               <span class="muted">{{ formatDate(batch.importDate) }}</span>
@@ -399,15 +387,18 @@
             <th class="type-cell">LOẠI HÌNH</th>
             <th class="status-cell">STATUS</th>
             <th class="date-cell">HSD</th>
+            <th class="week-cell" title="Week — nhập tay trên web, không bắt buộc (không có trong form import)">WEEK</th>
             <th class="status-cell">KK</th>
             <th class="status-cell">ĐÃ NHẬN</th>
             <th class="number-cell">LƯỢNG ĐƠN VỊ</th>
             <th class="number-cell">Số Bịch</th>
-            <th class="number-cell carton-col" title="Số thùng — In QR sẽ in thêm tem thùng (QTY = 0)">SỐ THÙNG</th>
+            <th class="number-cell carton-col" title="Lượng trong 1 thùng — số tem thùng = Lượng nhập ÷ Lượng trong thùng (dư → tem thùng lẻ cuối)">LƯỢNG TRONG THÙNG</th>
+            <th class="carton-col" title="In tem thùng 57×32mm của dòng (mã phải bật Xuất thùng trong Danh mục)">QR THÙNG</th>
             <th class="storage-unit-col" title="Đơn vị lưu trữ pallet">DV LƯU TRỮ</th>
             <th class="number-cell">Bịch (QR)</th>
             <th class="supplier-cell">NHÀ CUNG CẤP</th>
             <th class="unitweight-cell">Số Bịch / Cuộn</th>
+            <th class="gwbag-cell" title="GW 1 bag nguyên (gram) — lưu vào Danh mục NVL, dùng kiểm GW bag CL khi tách tem lẻ">GW BAG (g)</th>
             <th class="remarks-cell">LƯU Ý</th>
             <!-- Ẩn 2 cột MSNV và THỜI GIAN -->
             <!-- <th class="employee-cell">MSNV</th> -->
@@ -440,7 +431,9 @@
             </td>
             <td class="code-cell" 
                 [class.material-code-printed]="material.hasQRGenerated"
-                [class.material-received]="material.isReceived">
+                [class.material-received]="material.isReceived"
+                [class.code-cell--k100]="!!sxxkSuspectOf(material.materialCode)"
+                [attr.title]="sxxkSuspectOf(material.materialCode) ? sxxkSuspectTitle(material.materialCode) : null">
               <input type="text" 
                      class="editable-input" 
                      [(ngModel)]="material.materialCode" 
@@ -493,10 +486,25 @@
             <td class="date-cell">
               <input type="date" 
                      class="date-input" 
+                     [class.date-empty]="!material.expiryDate"
                      [value]="material.expiryDate ? material.expiryDate.toISOString().split('T')[0] : ''"
                      (change)="onExpiryDateChange($event, material)"
                      [disabled]="!canEditMaterials || material.isReceived"
                      [title]="material.isReceived ? 'Không thể sửa - đã trong Inventory' : 'Sửa hạn sử dụng'">
+            </td>
+            <td class="week-cell">
+              <button type="button"
+                      class="week-btn"
+                      [class.week-btn--set]="!!material.week"
+                      [class.week-btn--missing]="weekMissing(material)"
+                      [disabled]="!canEditMaterials"
+                      (click)="openWeekPopup(material)"
+                      [title]="material.week ? ((material.weekFormat || 'YYWW') + ' ' + material.week + ' — bấm để sửa') : (weekMissing(material) ? 'Mã theo dõi Week — cần nhập' : 'Bấm để nhập Week (không bắt buộc)')">
+                <ng-container *ngIf="material.week; else weekEmpty">
+                  <small>{{ material.weekFormat || 'YYWW' }}</small>{{ weekLabelOf(material) }}
+                </ng-container>
+                <ng-template #weekEmpty>{{ weekMissing(material) ? 'Cần nhập' : '+' }}</ng-template>
+              </button>
             </td>
                          <td class="status-cell">
                <input type="checkbox" 
@@ -513,6 +521,7 @@
                       [title]="getReceivedTitle(material)">
              </td>
             <td class="number-cell ldv-cell">
+              <div class="ldv-wrap">
               <input type="text"
                      inputmode="decimal"
                      class="editable-input"
@@ -526,6 +535,7 @@
                       class="ldv-edit-btn"
                       *ngIf="canEditMaterials && isRollsOrBagsLocked(material)"
                       (click)="requestRollsOrBagsEdit(material)">Sửa</button>
+              </div>
             </td>
             <td class="number-cell">
               <input type="number"
@@ -544,16 +554,23 @@
             <td class="number-cell carton-col">
               <input type="number"
                      class="editable-input carton-count-input"
-                     [(ngModel)]="material.cartonCount"
+                     [(ngModel)]="material.cartonQty"
                      [ngModelOptions]="{updateOn: 'blur'}"
-                     (blur)="onCartonCountCommit(material)"
+                     (blur)="onCartonQtyCommit(material)"
                      (keydown.enter)="$any($event.target).blur()"
-                     inputmode="numeric"
-                     step="1"
+                     inputmode="decimal"
+                     step="any"
                      min="0"
-                     placeholder="0"
+                     [placeholder]="catalogCartonQtyOf(material.materialCode) || '0'"
                      [disabled]="!canEditMaterials || material.isReceived"
-                     [title]="material.isReceived ? 'Đã nhận' : 'Số thùng — In QR: mỗi thùng một tem 57×32mm (QTY = 0, dán ngoài thùng)'">
+                     [title]="material.isReceived ? 'Đã nhận' : 'Lượng trong 1 thùng' + (catalogCartonQtyOf(material.materialCode) ? (' — danh mục: ' + catalogCartonQtyOf(material.materialCode)) : '')">
+            </td>
+            <td class="carton-col">
+              <button type="button" class="carton-qr-btn" (click)="printCartonQr(material)"
+                      [disabled]="!canGenerateQR"
+                      [title]="cartonLabelCount(material) ? ('In ' + cartonLabelCount(material) + ' tem thùng') : 'Nhập Lượng trong thùng trước'">
+                <i class="material-icons">qr_code_2</i>{{ cartonLabelCount(material) || '' }}
+              </button>
             </td>
             <td class="storage-unit-col">
               <button
@@ -599,6 +616,20 @@
                      step="0.01"
                      min="0"
                      max="99999.99">
+            </td>
+            <td class="gwbag-cell" [class.gwbag-cell--missing]="isGwMissing(material.materialCode)">
+              <span class="gwbag-exempt" *ngIf="isGwExempt(material.materialCode); else gwInput"
+                    title="Không cần GW: mã ngoài nhóm phải cân (B008, B009, B016, B019–B022) hoặc đã duyệt không cần cân">Không cần</span>
+              <ng-template #gwInput>
+                <input type="number"
+                       class="editable-input"
+                       [value]="gwBagOf(material.materialCode) || ''"
+                       (change)="saveGwBag(material.materialCode, $any($event.target).value)"
+                       [disabled]="!canEditMaterials"
+                       placeholder="Cần GW"
+                       min="0"
+                       title="GW 1 bag nguyên (gram) — bắt buộc với mã cần cân khi Outbound; lưu vào Danh mục NVL">
+              </ng-template>
             </td>
             <td class="remarks-cell">
               <input type="text" 
@@ -686,14 +717,23 @@
               <input 
                 type="text" 
                 id="employeeCodeInput"
+                [attr.name]="employeeFieldName"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="characters"
+                spellcheck="false"
                 [(ngModel)]="employeeCode"
-                placeholder="Nhập mã nhân viên (VD: ASP0106)"
+                placeholder="Quét thẻ nhân viên (không gõ tay / chọn mã đã lưu)"
                 class="employee-input uppercase-input modern-input"
                 [disabled]="isEmployeeCodeSaved"
+                (keydown)="onEmployeeCodeKeydown($event)"
+                (paste)="onEmployeeCodePaste($event)"
+                (drop)="$event.preventDefault()"
                 (input)="onEmployeeCodeInput($event)"
                 (keyup)="onEmployeeCodeKeyup($event)"
                 (keyup.enter)="saveEmployeeCode()">
             </div>
+            <div class="employee-scan-error" *ngIf="employeeScanError">{{ employeeScanError }}</div>
             
             <button 
               class="save-btn modern-btn" 
@@ -1157,136 +1197,151 @@
 </div>
 
 <!-- Kiểm hàng về Scan Modal -->
-<div class="modal-overlay" *ngIf="showInspectionScanModal" (click)="closeInspectionScanModal()">
-  <div class="modal-content return-goods-modal-content" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>📦 Kiểm hàng về - Lô hàng: {{ inspectionBatchNumber }}</h3>
-      <button class="close-btn" (click)="closeInspectionScanModal()">
-        <i class="material-icons">close</i>
+<div class="ib-scan-screen" *ngIf="showInspectionScanModal">
+  <!-- Thanh chế độ — giống Outbound -->
+  <div class="sc-modebar">
+    <button type="button" class="sc-home-btn" (click)="closeInspectionScanModal()" title="Quay lại danh sách Inbound">
+      <i class="material-icons">arrow_back</i> Quay lại
+    </button>
+    <span class="sc-modebar__sep"></span>
+    <span class="sc-modebar__label">Nhập kho · Lô:</span>
+    <span class="sc-modebar__value">{{ inspectionBatchNumber }}</span>
+    <span class="sc-modebar__sep"></span>
+    <span class="sc-modebar__label">Scan theo:</span>
+    <span class="ib-scan-mode" role="group" aria-label="Scan nhập kho theo">
+      <button type="button" class="sc-modebar__btn" [class.sc-modebar__btn--on]="inspectionScanMode === 'bag'" (click)="setInspectionScanMode('bag')"
+              title="Quét tem từng bịch — cộng dồn lượng">Theo bag</button>
+      <button type="button" class="sc-modebar__btn" [class.sc-modebar__btn--on]="inspectionScanMode === 'carton'" (click)="setInspectionScanMode('carton')"
+              title="Quét tem thùng (lượng = 0) — đủ số thùng của dòng thì nhận cả dòng">Theo thùng</button>
+    </span>
+  </div>
+
+  <!-- Hàng QUÉT / VỊ TRÍ — giống Outbound -->
+  <div class="sc-toolbar">
+    <div class="sc-toolbar__row">
+      <span class="sc-toolbar__tag">Quét</span>
+      <span class="sc-op-chip" *ngIf="inspectionEmployeeVerified" title="Nhân viên đang scan">{{ inspectionEmployeeId }}</span>
+      <input
+        type="text"
+        id="inspectionQRInput"
+        class="sc-toolbar__scan"
+        [(ngModel)]="inspectionQRInput"
+        [placeholder]="inspectionScanMode === 'carton' ? 'Quét tem thùng…' : 'Quét tem bag…'"
+        (keyup)="onInspectionQRKeyup($event)"
+        autocomplete="off"
+        autofocus>
+      <button type="button" class="ob-scan-act" (click)="processInspectionScan()">
+        <i class="material-icons">qr_code_scanner</i> Scan
+      </button>
+      <span class="sc-status scanned">
+        <i class="material-icons">check_circle</i> Lô {{ inspectionBatchNumber || '…' }}
+      </span>
+      <span class="sc-status" [class.scanned]="inspectionEmployeeVerified">
+        <i class="material-icons">{{ inspectionEmployeeVerified ? 'check_circle' : 'person' }}</i> NV {{ inspectionEmployeeId || '…' }}
+      </span>
+      <span class="sc-status" [class.scanned]="!!inspectionCurrentLocation" title="Các mã scan sau thuộc vị trí này">
+        <i class="material-icons">place</i> {{ inspectionCurrentLocation || 'Chưa có vị trí' }}
+      </span>
+      <span class="sc-toolbar__spacer"></span>
+    </div>
+    <div class="sc-toolbar__row">
+      <span class="sc-toolbar__tag">Vị trí</span>
+      <input
+        type="text"
+        id="inspectionLocationInput"
+        class="sc-toolbar__input"
+        [(ngModel)]="inspectionLocationInput"
+        placeholder="Scan vị trí (vd: Pallet 1)…"
+        (keyup.enter)="processInspectionLocationScan()"
+        autocomplete="off">
+      <button type="button" class="ob-scan-act" (click)="processInspectionLocationScan()">
+        <i class="material-icons">place</i> Đặt vị trí
       </button>
     </div>
-    
-    <div class="modal-body">
-      <!-- Employee Verified Badge -->
-      <div class="employee-verified-badge" *ngIf="inspectionEmployeeVerified">
-        <i class="material-icons">check_circle</i>
-        <span>Nhân viên: <strong>{{ inspectionEmployeeId }}</strong></span>
+  </div>
+
+  <!-- Bảng scan — giống Outbound -->
+  <div class="ob-scan-board">
+      <div class="ob-scan-flash"
+           [class.ob-scan-flash--ok]="inspectionScanResult?.success === true"
+           [class.ob-scan-flash--err]="inspectionScanResult?.success === false">
+        <i class="material-icons">{{ inspectionScanResult ? (inspectionScanResult.success ? 'check_circle' : 'error') : 'qr_code_scanner' }}</i>
+        <span>{{ inspectionScanResult?.message || 'Sẵn sàng — scan tem bag' }}</span>
       </div>
 
-      <!-- Scan Vị trí (Pallet) -->
-      <div class="return-goods-scanner-section inspection-location-section">
-        <label for="inspectionLocationInput">
-          <i class="material-icons">place</i>
-          Scan vị trí
-        </label>
-        <div class="location-scan-row">
-          <input
-            type="text"
-            id="inspectionLocationInput"
-            [(ngModel)]="inspectionLocationInput"
-            placeholder="Quét/nhập vị trí (vd: Pallet 1)..."
-            class="return-goods-scan-input"
-            (keyup.enter)="processInspectionLocationScan()"
-            autocomplete="off">
-          <button class="scan-submit-btn" (click)="processInspectionLocationScan()">
-            <i class="material-icons">place</i>
-            Scan vị trí
-          </button>
-        </div>
-        <p class="current-location-hint" *ngIf="inspectionCurrentLocation">
-          <i class="material-icons">check_circle</i>
-          Vị trí hiện tại: <strong>{{ inspectionCurrentLocation }}</strong> — các mã scan sau thuộc vị trí này
-        </p>
-      </div>
-
-      <!-- Scan QR Code -->
-      <div class="return-goods-scanner-section">
-        <label for="inspectionQRInput">
-          <i class="material-icons">qr_code_scanner</i>
-          Quét mã QR của hàng hóa
-        </label>
-        <input 
-          type="text" 
-          id="inspectionQRInput"
-          [(ngModel)]="inspectionQRInput"
-          placeholder="Quét hoặc nhập mã QR..."
-          class="return-goods-scan-input"
-          (keyup)="onInspectionQRKeyup($event)"
-          autofocus>
-        
-        <button class="scan-submit-btn" (click)="processInspectionScan()">
-          <i class="material-icons">qr_code_scanner</i>
-          Scan
-        </button>
-      </div>
-
-      <!-- Scan Result Message -->
-      <div class="return-goods-result" *ngIf="inspectionScanResult">
-        <div class="result-message" [ngClass]="inspectionScanResult.success ? 'success' : 'error'">
-          <i class="material-icons">{{ inspectionScanResult.success ? 'check_circle' : 'error' }}</i>
-          <span>{{ inspectionScanResult.message }}</span>
-        </div>
-        <div class="error-detail" *ngIf="!inspectionScanResult.success && inspectionScanResult.errorDetail">
-          <p>{{ inspectionScanResult.errorDetail }}</p>
+      <div class="ob-scan-meta" *ngIf="inspectionBatchRows.length">
+        <div class="ob-scan-progress" title="Theo bag (số bịch) — mã chưa có số bịch thì tính theo lượng">
+          <span class="ob-scan-progress__label">{{ inspectionBatchNumber }}</span>
+          <div class="ob-scan-progress__bar"><div [style.width.%]="inspectionBatchStats.percent"></div></div>
+          <strong>{{ inspectionBatchStats.percent }}%</strong>
+          <span class="ob-scan-progress__bags" *ngIf="inspectionBatchStats.total">{{ inspectionBatchStats.done }}/{{ inspectionBatchStats.total }} bag</span>
         </div>
       </div>
 
-      <!-- Danh sách Materials đã scan -->
-      <div class="scanned-materials-list" *ngIf="scannedMaterialsList.length > 0">
-        <h4 class="list-title">
-          <i class="material-icons">list</i>
-          Danh sách mã hàng đã scan ({{ scannedMaterialsList.length }})
-        </h4>
-        <div class="materials-grid">
-          <div
-            *ngFor="let item of scannedMaterialsList; trackBy: trackByMaterialCode"
-            class="material-item"
-            [ngClass]="{ 'complete': item.isComplete }">
-            <div class="material-header">
-              <div class="material-code">{{ item.material.materialCode }}</div>
-              <div class="material-po">PO: {{ item.material.poNumber }}</div>
-              <div class="complete-badge" *ngIf="item.isComplete">
-                <i class="material-icons">check_circle</i>
-                <span>Đã duyệt</span>
-              </div>
-            </div>
-            <div
-              class="material-quantity-info"
-              [matTooltip]="getInboundBagScanTooltip(item.material)"
-              matTooltipClass="inbound-bag-pending-tooltip"
-              matTooltipPosition="above">
-              <div class="scan-progress-box">
-                <div class="scan-progress-line">
-                  <span class="label">Lượng đã scan:</span>
-                  <span class="value scanned">
-                    {{ item.scannedQuantity | number:'1.2-2' }} / {{ item.totalQuantity | number:'1.2-2' }}
-                  </span>
-                </div>
-                <div class="scan-progress-line" *ngIf="getInboundBagScanSummary(item.material).hasBagTracking">
-                  <span class="label">Bịch đã scan:</span>
-                  <span class="value bag">
-                    {{ getInboundBagScanSummary(item.material).scannedBags }} / {{ getInboundBagScanSummary(item.material).totalBags }}
-                  </span>
-                </div>
-              </div>
-              <div class="quantity-row" *ngIf="item.remainingQuantity > 0">
-                <span class="label">Còn lại:</span>
-                <span class="value remaining">
-                  {{ item.remainingQuantity | number:'1.2-2' }}
-                </span>
-              </div>
-            </div>
+      <div class="ob-scan-id" *ngIf="inspectionIdentity">
+        <div class="ob-scan-id__main">
+          <strong>{{ inspectionIdentity.code }}</strong>
+          <span>{{ inspectionIdentity.name || '—' }}</span>
+          <small>PO {{ inspectionIdentity.po }} · bag {{ inspectionIdentity.bag || '—' }} · {{ inspectionIdentity.qty | number }}</small>
+        </div>
+        <div class="ob-scan-id__tags">
+          <span *ngFor="let t of inspectionIdentity.tags" class="ob-scan-tag ob-scan-tag--{{ t.tone }}" [title]="t.title || ''">{{ t.text }}</span>
+          <span class="ob-scan-tag ob-scan-tag--gray" *ngIf="!inspectionIdentity.tags.length">Không có ghi chú</span>
+        </div>
+      </div>
+
+      <div class="ob-scan-board__cols">
+        <section class="ob-scan-card">
+          <header>
+            <strong>Tiến độ theo lô</strong>
+            <span>{{ inspectionBatchNumber }}</span>
+            <span class="ob-scan-card__sum" *ngIf="inspectionBatchRows.length">{{ inspectionDoneCount }}/{{ inspectionBatchRows.length }} dòng đã nhận</span>
+          </header>
+          <p class="ob-scan-card__empty" *ngIf="!inspectionBatchRows.length">Lô chưa có dòng nhập (hoặc đang tải).</p>
+          <div class="ob-scan-card__body" *ngIf="inspectionBatchRows.length">
+            <table>
+              <thead><tr><th>Mã</th><th>PO</th><th class="n">Cần</th><th title="Lượng cần theo bag: bag chẵn × lượng đơn vị + lẻ">Bag cần</th><th class="n">Đã scan</th><th class="n">Còn</th><th class="n" title="Bịch đã scan / tổng bịch">Bag</th><th class="n" title="Thùng đã scan / tổng thùng">Thùng</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let r of inspectionBatchRows; trackBy: trackInspectionRow"
+                    [class.is-done]="r.received || (r.remain <= 0.0001 && r.remain >= -0.0001)"
+                    [class.is-over]="r.remain < -0.0001"
+                    [class.is-active]="r.scanned > 0">
+                  <td><strong>{{ r.code }}</strong></td>
+                  <td>{{ r.po || '—' }}</td>
+                  <td class="n">{{ r.need | number }}</td>
+                  <td [title]="r.std > 0 ? ('Lượng đơn vị ' + r.std) : 'Chưa có lượng đơn vị'">{{ inspectionNeedBagText(r) }}</td>
+                  <td class="n">{{ r.scanned | number }}</td>
+                  <td class="n">{{ r.received ? 0 : (r.remain | number) }}</td>
+                  <td class="n">{{ r.totalBags > 0 ? (r.doneBags + '/' + r.totalBags) : r.doneBags }}</td>
+                  <td class="n">{{ r.totalCartons > 0 ? (r.doneCartons + '/' + r.totalCartons) : '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
+        <section class="ob-scan-card">
+          <header>
+            <strong>Vừa scan</strong>
+            <span class="ob-scan-card__sum">{{ inspectionScanLog.length }} bag</span>
+          </header>
+          <p class="ob-scan-card__empty" *ngIf="!inspectionScanLog.length">Chưa có bag nào.</p>
+          <div class="ob-scan-card__body" *ngIf="inspectionScanLog.length">
+            <table>
+              <thead><tr><th>#</th><th>Giờ</th><th>Mã</th><th>PO</th><th>IMD / bag</th><th class="n">Lượng</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let it of inspectionScanLog; let i = index">
+                  <td>{{ inspectionScanLog.length - i }}</td>
+                  <td>{{ it.time | date:'HH:mm:ss' }}</td>
+                  <td><strong>{{ it.code }}</strong></td>
+                  <td>{{ it.po }}</td>
+                  <td>{{ it.bag }}</td>
+                  <td class="n">{{ it.qty | number }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
-
-      <!-- Instructions -->
-      <div class="return-goods-instructions">
-        <p><i class="material-icons">info</i> Quét mã QR trên tem material</p>
-        <p><i class="material-icons">qr_code_scanner</i> Format: MaterialCode|PO|Quantity|Date</p>
-        <p><i class="material-icons">search</i> Hệ thống sẽ tự động tìm và check đã nhận nếu khớp với lô hàng {{ inspectionBatchNumber }}</p>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1548,7 +1603,14 @@
                       class="ldv-otp-ok"
                       (click)="approveLdvMismatch(row, ldvPassBox.value)"
                       [disabled]="!!ldvApproveBusyId">
-                {{ ldvApproveBusyId === row.id ? 'Đang duyệt…' : 'Duyệt' }}
+                {{ ldvApproveBusyId === row.id ? 'Đang xử lý…' : 'Duyệt' }}
+              </button>
+              <button type="button"
+                      class="ldv-mismatch-del"
+                      (click)="rejectLdvMismatch(row, ldvPassBox.value)"
+                      [disabled]="!!ldvApproveBusyId"
+                      title="Không hợp lý — xóa khỏi danh mục, Standard giữ nguyên">
+                Xóa
               </button>
             </td>
           </tr>
@@ -1607,3 +1669,43 @@
   (closed)="closeStorageUnitPicker()"
   (confirmed)="onStorageUnitConfirmed($event)">
 </app-storage-unit-picker>
+
+<!-- Popup nhập Week trên tem: YYWW (năm + tuần) / MMYY (tháng + năm) -->
+<div class="week-pop-overlay" *ngIf="weekPopup as wp" (click)="closeWeekPopup()">
+  <div class="week-pop" (click)="$event.stopPropagation()">
+    <div class="week-pop__head">
+      <strong>Week trên tem</strong>
+      <small>{{ wp.material.materialCode }} · PO {{ wp.material.poNumber || '—' }} · Lô {{ wp.material.batchNumber || '—' }}</small>
+    </div>
+    <div class="week-pop__fmt">
+      <button type="button" [class.on]="wp.format === 'YYWW'" (click)="setWeekPopupFormat('YYWW')">
+        <b>YYWW</b><small>Năm + Tuần</small>
+      </button>
+      <button type="button" [class.on]="wp.format === 'MMYY'" (click)="setWeekPopupFormat('MMYY')">
+        <b>MMYY</b><small>Tháng + Năm</small>
+      </button>
+    </div>
+    <div class="week-pop__inputs">
+      <label>
+        <span>{{ wp.format === 'YYWW' ? 'Năm (YY)' : 'Tháng (MM)' }}</span>
+        <input id="weekPopupA" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="wp.a" (ngModelChange)="onWeekPopupA($event)"
+               [placeholder]="wp.format === 'YYWW' ? '26' : '10'" autocomplete="off">
+      </label>
+      <label>
+        <span>{{ wp.format === 'YYWW' ? 'Tuần (WW)' : 'Năm (YY)' }}</span>
+        <input id="weekPopupB" type="text" inputmode="numeric" maxlength="2"
+               [ngModel]="wp.b" (ngModelChange)="onWeekPopupB($event)"
+               (keydown.enter)="saveWeekPopup()"
+               [placeholder]="wp.format === 'YYWW' ? '42' : '26'" autocomplete="off">
+      </label>
+    </div>
+    <p class="week-pop__preview" [class.bad]="weekPopupValue && !weekPopupValid">{{ weekPopupPreview || 'Nhập 2 ô để xem diễn giải' }}</p>
+    <div class="week-pop__foot">
+      <button type="button" class="ghost danger" *ngIf="wp.material.week" (click)="saveWeekPopup(true)">Xóa Week</button>
+      <span class="sp"></span>
+      <button type="button" class="ghost" (click)="closeWeekPopup()">Hủy</button>
+      <button type="button" class="primary" [disabled]="!weekPopupValid" (click)="saveWeekPopup()">Lưu</button>
+    </div>
+  </div>
+</div>

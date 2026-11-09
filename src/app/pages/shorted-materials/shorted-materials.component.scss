@@ -112,7 +112,7 @@ $page-bg: #f4f6f8;
 
   &:hover {
     background: #f8fafc;
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
   }
 
   .material-icons {
@@ -190,7 +190,7 @@ $page-bg: #f4f6f8;
 .sm-btn--outline {
   background: $panel;
   color: #334155;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 
   &:hover {
@@ -212,7 +212,7 @@ $page-bg: #f4f6f8;
 .sm-btn--soft {
   background: #f1f5f9;
   color: #334155;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 
   &:hover {
     background: #e2e8f0;
@@ -257,7 +257,7 @@ $page-bg: #f4f6f8;
   height: 42px;
   border-radius: 10px;
   border: 1px solid $line;
-  background: #fff;
+  background: #FFFFFF;
 
   .material-icons {
     font-size: 20px;
@@ -286,7 +286,7 @@ $page-bg: #f4f6f8;
   border: 1px solid $line;
   font-size: 0.875rem;
   color: #334155;
-  background: #fff;
+  background: #FFFFFF;
   min-width: 140px;
   cursor: pointer;
 
@@ -312,7 +312,7 @@ $table-border: #000000;
   border-collapse: collapse;
   font-size: 0.875rem;
   border: 1px solid $table-border;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .sm-th {
@@ -345,7 +345,7 @@ $table-border: #000000;
   padding: 6px 10px;
   border: 1px solid $table-border;
   vertical-align: middle;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .sm-td--num {
@@ -465,7 +465,7 @@ $table-border: #000000;
   padding: 0 8px;
   border-radius: 8px;
   border: 1px solid $line;
-  background: #fff;
+  background: #FFFFFF;
   color: #475569;
   font-weight: 600;
   font-size: 0.8125rem;
@@ -473,7 +473,7 @@ $table-border: #000000;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 
   &:hover:not(:disabled) {
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
     background: #f8fafc;
   }
 
@@ -573,5 +573,5 @@ $table-border: #000000;
   gap: 10px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #8F8F89;
 }

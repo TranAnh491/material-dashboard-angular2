@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { ClientReloadService } from './services/client-reload.service';
 import { ForceLogoutService } from './services/force-logout.service';
 import { FirebaseAuthService } from './services/firebase-auth.service';
+import { ReadTrackerService } from './services/read-tracker.service';
 
 /** Các tài khoản dùng chung/hệ thống — không bắt cập nhật email công ty. */
 const EXEMPT_LOGIN_EMAILS = new Set(['asp0001@asp.com', 'asp9999@asp.com', 'xetai@asp.com']);
@@ -30,11 +31,18 @@ export class AppComponent implements OnInit {
     private clientReloadService: ClientReloadService,
     private forceLogoutService: ForceLogoutService,
     private authService: FirebaseAuthService,
-    private fns: AngularFireFunctions
-  ) {}
+    private fns: AngularFireFunctions,
+    private readTracker: ReadTrackerService
+  ) {
+    // Đếm mọi lượt đọc Firestore theo trang (field byRoute trong read-tracker) — tìm chỗ tốn chi phí
+    this.readTracker.installAutoTracking();
+  }
 
   ngOnInit(): void {
     this.clientReloadService.startListening();
+    this.clientReloadService.releaseNotes$.subscribe(notes => {
+      this.releaseNotes = notes;
+    });
     this.clientReloadService.showPrompt$.subscribe(available => {
       this.updateAvailable = available;
     });
@@ -51,6 +59,9 @@ export class AppComponent implements OnInit {
       this.needsCompanyEmailUpdate = !isExempt && !isCompanyEmail(email);
     });
   }
+
+  /** Chức năng mới của bản cập nhật (hiện trong popup tải lại) */
+  releaseNotes: string[] = [];
 
   reloadNow(): void {
     this.clientReloadService.reloadNow();

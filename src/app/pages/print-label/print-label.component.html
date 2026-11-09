@@ -1295,7 +1295,7 @@
         <div class="iqc-scanner-section" *ngIf="iqcStep === 1">
           <label for="iqcScanInput">
             <i class="material-icons">badge</i> 
-            Bước 1: Quét mã nhân viên QA
+            Bước 1: Quét mã nhân viên Kho hoặc QA
           </label>
           <input 
             type="text" 
@@ -1315,7 +1315,7 @@
         <!-- Employee Verified Badge -->
         <div class="employee-verified-badge" *ngIf="iqcEmployeeVerified">
           <i class="material-icons">check_circle</i>
-          <span>Nhân viên QA: <strong>{{ iqcEmployeeId }}</strong></span>
+          <span>Nhân viên: <strong>{{ iqcEmployeeId }}</strong></span>
         </div>
 
         <!-- Step 2: Scanner Section -->
@@ -1375,8 +1375,8 @@
 
         <!-- Instructions -->
         <div class="iqc-instructions" *ngIf="iqcStep === 1 && !iqcEmployeeVerified">
-          <p><i class="material-icons">info</i> Quét mã nhân viên QA để bắt đầu kiểm tra</p>
-          <p><i class="material-icons">security</i> Chỉ nhân viên thuộc bộ phận QA mới có quyền thực hiện IQC</p>
+          <p><i class="material-icons">info</i> Quét mã nhân viên Kho hoặc QA để bắt đầu kiểm tra</p>
+          <p><i class="material-icons">security</i> Nhân viên bộ phận Kho (WH) hoặc QA đều được quét IQC</p>
         </div>
         
         <div class="iqc-instructions" *ngIf="iqcStep === 2 && !scannedLabel">

@@ -1,27 +1,32 @@
 import * as admin from 'firebase-admin';
+import { defineSecret } from 'firebase-functions/params';
+
+/**
+ * Mật khẩu chung tài khoản Xe Tải — lưu trong Secret Manager, KHÔNG ghi trong mã nguồn.
+ * Đặt trước khi deploy:  firebase functions:secrets:set TRUCK_DRIVER_PASSWORD
+ * (đặt lại đúng mật khẩu tài xế đang dùng thì tài xế không phải đổi thao tác.)
+ */
+export const truckDriverPassword = defineSecret('TRUCK_DRIVER_PASSWORD');
 
 type TruckDriverAccount = {
   uid: string;
   email: string;
   employeeId: string;
-  password: string;
   displayName: string;
 };
 
-/** Tài khoản app phụ Xe Tải — đăng nhập bằng mã ASP hoặc XETAI, mật khẩu 123456. */
+/** Tài khoản app phụ Xe Tải — đăng nhập bằng mã ASP9999 hoặc XETAI, mật khẩu chung từ secret TRUCK_DRIVER_PASSWORD. */
 const TRUCK_DRIVER_ACCOUNTS: Record<string, TruckDriverAccount> = {
   ASP9999: {
     uid: 'truck-driver-asp9999',
     email: 'asp9999@asp.com',
     employeeId: 'ASP9999',
-    password: '123456',
     displayName: 'Tài xế Xe Tải'
   },
   XETAI: {
     uid: 'truck-driver-xetai',
     email: 'xetai@asp.com',
     employeeId: 'XETAI',
-    password: '123456',
     displayName: 'Tài xế Xe Tải'
   }
 };
@@ -33,9 +38,15 @@ export function toTruckAuthPassword(password: string): string {
   return p.padEnd(6, '0');
 }
 
+function sharedTruckPassword(): string {
+  const p = String(truckDriverPassword.value() || '').trim();
+  if (!p) throw new Error('permission-denied'); // chưa đặt secret → không cho đăng nhập
+  return p;
+}
+
 async function ensureTruckDriverAuthUser(account: TruckDriverAccount): Promise<string> {
   const auth = admin.auth();
-  const authPassword = toTruckAuthPassword(account.password);
+  const authPassword = toTruckAuthPassword(sharedTruckPassword());
 
   const applyUpdate = async (uid: string): Promise<void> => {
     await auth.updateUser(uid, {
@@ -136,7 +147,7 @@ export async function signInTruckDriver(
   const password = String(passwordRaw || '').trim();
   const account = TRUCK_DRIVER_ACCOUNTS[employeeId];
 
-  if (!account || password !== account.password) {
+  if (!account || password !== sharedTruckPassword()) {
     throw new Error('permission-denied');
   }
 
@@ -145,6 +156,6 @@ export async function signInTruckDriver(
 
   return {
     email: account.email,
-    authPassword: toTruckAuthPassword(account.password)
+    authPassword: toTruckAuthPassword(sharedTruckPassword())
   };
 }

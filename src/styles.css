@@ -239,3 +239,86 @@ body.kk-page-lock .kk-page.excel-container {
   max-height: 100dvh !important;
   overflow: hidden !important;
 }
+
+/* ======================================================================
+   BIẾN DÙNG CHUNG (design tokens) — 06/11/2026
+   Trang mới / khi sửa trang cũ: dùng var(--app-…) thay vì tự đặt mã màu.
+   ====================================================================== */
+:root {
+  --app-font: Arial, Helvetica, sans-serif;
+  --app-font-size: 13px;
+
+  --app-text: #111111;
+  --app-text-muted: #64748b;
+  --app-bg: #ffffff;
+  --app-bg-subtle: #f8fafc;
+
+  --app-border: #d0d0d0;        /* kẻ ô bảng */
+  --app-border-strong: #b7b7b7; /* viền nút / ô nhập / tiêu đề cột */
+  --app-header-bg: #f2f2f2;     /* nền tiêu đề cột */
+  --app-hover: #f7f9fc;
+  --app-active: #e3e3e3;
+
+  --app-primary: #1d4ed8;
+  --app-danger: #dc2626;
+  --app-success: #16a34a;
+  --app-warn: #d97706;
+
+  --app-btn-height: 36px;
+  --app-radius: 4px;
+}
+
+/* ---- Nút chuẩn thanh công cụ: chữ nhật, cao 36px, cùng tone ---- */
+.app-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: var(--app-btn-height);
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius);
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: 600 var(--app-font-size) var(--app-font);
+  white-space: nowrap;
+  cursor: pointer;
+  text-transform: none;
+}
+.app-btn .material-icons { font-size: 18px; }
+.app-btn:hover:not(:disabled) { background: #f2f2f2; }
+.app-btn:disabled { opacity: .5; cursor: default; }
+.app-btn.is-active { background: var(--app-active); border-color: #7a7a7a; }
+.app-btn--primary { background: var(--app-primary); border-color: var(--app-primary); color: #fff; }
+.app-btn--primary:hover:not(:disabled) { background: #1e40af; }
+
+/* ---- Bảng kiểu Excel: thêm class="xl-table" vào <table> ---- */
+table.xl-table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  background: var(--app-bg);
+  font-family: var(--app-font);
+  color: var(--app-text);
+}
+table.xl-table th,
+table.xl-table td {
+  border: 1px solid var(--app-border);
+  padding: 3px 6px;
+  font-size: var(--app-font-size);
+  vertical-align: middle;
+}
+table.xl-table th {
+  background: var(--app-header-bg);
+  border-color: var(--app-border-strong);
+  font-weight: 700;
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+table.xl-table tbody tr:hover > td { background-color: var(--app-hover); }
+/* Tiêu đề cột đứng yên khi cuộn: bọc bảng trong .xl-scroll (có chiều cao giới hạn) */
+.xl-scroll { overflow: auto; border: 1px solid var(--app-border); }
+.xl-scroll > table.xl-table { border: 0; }
+.xl-scroll > table.xl-table thead th { position: sticky; top: 0; z-index: 2; }
+table.xl-table td.num { text-align: right; font-variant-numeric: tabular-nums; }

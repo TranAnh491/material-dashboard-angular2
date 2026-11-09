@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -532,11 +533,11 @@ export class PdControlComponent implements OnInit, OnDestroy {
 
     const emp = this.parseEmployeeIdFromScan(raw);
     if (!emp) {
-      alert('Không đọc được mã nhân viên (7 ký tự đầu = ASP + 4 số). Quét lại.');
+      appAlert('Không đọc được mã nhân viên (7 ký tự đầu = ASP + 4 số). Quét lại.');
       return;
     }
     if (emp !== this.DELETE_AUTH_EMPLOYEE_ID) {
-      alert(`Chỉ mã nhân viên ${this.DELETE_AUTH_EMPLOYEE_ID} mới được xóa.`);
+      appAlert(`Chỉ mã nhân viên ${this.DELETE_AUTH_EMPLOYEE_ID} mới được xóa.`);
       return;
     }
 
@@ -560,7 +561,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       void this.loadPdReturnScans();
     } catch (e) {
       console.error('[PD Control] delete scan:', e);
-      alert('Không xóa được bản ghi. Kiểm tra quyền Firestore.');
+      appAlert('Không xóa được bản ghi. Kiểm tra quyền Firestore.');
     } finally {
       this.deleteBusy = false;
       this.cdr.markForCheck();
@@ -693,7 +694,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       console.error('[PD Control] start camera scanner:', e);
       this.cameraError = 'Không thể khởi động camera. Vui lòng kiểm tra quyền camera và thử lại.';
       this.isCameraOn = false;
-      alert(this.cameraError + (msg ? ` (${msg})` : ''));
+      appAlert(this.cameraError + (msg ? ` (${msg})` : ''));
     } finally {
       this.cameraStarting = false;
       this.cdr.markForCheck();
@@ -729,11 +730,11 @@ export class PdControlComponent implements OnInit, OnDestroy {
   async commitPdBatch(): Promise<void> {
     if (!this.isPdScanActive || this.batchSaving) return;
     if (!this.batchEmployeeId || !this.batchProductionOrder) {
-      alert('Chưa đủ ID nhân viên hoặc LSX. Hoàn tất bước 1 và 2 trước.');
+      appAlert('Chưa đủ ID nhân viên hoặc LSX. Hoàn tất bước 1 và 2 trước.');
       return;
     }
     if (this.pendingMaterials.length === 0) {
-      alert('Chưa có mã nguyên liệu nào trong phiên. Quét mã rồi bấm Done.');
+      appAlert('Chưa có mã nguyên liệu nào trong phiên. Quét mã rồi bấm Done.');
       return;
     }
 
@@ -771,7 +772,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       void this.loadPdReturnScans();
     } catch (e) {
       console.error('[PD Control] batch commit:', e);
-      alert('Không lưu được dữ liệu. Kiểm tra kết nối hoặc quyền Firestore.');
+      appAlert('Không lưu được dữ liệu. Kiểm tra kết nối hoặc quyền Firestore.');
     } finally {
       this.batchSaving = false;
       this.cdr.markForCheck();
@@ -834,7 +835,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       case 'employee': {
         const emp = this.parseEmployeeIdFromScan(line);
         if (!emp) {
-          alert(
+          appAlert(
             'Sai định dạng ID: lấy 7 ký tự đầu phải là ASP + 4 số (ví dụ ASP2101).'
           );
           return;
@@ -847,7 +848,7 @@ export class PdControlComponent implements OnInit, OnDestroy {
       case 'lsx': {
         const lsx = line.trim();
         if (!this.isValidLsxCode(lsx)) {
-          alert('Quét lệnh sản xuất (LSX) — mã phải bắt đầu KZLSX hoặc LHLSX.');
+          appAlert('Quét lệnh sản xuất (LSX) — mã phải bắt đầu KZLSX hoặc LHLSX.');
           return;
         }
         this.batchProductionOrder = lsx;
@@ -857,14 +858,14 @@ export class PdControlComponent implements OnInit, OnDestroy {
       }
       case 'material': {
         if (this.isValidLsxCode(line)) {
-          alert(
+          appAlert(
             'Đang bước quét nguyên liệu. Nếu cần đổi LSX, bấm «Huỷ phiên» hoặc tắt SCAN.'
           );
           return;
         }
         const maybeEmp = this.parseEmployeeIdFromScan(line);
         if (maybeEmp) {
-          alert(
+          appAlert(
             'Mã vừa quét giống format ID nhân viên. Nếu đây là nguyên liệu, kiểm tra lại; hoặc huỷ phiên và quét lại từ đầu.'
           );
           return;

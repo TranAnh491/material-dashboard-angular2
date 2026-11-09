@@ -23,18 +23,12 @@ export class RolePermissionService {
   }
 
   /**
-   * Trang quản trị (Settings — Quản lý người dùng): chỉ tài khoản ASP0106.
+   * Trang quản trị (Settings — Quản lý người dùng): chỉ admin (custom claim `admin`, gán cho ASP0106).
    * Tách riêng khỏi canAccessSettings() vì canAccessSettings() còn được TabPermissionGuard
-   * dùng chung cho tab "zalo" (Admin/Quản lý) — không thu hẹp theo ASP0106.
+   * dùng chung cho tab "zalo" (Admin/Quản lý) — không thu hẹp theo admin.
    */
   canAccessUserManagement(): Observable<boolean> {
-    return this.authService.currentUser.pipe(
-      map(user => {
-        if (!user) return false;
-        const employeeId = (user.employeeId || '').trim().toUpperCase();
-        return employeeId === 'ASP0106';
-      })
-    );
+    return this.authService.claims().pipe(map(claims => claims.admin));
   }
 
   // Kiểm tra xem user có vai trò Admin không

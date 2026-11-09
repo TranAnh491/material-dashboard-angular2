@@ -302,8 +302,8 @@
       background: #f8f9fa;
       z-index: 10;
       min-width: 56px;
-      border-right: 1px solid #dee2e6 !important;
-      border-bottom: 2px solid #dee2e6 !important;
+      border-right: 1px solid #8F8F89 !important;
+      border-bottom: 2px solid #8F8F89 !important;
       padding: 8px 6px !important;
       
       &:first-child {
@@ -318,8 +318,8 @@
     tbody td {
       min-width: 56px;
       vertical-align: middle;
-      border-right: 1px solid #dee2e6 !important;
-      border-bottom: 1px solid #dee2e6 !important;
+      border-right: 1px solid #8F8F89 !important;
+      border-bottom: 1px solid #8F8F89 !important;
       padding: 6px 6px !important;
       
       &:first-child {
@@ -332,7 +332,7 @@
     }
     
     tbody tr {
-      border-bottom: 1px solid #dee2e6;
+      border-bottom: 1px solid #8F8F89;
       
       &:hover {
         background-color: #f8f9fa;
@@ -792,8 +792,8 @@
     margin-bottom: 30px;
     
     .file-type-card {
-      background: #fff;
-      border: 2px solid #e0e0e0;
+      background: #FFFFFF;
+      border: 2px solid #6B6B66;
       border-radius: 12px;
       padding: 20px;
       cursor: pointer;
@@ -867,9 +867,9 @@
 
 .imported-files-section {
   margin-top: 30px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 8px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   overflow: hidden;
   
   .section-header {
@@ -878,7 +878,7 @@
     align-items: center;
     padding: 15px 20px;
     background: #f8f9fa;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     
     .section-title {
       margin: 0;

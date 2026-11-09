@@ -4,7 +4,9 @@ import { AngularFireFunctions } from '@angular/fire/compat/functions';
 import { firstValueFrom } from 'rxjs';
 import * as QRCode from 'qrcode';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
+import { UserPermissionService } from '../../services/user-permission.service';
 import {
+  compareEquipment,
   dateKey,
   daysOfMonth,
   EquipmentChecklistService,
@@ -29,7 +31,7 @@ import {
   MaintenanceCycle
 } from './equipment-checklist.models';
 
-type PageView = 'check' | 'list' | 'groups' | 'items' | 'history' | 'labels' | 'scan' | 'staff';
+type PageView = 'check' | 'overview' | 'maint' | 'list' | 'items' | 'history' | 'labels' | 'scan' | 'staff';
 type ResultFilter = 'all' | 'NOT_CHECKED' | 'PASS' | 'FAIL';
 
 @Component({
@@ -42,6 +44,7 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   @ViewChild('excelInput') excelInput?: ElementRef<HTMLInputElement>;
   @ViewChild('scanBox') scanBox?: ElementRef<HTMLInputElement>;
   @ViewChild('mobileScanBox') mobileScanBox?: ElementRef<HTMLInputElement>;
+  @ViewChild('formName') formName?: ElementRef<HTMLInputElement>;
 
   readonly categories = EQUIPMENT_CATEGORIES;
   readonly categoryName = categoryName;
@@ -49,13 +52,28 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   readonly frequencyLabel = frequencyLabel;
 
   view: PageView = 'check';
+  private readonly allTabs: Array<{ key: PageView; icon: string; label: string; manage?: boolean }> = [
+    { key: 'check', icon: 'fact_check', label: 'Kiểm tra' },
+    { key: 'overview', icon: 'dashboard', label: 'Tổng quan' },
+    { key: 'maint', icon: 'build', label: 'Bảo dưỡng' },
+    { key: 'list', icon: 'list_alt', label: 'Danh sách', manage: true },
+    { key: 'items', icon: 'checklist', label: 'Hạng mục', manage: true },
+    { key: 'history', icon: 'history', label: 'Lịch sử' },
+    { key: 'labels', icon: 'qr_code_2', label: 'Tem QR' },
+    { key: 'scan', icon: 'qr_code_scanner', label: 'Quét' },
+    { key: 'staff', icon: 'groups', label: 'Nhân sự', manage: true }
+  ];
+
+  get tabs(): Array<{ key: PageView; icon: string; label: string }> {
+    return this.allTabs.filter(tab => !tab.manage || this.canManage);
+  }
   collapsed = new Set<string>();
   private collapseReady = false;
   searchQuery = '';
   userName = '';
   userRole = '';
   itemRows: Array<{ name: string; result: 'PASS' | 'FAIL' | ''; note: string }> = [];
-  readonly donutColors = ['#3b82f6', '#f59e0b', '#eab308', '#a855f7', '#22c55e'];
+  readonly donutColors = ['#3b82f6', '#f59e0b', '#eab308', '#3478F6', '#22c55e'];
   readonly roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
   loading = false;
   message = '';
@@ -86,18 +104,38 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   showForm = false;
   editing = false;
   form: Equipment = this.emptyEquipment();
+  formError = '';
+  formSaving = false;
+  /** Mã gợi ý gần nhất — chỉ thay khi người dùng chưa tự sửa mã. */
+  suggestedCode = '';
+  /** Nhóm đích khi chuyển nhiều thiết bị đã chọn. */
+  bulkGroup = '';
+  bulkMoving = false;
+  /** Dòng vừa thêm / vừa chuyển nhóm — tô sáng một lúc cho dễ thấy. */
+  recentId = '';
+  private recentTimer = 0;
+  /** Trạng thái lưu từng dòng khi sửa trực tiếp trên bảng Danh sách. */
+  rowState = new Map<string, 'saving' | 'saved' | 'error'>();
+  private rowTimers = new Map<string, number>();
+  private rowSaving = new Set<string>();
+  private rowDirty = new Set<string>();
+  /** Giá trị ô lúc bắt đầu sửa — Esc trả về giá trị này. */
+  private cellOriginal = '';
+  private static readonly LAST_GROUP_KEY = 'eq-last-group';
+
+  /** Nhóm lớn kèm các nhóm con — cho các ô chọn nhóm (optgroup). */
+  readonly groupOptions = SEED_CATEGORIES.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    subs: cat.subcategories.map(sub => ({ id: sub.id, name: sub.name }))
+  }));
   showDelete = false;
-  deletePassword = '';
-  /** Mật khẩu mở mục Danh sách thiết bị (chỉ chặn trên giao diện, giống mật khẩu Xóa). */
-  private static readonly LIST_PASSWORD = '2026';
-  showListPassword = false;
-  listPassword = '';
-  listPasswordError = '';
-  private listUnlocked = false;
-  deleteError = '';
+  /**
+   * Quyền quản lý (Settings > quyền Xóa, hoặc admin; không áp dụng cho phiên quét thẻ): sửa danh mục, hạng mục, nhân sự, xóa.
+   * Firestore rules chặn ghi ở server; cờ này chỉ để ẩn các nút người dùng không dùng được.
+   */
+  canManage = false;
   deleting = false;
-  showInspect = false;
-  showMaintenanceForm = false;
   maintenanceDoneKeys = new Set<string>();
   readonly maintenanceGroups: Array<{ by: 'internal' | 'external'; title: string }> = [
     { by: 'internal', title: 'Bảo dưỡng trong' },
@@ -141,38 +179,56 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
   constructor(
     private api: EquipmentChecklistService,
     private auth: FirebaseAuthService,
+    private perms: UserPermissionService,
     private fns: AngularFireFunctions,
     private router: Router,
     private cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
-    const seeded = await this.api.ensureSeeded().catch(() => 0);
+    this.mobileUi = this.isHandheld();
     const user = await firstValueFrom(this.auth.user$);
     this.userName = user?.displayName || user?.employeeId || '';
     this.userRole = user?.role || '';
+    const claims = await firstValueFrom(this.auth.claims());
+    this.canManage = claims.admin || (!claims.scan && !!user?.uid && await this.perms.hasDeletePermission(user.uid));
     await this.reload();
-    if (seeded) this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
+    if (this.mobileUi) {
+      this.cdr.detectChanges();
+      this.focusMobileScan();
+    }
+    void this.syncInBackground();
+  }
+
+  /** Nạp danh mục gốc và ghi bù kiểm tra Đạt sau khi trang đã hiện, không chặn người dùng. */
+  private async syncInBackground(): Promise<void> {
     try {
+      let changed = false;
+      const seeded = await this.api.ensureSeeded().catch(() => 0);
+      if (seeded) {
+        this.flash(`Đã nạp ${seeded} thiết bị ban đầu.`);
+        changed = true;
+        await this.reload();
+      }
       const filled = await this.api.fillPassedChecksUntil(this.equipment, '2026-10-10', (eq) => ({
         inspector: eq.responsiblePerson?.trim() || this.staff[0]?.name || 'Nguyễn Hoàng Tuấn',
         items: this.namesFor(eq)
       }));
       if (filled > 0) {
         this.flash(`Đã ghi ${filled} lần kiểm tra Đạt đến 10/10/2026.`);
-        await this.reload();
+        changed = true;
       }
+      if (changed) await this.reload();
     } catch (e: unknown) {
-      this.flash(e instanceof Error ? e.message : 'Không ghi được dữ liệu kiểm tra Đạt.', true);
-    }
-    this.mobileUi = this.isHandheld();
-    if (this.mobileUi) {
-      this.cdr.detectChanges();
-      this.focusMobileScan();
+      this.flash(e instanceof Error ? e.message : 'Không đồng bộ được dữ liệu ban đầu.', true);
     }
   }
 
   ngOnDestroy(): void {
+    window.clearTimeout(this.flashTimer);
+    window.clearTimeout(this.recentTimer);
+    this.rowTimers.forEach(timer => window.clearTimeout(timer));
+    window.clearTimeout(this.catalogTimer);
     void this.stopScan();
   }
 
@@ -188,21 +244,9 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return [...set].sort((a, b) => a.localeCompare(b, 'vi'));
   }
 
-  get categoryOptions(): Array<{ id: string; name: string }> {
-    const map = new Map<string, string>();
-    EQUIPMENT_CATEGORIES.forEach(c => map.set(c.categoryId, c.categoryName));
-    return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }
-
   get subcategoryOptions(): Array<{ id: string; name: string }> {
     return EQUIPMENT_CATEGORIES
       .filter(c => !this.filterCategory || c.categoryId === this.filterCategory)
-      .map(c => ({ id: c.subcategoryId, name: c.subcategoryName }));
-  }
-
-  get formSubcategories(): Array<{ id: string; name: string }> {
-    return EQUIPMENT_CATEGORIES
-      .filter(c => c.categoryId === this.form.categoryId)
       .map(c => ({ id: c.subcategoryId, name: c.subcategoryName }));
   }
 
@@ -364,32 +408,297 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
     return this.namesFor(eq).join(', ');
   }
 
-  openCreate(): void {
+  /** Nhóm đang thu gọn trên bảng Danh sách. */
+  listCollapsed = new Set<string>();
+  readonly statusFilters: Array<{ key: string; label: string }> = [
+    { key: '', label: 'Tất cả' },
+    { key: 'ACTIVE', label: 'Đang sử dụng' },
+    { key: 'REPAIR', label: 'Đang sửa chữa' },
+    { key: 'SPARE', label: 'Dự phòng' },
+    { key: 'INACTIVE', label: 'Không sử dụng' }
+  ];
+
+  /** Danh sách đã lọc, chia theo nhóm con (đúng thứ tự danh mục), bỏ nhóm không có thiết bị. */
+  get listSections(): Array<{ id: string; name: string; categoryName: string; rows: Equipment[] }> {
+    const rows = this.filtered;
+    return this.groupOptions.flatMap(cat => cat.subs.map(sub => ({
+      id: sub.id,
+      name: sub.name,
+      categoryName: cat.name,
+      rows: rows.filter(eq => eq.subcategoryId === sub.id)
+    }))).filter(sec => sec.rows.length);
+  }
+
+  get hasListFilter(): boolean {
+    return !!(this.filterStatus || this.filterSubcategory || this.searchQuery.trim());
+  }
+
+  statusCount(status: string): number {
+    return status ? this.equipment.filter(eq => eq.status === status).length : this.equipment.length;
+  }
+
+  setStatusFilter(status: string): void {
+    this.filterStatus = this.filterStatus === status ? '' : status;
+    this.cdr.markForCheck();
+  }
+
+  clearListFilters(): void {
+    this.filterStatus = '';
+    this.filterSubcategory = '';
+    this.searchQuery = '';
+    this.cdr.markForCheck();
+  }
+
+  toggleListGroup(id: string): void {
+    const next = new Set(this.listCollapsed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.listCollapsed = next;
+  }
+
+  sectionSelected(rows: Equipment[]): boolean {
+    return rows.length > 0 && rows.every(eq => this.labelSelection.has(eq.equipmentId));
+  }
+
+  toggleSection(rows: Equipment[]): void {
+    const all = this.sectionSelected(rows);
+    rows.forEach(eq => all ? this.labelSelection.delete(eq.equipmentId) : this.labelSelection.add(eq.equipmentId));
+    this.labelSelection = new Set(this.labelSelection);
+    this.cdr.markForCheck();
+  }
+
+  clearSelection(): void {
+    this.labelSelection = new Set();
+    this.bulkGroup = '';
+    this.cdr.markForCheck();
+  }
+
+  openCreate(subcategoryId = ''): void {
     this.editing = false;
     this.form = this.emptyEquipment();
+    this.form.subcategoryId = subcategoryId || this.filterSubcategory || this.lastGroup();
+    this.suggestedCode = '';
+    this.onFormGroup();
+    this.formError = '';
     this.showForm = true;
+    this.focusFormName();
   }
 
   openEdit(eq: Equipment): void {
     this.editing = true;
     this.form = { ...eq, checkBy: eq.checkBy || 'computer' };
+    this.formError = '';
     this.showForm = true;
+    this.focusFormName();
   }
 
-  onFormCategory(): void {
-    const first = this.formSubcategories[0];
-    if (first) this.form.subcategoryId = first.id;
+  closeForm(): void {
+    if (this.formSaving) return;
+    this.showForm = false;
+    this.cdr.markForCheck();
   }
 
-  async saveEquipment(): Promise<void> {
-    try {
-      await this.api.saveEquipment(this.form, !this.editing);
-      this.showForm = false;
-      this.flash(this.editing ? 'Đã cập nhật thiết bị.' : 'Đã thêm thiết bị.');
-      await this.reload();
-    } catch (e: unknown) {
-      this.flash(e instanceof Error ? e.message : 'Không lưu được thiết bị.', true);
+  /** Đổi nhóm trong form: gán nhóm lớn tương ứng; khi thêm mới thì gợi ý mã kế tiếp của nhóm. */
+  onFormGroup(): void {
+    this.form.categoryId = this.categoryOf(this.form.subcategoryId) || this.form.categoryId;
+    if (this.editing) return;
+    const code = this.form.managementCode.trim();
+    if (!code || code === this.suggestedCode) {
+      this.suggestedCode = this.suggestCode(this.form.subcategoryId);
+      this.form.managementCode = this.suggestedCode;
     }
+  }
+
+  /** Gõ / chọn đúng tên trong Nhân sự thì tự điền ID. */
+  onFormPerson(name: string): void {
+    const key = String(name || '').trim().toLowerCase();
+    const hit = this.staff.find(person => person.name.trim().toLowerCase() === key);
+    if (hit) this.form.responsibleEmployeeId = hit.employeeId;
+  }
+
+  /** Lưu thiết bị. addNext: giữ form mở, cùng nhóm, để thêm thiết bị kế tiếp. */
+  async saveEquipment(addNext = false): Promise<void> {
+    if (this.formSaving) return;
+    const name = this.form.equipmentName.trim();
+    const code = this.form.managementCode.trim();
+    if (!name || !code) {
+      this.formError = 'Cần nhập tên thiết bị và mã số quản lý.';
+      this.cdr.markForCheck();
+      return;
+    }
+    if (!this.editing && this.equipment.some(e => e.managementCode.trim().toLowerCase() === code.toLowerCase())) {
+      this.formError = `Mã ${code} đã có trong danh sách.`;
+      this.cdr.markForCheck();
+      return;
+    }
+    const original = this.editing ? this.equipment.find(e => e.equipmentId === this.form.equipmentId) : undefined;
+    const row: Equipment = {
+      ...this.form,
+      equipmentName: name,
+      managementCode: code,
+      categoryId: this.categoryOf(this.form.subcategoryId) || this.form.categoryId
+    };
+    if (!this.editing || original?.subcategoryId !== row.subcategoryId) row.stt = this.nextStt(row.subcategoryId);
+
+    const wasEditing = this.editing;
+    this.formSaving = true;
+    this.formError = '';
+    this.cdr.markForCheck();
+    try {
+      const saved = await this.api.saveEquipment(row, !wasEditing);
+      this.upsertLocal(saved);
+      this.rememberGroup(saved.subcategoryId);
+      this.markRecent(saved.equipmentId);
+      this.flash(wasEditing
+        ? `Đã lưu ${saved.managementCode}.`
+        : `Đã thêm ${saved.managementCode} vào ${subcategoryName(saved.subcategoryId)}.`);
+      if (addNext && !wasEditing) {
+        this.form = {
+          ...this.emptyEquipment(),
+          subcategoryId: saved.subcategoryId,
+          frequency: saved.frequency,
+          status: saved.status,
+          checkBy: saved.checkBy || 'computer',
+          responsiblePerson: saved.responsiblePerson,
+          responsibleEmployeeId: saved.responsibleEmployeeId
+        };
+        this.suggestedCode = '';
+        this.onFormGroup();
+        this.focusFormName();
+      } else {
+        this.showForm = false;
+      }
+    } catch (e: unknown) {
+      this.formError = e instanceof Error ? e.message : 'Không lưu được thiết bị.';
+    } finally {
+      this.formSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Chuyển một thiết bị sang nhóm khác ngay trên bảng; lỗi thì trả về nhóm cũ. */
+  async setGroup(eq: Equipment, subcategoryId: string): Promise<void> {
+    const categoryId = this.categoryOf(subcategoryId);
+    if (!categoryId || subcategoryId === eq.subcategoryId) return;
+    const prev = { categoryId: eq.categoryId, subcategoryId: eq.subcategoryId, stt: eq.stt };
+    const stt = this.nextStt(subcategoryId);
+    Object.assign(eq, { categoryId, subcategoryId, stt });
+    this.equipment = [...this.equipment].sort(compareEquipment);
+    this.markRecent(eq.equipmentId);
+    this.cdr.markForCheck();
+    try {
+      await this.api.moveEquipmentGroup([eq.equipmentId], categoryId, subcategoryId, stt);
+      this.flash(`Đã chuyển ${eq.managementCode} sang ${subcategoryName(subcategoryId)}.`);
+    } catch (e: unknown) {
+      Object.assign(eq, prev);
+      this.equipment = [...this.equipment].sort(compareEquipment);
+      this.flash(e instanceof Error ? e.message : 'Không chuyển được nhóm.', true);
+    }
+  }
+
+  /** Chuyển các thiết bị đang chọn sang nhóm bulkGroup, xếp nối tiếp cuối nhóm. */
+  async moveSelected(): Promise<void> {
+    const subcategoryId = this.bulkGroup;
+    const categoryId = this.categoryOf(subcategoryId);
+    if (!categoryId) {
+      this.flash('Chọn nhóm cần chuyển tới.', true);
+      return;
+    }
+    const rows = this.equipment.filter(e => this.labelSelection.has(e.equipmentId) && e.subcategoryId !== subcategoryId);
+    if (!rows.length) {
+      this.flash('Thiết bị đã chọn đã ở nhóm này.');
+      return;
+    }
+    const start = this.nextStt(subcategoryId);
+    const prev = rows.map(e => ({ e, categoryId: e.categoryId, subcategoryId: e.subcategoryId, stt: e.stt }));
+    rows.forEach((e, i) => Object.assign(e, { categoryId, subcategoryId, stt: start + i }));
+    this.equipment = [...this.equipment].sort(compareEquipment);
+    this.bulkMoving = true;
+    this.cdr.markForCheck();
+    try {
+      await this.api.moveEquipmentGroup(rows.map(e => e.equipmentId), categoryId, subcategoryId, start);
+      this.bulkGroup = '';
+      this.flash(`Đã chuyển ${rows.length} thiết bị sang ${subcategoryName(subcategoryId)}.`);
+    } catch (e: unknown) {
+      prev.forEach(p => Object.assign(p.e, { categoryId: p.categoryId, subcategoryId: p.subcategoryId, stt: p.stt }));
+      this.equipment = [...this.equipment].sort(compareEquipment);
+      this.flash(e instanceof Error ? e.message : 'Không chuyển được nhóm.', true);
+    } finally {
+      this.bulkMoving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private upsertLocal(saved: Equipment): void {
+    this.equipment = [...this.equipment.filter(e => e.equipmentId !== saved.equipmentId), saved].sort(compareEquipment);
+  }
+
+  private categoryOf(subcategoryId: string): string {
+    return EQUIPMENT_CATEGORIES.find(c => c.subcategoryId === subcategoryId)?.categoryId || '';
+  }
+
+  private nextStt(subcategoryId: string): number {
+    return this.equipment
+      .filter(e => e.subcategoryId === subcategoryId)
+      .reduce((max, e) => Math.max(max, Number(e.stt) || 0), 0) + 1;
+  }
+
+  /** Mã kế tiếp theo kiểu mã dùng nhiều nhất trong nhóm, ví dụ WH-XNĐ_011 → WH-XNĐ_012 (không trùng mã đã có). */
+  private suggestCode(subcategoryId: string): string {
+    const prefixCount = new Map<string, number>();
+    this.equipment.filter(e => e.subcategoryId === subcategoryId).forEach(e => {
+      const m = e.managementCode.trim().match(/^(.*?)(\d+)$/);
+      if (m) prefixCount.set(m[1], (prefixCount.get(m[1]) || 0) + 1);
+    });
+    const prefix = [...prefixCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (prefix === undefined) return '';
+    let max = 0;
+    let width = 1;
+    this.equipment.forEach(e => {
+      const code = e.managementCode.trim();
+      if (!code.startsWith(prefix)) return;
+      const digits = code.slice(prefix.length);
+      if (!/^\d+$/.test(digits)) return;
+      max = Math.max(max, Number(digits));
+      width = Math.max(width, digits.length);
+    });
+    const taken = new Set(this.equipment.map(e => e.managementCode.trim().toLowerCase()));
+    let next = max + 1;
+    let code = '';
+    do {
+      code = `${prefix}${String(next).padStart(width, '0')}`;
+      next += 1;
+    } while (taken.has(code.toLowerCase()));
+    return code;
+  }
+
+  private lastGroup(): string {
+    try {
+      const id = localStorage.getItem(EquipmentChecklistComponent.LAST_GROUP_KEY) || '';
+      if (this.categoryOf(id)) return id;
+    } catch { /* bộ nhớ trình duyệt bị chặn */ }
+    return this.groupOptions[0]?.subs[0]?.id || '';
+  }
+
+  private rememberGroup(subcategoryId: string): void {
+    try { localStorage.setItem(EquipmentChecklistComponent.LAST_GROUP_KEY, subcategoryId); } catch { /* bỏ qua */ }
+  }
+
+  private markRecent(equipmentId: string): void {
+    this.recentId = equipmentId;
+    window.clearTimeout(this.recentTimer);
+    this.recentTimer = window.setTimeout(() => {
+      this.recentId = '';
+      this.cdr.markForCheck();
+    }, 2500);
+    window.setTimeout(() => {
+      document.querySelector(`tr[data-eq="${CSS.escape(equipmentId)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 80);
+  }
+
+  private focusFormName(): void {
+    this.cdr.markForCheck();
+    window.setTimeout(() => this.formName?.nativeElement.focus(), 30);
   }
 
   async onExcel(event: Event): Promise<void> {
@@ -410,6 +719,14 @@ export class EquipmentChecklistComponent implements OnInit, OnDestroy {
 
   exportExcel(): void {
     this.api.exportMonth(this.filtered, this.records, this.year, this.month);
+  }
+
+  /** Ô ký cuối biểu mẫu khi in / tải file: Người lập · Người kiểm tra · Người phê duyệt. */
+  private signatureBlockHtml(): string {
+    const cell = (role: string) => `<td><div class="sign-role">${role}</div><div class="sign-note">(Ký, ghi rõ họ tên)</div>`
+      + `<div class="sign-space"></div><div class="sign-line">Họ tên: ................................................</div>`
+      + `<div class="sign-line">Ngày: ......../......../${this.year}</div></td>`;
+    return `<table class="sign-block"><tr>${cell('Người lập')}${cell('Người kiểm tra')}${cell('Người phê duyệt')}</tr></table>`;
   }
 
   printChecklistA3(download: boolean): void {
@@ -456,6 +773,12 @@ td.sun, th.sun { background: #e5e7eb; }
 .actions { margin: 10px 0; }
 button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
 @media print { .actions { display: none; } }
+.sign-block { width: 100%; border-collapse: collapse; margin-top: 18px; page-break-inside: avoid; font-size: 12px; }
+.sign-block td { width: 33.33%; border: 1px solid #000; text-align: center; vertical-align: top; padding: 6px; }
+.sign-block .sign-role { font-weight: 700; }
+.sign-block .sign-note { font-size: 10px; font-style: italic; color: #333; }
+.sign-block .sign-space { height: 70px; }
+.sign-block .sign-line { text-align: left; font-size: 11px; padding-top: 4px; }
 </style></head><body>
 <div class="actions"><button type="button" onclick="window.print()">In A3</button></div>
 <table class="pxk-top-header"><tr>
@@ -474,6 +797,7 @@ button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
 <p class="sub">Tháng ${this.month}/${this.year}. ✓ Đạt (xanh), chưa làm (vàng), ✕ Không đạt (đỏ). Chủ nhật không kiểm tra. Lịch tuần chỉ thứ 2.</p>
 <table class="grid"><thead><tr><th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Người phụ trách</th>${headDays}</tr></thead><tbody>${body}</tbody></table>
 <p class="legend"><i class="g"></i>Đạt<i class="y"></i>Chưa làm<i class="r"></i>Không đạt</p>
+${this.signatureBlockHtml()}
 </body></html>`;
     if (download) {
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -494,14 +818,7 @@ button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
   }
 
   openMaintenanceForm(): void {
-    this.showInspect = false;
-    this.showMaintenanceForm = true;
-    this.cdr.markForCheck();
-  }
-
-  closeMaintenanceForm(): void {
-    this.showMaintenanceForm = false;
-    this.cdr.markForCheck();
+    this.setView('maint');
   }
 
   maintenanceEquipment(by: 'internal' | 'external'): Equipment[] {
@@ -590,6 +907,12 @@ table.grid td.name, table.grid td.ticks { text-align: left; }
 .actions { margin: 10px 0; }
 button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
 @media print { .actions { display: none; } }
+.sign-block { width: 100%; border-collapse: collapse; margin-top: 18px; page-break-inside: avoid; font-size: 12px; }
+.sign-block td { width: 33.33%; border: 1px solid #000; text-align: center; vertical-align: top; padding: 6px; }
+.sign-block .sign-role { font-weight: 700; }
+.sign-block .sign-note { font-size: 10px; font-style: italic; color: #333; }
+.sign-block .sign-space { height: 70px; }
+.sign-block .sign-line { text-align: left; font-size: 11px; padding-top: 4px; }
 </style></head><body>
 <div class="actions"><button type="button" onclick="window.print()">In A3</button></div>
 <table class="pxk-top-header"><tr>
@@ -608,6 +931,7 @@ button { height: 32px; padding: 0 12px; font-weight: 700; cursor: pointer; }
 <p class="sub">Năm ${this.year}. ☑ đã bảo dưỡng lần đó. ☐ chưa bảo dưỡng.</p>
 ${section('Bảo dưỡng trong', 'internal')}
 ${section('Bảo dưỡng ngoài', 'external')}
+${this.signatureBlockHtml()}
 </body></html>`;
     if (download) {
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -664,7 +988,6 @@ ${section('Bảo dưỡng ngoài', 'external')}
     });
     this.selectedDay = day;
     this.dialogOpen = true;
-    this.view = 'check';
     this.cdr.markForCheck();
     return true;
   }
@@ -690,6 +1013,12 @@ ${section('Bảo dưỡng ngoài', 'external')}
   onItemResult(row: { result: 'PASS' | 'FAIL' | '' }, value: string): void {
     row.result = value === 'FAIL' || value === 'PASS' ? value : '';
     if (value === 'FAIL') this.dialogResult = 'FAIL';
+  }
+
+  allItemsPass(): void {
+    this.itemRows.forEach(row => { row.result = 'PASS'; });
+    if (this.dialogResult === 'FAIL') this.dialogResult = 'PASS';
+    this.cdr.markForCheck();
   }
 
   dialogItems(): string[] {
@@ -721,7 +1050,7 @@ ${section('Bảo dưỡng ngoài', 'external')}
     }
     this.dialogSaving = true;
     try {
-      await this.api.upsertInspection({
+      const saved = await this.api.upsertInspection({
         inspectionId: '',
         equipmentId: this.dialogEquipment.equipmentId,
         inspectionDate: this.dialogDate,
@@ -734,7 +1063,10 @@ ${section('Bảo dưỡng ngoài', 'external')}
         checkedItems: this.itemRows.filter(row => row.result === 'PASS').map(row => row.name),
         itemResults: this.itemRows.map(row => ({ itemName: row.name, result: row.result, note: row.note.trim() }))
       });
-      await this.reload();
+      this.records = [
+        ...this.records.filter(r => !(r.equipmentId === saved.equipmentId && r.inspectionDate === saved.inspectionDate)),
+        saved
+      ];
       this.dialogOpen = false;
       if (this.mobileUi) {
         const rest = this.dialogEquipment ? this.lateDatesFor(this.dialogEquipment) : [];
@@ -783,34 +1115,11 @@ ${section('Bảo dưỡng ngoài', 'external')}
       void this.startScan();
       return;
     }
-    if (view === 'list' && !this.listUnlocked) {
-      this.listPassword = '';
-      this.listPasswordError = '';
-      this.showListPassword = true;
-      this.cdr.markForCheck();
+    if ((view === 'list' || view === 'items' || view === 'staff') && !this.canManage) {
+      this.flash('Bạn không có quyền mở mục này. Nhờ quản lý bật quyền trong Settings.', true);
       return;
     }
     this.view = view;
-    this.cdr.markForCheck();
-  }
-
-  /** Mở mục Danh sách thiết bị: cần mật khẩu, nhập đúng 1 lần thì mở được tới khi rời tab. */
-  confirmListPassword(): void {
-    if (this.listPassword !== EquipmentChecklistComponent.LIST_PASSWORD) {
-      this.listPasswordError = 'Sai mật khẩu.';
-      this.cdr.markForCheck();
-      return;
-    }
-    this.listUnlocked = true;
-    this.showListPassword = false;
-    this.listPassword = '';
-    this.setView('list');
-  }
-
-  cancelListPassword(): void {
-    this.showListPassword = false;
-    this.listPassword = '';
-    this.listPasswordError = '';
     this.cdr.markForCheck();
   }
 
@@ -954,18 +1263,16 @@ ${section('Bảo dưỡng ngoài', 'external')}
       this.flash('Chọn ít nhất một thiết bị để xóa.', true);
       return;
     }
-    this.deletePassword = '';
-    this.deleteError = '';
+    if (!this.canManage) {
+      this.flash('Bạn không có quyền xóa thiết bị.', true);
+      return;
+    }
     this.showDelete = true;
     this.cdr.markForCheck();
   }
 
   async confirmDelete(): Promise<void> {
-    if (this.deletePassword !== '2026') {
-      this.deleteError = 'Sai mật khẩu.';
-      this.cdr.markForCheck();
-      return;
-    }
+    if (!this.canManage) return;
     const ids = [...this.labelSelection];
     this.deleting = true;
     this.cdr.markForCheck();
@@ -974,7 +1281,6 @@ ${section('Bảo dưỡng ngoài', 'external')}
       ids.forEach(id => this.labelSelection.delete(id));
       if (this.dialogEquipment && ids.includes(this.dialogEquipment.equipmentId)) this.dialogOpen = false;
       this.showDelete = false;
-      this.deletePassword = '';
       this.flash(`Đã xóa ${ids.length} thiết bị.`);
       await this.reload();
     } catch (e: unknown) {
@@ -985,14 +1291,90 @@ ${section('Bảo dưỡng ngoài', 'external')}
     }
   }
 
+  /**
+   * Lưu một dòng sau khi sửa trực tiếp trên bảng. Mỗi dòng lưu tuần tự: sửa tiếp trong lúc đang lưu
+   * thì lưu thêm một lượt với giá trị mới nhất, không để bản cũ ghi đè bản mới.
+   */
   async saveRow(eq: Equipment): Promise<void> {
+    const id = eq.equipmentId;
+    eq.equipmentName = (eq.equipmentName || '').trim();
     eq.responsiblePerson = eq.responsiblePerson?.trim() || null;
     eq.responsibleEmployeeId = eq.responsibleEmployeeId?.trim().toUpperCase() || null;
-    try {
-      await this.api.saveEquipment(eq, false);
-    } catch (e: unknown) {
-      this.flash(e instanceof Error ? e.message : 'Không lưu được thiết bị.', true);
+    if (!eq.equipmentName) {
+      this.setRowState(id, 'error');
+      this.flash('Tên thiết bị không được để trống.', true);
+      return;
     }
+    if (this.rowSaving.has(id)) {
+      this.rowDirty.add(id);
+      return;
+    }
+    this.rowSaving.add(id);
+    this.setRowState(id, 'saving');
+    try {
+      do {
+        this.rowDirty.delete(id);
+        await this.api.saveEquipment(eq, false);
+      } while (this.rowDirty.has(id));
+      this.setRowState(id, 'saved');
+      if (this.view !== 'list') this.flash('Đã lưu.');
+    } catch (e: unknown) {
+      this.setRowState(id, 'error');
+      this.flash(e instanceof Error ? e.message : 'Không lưu được thiết bị.', true);
+    } finally {
+      this.rowSaving.delete(id);
+      this.rowDirty.delete(id);
+    }
+  }
+
+  /** Gõ / chọn đúng tên trong Nhân sự ở bảng thì tự điền ID rồi lưu. */
+  onRowPerson(eq: Equipment): void {
+    const key = String(eq.responsiblePerson || '').trim().toLowerCase();
+    const hit = this.staff.find(person => person.name.trim().toLowerCase() === key);
+    if (hit) eq.responsibleEmployeeId = hit.employeeId;
+    void this.saveRow(eq);
+  }
+
+  onCellFocus(event: FocusEvent): void {
+    this.cellOriginal = (event.target as HTMLInputElement).value;
+  }
+
+  /** Ô sửa trên bảng: Enter lưu và xuống dòng (Shift+Enter lên dòng), Esc hoàn tác. */
+  onCellKey(event: KeyboardEvent, eq: Equipment, field: 'equipmentName' | 'responsiblePerson' | 'responsibleEmployeeId'): void {
+    const input = event.target as HTMLInputElement;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      eq[field] = this.cellOriginal;
+      input.value = this.cellOriginal;
+      input.blur();
+      this.cdr.markForCheck();
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const col = input.dataset['col'] || '';
+    const cells = Array.from(document.querySelectorAll<HTMLInputElement>(`.eql input[data-col="${col}"]`));
+    const next = cells[cells.indexOf(input) + (event.shiftKey ? -1 : 1)];
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      input.blur();
+    }
+  }
+
+  private setRowState(id: string, state: 'saving' | 'saved' | 'error'): void {
+    this.rowState = new Map(this.rowState).set(id, state);
+    window.clearTimeout(this.rowTimers.get(id));
+    if (state === 'saved') {
+      this.rowTimers.set(id, window.setTimeout(() => {
+        const next = new Map(this.rowState);
+        next.delete(id);
+        this.rowState = next;
+        this.cdr.markForCheck();
+      }, 1500));
+    }
+    this.cdr.markForCheck();
   }
 
   async setFrequency(eq: Equipment, value: string): Promise<void> {
@@ -1221,9 +1603,19 @@ ${section('Bảo dưỡng ngoài', 'external')}
     return 'open';
   }
 
-  addCheckItem(sub: { items: string[] }): void {
-    sub.items.push('');
-    this.cdr.markForCheck();
+  /** Ô "Thêm hạng mục" của từng thẻ nhóm (khóa = id nhóm con, MAINT_DRAFT cho bảo dưỡng). */
+  itemDrafts: Record<string, string> = {};
+  readonly MAINT_DRAFT = '__maint';
+  catalogState: '' | 'saving' | 'saved' | 'error' = '';
+  private catalogTimer = 0;
+
+  /** Thêm hạng mục từ ô nhập cuối thẻ (Enter). Bỏ qua ô trống và hạng mục trùng. */
+  addItemFromDraft(sub: { id: string; items: string[] }): void {
+    if (this.pushDraft(sub.id, sub.items)) void this.saveCatalog();
+  }
+
+  addMaintenanceFromDraft(): void {
+    if (this.pushDraft(this.MAINT_DRAFT, this.maintenanceItems)) void this.saveCatalog();
   }
 
   removeCheckItem(sub: { items: string[] }, index: number): void {
@@ -1231,14 +1623,39 @@ ${section('Bảo dưỡng ngoài', 'external')}
     void this.saveCatalog();
   }
 
-  addMaintenanceItem(): void {
-    this.maintenanceItems.push('');
-    this.cdr.markForCheck();
-  }
-
   removeMaintenanceItem(index: number): void {
     this.maintenanceItems.splice(index, 1);
     void this.saveCatalog();
+  }
+
+  /** Enter trong ô hạng mục: rời ô để lưu (sự kiện change). */
+  blurInput(event: Event): void {
+    (event.target as HTMLInputElement).blur();
+  }
+
+  trackIndex(index: number): number {
+    return index;
+  }
+
+  trackSection(_index: number, section: { id: string }): string {
+    return section.id;
+  }
+
+  groupCount(subcategoryId: string): number {
+    return this.equipment.filter(eq => eq.subcategoryId === subcategoryId).length;
+  }
+
+  private pushDraft(key: string, items: string[]): boolean {
+    const value = (this.itemDrafts[key] || '').trim();
+    if (!value) return false;
+    if (items.some(item => item.trim().toLowerCase() === value.toLowerCase())) {
+      this.flash(`"${value}" đã có trong danh sách.`, true);
+      return false;
+    }
+    items.push(value);
+    this.itemDrafts[key] = '';
+    this.cdr.markForCheck();
+    return true;
   }
 
   async saveCatalog(): Promise<void> {
@@ -1248,10 +1665,21 @@ ${section('Bảo dưỡng ngoài', 'external')}
         checklists[sub.id] = sub.items.map(item => item.trim()).filter(Boolean);
       });
     });
+    this.catalogState = 'saving';
+    window.clearTimeout(this.catalogTimer);
+    this.cdr.markForCheck();
     try {
       await this.api.saveItemCatalog(checklists, this.maintenanceItems.map(item => item.trim()).filter(Boolean));
+      this.catalogState = 'saved';
+      this.catalogTimer = window.setTimeout(() => {
+        this.catalogState = '';
+        this.cdr.markForCheck();
+      }, 2000);
     } catch (e: unknown) {
+      this.catalogState = 'error';
       this.flash(e instanceof Error ? e.message : 'Không lưu được hạng mục.', true);
+    } finally {
+      this.cdr.markForCheck();
     }
   }
 
@@ -1261,6 +1689,28 @@ ${section('Bảo dưỡng ngoài', 'external')}
 
   checkedDay(eq: Equipment, day: number): boolean {
     return isClosed(this.resultOn(eq, this.cellDate(day)));
+  }
+
+  /** Tab Kiểm tra: xem theo trang, mỗi trang CHECK_PAGE_SIZE thiết bị. */
+  checkPage = 1;
+  readonly CHECK_PAGE_SIZE = 10;
+
+  get checkView(): { rows: Equipment[]; total: number; page: number; pageCount: number; pages: number[]; from: number; to: number } {
+    const list = this.filtered;
+    const total = list.length;
+    const pageCount = Math.max(1, Math.ceil(total / this.CHECK_PAGE_SIZE));
+    const page = Math.min(Math.max(1, this.checkPage), pageCount);
+    const start = (page - 1) * this.CHECK_PAGE_SIZE;
+    const rows = list.slice(start, start + this.CHECK_PAGE_SIZE);
+    // Tối đa 7 nút số quanh trang hiện tại
+    const first = Math.max(1, Math.min(page - 3, pageCount - 6));
+    const pages: number[] = [];
+    for (let n = first; n <= Math.min(pageCount, first + 6); n++) pages.push(n);
+    return { rows, total, page, pageCount, pages, from: total ? start + 1 : 0, to: start + rows.length };
+  }
+
+  isTodayDay(day: number): boolean {
+    return this.cellDate(day) === this.todayKey();
   }
 
   isSundayDay(day: number): boolean {
@@ -1921,9 +2371,16 @@ ${section('Bảo dưỡng ngoài', 'external')}
     });
   }
 
+  private flashTimer = 0;
+
   private flash(text: string, error = false): void {
     this.message = text;
     this.messageError = error;
+    window.clearTimeout(this.flashTimer);
+    this.flashTimer = window.setTimeout(() => {
+      this.message = '';
+      this.cdr.markForCheck();
+    }, error ? 6000 : 2500);
     this.cdr.markForCheck();
   }
 }

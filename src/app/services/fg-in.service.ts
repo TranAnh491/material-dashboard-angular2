@@ -52,13 +52,4 @@ export class FgInService {
     );
   }
 
-  // Get all import records
-  getAllImportRecords(): Observable<FgInItem[]> {
-    return this.firestore.collection('fg-in').snapshotChanges().pipe(
-      map(actions => actions.map(action => ({
-        id: action.payload.doc.id,
-        ...action.payload.doc.data() as FgInItem
-      })))
-    );
-  }
 }

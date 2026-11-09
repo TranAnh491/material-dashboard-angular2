@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
@@ -326,7 +327,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
   async printLabel(): Promise<void> {
     if (this.isSavingLabel) return;
     if (!this.labelSenderName.trim() || !this.labelReceiverName.trim()) {
-      alert('Vui lòng nhập đủ Tên người gửi và Tên người nhận.');
+      appAlert('Vui lòng nhập đủ Tên người gửi và Tên người nhận.');
       return;
     }
 
@@ -366,7 +367,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       void this.loadInternalLabelCounts(this.rangeStart, this.rangeEnd);
     } catch (e) {
       console.error('printLabel error', e);
-      alert('Không tạo được label. Vui lòng thử lại.');
+      appAlert('Không tạo được label. Vui lòng thử lại.');
     } finally {
       this.isSavingLabel = false;
       this.cdr.markForCheck();
@@ -383,7 +384,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
 
     const win = window.open('', '_blank');
     if (!win) {
-      alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+      appAlert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
       return;
     }
 
@@ -597,7 +598,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.scanLabelResult = { ...this.scanLabelResult, status: 'received', receivedAt: new Date() };
     } catch (e) {
       console.error('markLabelReceived error', e);
-      alert('Cập nhật "Đã nhận" thất bại. Vui lòng thử lại.');
+      appAlert('Cập nhật "Đã nhận" thất bại. Vui lòng thử lại.');
     } finally {
       this.isSavingScanAction = false;
       this.cdr.markForCheck();
@@ -614,7 +615,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
     const raw = String(this.scanEmployeeCodeInput || '').trim().toUpperCase();
     const employeeId = raw.slice(0, 7);
     if (!/^ASP\d{4}$/.test(employeeId)) {
-      alert('Vui lòng scan/nhập đúng mã nhân viên người nhận (ASP + 4 số).');
+      appAlert('Vui lòng scan/nhập đúng mã nhân viên người nhận (ASP + 4 số).');
       return;
     }
 
@@ -636,10 +637,10 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         deliveredByEmployeeId: employeeId
       };
       this.scanEmployeeCodeInput = '';
-      alert(`✅ Đã giao cho ${employeeId}.`);
+      appAlert(`✅ Đã giao cho ${employeeId}.`);
     } catch (e) {
       console.error('markLabelDelivered error', e);
-      alert('Cập nhật "Đã giao" thất bại. Vui lòng thử lại.');
+      appAlert('Cập nhật "Đã giao" thất bại. Vui lòng thử lại.');
     } finally {
       this.isSavingScanAction = false;
       this.cdr.markForCheck();
@@ -882,7 +883,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
     if (this.blockedDayKeys.has(dayKey)) {
       const pass = String(prompt('Nhập pass để unblock ngày') || '').trim();
       if (pass !== this.BLOCK_PASS) {
-        alert('Sai pass.');
+        appAlert('Sai pass.');
         return;
       }
       const ok = confirm(`Unblock ngày ${cell.ymd}?`);
@@ -895,14 +896,14 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         .then(() => this.loadRange(this.rangeStart, this.rangeEnd))
         .catch((err) => {
           console.error('unblockDay error', err);
-          alert('Unblock ngày thất bại. Vui lòng thử lại.');
+          appAlert('Unblock ngày thất bại. Vui lòng thử lại.');
         });
       return;
     }
 
     const pass = String(prompt('Nhập pass để block ngày') || '').trim();
     if (pass !== this.BLOCK_PASS) {
-      alert('Sai pass.');
+      appAlert('Sai pass.');
       return;
     }
 
@@ -922,7 +923,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       .then(() => this.loadRange(this.rangeStart, this.rangeEnd))
       .catch((err) => {
         console.error('blockDay error', err);
-        alert('Block ngày thất bại. Vui lòng thử lại.');
+        appAlert('Block ngày thất bại. Vui lòng thử lại.');
       });
   }
 
@@ -1011,10 +1012,10 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
         { merge: true }
       );
       await this.loadRange(this.rangeStart, this.rangeEnd);
-      alert('✅ Đã xác nhận ngày mới. Lệnh được đưa lên lịch.');
+      appAlert('✅ Đã xác nhận ngày mới. Lệnh được đưa lên lịch.');
     } catch (e) {
       console.error('confirmRescheduledByRequester error', e);
-      alert('Xác nhận thất bại. Vui lòng thử lại.');
+      appAlert('Xác nhận thất bại. Vui lòng thử lại.');
     }
   }
 
@@ -1449,7 +1450,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
 
     const pass = String(prompt('Nhập pass để xử lý lệnh giao hàng') || '').trim();
     if (pass !== this.APPROVE_PASS) {
-      alert('Sai pass.');
+      appAlert('Sai pass.');
       return;
     }
 
@@ -1499,7 +1500,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);
-      alert('✅ Đã từ chối (Không đặt được).');
+      appAlert('✅ Đã từ chối (Không đặt được).');
     } catch (e) {
       console.error('decideReject error', e);
       this.decisionError = 'Từ chối thất bại. Vui lòng thử lại.';
@@ -1533,7 +1534,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);
-      alert('✅ Đã duyệt (Đã đặt).');
+      appAlert('✅ Đã duyệt (Đã đặt).');
     } catch (e) {
       console.error('decideApprove error', e);
       this.decisionError = 'Duyệt thất bại. Vui lòng thử lại.';
@@ -1621,7 +1622,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       this.isDecisionProcessing = false;
       this.closeDecisionModal();
       await this.loadRange(this.rangeStart, this.rangeEnd);
-      alert(outOfRange ? '✅ Đổi lịch thành công (có thể không hiển thị vì ngoài 2 tuần).'
+      appAlert(outOfRange ? '✅ Đổi lịch thành công (có thể không hiển thị vì ngoài 2 tuần).'
         : '✅ Đổi lịch thành công.');
     } catch (e) {
       console.error('confirmReschedule error', e);
@@ -1638,7 +1639,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
 
     const pass = String(prompt('Nhập pass để Xóa lệnh') || '').trim();
     if (pass !== this.DELETE_PASS) {
-      alert('Sai pass.');
+      appAlert('Sai pass.');
       return;
     }
 
@@ -1648,10 +1649,10 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
     try {
       await this.firestore.collection(this.COLLECTION).doc(row.id).delete();
       await this.loadRange(this.rangeStart, this.rangeEnd);
-      alert('✅ Đã xóa lệnh giao hàng.');
+      appAlert('✅ Đã xóa lệnh giao hàng.');
     } catch (e) {
       console.error('requestDelete error', e);
-      alert('Xóa thất bại. Vui lòng thử lại.');
+      appAlert('Xóa thất bại. Vui lòng thử lại.');
       this.cdr.markForCheck();
     }
   }
@@ -1679,7 +1680,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
 
       const win = window.open('', '_blank');
       if (!win) {
-        alert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
+        appAlert('Trình duyệt chặn cửa sổ in. Cho phép popup và thử lại.');
         return;
       }
 
@@ -1792,7 +1793,7 @@ export class TruckScheduleComponent implements OnInit, OnDestroy {
       win.document.close();
     } catch (e) {
       console.error('downloadDeliveryOrder error', e);
-      alert('Không tải được lệnh giao hàng. Vui lòng thử lại.');
+      appAlert('Không tải được lệnh giao hàng. Vui lòng thử lại.');
     }
   }
 }

@@ -43,7 +43,8 @@ export async function notifyPxkWeightCheckReport(
     clip(opts?.maKho, 40) ? `Kho: ${clip(opts?.maKho, 40)}` : '',
     clip(opts?.po, 80) ? `PO: ${clip(opts?.po, 80)}` : '',
     clip(opts?.reason, 400) ? `Lý do: ${clip(opts?.reason, 400)}` : '',
-    'Nhóm Quản lý kho: Work Order Status → KHÁC → Danh mục check lượng → Duyệt hoặc Từ chối.'
+    'Duyệt: Danh mục NVL/TP → tab Check lượng / Cân → Duyệt hoặc Từ chối.',
+    `Hoặc rep tin này: duyệt (hoặc gõ: duyệt ${clip(opts?.materialCode, 40) || '<Mã hàng>'})`
   ].filter(Boolean);
   const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
   const res = await fetch(url, {

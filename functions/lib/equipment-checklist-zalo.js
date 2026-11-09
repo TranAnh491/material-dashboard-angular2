@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendEquipmentChecklistZaloRemind = sendEquipmentChecklistZaloRemind;
 const zalo_notify_util_1 = require("./zalo-notify.util");
-const KHO_GROUP_DOC = 'zalo_group_config/quanly_kho';
+const EQUIPMENT_GROUP_CHAT_ID = 'zgr-e8c5e8200360ea3eb371';
 /** Ngày lễ cố định hằng năm: Tết Dương lịch, 30/4, 1/5, 2/9. */
 const FIXED_HOLIDAYS = ['01-01', '04-30', '05-01', '09-02'];
 /**
@@ -111,7 +111,7 @@ function chunkZaloText(title, lines) {
     return chunks;
 }
 async function sendEquipmentChecklistZaloRemind(db, now = new Date(), slot = '1100') {
-    var _a, _b;
+    var _a;
     const day = todayKey(now);
     const offDay = isSunday(now) || await isHoliday(db, day);
     if (offDay && isSunday(now))
@@ -140,10 +140,7 @@ async function sendEquipmentChecklistZaloRemind(db, now = new Date(), slot = '11
     const due = offDay ? [] : active.filter(eq => isDue(eq, records, day));
     if (!late.length && !due.length)
         return { sent: 0, due: 0, offDay };
-    const groupSnap = await db.doc(KHO_GROUP_DOC).get();
-    const chatId = String(((_b = groupSnap.data()) === null || _b === void 0 ? void 0 : _b.chatId) || '').trim();
-    if (!chatId)
-        throw new Error('Chưa gắn nhóm Kho trong zalo_group_config/quanly_kho.');
+    const chatId = EQUIPMENT_GROUP_CHAT_ID;
     const title = slot === '1315'
         ? `Nhắc lại kiểm tra thiết bị kho (${viDay(day)}/${day.slice(0, 4)})`
         : slot === 'push'

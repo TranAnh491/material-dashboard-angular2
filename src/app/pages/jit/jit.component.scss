@@ -1,0 +1,320 @@
+/* JIT — giao diện kiểu Excel: full trang, kẻ ô, ít màu */
+:host { display: block; }
+
+.jit { display: flex; flex-direction: column; height: 100vh; width: 100%; padding: 8px 12px; box-sizing: border-box;
+  background: #fff; color: #111; font-size: 13px; }
+
+/* Thanh nút đầu trang */
+.jit__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid #d0d0d0; }
+.jit__group { display: flex; align-items: center; gap: 6px; }
+.jit__group--grow { flex: 1; justify-content: flex-end; min-width: 260px; }
+.jit__title { font-size: 16px; font-weight: 700; margin: 0 10px;
+  .material-icons { display: none; } }
+
+.jit-btn { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid #b7b7b7; border-radius: 4px; background: #fff; color: #111; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  .material-icons { font-size: 18px; }
+  &:hover { background: #f2f2f2; }
+  &--on { background: #e3e3e3; border-color: #7a7a7a; font-weight: 700; }
+  &--check { font-weight: 500; input { margin: 0 4px 0 0; } }
+  &:disabled { opacity: .5; cursor: default; } }
+.jit-search { height: 36px; box-sizing: border-box; padding: 0 8px; border: 1px solid #b7b7b7; border-radius: 4px;
+  min-width: 200px; flex: 1; max-width: 320px; font-size: 13px; }
+
+.jit__err { color: #c00; margin: 6px 0 0; }
+.jit__hint { display: none; }
+
+/* Bảng chính */
+.jit__wrap { flex: 1; min-height: 0; overflow: auto; margin-top: 8px; border: 1px solid #b7b7b7; }
+.jit-table { width: 100%; border-collapse: collapse;
+  th, td { border: 1px solid #d0d0d0; padding: 3px 6px; height: 26px; text-align: left; vertical-align: middle; white-space: nowrap; }
+  th { position: sticky; top: 0; z-index: 2; background: #f2f2f2; font-weight: 700; font-size: 12px; color: #111; border-color: #b7b7b7; }
+  tbody tr:hover > td { background: #f7f9fc; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .c { text-align: center; }
+  .b { font-weight: 700; }
+  tr.is-done > td { color: #8a8a8a; }
+  tr.is-open > td { background: #eef3fb; }
+  small { display: block; font-size: 11px; color: #666; } }
+
+.jit-pat { color: #555 !important; }
+.jit-st { font-weight: 400; }
+
+.jit-lsx { display: inline-flex; align-items: center; gap: 2px; border: none; background: none; padding: 0; font: inherit;
+  font-weight: 700; color: #1f4e9c; cursor: pointer;
+  .material-icons { font-size: 16px; color: #555; }
+  &:hover { text-decoration: underline; } }
+
+.jit-pick { width: 16px; height: 16px; cursor: pointer; margin: 0; }
+.jit-call { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 8px; border: 1px solid #b7b7b7;
+  border-radius: 3px; background: #fff; color: #111; font-size: 12px; font-weight: 600; cursor: pointer;
+  .material-icons { font-size: 15px; }
+  &:hover { background: #f2f2f2; }
+  &:disabled { opacity: .5; cursor: default; } }
+.jit-last { margin-top: 1px; }
+.jit-next { input { height: 24px; border: 1px solid #b7b7b7; border-radius: 3px; padding: 0 4px; font-size: 12px; } }
+.jit-x { margin-left: 3px; width: 22px; height: 22px; border: 1px solid #b7b7b7; border-radius: 3px; background: #fff; cursor: pointer; }
+.jit-empty { text-align: center !important; color: #666; padding: 20px !important; }
+
+/* Bảng sắp xếp NVL (mở dưới LSX) */
+.jit-detail-row > td { background: #fafafa !important; padding: 6px 8px 10px 28px !important; white-space: normal !important; height: auto !important; }
+.jit-detail__msg { margin: 4px 0; color: #444; &--err { color: #c00; } }
+.jit-plan__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+.jit-plan__src { color: #555; font-size: 12px; }
+.jit-plan__grow { flex: 1; }
+.jit-mats { width: 100%; border-collapse: collapse; background: #fff;
+  th, td { border: 1px solid #d0d0d0; padding: 2px 6px; height: 24px; white-space: nowrap; }
+  th { position: static; background: #f2f2f2; font-size: 12px; font-weight: 700; border-color: #b7b7b7; }
+  .jit-mat-name { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+  tr.jit-mat--du td, tr.jit-mat--thieu td { color: inherit; } }
+.jit-plan-h small { display: inline; margin-left: 4px; font-weight: 400; color: #666; }
+.jit-plan-cell { padding: 0 !important; background: #fffef5;
+  input { width: calc(100% - 22px); min-width: 70px; height: 24px; box-sizing: border-box; border: none; padding: 0 6px;
+    text-align: right; font: inherit; background: transparent; vertical-align: middle;
+    &:focus { outline: 2px solid #1f6feb; outline-offset: -2px; background: #fff; } } }
+.jit-fill { width: 20px; height: 22px; padding: 0; border: none; border-left: 1px solid #e0e0e0; background: transparent;
+  color: #888; cursor: pointer; vertical-align: middle;
+  &:hover { color: #111; background: #eee; } }
+.jit-plan-bad { color: #c00 !important; font-weight: 700; }
+
+@media (max-width: 700px) { .jit { padding: 8px 16px; } .jit__title { width: 100%; margin: 0; } }
+
+/* Trang của 1 LSX */
+.jit-info { width: 100%; border-collapse: collapse; margin-top: 8px;
+  th, td { border: 1px solid #d0d0d0; padding: 3px 6px; height: 26px; white-space: nowrap; text-align: left; }
+  th { background: #f2f2f2; font-weight: 700; font-size: 12px; width: 1%; border-color: #b7b7b7; } }
+.jit-info__pick { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; cursor: pointer; }
+.jit-table.jit-mats { width: 100%;
+  th { position: sticky; top: 0; } }
+.jit-detail__msg { margin: 6px 0 0; }
+
+/* Lần 1/2/3: nhóm 3 cột Chọn | Cuộn | Đã giao */
+.jit-table.jit-mats {
+  thead tr:first-child th { top: 0; }
+  thead tr.jit-sub th { top: 33px; font-weight: 600; font-size: 11px; }
+  .jit-grp { border-left: 2px solid #8a8a8a !important;
+    small { display: block; font-weight: 400; color: #666; } }
+  .jit-grp-l { border-left: 2px solid #8a8a8a !important; }
+  .jit-plan-cell { width: 70px;
+    input { width: 100%; min-width: 56px; }
+    input:disabled { background: #f4f4f4; } } }
+
+/* Lọc Line, sắp xếp ngày nhận, ẩn LSX, ngày từng lần */
+.jit-select { height: 36px; box-sizing: border-box; padding: 0 6px; border: 1px solid #b7b7b7; border-radius: 4px; background: #fff; font-size: 13px; }
+.jit-sort { cursor: pointer; user-select: none; &:hover { background: #e6e6e6 !important; } }
+.jit-table tr.is-hidden > td { color: #9a9a9a; background: #f6f6f6; }
+.jit-rdate { font-weight: 400; font-size: 12px; white-space: nowrap; margin-top: 2px;
+  input { width: 40px; height: 22px; box-sizing: border-box; border: 1px solid #b7b7b7; border-radius: 3px; padding: 0 3px; text-align: right; }
+  b { font-weight: 700; } }
+
+/* History: Apply / Unapply */
+.jit-hist { white-space: nowrap;
+  .jit-hist__txt { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+    font-size: 12px; color: #444; margin-right: 4px; }
+  .jit-call + .jit-call { margin-left: 3px; } }
+.jit-sign { color: #1b5e20 !important; font-weight: 600; }
+
+/* Điện thoại: tick Đã giao + ký nhận */
+.jitm { min-height: 100vh; padding: 8px 16px 16px; box-sizing: border-box; background: #fff; color: #111; font-size: 14px; }
+.jitm__bar { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid #d0d0d0; }
+.jitm__title { flex: 1; min-width: 0; font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jitm__tools { display: flex; gap: 6px; margin: 8px 0;
+  .jit-search { min-width: 0; max-width: none; } }
+.jitm__empty { color: #666; text-align: center; margin: 16px 0; }
+.jitm-card { display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 8px 10px; border: 1px solid #c8c8c8;
+  border-radius: 4px; background: #fff; font: inherit; color: inherit; cursor: pointer;
+  &:active { background: #f2f2f2; } }
+.jitm-card__top { display: flex; justify-content: space-between; gap: 8px; span { color: #555; font-size: 12px; } }
+.jitm-card__sub { color: #555; font-size: 12px; margin: 2px 0 4px; }
+.jitm-card__rounds { display: flex; flex-wrap: wrap; gap: 4px; }
+.jitm-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #c8c8c8; border-radius: 3px;
+  background: #f5f5f5; font-size: 12px;
+  &.is-ok { background: #e8f5e9; border-color: #a5d6a7; } }
+.jitm-chip__x { border: none; background: none; font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.jitm-tabs { display: flex; gap: 6px; margin: 8px 0; }
+.jitm-tab { flex: 1; height: 44px; border: 1px solid #b7b7b7; border-radius: 4px; background: #fff; font: inherit; font-weight: 700; cursor: pointer;
+  small { display: block; font-size: 11px; font-weight: 400; color: #555; }
+  &.is-on { background: #e3e3e3; border-color: #7a7a7a; } }
+.jitm-list { border: 1px solid #d0d0d0; }
+.jitm-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #e0e0e0; cursor: pointer; margin: 0;
+  &:last-child { border-bottom: none; }
+  input { width: 24px; height: 24px; margin: 2px 0 0; flex: none; }
+  &.is-ok { background: #f1f8f1; }
+  small { display: block; color: #666; font-size: 12px; } }
+.jitm-item__body { flex: 1; min-width: 0; font-weight: 400; color: #111; }
+.jitm-po { color: #555; font-size: 12px; }
+.jitm-sign { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.jitm-sign__done { color: #1b5e20; font-weight: 600; font-size: 13px; }
+.jitm-sign__ids { display: flex; flex-wrap: wrap; gap: 4px; }
+.jitm-sign__row { display: flex; gap: 6px; .jit-search { min-width: 0; max-width: none; } }
+.jitm-sign__save { width: 100%; justify-content: center; height: 44px; }
+
+/* =====================================================================
+   KANBAN (07/11/2026) — theo mẫu "JIT – Raw Material Call Delivery"
+   ===================================================================== */
+.jit { background: #f6f8fb; gap: 10px; }
+
+/* màu theo cột: (chữ, nền nhạt, viền) */
+$jk: (
+  waiting:    (#475569, #eef1f5, #e2e8f0),
+  kitting:    (#d9730d, #fff4e8, #fde3c4),
+  ready:      (#15803d, #edf9f0, #cdeed6),
+  delivering: (#1d4ed8, #edf3ff, #cfdffd),
+  jit:        (#6d28d9, #f4effe, #e2d6fb)
+);
+
+/* Header */
+.jk-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff;
+  border: 1px solid #e3e7ee; border-radius: 8px; padding: 8px 12px; }
+.jk-head__nav { display: flex; gap: 6px; padding-right: 12px; border-right: 1px solid #e3e7ee; }
+.jk-head__logo { height: 30px; }
+.jk-head__title { font-size: 18px; font-weight: 700; color: #0f172a; white-space: nowrap;
+  span { font-weight: 600; color: #475569; } }
+.jk-head__right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.jk-range { display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 8px; border: 1px solid #cbd2dc;
+  border-radius: 6px; background: #fff;
+  .material-icons { font-size: 18px; color: #475569; }
+  input { border: 0; outline: 0; font-size: 13px; background: transparent; width: 122px; }
+  span { color: #64748b; } }
+.jk-range__x { border: 0; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; color: #64748b; }
+.jk-icon-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #cbd2dc; border-radius: 6px; background: #fff; color: #334155; cursor: pointer;
+  &:hover { background: #f2f4f7; } .material-icons { font-size: 20px; } }
+
+/* Ô số liệu */
+.jk-stats { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.jk-stat { display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 72px; box-sizing: border-box;
+  background: #fff; border: 1px solid #e3e7ee; border-radius: 8px; text-align: left; font: inherit; color: #0f172a;
+  cursor: pointer;
+  &:hover { border-color: #b8c2d0; }
+  &.is-on { border-color: #64748b; box-shadow: inset 0 0 0 1px #64748b; } }
+.jk-stat__ic { width: 44px; height: 44px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; background: #eaf1ff; color: #1d4ed8; .material-icons { font-size: 26px; } }
+.jk-stat__txt { display: flex; flex-direction: column; min-width: 0;
+  b { font-size: 26px; line-height: 1.1; font-weight: 700; } }
+.jk-stat__lbl { font-size: 13px; color: #475569; white-space: nowrap; }
+@each $k, $c in $jk {
+  .jk-stat--#{$k} .jk-stat__ic { background: nth($c, 2); color: nth($c, 1); }
+}
+.jk-stat--otd { cursor: default; &:hover { border-color: #e3e7ee; } }
+.jk-otd__t { font-size: 15px !important; }
+.jk-ring { --p: 0; width: 54px; height: 54px; border-radius: 50%; flex: none; display: inline-flex; align-items: center;
+  justify-content: center; background: conic-gradient(#f59e0b calc(var(--p) * 1%), #e5e7eb 0);
+  &.is-good { background: conic-gradient(#16a34a calc(var(--p) * 1%), #e5e7eb 0); }
+  span { width: 42px; height: 42px; border-radius: 50%; background: #fff; display: inline-flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 700; } }
+
+/* Thanh lọc */
+.jk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.jk-seg { display: inline-flex; border: 1px solid #cbd2dc; border-radius: 6px; overflow: hidden; background: #fff;
+  button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 0; background: #fff;
+    font-size: 13px; font-weight: 600; color: #334155; cursor: pointer;
+    .material-icons { font-size: 18px; }
+    & + button { border-left: 1px solid #cbd2dc; }
+    &.is-on { background: #eaf1ff; color: #1d4ed8; box-shadow: inset 0 -2px 0 #1d4ed8; } } }
+.jk-search { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; box-sizing: border-box; flex: 1;
+  min-width: 200px; max-width: 360px; border: 1px solid #cbd2dc; border-radius: 6px; background: #fff;
+  .material-icons { font-size: 20px; color: #64748b; }
+  input { border: 0; outline: 0; flex: 1; font-size: 13px; background: transparent; min-width: 0; } }
+.jk-sel { height: 36px; padding: 0 8px; border: 1px solid #cbd2dc; border-radius: 6px; background: #fff; font-size: 13px;
+  color: #0f172a; max-width: 170px; }
+.jk-more { position: relative; }
+.jk-more__panel { position: absolute; top: 40px; left: 0; z-index: 30; min-width: 240px; padding: 8px 10px; background: #fff;
+  border: 1px solid #cbd2dc; border-radius: 6px; box-shadow: 0 6px 18px rgba(15, 23, 42, .12);
+  label { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 13px; cursor: pointer; white-space: nowrap; } }
+.jk-badge { margin-left: 4px; min-width: 18px; height: 18px; border-radius: 9px; background: #1d4ed8; color: #fff;
+  font-size: 11px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
+.jk-square { width: 36px; padding: 0; justify-content: center; }
+.jk-primary { background: #1d4ed8 !important; border-color: #1d4ed8 !important; color: #fff !important;
+  &:hover:not(:disabled) { background: #1e40af !important; } }
+.jk-spin { animation: jk-spin 1s linear infinite; }
+@keyframes jk-spin { to { transform: rotate(360deg); } }
+
+/* Bảng Kanban */
+.jk-board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.jk-col { display: flex; flex-direction: column; min-height: 0; background: #fff; border: 1px solid #e3e7ee; border-radius: 8px;
+  overflow: hidden; }
+.jk-col__head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 17px; font-weight: 700;
+  .material-icons { font-size: 22px; } }
+.jk-col__count { margin-left: auto; min-width: 28px; height: 24px; padding: 0 7px; border-radius: 6px; color: #fff;
+  font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.jk-col__body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.jk-col__more { border: 0; border-top: 1px solid #eef0f4; background: #fff; padding: 9px; font-size: 13px; color: #334155;
+  cursor: pointer; &:hover { background: #f6f8fb; } }
+.jk-empty { margin: 8px 0; text-align: center; color: #94a3b8; font-size: 13px; }
+
+.jk-card { position: relative; background: #fff; border: 1px solid #e3e7ee; border-left-width: 4px; border-radius: 6px;
+  padding: 10px 10px 8px 12px; display: flex; flex-direction: column; gap: 4px; flex: none;
+  &.is-hidden { opacity: .55; } }
+.jk-card__top { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.jk-card__lsx { border: 0; background: transparent; padding: 0; font-size: 15px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
+  &:hover { text-decoration: underline; } }
+.jk-chip { margin-left: auto; padding: 1px 7px; border: 1px solid #cbd2dc; border-radius: 4px; font-size: 11px; color: #334155;
+  background: #fff; flex: none; }
+.jk-card__row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e293b; min-width: 0;
+  .material-icons { font-size: 16px; color: #64748b; flex: none; }
+  > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+.jk-card__line { margin-left: auto; font-size: 11px; color: #64748b; flex: none; }
+.jk-card__calls { margin-left: auto; font-size: 11px; color: #64748b; flex: none; }
+.jk-card__foot { margin-top: 2px; }
+.jk-card__next { font-size: 11px; color: #b45309; display: flex; align-items: center; gap: 4px;
+  .material-icons { font-size: 14px; } }
+
+.jk-status { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 12px;
+  font-weight: 600; white-space: nowrap; .material-icons { font-size: 14px; color: inherit !important; } }
+.jk-card__foot .jk-status { margin-left: auto; }
+
+@each $k, $c in $jk {
+  .jk-col--#{$k} {
+    .jk-col__head { background: nth($c, 2); color: nth($c, 1); border-bottom: 1px solid nth($c, 3); }
+    .jk-col__count { background: nth($c, 1); }
+    .jk-card { border-left-color: nth($c, 1); }
+    .jk-card__lsx { color: if($k == waiting, #1d4ed8, nth($c, 1)); }
+  }
+  .jk-status--#{$k} { background: nth($c, 2); color: nth($c, 1); }
+}
+.jk-status.jk-status--delay { background: #fdecec; color: #b91c1c; }
+
+/* Menu ⋮ trên thẻ */
+.jk-menu { position: relative; flex: none; }
+.jk-menu__btn { width: 26px; height: 26px; border: 0; background: transparent; border-radius: 4px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; color: #475569;
+  &:hover { background: #f1f3f6; } .material-icons { font-size: 20px; } }
+.jk-menu__panel { position: absolute; right: 0; top: 28px; z-index: 40; min-width: 210px; padding: 4px 0; background: #fff;
+  border: 1px solid #cbd2dc; border-radius: 6px; box-shadow: 0 6px 18px rgba(15, 23, 42, .14);
+  button, label { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; border: 0; background: transparent;
+    font-size: 13px; color: #0f172a; text-align: left; cursor: pointer; box-sizing: border-box; white-space: nowrap;
+    &:hover { background: #f4f6f9; } .material-icons { font-size: 18px; color: #475569; } }
+  button:disabled { opacity: .5; cursor: default; }
+  label input { margin: 0 4px 0 2px; } }
+
+/* Status Flow */
+.jk-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; background: #fff;
+  border: 1px solid #e3e7ee; border-radius: 8px; font-size: 13px;
+  .jk-status { padding: 4px 10px; font-size: 13px; } }
+.jk-flow__arrow { font-size: 18px; color: #64748b; }
+.jk-flow__upd { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #334155;
+  .material-icons { font-size: 18px; } }
+
+/* Hộp thoại */
+.jk-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, .35); display: flex;
+  align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+.jk-dialog { width: min(520px, 100%); background: #fff; border-radius: 8px; border: 1px solid #cbd2dc; padding: 14px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .2);
+  > input { width: 100%; height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #b7b7b7; border-radius: 6px;
+    font-size: 15px; } }
+.jk-dialog__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; b { font-size: 16px; } }
+.jk-dialog__hint { margin: 6px 0 10px; font-size: 13px; color: #475569; }
+.jk-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.jk-help { width: 100%; td { vertical-align: middle; } }
+
+/* List trong bố cục mới */
+.jit .jit__wrap { background: #fff; margin-top: 0; }
+
+.jk-sel--month { font-weight: 600; }
+
+@media (max-width: 1400px) {
+  .jk-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

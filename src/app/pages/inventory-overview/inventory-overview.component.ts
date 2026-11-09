@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Location } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -85,6 +86,8 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   
   // LinkQ data
   linkQData: Map<string, number> = new Map(); // materialCode -> stock
+  /** File LinkQ có cột PO → tồn theo từng PO (materialCode → PO → stock), dùng cho Check PO ở Quản lý NL. */
+  linkQPoData: Map<string, Map<string, number>> = new Map();
   isLinkQDataLoaded = false;
   linkQEnoughCount = 0;
   linkQSurplusCount = 0;
@@ -1105,7 +1108,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
   async downloadFullReport(): Promise<void> {
     if (this.inventoryItems.length === 0) {
       console.warn('⚠️ No data to export');
-      alert('⚠️ Không có dữ liệu để tải báo cáo');
+      appAlert('⚠️ Không có dữ liệu để tải báo cáo');
       return;
     }
 
@@ -1177,10 +1180,10 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       XLSX.writeFile(wb, filename);
       
       console.log(`✅ Full report downloaded successfully: ${filename}`);
-      alert(`✅ Đã tải báo cáo đầy đủ: ${filename}\n\n📊 Tổng số dòng: ${exportData.length}\n📅 Thời gian: ${new Date().toLocaleString('vi-VN')}`);
+      appAlert(`✅ Đã tải báo cáo đầy đủ: ${filename}\n\n📊 Tổng số dòng: ${exportData.length}\n📅 Thời gian: ${new Date().toLocaleString('vi-VN')}`);
     } catch (error) {
       console.error('❌ Error downloading full report:', error);
-      alert('❌ Lỗi khi tải báo cáo: ' + error.message);
+      appAlert('❌ Lỗi khi tải báo cáo: ' + error.message);
     }
   }
 
@@ -1339,7 +1342,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           await this.processLinkQData(data, file.name);
 
           if (this.linkQData.size === 0) {
-            alert(
+            appAlert(
               '⚠️ Không đọc được mã hàng từ file.\n\n' +
               'Template cần 2 cột ở hàng đầu:\n' +
               '• Mã hàng\n' +
@@ -1357,11 +1360,11 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           }
           this.cdr.detectChanges();
 
-          alert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 File: ${file.name}\n🕒 ${this.latestLinkQFile?.uploadDate ? this.latestLinkQFile.uploadDate.toLocaleString('vi-VN') : ''}\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Bản cũ của ${this.selectedFactory} đã bị xóa / ghi đè`);
+          appAlert(`✅ Đã import thành công dữ liệu LinkQ!\n\n📦 File: ${file.name}\n🕒 ${this.latestLinkQFile?.uploadDate ? this.latestLinkQFile.uploadDate.toLocaleString('vi-VN') : ''}\n📦 Tổng số mã hàng: ${this.linkQData.size}\n🔄 Bản cũ của ${this.selectedFactory} đã bị xóa / ghi đè`);
           
         } catch (error) {
           console.error('❌ Error importing LinkQ data:', error);
-          alert('❌ Lỗi khi import dữ liệu LinkQ: ' + error.message);
+          appAlert('❌ Lỗi khi import dữ liệu LinkQ: ' + error.message);
         } finally {
           // Remove file input
           document.body.removeChild(fileInput);
@@ -1374,7 +1377,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Error in importLinkQData:', error);
-      alert('❌ Lỗi khi import dữ liệu LinkQ: ' + error.message);
+      appAlert('❌ Lỗi khi import dữ liệu LinkQ: ' + error.message);
     }
   }
 
@@ -1386,24 +1389,25 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       
       // Create sample data for template
       const templateData = [
+        // Cột PO không bắt buộc — có PO thì mỗi dòng 1 PO, tồn mã = cộng các PO
         {
           'Mã hàng': 'B001003',
-          'Tồn kho': 100
+          'PO': 'KZP001',
+          'Tồn kho': 60
         },
         {
-          'Mã hàng': 'P0123',
-          'Tồn kho': 50
+          'Mã hàng': 'B001003',
+          'PO': 'KZP002',
+          'Tồn kho': 40
         },
         {
           'Mã hàng': 'B018694',
+          'PO': 'KZP003',
           'Tồn kho': 200
         },
         {
-          'Mã hàng': 'A001234',
-          'Tồn kho': 75
-        },
-        {
           'Mã hàng': 'C005678',
+          'PO': '',
           'Tồn kho': 150
         }
       ];
@@ -1415,6 +1419,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       // Set column widths
       worksheet['!cols'] = [
         { width: 20 },  // Mã hàng
+        { width: 18 },  // PO
         { width: 15 }   // Tồn kho
       ];
       
@@ -1426,11 +1431,11 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ LinkQ template downloaded successfully');
-      alert('✅ Đã tải template LinkQ!\n\n📋 Template có 2 cột:\n• Mã hàng: Mã sản phẩm\n• Tồn kho: Số lượng tồn kho\n\n💡 Bạn có thể copy dữ liệu từ hệ thống LinkQ vào template này để import.');
+      appAlert('✅ Đã tải template LinkQ!\n\n📋 Template có 2 cột:\n• Mã hàng: Mã sản phẩm\n• Tồn kho: Số lượng tồn kho\n\n💡 Bạn có thể copy dữ liệu từ hệ thống LinkQ vào template này để import.');
       
     } catch (error) {
       console.error('❌ Error downloading template:', error);
-      alert('❌ Lỗi khi tải template: ' + error.message);
+      appAlert('❌ Lỗi khi tải template: ' + error.message);
     }
   }
 
@@ -1439,7 +1444,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     const XLSX = await import('xlsx');
     try {
       if (!this.isLinkQDataLoaded) {
-        alert('⚠️ Vui lòng import dữ liệu LinkQ trước khi tải báo cáo so sánh!');
+        appAlert('⚠️ Vui lòng import dữ liệu LinkQ trước khi tải báo cáo so sánh!');
         return;
       }
 
@@ -1478,7 +1483,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       const enough = comparisonData.filter(item => item['Kết quả'] === 'Đủ').length;
       const du = comparisonData.filter(item => item['Kết quả'] === 'Dư').length;
       const thieu = comparisonData.filter(item => item['Kết quả'] === 'Thiếu').length;
-      alert(
+      appAlert(
         `✅ Đã tải báo cáo so sánh LinkQ (LinkQ làm gốc)!\n\n` +
         `• Tổng mã: ${comparisonData.length}\n` +
         `• Đủ: ${enough}\n` +
@@ -1489,7 +1494,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Error downloading comparison report:', error);
-      alert('❌ Lỗi khi tải báo cáo so sánh: ' + error.message);
+      appAlert('❌ Lỗi khi tải báo cáo so sánh: ' + error.message);
     }
   }
 
@@ -1530,7 +1535,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
     });
   }
 
-  private mapLinkQRow(row: any): { materialCode: string; stock: number } {
+  private mapLinkQRow(row: any): { materialCode: string; stock: number; po: string | null } {
     const lookup = new Map<string, unknown>();
     Object.keys(row || {}).forEach((key) => {
       lookup.set(String(key).replace(/^\uFEFF/, '').trim().toLowerCase(), row[key]);
@@ -1575,7 +1580,9 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       'balance'
     );
     const stock = parseFloat(String(stockRaw ?? '0').replace(/,/g, '')) || 0;
-    return { materialCode, stock };
+    const poKey = ['po', 'số po', 'so po', 'po number', 'po no', 'po no.', 'mã po', 'ma po'].find((k) => lookup.has(k));
+    const po = poKey ? String(lookup.get(poKey) ?? '').trim().toUpperCase() : null;
+    return { materialCode, stock, po };
   }
 
   // Process LinkQ data from Excel
@@ -1616,15 +1623,35 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       
       // 🔧 SỬA LỖI: Tạo Map để track duplicate material codes
       const materialCodeCount = new Map<string, number>();
-      
+      this.linkQPoData.clear();
+      // File có cột PO: mỗi dòng 1 PO → tồn mã = cộng các dòng; giữ thêm tồn theo PO
+      const hasPoColumn = data.some((row) => this.mapLinkQRow(row).po !== null);
+
       data.forEach((row, index) => {
         const mapped = this.mapLinkQRow(row);
         const materialCode = mapped.materialCode;
         let stock = mapped.stock;
-        
+
+        if (hasPoColumn) {
+          const code = String(materialCode || '').trim();
+          if (!code) {
+            skippedCount++;
+            return;
+          }
+          if (materialCodeCount.has(code)) duplicateCount++;
+          else processedCount++;
+          materialCodeCount.set(code, (materialCodeCount.get(code) || 0) + 1);
+          this.linkQData.set(code, (this.linkQData.get(code) || 0) + stock);
+          const po = mapped.po || '—';
+          const byPo = this.linkQPoData.get(code) || new Map<string, number>();
+          byPo.set(po, (byPo.get(po) || 0) + stock);
+          this.linkQPoData.set(code, byPo);
+          return;
+        }
+
         // 🔧 LÀM TRÒN SỐ: Làm tròn số từ file LinkQ thành số chẵn
         stock = Math.round(stock);
-        
+
         if (materialCode && materialCode.toString().trim() !== '') {
           const trimmedCode = materialCode.toString().trim();
           
@@ -1660,7 +1687,12 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
           }
         }
       });
-      
+
+      if (hasPoColumn) {
+        this.linkQData.forEach((v, k) => this.linkQData.set(k, Math.round(v)));
+        this.linkQPoData.forEach((byPo) => byPo.forEach((v, k) => byPo.set(k, Math.round(v))));
+      }
+
       if (this.linkQData.size > 0) {
         await this.saveLinkQFileToFirebase(fileName, data.length, processedCount, skippedCount);
       }
@@ -1850,7 +1882,11 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
         skippedItems,
         userId,
         factory: this.selectedFactory,
-        linkQData: Object.fromEntries(this.linkQData)
+        linkQData: Object.fromEntries(this.linkQData),
+        // Không có cột PO → null (xóa tồn theo PO của file cũ)
+        linkQPoData: this.linkQPoData.size
+          ? Object.fromEntries(Array.from(this.linkQPoData.entries()).map(([code, byPo]) => [code, Object.fromEntries(byPo)]))
+          : null
       };
       const docId = this.linkQDocId();
       await this.firestore.collection('linkQFiles').doc(docId).set(payload);
@@ -1874,7 +1910,7 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
       // Find the file in our loaded history
       const fileInfo = this.linkQFiles.find(file => file.id === fileId);
       if (!fileInfo) {
-        alert('❌ File không tồn tại trong lịch sử!');
+        appAlert('❌ File không tồn tại trong lịch sử!');
         return;
       }
       
@@ -1895,17 +1931,17 @@ export class InventoryOverviewComponent implements OnInit, OnDestroy {
         this.updateStockComparisonSilently();
         
         // Show success message
-        alert(`✅ Đã load lại dữ liệu LinkQ từ file: ${fileInfo.fileName}\n\n📊 Thông tin file:\n• Tổng items: ${fileInfo.totalItems}\n• Xử lý thành công: ${fileInfo.processedItems}\n• Bỏ qua: ${fileInfo.skippedItems}\n• Ngày upload: ${fileInfo.uploadDate.toLocaleDateString('vi-VN')}\n\n🔄 Đã khôi phục ${this.linkQData.size} mã hàng để so sánh`);
+        appAlert(`✅ Đã load lại dữ liệu LinkQ từ file: ${fileInfo.fileName}\n\n📊 Thông tin file:\n• Tổng items: ${fileInfo.totalItems}\n• Xử lý thành công: ${fileInfo.processedItems}\n• Bỏ qua: ${fileInfo.skippedItems}\n• Ngày upload: ${fileInfo.uploadDate.toLocaleDateString('vi-VN')}\n\n🔄 Đã khôi phục ${this.linkQData.size} mã hàng để so sánh`);
         
         console.log(`✅ LinkQ data restored from ${fileInfo.fileName}: ${this.linkQData.size} items`);
       } else {
-        alert(`⚠️ File ${fileInfo.fileName} không có dữ liệu LinkQ để khôi phục!`);
+        appAlert(`⚠️ File ${fileInfo.fileName} không có dữ liệu LinkQ để khôi phục!`);
         console.log('⚠️ File has no LinkQ data to restore');
       }
       
     } catch (error) {
       console.error('❌ Error loading LinkQ file data:', error);
-      alert('❌ Lỗi khi load dữ liệu file: ' + error.message);
+      appAlert('❌ Lỗi khi load dữ liệu file: ' + error.message);
     }
   }
 

@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener } from '@angular/core';
+import { appAlert } from '../../shared/app-toast';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef, HostListener, NgZone, inject } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, forkJoin, firstValueFrom, Subscription } from 'rxjs';
 import { takeUntil, debounceTime, take, distinctUntilChanged } from 'rxjs/operators';
@@ -255,8 +256,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
   pklParsedItems: Partial<FgOutItem>[] = [];
 
   // Drag-and-drop state — bảng chính
-  dragMainIndex: number | null = null;
-  dragMainOverIndex: number | null = null;
   // Drag-and-drop state — bảng xuất kho dialog
   dragXkIndex: number | null = null;
   dragXkOverIndex: number | null = null;
@@ -350,6 +349,47 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.selectedFactory = factory;
     }
   }
+
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  /** Cache theo 1 chu kỳ change detection: các getter tổng hợp được template gọi nhiều lần mỗi lượt. */
+  private tickCache = new Map<string, unknown>();
+
+  /** Xóa cache ngoài NgZone: microtask trong zone sẽ kích hoạt thêm một vòng change detection liên tục. */
+  private cacheZone = inject(NgZone);
+
+  private memoTick<T>(key: string, compute: () => T): T {
+    if (this.tickCache.has(key)) return this.tickCache.get(key) as T;
+    const value = compute();
+    if (this.tickCache.size === 0) {
+      this.cacheZone.runOutsideAngular(() => Promise.resolve().then(() => this.tickCache.clear()));
+    }
+    this.tickCache.set(key, value);
+    return value;
+  }
+
+  /** Ô đang sửa: chỉ ô này dựng <input>, các ô còn lại là chữ thuần (như bảng SXXK) nên 300 dòng nhẹ hơn nhiều. */
+  private editMat: FgOutItem | null = null;
+  private editField = '';
+
+  isEditing(material: FgOutItem, field: string): boolean {
+    return this.editMat === material && this.editField === field;
+  }
+
+  startEdit(material: FgOutItem, field: string): void {
+    this.editMat = material;
+    this.editField = field;
+  }
+
+  stopEdit(): void {
+    this.editMat = null;
+    this.editField = '';
+  }
+
+  trackByMaterialCode = (_: number, t: { materialCode: string }): string => t.materialCode;
+
+  trackByPalletGroup = (_: number, g: { pallet: string }): string => g.pallet;
+
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
 
   ngOnInit(): void {
     this.applyIncomingQueryParams();
@@ -928,22 +968,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   /** Danh sách shipment đang hiển thị (từ filteredMaterials), dạng chuỗi. */
   get displayedShipmentsText(): string {
-    const set = new Set<string>();
-    this.filteredMaterials.forEach(m => {
-      const s = (m.shipment || '').toString().trim();
-      if (s) set.add(s);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b)).join(', ') || '—';
+    return this.getDisplayedShipments().join(', ') || '—';
   }
 
   /** Danh sách shipment unique đang hiển thị. */
   private getDisplayedShipments(): string[] {
-    const set = new Set<string>();
-    this.filteredMaterials.forEach(m => {
-      const s = String(m.shipment ?? '').trim();
-      if (s) set.add(s);
+    return this.memoTick('displayedShipments', () => {
+      const set = new Set<string>();
+      this.filteredMaterials.forEach(m => {
+        const s = String(m.shipment ?? '').trim();
+        if (s) set.add(s);
+      });
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
   /** Đang lọc theo 1 shipment (chỉ còn 1 shipment trong danh sách hiển thị). */
@@ -963,43 +1000,45 @@ export class FgOutComponent implements OnInit, OnDestroy {
     shipmentQty: number | null;
     qtyMatches: boolean;
   }> {
-    if (!this.isSingleShipmentView) return [];
-    const ship = this.getDisplayedShipments()[0] || '';
-    const map = new Map<string, { qty: number; carton: number }>();
-    this.displayRows.forEach(r => {
-      if (r.type !== 'detail') return;
-      const m = r.material;
-      const code = String(m.materialCode ?? '').trim().toUpperCase();
-      if (!code) return;
-      const cur = map.get(code) || { qty: 0, carton: 0 };
-      cur.qty += Number(m.quantity) || 0;
-      cur.carton += this.getCartonCountForDetailRow(m, r.matIdx);
-      map.set(code, cur);
-    });
+    return this.memoTick('totalsByCode', () => {
+      if (!this.isSingleShipmentView) return [];
+      const ship = this.getDisplayedShipments()[0] || '';
+      const map = new Map<string, { qty: number; carton: number }>();
+      this.displayRows.forEach(r => {
+        if (r.type !== 'detail') return;
+        const m = r.material;
+        const code = String(m.materialCode ?? '').trim().toUpperCase();
+        if (!code) return;
+        const cur = map.get(code) || { qty: 0, carton: 0 };
+        cur.qty += Number(m.quantity) || 0;
+        cur.carton += this.getCartonCountForDetailRow(m, r.matIdx);
+        map.set(code, cur);
+      });
 
-    // Thêm mã TP chỉ có bên Shipment (chưa có dòng nào trong FG Out) để không bị bỏ sót lệch.
-    this.shipmentExpectedQtyMap.forEach((_, key) => {
-      const sep = key.indexOf('|');
-      const keyShip = key.slice(0, sep);
-      const code = key.slice(sep + 1);
-      if (keyShip !== ship || !code) return;
-      if (!map.has(code)) map.set(code, { qty: 0, carton: 0 });
-    });
+      // Thêm mã TP chỉ có bên Shipment (chưa có dòng nào trong FG Out) để không bị bỏ sót lệch.
+      this.shipmentExpectedQtyMap.forEach((_, key) => {
+        const sep = key.indexOf('|');
+        const keyShip = key.slice(0, sep);
+        const code = key.slice(sep + 1);
+        if (keyShip !== ship || !code) return;
+        if (!map.has(code)) map.set(code, { qty: 0, carton: 0 });
+      });
 
-    return Array.from(map.entries())
-      .map(([materialCode, v]) => {
-        const key = `${ship}|${materialCode}`;
-        const hasShipmentData = this.shipmentExpectedQtyMap.has(key);
-        const shipmentQty = hasShipmentData ? this.shipmentExpectedQtyMap.get(key)! : null;
-        return {
-          materialCode,
-          totalQty: v.qty,
-          totalCarton: v.carton,
-          shipmentQty,
-          qtyMatches: shipmentQty === null ? true : Math.round(v.qty) === Math.round(shipmentQty)
-        };
-      })
-      .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+      return Array.from(map.entries())
+        .map(([materialCode, v]) => {
+          const key = `${ship}|${materialCode}`;
+          const hasShipmentData = this.shipmentExpectedQtyMap.has(key);
+          const shipmentQty = hasShipmentData ? this.shipmentExpectedQtyMap.get(key)! : null;
+          return {
+            materialCode,
+            totalQty: v.qty,
+            totalCarton: v.carton,
+            shipmentQty,
+            qtyMatches: shipmentQty === null ? true : Math.round(v.qty) === Math.round(shipmentQty)
+          };
+        })
+        .sort((a, b) => a.materialCode.localeCompare(b.materialCode));
+    });
   }
 
   /** So sánh số lượng Mã TP giữa FG Out (đang lọc) và tab Shipment cho shipment đang xem. */
@@ -1013,12 +1052,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   /** Shipment mặc định khi thêm dòng mới (giống shipment đang hiển thị). */
   get displayedShipmentForNewRow(): string {
-    const set = new Set<string>();
-    this.filteredMaterials.forEach(m => {
-      const s = (m.shipment || '').toString().trim();
-      if (s) set.add(s);
-    });
-    const arr = Array.from(set).sort((a, b) => a.localeCompare(b));
+    const arr = this.getDisplayedShipments();
     if (arr.length > 0) return arr[0];
     return (this.searchTerm || '').toString().trim();
   }
@@ -1096,7 +1130,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Sort materials: Shipment → Pallet → mergeCarton → Mã TP
   sortMaterials(): void {
-    console.log('🔄 Sorting FG Out materials by: Shipment → Pallet → mergeCarton → Mã TP');
     this.materials.sort((a, b) => {
       const shipA = (a.shipment || '').toString().toUpperCase();
       const shipB = (b.shipment || '').toString().toUpperCase();
@@ -1125,7 +1158,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const batchB = (b.batchNumber || '').toString().toUpperCase();
       return batchA.localeCompare(batchB);
     });
-    console.log(`✅ Sorted ${this.materials.length} FG Out materials`);
   }
 
   /** Đổi Gộp Thùng: lưu Firebase và sắp xếp lại để các dòng cùng pallet+mergeCarton nằm cạnh nhau */
@@ -1166,7 +1198,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       this.firestore.collection('fg-out').doc(material.id).update(updateData)
         .then(() => {
-          console.log('FG Out material updated in Firebase successfully');
         })
         .catch(error => {
           console.error('Error updating FG Out material in Firebase:', error);
@@ -1180,9 +1211,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
               this.materials.splice(index, 1);
               this.applyFilters();
             }
-            alert('⚠️ Dòng này đã bị xóa trước đó. Đã tự động làm mới danh sách.');
+            appAlert('⚠️ Dòng này đã bị xóa trước đó. Đã tự động làm mới danh sách.');
           } else {
-            alert('❌ Không lưu được thay đổi lên Firebase. Vui lòng thử lại.');
+            appAlert('❌ Không lưu được thay đổi lên Firebase. Vui lòng thử lại.');
           }
         });
     } else {
@@ -1205,11 +1236,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.firestore.collection('fg-out').add(newData)
         .then(docRef => {
           material.id = docRef.id;
-          console.log('FG Out material created in Firebase successfully with ID:', docRef.id);
         })
         .catch(error => {
           console.error('Error creating FG Out material in Firebase:', error);
-          alert('❌ Không lưu được dòng mới lên Firebase. Vui lòng thử lại.');
+          appAlert('❌ Không lưu được dòng mới lên Firebase. Vui lòng thử lại.');
         });
     }
   }
@@ -1458,7 +1488,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     if (material.approved) return;
     const shipment = String(material.shipment || '').trim();
     if (!shipment) {
-      alert('Vui lòng nhập/ chọn Shipment trước khi chọn Mã TP.');
+      appAlert('Vui lòng nhập/ chọn Shipment trước khi chọn Mã TP.');
       return;
     }
 
@@ -1778,11 +1808,18 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Delete material
   deleteMaterial(material: FgOutItem): void {
+    // Dòng đã duyệt đã trừ tồn TP → phải bỏ duyệt (trả lại tồn) rồi mới xóa, tránh lệch tồn.
+    if ((material as any).approved) {
+      appAlert('Dòng này đã duyệt (đã trừ tồn TP).\nBỏ tick Duyệt trước để trả lại tồn, rồi mới xóa.');
+      return;
+    }
+    if (material.id && !confirm(`Xóa dòng FG Out ${(material as any).materialCode || ''}${(material as any).batchNumber ? ' · batch ' + (material as any).batchNumber : ''}?`)) {
+      return;
+    }
     const removeLocally = () => {
       const index = this.materials.indexOf(material);
       if (index > -1) {
         this.materials.splice(index, 1);
-        console.log(`Deleted FG Out material: ${material.materialCode}`);
         this.applyFilters();
       }
     };
@@ -1792,7 +1829,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       // tránh tình trạng UI báo đã xóa nhưng document vẫn còn (F5 lại thấy dòng cũ).
       this.firestore.collection('fg-out').doc(material.id).delete()
         .then(() => {
-          console.log('FG Out material deleted from Firebase successfully');
           // Đánh dấu tombstone — nếu không, doc này vẫn còn trong snapshot backup hôm qua
           // và sẽ tái xuất hiện mỗi lần load (F5) cho tới khi backup ngày mai chạy lại.
           void this.fgDailyBackup.markDeleted('fg-out', material.id!);
@@ -1800,7 +1836,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         })
         .catch(error => {
           console.error('Error deleting FG Out material from Firebase:', error);
-          alert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại hoặc kiểm tra quyền xóa.');
+          appAlert('❌ Không xóa được dòng này trên Firebase. Vui lòng thử lại hoặc kiểm tra quyền xóa.');
         });
     } else {
       // Chưa có id (chưa từng lưu lên Firebase) — chỉ cần bỏ khỏi bảng.
@@ -2028,7 +2064,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.lastEmptySearchAlert = sig;
 
     if (kind === 'lot') {
-      alert(
+      appAlert(
         `Không tìm thấy lô «${t}».\n\n` +
           `Kiểm tra lại mã lô (có cả phần trong ngoặc nếu có), ví dụ: 5492(4).\n` +
           `Hoặc mở «Lọc theo thời gian» rồi tìm lại.`
@@ -2036,10 +2072,10 @@ export class FgOutComponent implements OnInit, OnDestroy {
       return;
     }
     if (kind === 'maTp') {
-      alert(`Không tìm thấy phiếu xuất cho mã TP «${t}».`);
+      appAlert(`Không tìm thấy phiếu xuất cho mã TP «${t}».`);
       return;
     }
-    alert(
+    appAlert(
       `Không tìm thấy kết quả cho «${t}».\n\n` +
         `Nếu đang tìm lô, hãy gõ đúng mã (vd: 5492(4)).`
     );
@@ -2266,11 +2302,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
     // Vị trí chỉ tải cho các dòng vừa hiển thị (debounce 500ms)
     this.loadLocationsSubject.next();
 
-    console.log('FG Out search results:', {
-      searchTerm: this.searchTerm,
-      totalMaterials: this.materials.length,
-      filteredMaterials: this.filteredMaterials.length
-    });
   }
 
   /** Load số lượng kỳ vọng từ collection shipments (tab Shipment) theo shipmentCode có trong filteredMaterials */
@@ -2338,7 +2369,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   searchHistory(): void {
     const code = (this.historyMaterialCode || '').trim().toUpperCase();
     if (!code) {
-      alert('Vui lòng nhập Mã TP');
+      appAlert('Vui lòng nhập Mã TP');
       return;
     }
     this.historyLoading = true;
@@ -2383,7 +2414,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
     }).catch(err => {
       console.error('History search error:', err);
-      alert('Lỗi tìm kiếm lịch sử: ' + (err?.message || err));
+      appAlert('Lỗi tìm kiếm lịch sử: ' + (err?.message || err));
     }).finally(() => {
       this.historyLoading = false;
     });
@@ -2484,16 +2515,19 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   getTotalQty(): number {
-    return this.filteredMaterials.reduce((sum, m) => sum + (m.quantity || 0), 0);
+    return this.memoTick('totalQty', () =>
+      this.filteredMaterials.reduce((sum, m) => sum + (m.quantity || 0), 0));
   }
 
   getTotalCarton(): number {
-    let sum = 0;
-    this.displayRows.forEach(r => {
-      if (r.type !== 'detail') return;
-      sum += this.getCartonCountForDetailRow(r.material, r.matIdx);
+    return this.memoTick('totalCarton', () => {
+      let sum = 0;
+      this.displayRows.forEach(r => {
+        if (r.type !== 'detail') return;
+        sum += this.getCartonCountForDetailRow(r.material, r.matIdx);
+      });
+      return sum;
     });
-    return sum;
   }
 
   trackByDisplayRow = (_: number, row: FgOutDisplayRow): string => {
@@ -2566,7 +2600,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     event.preventDefault();
     const trimmed = (this.searchTerm || '').trim().toUpperCase();
     if (trimmed.length < 4) {
-      alert('Nhập ít nhất 4 ký tự để tìm (Shipment / Mã TP / Lô).');
+      appAlert('Nhập ít nhất 4 ký tự để tìm (Shipment / Mã TP / Lô).');
       return;
     }
     this.lastEmptySearchAlert = '';
@@ -2678,7 +2712,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.pklStep = 2;
     } catch (err) {
       console.error(err);
-      alert('Lỗi đọc file: ' + (err as Error).message);
+      appAlert('Lỗi đọc file: ' + (err as Error).message);
     }
   }
 
@@ -2726,7 +2760,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.pklBuildMappingDisplay(mapping);
     this.pklParsedItems = this.pklParseDataWithMapping(mapping);
     if (this.pklParsedItems.length === 0) {
-      alert('Không tìm thấy dữ liệu. Hãy kiểm tra lại dòng bắt đầu (header) ở Bước 2.\n\nGợi ý: Chọn đúng dòng chứa tên cột như "PART NO.", "Quantity", "ASP VN PN"...');
+      appAlert('Không tìm thấy dữ liệu. Hãy kiểm tra lại dòng bắt đầu (header) ở Bước 2.\n\nGợi ý: Chọn đúng dòng chứa tên cột như "PART NO.", "Quantity", "ASP VN PN"...');
     }
     this.pklStep = 3;
   }
@@ -2738,7 +2772,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.materials = [...this.materials, ...materials];
     this.applyFilters();
     this.saveMaterialsToFirebase(materials);
-    alert(`Đã import ${materials.length} dòng từ Packing List`);
+    appAlert(`Đã import ${materials.length} dòng từ Packing List`);
     this.closePKLImportModal();
   }
 
@@ -2988,11 +3022,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
       // Save to Firebase
       this.saveMaterialsToFirebase(materials);
       
-      alert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
+      appAlert(`✅ Đã import thành công ${materials.length} materials từ file Excel!`);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -3070,7 +3104,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.firestore.collection('fg-out').add(materialData)
         .then((docRef) => {
           material.id = docRef.id;
-          console.log('FG Out material saved to Firebase successfully with ID:', docRef.id);
         })
         .catch(error => {
           console.error('Error saving FG Out material to Firebase:', error);
@@ -3135,7 +3168,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
 
   updateNotes(material: FgOutItem): void {
-    console.log('Updating notes for material:', material.materialCode, 'to:', material.notes);
     this.updateMaterialInFirebase(material);
   }
 
@@ -3176,10 +3208,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
     try {
       const data = await this.readExcelFile(file);
       this.xtpPreviewData = this.parseXTPData(data);
-      console.log('XTP Preview data:', this.xtpPreviewData);
     } catch (error) {
       console.error('Error processing XTP file:', error);
-      alert(`❌ Lỗi khi đọc file XTP: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi đọc file XTP: ${error.message || error}`);
     }
   }
 
@@ -3208,7 +3239,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
     }
     
-    console.log('XTP Column mapping:', { materialCodeCol, quantityCol, lotCol });
     
     // Parse data rows
     data.forEach((row: any, index: number) => {
@@ -3247,7 +3277,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   importXTPData(): void {
     if (!this.canImportXTP()) {
-      alert('❌ Vui lòng nhập đầy đủ thông tin và chọn file XTP');
+      appAlert('❌ Vui lòng nhập đầy đủ thông tin và chọn file XTP');
       return;
     }
 
@@ -3299,7 +3329,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xtpPreviewData = [];
     this.showXTPDialog = false;
 
-    alert(`✅ Đã import thành công ${newMaterials.length} items từ phiếu XTP!`);
+    appAlert(`✅ Đã import thành công ${newMaterials.length} items từ phiếu XTP!`);
   }
 
   // Load available shipments for filter (từ dữ liệu đã load — không query full collection)
@@ -3313,7 +3343,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Handle shipment input change
   onShipmentInputChange(): void {
-    console.log('Shipment input changed to:', this.selectedShipment);
     this.applyFilters();
   }
 
@@ -3330,7 +3359,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Handle approval change
   onApprovalChange(material: FgOutItem): void {
-    console.log('Approval changed for material:', material.id, 'approved:', material.approved);
     
     if (material.approved) {
       // Tick duyệt xuất: lưu ngày duyệt + ghi nhận xuất kho ở FG Inventory
@@ -3356,7 +3384,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       }
 
       this.removeFromExportCollection(material);
-      alert('Cần refresh tồn kho ở FG Inventory');
+      appAlert('Cần refresh tồn kho ở FG Inventory');
 
       // Reset approvedAt để UI hiển thị đúng “ngày tick duyệt”
       material.approvedAt = undefined;
@@ -3399,7 +3427,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Subtract quantity from FG Inventory (theo Mã TP, nhà máy, batch) và cập nhật fg-export
   // Nếu tồn nằm ở nhiều vị trí/doc → FIFO trừ lần lượt từng doc (ưu tiên khớp vị trí trên phiếu xuất).
   private subtractFromFGInventory(material: FgOutItem): void {
-    console.log(`📉 Processing export for ${material.quantity} units of ${material.materialCode}`);
     const factory = (material.factory || 'ASM1').toString().trim().toUpperCase();
     const materialCodeNorm = (material.materialCode || '').toString().trim().toUpperCase();
     const batchNorm = (material.batchNumber || '').toString().trim();
@@ -3434,8 +3461,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
     const processDocs = (matchingDocs: any[]) => {
       if (matchingDocs.length === 0) {
-        console.log('⚠️ No matching FG Inventory found (materialCode, batch)');
-        alert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
+        appAlert(`⚠️ Cảnh báo: Không tìm thấy tồn kho cho ${material.materialCode}! (Nhà máy: ${factory}, Batch: ${batchNorm})`);
         return;
       }
 
@@ -3448,14 +3474,12 @@ export class FgOutComponent implements OnInit, OnDestroy {
       });
 
       if (totalAvailable < material.quantity) {
-        console.log(`⚠️ Insufficient inventory: available=${totalAvailable}, required=${material.quantity}`);
-        alert(`⚠️ Cảnh báo: Không đủ tồn kho!\nCó: ${totalAvailable}\nCần: ${material.quantity}`);
+        appAlert(`⚠️ Cảnh báo: Không đủ tồn kho!\nCó: ${totalAvailable}\nCần: ${material.quantity}`);
         return;
       }
 
-      // Trừ tồn FIFO theo từng vị trí/doc
-      this.subtractFromInventoryDocs(sorted, material.quantity);
-      this.addToExportCollection(material);
+      // Trừ tồn FIFO theo từng vị trí/doc + bản ghi fg-export trong CÙNG 1 batch (cùng thành công / cùng không ghi)
+      void this.subtractFromInventoryDocs(sorted, material.quantity, material);
     };
 
     const expandAcrossLocationsIfNeeded = (primaryDocs: any[]) => {
@@ -3541,41 +3565,33 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Trừ tồn từ danh sách doc FG Inventory (FIFO từng vị trí)
-  private subtractFromInventoryDocs(docs: any[], totalQuantity: number): void {
-    let remainingQuantity = totalQuantity;
-    docs.forEach(doc => {
-      if (remainingQuantity <= 0) return;
-      const d = doc.data() as any;
-      const availableQuantity = Number(d.ton ?? d.stock ?? 0) || 0;
-      const quantityToSubtract = Math.min(remainingQuantity, availableQuantity);
-      if (quantityToSubtract > 0) {
-        const newQuantity = availableQuantity - quantityToSubtract;
-        const currentExported = Number(d.xuat ?? d.exported ?? 0) || 0;
-        const newExported = currentExported + quantityToSubtract;
-        const loc = String(d.location || '').trim() || '—';
-        doc.ref.update({
-          ton: newQuantity,
-          xuat: newExported,
-          exported: newExported,
-          updatedAt: new Date()
-        }).then(() => {
-          console.log(
-            `✅ Updated inventory ${doc.id} @ ${loc}: ton=${newQuantity}, xuat=${newExported} (subtracted ${quantityToSubtract})`
-          );
-        }).catch(error => {
-          console.error('❌ Error updating inventory:', error);
-        });
-        remainingQuantity -= quantityToSubtract;
-      }
-    });
-    if (remainingQuantity > 0) {
-      console.warn(`⚠️ Còn ${remainingQuantity} chưa trừ hết sau khi duyệt các vị trí`);
+  /** Phần cập nhật số cho 1 dòng fg-inventory khi xuất (+q) / hoàn tác (−q): cộng dồn nguyên tử, đúng trường dòng đó đang dùng. */
+  private fgInvDelta(d: any, q: number): Record<string, unknown> {
+    const FV = firebase.firestore.FieldValue;
+    const out: Record<string, unknown> = { updatedAt: new Date() };
+    // Tồn: dòng dùng `ton` (chuẩn) hoặc `stock` (dòng cũ)
+    if (d.ton !== undefined && d.ton !== null) out['ton'] = FV.increment(-q);
+    else if (d.stock !== undefined && d.stock !== null) out['stock'] = FV.increment(-q);
+    else out['ton'] = FV.increment(-q);
+    // Đã xuất: `xuat` là chuẩn; `exported` giữ khớp với `xuat`
+    const hasXuat = d.xuat !== undefined && d.xuat !== null;
+    const hasExported = d.exported !== undefined && d.exported !== null;
+    if (hasXuat) {
+      out['xuat'] = FV.increment(q);
+      if (!hasExported || Number(d.exported) === Number(d.xuat)) out['exported'] = FV.increment(q);
+      else out['exported'] = Math.max(0, (Number(d.xuat) || 0) + q);
+    } else if (hasExported) {
+      out['exported'] = FV.increment(q);
+      out['xuat'] = Math.max(0, (Number(d.exported) || 0) + q);
+    } else {
+      out['xuat'] = FV.increment(q);
+      out['exported'] = FV.increment(q);
     }
+    return out;
   }
 
-  // Add export record to fg-export collection
-  private addToExportCollection(material: FgOutItem): void {
-    const exportRecord = {
+  private fgExportRecord(material: FgOutItem): Record<string, unknown> {
+    return {
       materialCode: material.materialCode,
       batchNumber: material.batchNumber,
       lsx: material.lsx,
@@ -3583,101 +3599,67 @@ export class FgOutComponent implements OnInit, OnDestroy {
       quantity: material.quantity,
       shipment: material.shipment,
       pushNo: material.pushNo,
-      approvedBy: material.approvedBy || 'Current User', // TODO: Get from auth service
+      approvedBy: material.approvedBy || 'Current User',
       approvedAt: material.approvedAt || new Date(),
       createdAt: new Date(),
       updatedAt: new Date()
     };
-
-    this.firestore.collection('fg-export').add(exportRecord)
-      .then(docRef => {
-        console.log(`✅ Added export record: ${docRef.id} for ${material.materialCode}`);
-      })
-      .catch(error => {
-        console.error('❌ Error adding export record:', error);
-        alert(`❌ Lỗi khi lưu bản ghi xuất: ${error.message}`);
-      });
   }
+
+  // Trừ tồn từ danh sách doc FG Inventory (FIFO từng vị trí) + ghi fg-export — 1 batch, cộng dồn nguyên tử
+  private async subtractFromInventoryDocs(docs: any[], totalQuantity: number, material: FgOutItem): Promise<void> {
+    const db = this.firestore.firestore;
+    const batch = db.batch();
+    let remainingQuantity = totalQuantity;
+    for (const doc of docs) {
+      if (remainingQuantity <= 0) break;
+      const d = doc.data() as any;
+      const availableQuantity = Number(d.ton ?? d.stock ?? 0) || 0;
+      const q = Math.min(remainingQuantity, availableQuantity);
+      if (q > 0) {
+        batch.update(doc.ref, this.fgInvDelta(d, q));
+        remainingQuantity -= q;
+      }
+    }
+    if (remainingQuantity > 0) {
+      appAlert(`⚠️ ${material.materialCode}: còn ${remainingQuantity} chưa trừ được sau khi duyệt các vị trí — chưa ghi gì, kiểm tra tồn rồi duyệt lại.`);
+      return;
+    }
+    batch.set(db.collection('fg-export').doc(), this.fgExportRecord(material));
+    try {
+      await batch.commit();
+    } catch (error: any) {
+      console.error('❌ FG xuất: lỗi ghi tồn + fg-export', error);
+      appAlert(`❌ Chưa ghi được xuất kho ${material.materialCode} (tồn chưa bị trừ): ${error?.message || error}. Bỏ tick rồi duyệt lại.`);
+    }
+  }
+
+  // Add export record to fg-export collection
 
   // Add back quantity to FG Inventory and remove from export collection (hoàn tác duyệt xuất)
-  private addBackToFGInventory(material: FgOutItem): void {
-    console.log(`📈 Reversing export for ${material.quantity} units of ${material.materialCode}`);
-    
-    // First, remove from export collection
-    this.removeFromExportCollection(material);
-    
-    // Then add back to inventory
-    this.addBackToInventory(material);
-  }
+
 
   // Remove export record from fg-export collection
-  private removeFromExportCollection(material: FgOutItem): void {
-    this.firestore.collection('fg-export', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('batchNumber', '==', material.batchNumber)
-         .where('lsx', '==', material.lsx)
-         .where('lot', '==', material.lot)
-         .where('shipment', '==', material.shipment)
-         .where('pushNo', '==', material.pushNo)
-         .limit(1)
-    ).get().subscribe(snapshot => {
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        doc.ref.delete()
-          .then(() => {
-            console.log(`✅ Removed export record: ${doc.id} for ${material.materialCode}`);
-          })
-          .catch(error => {
-            console.error('❌ Error removing export record:', error);
-          });
-      } else {
-        console.log('⚠️ No matching export record found to remove');
-      }
-    });
-  }
 
   // Add back quantity to inventory items
-  private addBackToInventory(material: FgOutItem): void {
-    this.firestore.collection('fg-inventory', ref => 
-      ref.where('materialCode', '==', material.materialCode)
-         .where('batchNumber', '==', material.batchNumber)
-         .where('lsx', '==', material.lsx)
-         .where('lot', '==', material.lot)
-    ).get().subscribe(snapshot => {
-      if (snapshot.empty) {
-        console.log('⚠️ No matching FG Inventory found for adding back');
-        return;
-      }
 
-      let remainingQuantity = material.quantity;
-      
-      snapshot.docs.forEach(doc => {
-        if (remainingQuantity <= 0) return;
-        
-        const inventoryData = doc.data() as any;
-        const currentQuantity = inventoryData.ton || 0;
-        const quantityToAddBack = Math.min(remainingQuantity, material.quantity);
-        
-        if (quantityToAddBack > 0) {
-          const newQuantity = currentQuantity + quantityToAddBack;
-          const currentExported = Number(inventoryData.xuat ?? inventoryData.exported ?? 0) || 0;
-          const newExported = Math.max(0, currentExported - quantityToAddBack);
-          
-          doc.ref.update({
-            ton: newQuantity,
-            xuat: newExported,
-            exported: newExported, // backward-compat
-            updatedAt: new Date()
-          }).then(() => {
-            console.log(`✅ Added back to inventory ${doc.id}: ton=${newQuantity}, xuat=${newExported} (added ${quantityToAddBack})`);
-          }).catch(error => {
-            console.error('❌ Error updating inventory:', error);
-          });
-          
-          remainingQuantity -= quantityToAddBack;
-        }
+  /** Bỏ duyệt xuất: xóa bản ghi fg-export (tồn được trả lại khi FG Inventory "Refresh" theo danh mục hoàn tác — như cũ). */
+  private removeFromExportCollection(material: FgOutItem): void {
+    const db = this.firestore.firestore;
+    db.collection('fg-export')
+      .where('materialCode', '==', material.materialCode)
+      .where('batchNumber', '==', material.batchNumber)
+      .where('lsx', '==', material.lsx)
+      .where('lot', '==', material.lot)
+      .where('shipment', '==', material.shipment)
+      .where('pushNo', '==', material.pushNo)
+      .limit(1)
+      .get()
+      .then((snap) => (snap.empty ? undefined : snap.docs[0].ref.delete()))
+      .catch((error) => {
+        console.error('❌ Error removing export record:', error);
+        appAlert(`❌ Chưa xóa được bản ghi xuất ${material.materialCode}: ${error?.message || error}. Thử bỏ tick lại.`);
       });
-    });
   }
 
   private rebuildPrintMergeCartonFirstRowMap(): void {
@@ -3749,15 +3731,17 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   /** Nhóm printMaterials theo pallet để in */
   get printRowsByPallet(): { pallet: string; materials: FgOutItem[] }[] {
-    const groups = new Map<string, FgOutItem[]>();
-    this.printMaterials.forEach(m => {
-      const p = (m.pallet || '').toString().trim() || '—';
-      if (!groups.has(p)) groups.set(p, []);
-      groups.get(p)!.push(m);
+    return this.memoTick('printRowsByPallet', () => {
+      const groups = new Map<string, FgOutItem[]>();
+      this.printMaterials.forEach(m => {
+        const p = (m.pallet || '').toString().trim() || '—';
+        if (!groups.has(p)) groups.set(p, []);
+        groups.get(p)!.push(m);
+      });
+      return Array.from(groups.entries())
+        .sort((a, b) => (a[0] === '—' ? 1 : 0) - (b[0] === '—' ? 1 : 0) || a[0].localeCompare(b[0]))
+        .map(([pallet, materials]) => ({ pallet, materials }));
     });
-    return Array.from(groups.entries())
-      .sort((a, b) => (a[0] === '—' ? 1 : 0) - (b[0] === '—' ? 1 : 0) || a[0].localeCompare(b[0]))
-      .map(([pallet, materials]) => ({ pallet, materials }));
   }
 
   get printFactory(): string {
@@ -3767,7 +3751,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
   // Print selected shipment
   printSelectedShipment(): void {
     if (!this.selectedShipment) {
-      alert('Vui lòng chọn Shipment để in!');
+      appAlert('Vui lòng chọn Shipment để in!');
       return;
     }
     
@@ -3782,7 +3766,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const shipments = [...new Set(this.filteredMaterials.map(m => m.shipment).filter(s => s && s.trim()))];
     
     if (shipments.length === 0) {
-      alert('Không có shipment nào để in. Vui lòng tìm kiếm hoặc xem tất cả dữ liệu trước.');
+      appAlert('Không có shipment nào để in. Vui lòng tìm kiếm hoặc xem tất cả dữ liệu trước.');
       return;
     }
     
@@ -3799,7 +3783,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         this.selectedShipment = selected.trim();
         this.preparePrintData();
       } else if (selected) {
-        alert('Shipment không hợp lệ!');
+        appAlert('Shipment không hợp lệ!');
       }
     }
   }
@@ -4002,7 +3986,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const e = new Date(this.fgReportEndDate);
     e.setHours(23, 59, 59, 999);
     if (e < s) {
-      alert('Ngày kết thúc phải sau ngày bắt đầu.');
+      appAlert('Ngày kết thúc phải sau ngày bắt đầu.');
       return;
     }
     this.fgReportDownloading = true;
@@ -4015,7 +3999,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         .get()
         .toPromise();
       if (!snap || snap.empty) {
-        alert('Không có dữ liệu FG-OUT trong khoảng thời gian đã chọn.');
+        appAlert('Không có dữ liệu FG-OUT trong khoảng thời gian đã chọn.');
         return;
       }
       const rows: object[] = [];
@@ -4056,7 +4040,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
       const pad = (n: number) => String(n).padStart(2, '0');
       const fn = `FG_OUT_Report_${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}_${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}.xlsx`;
       XLSX.writeFile(wb, fn);
-      alert(`Đã tải ${rows.length} dòng FG-OUT Report.`);
+      appAlert(`Đã tải ${rows.length} dòng FG-OUT Report.`);
       this.closeFgOutReportDialog();
     } catch (err: any) {
       console.error('downloadFgOutReportExcel', err);
@@ -4064,7 +4048,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         err?.code === 'failed-precondition'
           ? 'Cần index Firestore cho fg-out (exportDate). Mở link trong Console.'
           : err?.message || 'Lỗi không xác định';
-      alert('Không tải được report: ' + msg);
+      appAlert('Không tải được report: ' + msg);
     } finally {
       this.fgReportDownloading = false;
       this.cdr.markForCheck();
@@ -4073,33 +4057,52 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // ==================== DRAG & DROP — BẢNG CHÍNH ====================
 
-  onMainDragStart(matIdx: number): void {
-    this.dragMainIndex = matIdx;
-  }
+  /** Menu chuột phải để đổi thứ tự dòng (thay kéo thả: kéo thả làm bảng 300 dòng bị giật). */
+  rowMenu: { x: number; y: number; matIdx: number } | null = null;
 
-  onMainDragOver(event: DragEvent, matIdx: number): void {
+  openRowMenu(event: MouseEvent, matIdx: number): void {
     event.preventDefault();
-    this.dragMainOverIndex = matIdx;
+    event.stopPropagation();
+    const menuW = 160;
+    const menuH = 150;
+    this.rowMenu = {
+      x: Math.min(event.clientX, window.innerWidth - menuW),
+      y: Math.min(event.clientY, window.innerHeight - menuH),
+      matIdx
+    };
   }
 
-  onMainDrop(matIdx: number): void {
-    if (this.dragMainIndex === null || this.dragMainIndex === matIdx) {
-      this.dragMainIndex = null;
-      this.dragMainOverIndex = null;
-      return;
+  @HostListener('document:click')
+  @HostListener('document:keydown.escape')
+  closeRowMenu(): void {
+    if (this.rowMenu) {
+      this.rowMenu = null;
+      this.cdr.markForCheck();
     }
-    // Reorder filteredMaterials
-    const [moved] = this.filteredMaterials.splice(this.dragMainIndex, 1);
-    this.filteredMaterials.splice(matIdx, 0, moved);
-    // Rebuild displayRows without resorting
-    this.rebuildDisplayRows();
-    this.dragMainIndex = null;
-    this.dragMainOverIndex = null;
   }
 
-  onMainDragEnd(): void {
-    this.dragMainIndex = null;
-    this.dragMainOverIndex = null;
+  moveRow(where: 'top' | 'bottom' | number): void {
+    const menu = this.rowMenu;
+    this.rowMenu = null;
+    if (!menu) return;
+    const list = this.filteredMaterials;
+    const to = where === 'top' ? 0
+      : where === 'bottom' ? list.length - 1
+      : menu.matIdx + where;
+    this.moveRowTo(menu.matIdx, to + 1);
+  }
+
+  /** Chuyển dòng ở vị trí `from` (0-based) tới số thứ tự `position` (1-based). */
+  moveRowTo(from: number, position: number | string): void {
+    const list = this.filteredMaterials;
+    const n = Math.round(Number(position));
+    if (!Number.isFinite(n) || from < 0 || from >= list.length) return;
+    const to = Math.max(0, Math.min(list.length - 1, n - 1));
+    if (to === from) return;
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    this.rebuildDisplayRows();
+    this.cdr.markForCheck();
   }
 
   // Rebuild displayRows từ filteredMaterials (chỉ chi tiết + dòng tổng carton theo pallet)
@@ -4221,7 +4224,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
     // Update filtered materials
     this.applyFilters();
     
-    console.log('✅ Added new row manually');
   }
 
   // Get location from FG Inventory - SIMPLIFIED to avoid infinite loop
@@ -4355,12 +4357,11 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
   // Get count of selected items
   getSelectedItemsCount(): number {
-    return this.xuatKhoPreviewItems.filter(item => item.selected).length;
+    return this.memoTick('selectedCount', () => this.xuatKhoPreviewItems.filter(item => item.selected).length);
   }
 
   // Load available shipments cho Xuất Kho – chỉ lấy shipment có status "Chờ soạn"
   loadAvailableShipmentsForXuatKho(): void {
-    console.log('🔍 Loading available shipments (status Chờ soạn)...');
     
     this.firestore.collection('shipments', ref =>
       ref.where('status', '==', 'Chờ soạn').limit(500)
@@ -4381,7 +4382,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       this.xuatKhoAvailableShipments = Array.from(shipmentMap.entries())
         .map(([code, factory]) => ({ code, factory }))
         .sort((a, b) => a.code.localeCompare(b.code));
-      console.log('✅ Loaded', this.xuatKhoAvailableShipments.length, 'shipments (Chờ soạn)');
     });
   }
 
@@ -4429,13 +4429,30 @@ export class FgOutComponent implements OnInit, OnDestroy {
     this.xuatKhoShipmentFactory = shipment.factory;
     this.shipmentStockStatus = 'loading';
     this.checkStockForSelectedShipment(shipment.code);
-    console.log('✅ Selected shipment from grid:', shipment.code, 'Factory:', shipment.factory);
   }
 
   // Xóa selection shipment
   clearShipmentSelection(): void {
     this.xuatKhoSelectedShipment = '';
     this.shipmentStockStatus = 'unknown';
+  }
+
+  /**
+   * Bản đọc fg-inventory gần nhất (toàn collection) — chỉ dùng cho nhãn Đủ/Thiếu khi bấm shipment.
+   * Bấm nhiều shipment liên tiếp trong 60 giây không đọc lại cả collection mỗi lần.
+   * Nút tải danh sách xuất kho vẫn đọc mới (và làm mới bản này).
+   */
+  private fgInvStatusCache: { ts: number; docs: any[] } | null = null;
+  private static readonly FG_INV_STATUS_TTL_MS = 60_000;
+
+  private getFgInventoryDocsForStatus(): Promise<any[]> {
+    const hit = this.fgInvStatusCache;
+    if (hit && Date.now() - hit.ts < FgOutComponent.FG_INV_STATUS_TTL_MS) return Promise.resolve(hit.docs);
+    return firstValueFrom(this.firestore.collection('fg-inventory').get()).then((snap: any) => {
+      const docs = snap?.docs || [];
+      this.fgInvStatusCache = { ts: Date.now(), docs };
+      return docs;
+    });
   }
 
   // Kiểm tra đủ/thiếu tồn cho shipment (chỉ set shipmentStockStatus, không load danh sách)
@@ -4456,9 +4473,9 @@ export class FgOutComponent implements OnInit, OnDestroy {
         this.shipmentStockStatus = 'unknown';
         return;
       }
-      this.firestore.collection('fg-inventory').get().subscribe(invSnapshot => {
+      void this.getFgInventoryDocsForStatus().then(invDocs => {
         const inventoryRows: Array<{ materialCode: string; batchNumber: string; ton: number }> = [];
-        invSnapshot.docs.forEach(doc => {
+        invDocs.forEach((doc: any) => {
           const d = doc.data() as any;
           const ton = Number(d.ton ?? d.stock ?? 0) || 0;
           if (ton > 0) {
@@ -4493,19 +4510,64 @@ export class FgOutComponent implements OnInit, OnDestroy {
   }
 
   // Load danh sách hàng: lọc shipment từ tab Shipment + phân bổ FIFO từ FG Inventory
+  /**
+   * Nguồn tính tồn cho Xuất kho theo shipment. fg-in / fg-export chỉ đọc theo đúng các mã TP (giá trị
+   * materialCode lưu trên dòng tồn) của những dòng tồn khớp nhu cầu — kết quả tính tồn giống đọc toàn bộ,
+   * vì 2 bảng này chỉ được tra theo khóa mã|batch|lsx|lot của các dòng tồn đó. Lỗi → đọc toàn bộ như cũ.
+   */
+  private async loadFgShipmentSources(demandByMaterial: Map<string, number>, factory: string): Promise<[{ docs: any[] }, { docs: any[] }, { docs: any[] }]> {
+    const invSnapshot: any = await firstValueFrom(this.firestore.collection('fg-inventory').get());
+    const demand = Array.from(demandByMaterial.keys());
+    const codeMatches = (invCodeUpper: string) => demand.some((m) =>
+      invCodeUpper === m ||
+      (m.startsWith(invCodeUpper) && invCodeUpper.length >= 6) ||
+      (invCodeUpper.startsWith(m) && m.length >= 6));
+    const codes = new Set<string>();
+    for (const doc of invSnapshot.docs) {
+      const d = doc.data() as any;
+      const docFactory = (d.factory || 'ASM1').toString().trim().toUpperCase();
+      if (docFactory !== factory) continue;
+      const raw = String(d.materialCode || d.maTP || '');
+      if (raw.trim() && codeMatches(raw.trim().toUpperCase())) {
+        codes.add(raw);
+        codes.add(raw.trim());
+      }
+    }
+    const byCodes = async (col: string): Promise<{ docs: any[] }> => {
+      const list = Array.from(codes);
+      const docs: any[] = [];
+      for (let i = 0; i < list.length; i += 30) {
+        const chunk = list.slice(i, i + 30);
+        const snap: any = await firstValueFrom(this.firestore.collection(col, (ref) => ref.where('materialCode', 'in', chunk)).get());
+        docs.push(...snap.docs);
+      }
+      return { docs };
+    };
+    try {
+      const [fgIn, fgExport] = await Promise.all([byCodes('fg-in'), byCodes('fg-export')]);
+      return [invSnapshot, fgIn, fgExport];
+    } catch (e) {
+      console.warn('[FG Out] đọc theo mã lỗi — đọc toàn bộ như cũ', e);
+      const [fgIn, fgExport]: any[] = await Promise.all([
+        firstValueFrom(this.firestore.collection('fg-in').get()),
+        firstValueFrom(this.firestore.collection('fg-export').get())
+      ]);
+      return [invSnapshot, fgIn, fgExport];
+    }
+  }
+
   loadInventoryForShipment(): void {
     if (!this.xuatKhoSelectedShipment) {
-      alert('⚠️ Vui lòng chọn shipment');
+      appAlert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
     const shipmentCode = this.xuatKhoSelectedShipment.trim();
     if (!shipmentCode) {
-      alert('⚠️ Vui lòng chọn shipment');
+      appAlert('⚠️ Vui lòng chọn shipment');
       return;
     }
 
-    console.log('🔍 Loading inventory for shipment:', shipmentCode);
 
     // Bước 1: Lọc shipment đó từ tab Shipment (collection shipments), lấy factory
     this.firestore.collection('shipments', ref =>
@@ -4527,18 +4589,16 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
       const materialCodesNeeded = Array.from(demandByMaterial.keys());
       if (materialCodesNeeded.length === 0) {
-        alert('❌ Không tìm thấy dòng nào của shipment "' + shipmentCode + '" trong tab Shipment. Kiểm tra lại mã shipment.');
+        appAlert('❌ Không tìm thấy dòng nào của shipment "' + shipmentCode + '" trong tab Shipment. Kiểm tra lại mã shipment.');
         return;
       }
 
-      console.log('📦 Shipment cần xuất (từ tab Shipment):', Object.fromEntries(demandByMaterial), ', factory:', this.xuatKhoShipmentFactory);
 
       // Bước 2: Load FG Inventory (chỉ nhà máy của shipment) + fg-in + fg-export, tính tồn
-      const invGet = this.firestore.collection('fg-inventory').get();
-      const fgInGet = this.firestore.collection('fg-in').get();
-      const fgExportGet = this.firestore.collection('fg-export').get();
-
-      forkJoin([invGet, fgInGet, fgExportGet]).pipe(take(1)).subscribe(([invSnapshot, fgInSnapshot, fgExportSnapshot]) => {
+      // fg-inventory: đọc đủ (bảng hiện trạng, còn dùng cho cache trạng thái).
+      // fg-in / fg-export (lịch sử, tăng mãi): chỉ đọc các mã TP của shipment — trước đây đọc toàn bộ mỗi lần bấm.
+      this.loadFgShipmentSources(demandByMaterial, shipmentFactory).then(([invSnapshot, fgInSnapshot, fgExportSnapshot]) => {
+        this.fgInvStatusCache = { ts: Date.now(), docs: invSnapshot.docs };
         const key = (mc: string, batch: string, lsx: string, lot: string) =>
           [String(mc || '').trim(), String(batch || '').trim(), String(lsx || '').trim(), String(lot || '').trim()].join('|');
 
@@ -4646,7 +4706,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
         if (this.xuatKhoPreviewItems.length > 0) {
           this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
-          console.log('✅ Loaded', this.xuatKhoPreviewItems.length, 'dòng xuất (FIFO) cho shipment', shipmentCode);
         } else if (materialCodesNeeded.length > 0) {
           // Không có tồn kho nào → vẫn list ra các mã TP với dòng trống
           materialCodesNeeded.forEach(code => {
@@ -4667,7 +4726,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
           this.xuatKhoStep = 2;
           this.xuatKhoChecked = true;
         } else {
-          alert('❌ Không tìm thấy dòng hàng nào của shipment này.');
+          appAlert('❌ Không tìm thấy dòng hàng nào của shipment này.');
         }
       });
     });
@@ -4684,21 +4743,20 @@ export class FgOutComponent implements OnInit, OnDestroy {
     const selectedItems = this.xuatKhoPreviewItems.filter(item => item.selected);
     
     if (selectedItems.length === 0) {
-      alert('⚠️ Vui lòng chọn ít nhất một item để xuất kho');
+      appAlert('⚠️ Vui lòng chọn ít nhất một item để xuất kho');
       return;
     }
 
     // Kiểm tra số lượng xuất không vượt quá tồn (chỉ với dòng có inventoryId từ kho)
     const hasError = selectedItems.some(item => item.inventoryId && item.quantity > item.availableStock);
     if (hasError) {
-      alert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
+      appAlert('❌ Có mã TP có số lượng xuất vượt quá tồn kho. Vui lòng kiểm tra lại!');
       return;
     }
 
     const confirmed = confirm(`✅ Xác nhận xuất kho ${selectedItems.length} items đã chọn?`);
     if (!confirmed) return;
 
-    console.log('🚀 Approving export for', selectedItems.length, 'selected items...');
     let savedCount = 0;
 
     selectedItems.forEach(item => {
@@ -4736,7 +4794,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
       fgOutRecord.shipment = this.xuatKhoSelectedShipment; // Gán shipment đã chọn
       
       this.firestore.collection('fg-out').add(fgOutRecord).then(() => {
-        console.log(`✅ Created FG Out record for ${item.materialCode}`);
         savedCount++;
 
         // 2. Cập nhật cột Xuất trong FG Inventory
@@ -4754,7 +4811,6 @@ export class FgOutComponent implements OnInit, OnDestroy {
                 ton: newTon,
                 updatedAt: new Date()
               }).then(() => {
-                console.log(`✅ Updated FG Inventory xuat: ${currentXuat} → ${newXuat}, ton: ${currentTon} → ${newTon}`);
               }).catch(error => {
                 console.error('❌ Error updating FG Inventory:', error);
               });
@@ -4764,7 +4820,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
 
         // Khi đã lưu hết
         if (savedCount === selectedItems.length) {
-          alert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
+          appAlert(`✅ Đã duyệt xuất kho thành công ${savedCount} items cho shipment ${this.xuatKhoSelectedShipment}!`);
           this.closeXuatKhoDialog();
           this.loadMaterialsFromFirebase();
           const exportedKeys = new Set(
@@ -4781,7 +4837,7 @@ export class FgOutComponent implements OnInit, OnDestroy {
         }
       }).catch(error => {
         console.error('❌ Error creating FG Out record:', error);
-        alert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
+        appAlert('❌ Lỗi khi lưu dữ liệu: ' + error.message);
       });
     });
   }

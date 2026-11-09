@@ -1,36 +1,21 @@
 import * as admin from 'firebase-admin';
+import { assertAdmin, randomSixDigitPassword, sendNewPasswordsToAdminZalo } from './authz';
 
 export type AdminUpdateUserPasswordPayload = {
   uid: string;
   newPassword: string;
 };
 
-function isAdminOrManager(role: string | undefined | null): boolean {
-  const r = (role || '').toString().trim().toLowerCase();
-  const normalized = r
-    // bỏ dấu tiếng Việt để so sánh ổn định
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-
-  return (
-    normalized === 'admin' ||
-    normalized === 'quan ly' ||
-    normalized === 'quan ly ' ||
-    normalized === 'quan ly\n' ||
-    r === 'admin' ||
-    r === 'quản lý' // fallback nếu môi trường không hỗ trợ regex diacritics
-  );
-}
-
 /**
  * Đổi password cho user theo uid, chỉ dùng Admin SDK nên KHÔNG cần biết password hiện tại.
- * Đồng thời cập nhật field password trong Firestore để UI Settings hiển thị đúng.
+ * Không lưu password vào Firestore; mật khẩu mới được gửi về Zalo ASP0106 để chuyển cho nhân viên.
+ * Trả về true nếu đã gửi Zalo.
  */
 export async function adminUpdateUserPassword(
   callerUid: string,
   targetUid: string,
   newPassword: string
-): Promise<void> {
+): Promise<boolean> {
   if (!callerUid || !targetUid) {
     throw new Error('Thiếu callerUid hoặc targetUid.');
   }
@@ -38,35 +23,24 @@ export async function adminUpdateUserPassword(
     throw new Error('Password mới phải có ít nhất 6 ký tự.');
   }
 
-  const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-  const callerRole = callerDoc.data()?.role;
-  console.log('🔐 adminUpdateUserPassword', {
-    callerUid,
-    callerRole,
-    targetUid,
-    passwordLen: newPassword?.length
-  });
-  if (!isAdminOrManager(callerRole)) {
-    throw new Error('permission-denied');
-  }
+  await assertAdmin(callerUid);
+  console.log('🔐 adminUpdateUserPassword', { callerUid, targetUid });
 
-  // Update Firebase Auth password
   await admin.auth().updateUser(targetUid, { password: newPassword });
+  // Phiên đăng nhập cũ của user bị buộc đăng nhập lại.
+  await admin.auth().revokeRefreshTokens(targetUid);
 
-  // Cập nhật lại password ở Firestore để màn hình Settings hiển thị đồng bộ.
-  await admin.firestore().collection('users').doc(targetUid).set(
-    { password: newPassword, updatedAt: new Date() },
-    { merge: true }
-  );
-  await admin.firestore().collection('user-permissions').doc(targetUid).set(
-    { password: newPassword, updatedAt: new Date() },
-    { merge: true }
-  );
-}
+  // Xóa password cũ còn sót trong Firestore (dữ liệu trước khi ngừng lưu).
+  const clear = { password: admin.firestore.FieldValue.delete(), updatedAt: new Date() };
+  await admin.firestore().collection('users').doc(targetUid).set(clear, { merge: true });
+  await admin.firestore().collection('user-permissions').doc(targetUid).set(clear, { merge: true });
 
-function generateSixDigitPassword(): string {
-  const n = Math.floor(100000 + Math.random() * 900000);
-  return String(n);
+  const profile = (await admin.firestore().collection('users').doc(targetUid).get()).data() || {};
+  return sendNewPasswordsToAdminZalo('Mật khẩu mới (đặt lại)', [{
+    employeeId: String(profile.employeeId || targetUid),
+    fullName: String(profile.displayName || ''),
+    password: newPassword
+  }]);
 }
 
 /**
@@ -77,7 +51,7 @@ export async function adminResetUserPassword(
   callerUid: string,
   targetUid: string
 ): Promise<string> {
-  const newPassword = generateSixDigitPassword();
+  const newPassword = randomSixDigitPassword();
   await adminUpdateUserPassword(callerUid, targetUid, newPassword);
   return newPassword;
 }
@@ -104,7 +78,7 @@ export async function adminSetUserPasswordByEmployeeId(
   callerUid: string,
   employeeIdRaw: string,
   newPassword: string
-): Promise<{ uid: string; email: string }> {
+): Promise<{ uid: string; email: string; zaloSent: boolean }> {
   if (!callerUid) throw new Error('Thiếu callerUid.');
   if (!employeeIdRaw) throw new Error('Thiếu employeeId.');
   if (!newPassword || newPassword.length < 6) {
@@ -113,6 +87,7 @@ export async function adminSetUserPasswordByEmployeeId(
 
   const employeeId = normalizeAspEmployeeId(employeeIdRaw);
   if (!employeeId) throw new Error('employeeId không đúng định dạng (ASPxxxx hoặc xxxx).');
+  await assertAdmin(callerUid);
 
   const digits = employeeId.replace(/^ASP/, '');
   const emailCandidates = [
@@ -164,7 +139,7 @@ export async function adminSetUserPasswordByEmployeeId(
     foundEmail = authUser.email || '';
   }
 
-  await adminUpdateUserPassword(callerUid, foundUid, newPassword);
-  return { uid: foundUid, email: foundEmail };
+  const zaloSent = await adminUpdateUserPassword(callerUid, foundUid, newPassword);
+  return { uid: foundUid, email: foundEmail, zaloSent };
 }
 

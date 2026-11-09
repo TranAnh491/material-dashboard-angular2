@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Subject, combineLatest, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -248,8 +249,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     return { packType: 'Box', isBanded: false, packingLabel: 'Ship Box' };
   }
 
-  /** Khách không bắt buộc scan check (FG Check). */
-  private static readonly SCAN_CHECK_EXEMPT_CUSTOMERS = new Set(['FJXR']);
+  /** Khách không bắt buộc scan check (FG Check). Trống: FJXR đã scan (Check Lượng FJXR) như mọi khách. */
+  private static readonly SCAN_CHECK_EXEMPT_CUSTOMERS = new Set<string>();
 
   private isScanCheckExemptCustomerName(name: string | undefined | null): boolean {
     const n = String(name || '').trim().toUpperCase();
@@ -510,7 +511,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   goToFgOutForShipment(shipment: ShipmentItem): void {
     const code = String(shipment.shipmentCode || '').trim();
     if (!code) {
-      alert('Chưa có mã Shipment để lọc.');
+      appAlert('Chưa có mã Shipment để lọc.');
       return;
     }
     this.router.navigate(['/fg-out'], {
@@ -815,7 +816,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     try {
       const rows = await this.readExcelSheetAsRows(file);
       if (!rows.length) {
-        alert('ℹ️ File không có dữ liệu.');
+        appAlert('ℹ️ File không có dữ liệu.');
         return;
       }
       let start = 0;
@@ -874,7 +875,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       if (!saved) {
         this.importingKhCatalog = false;
         this.cdr.detectChanges();
-        alert('ℹ️ Không có dòng hợp lệ (cần cột A là Mã TP).');
+        appAlert('ℹ️ Không có dòng hợp lệ (cần cột A là Mã TP).');
         return;
       }
       this.importKhSaved = saved;
@@ -885,7 +886,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.tpCatalogService.invalidateCache();
       this.loadCustomerMapping();
       this.cdr.detectChanges();
-      alert(
+      appAlert(
         `✅ Đã lưu danh mục KH lên Firebase.\n` +
         `- Tổng dòng đọc: ${totalRows}\n` +
         `- Đã lưu (hợp lệ): ${saved}\n` +
@@ -896,7 +897,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.error('processCustomerKhExcel', e);
       this.importingKhCatalog = false;
       this.cdr.detectChanges();
-      alert(`❌ Lỗi import danh mục KH: ${e?.message || e}`);
+      appAlert(`❌ Lỗi import danh mục KH: ${e?.message || e}`);
     }
   }
 
@@ -1608,14 +1609,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   applyMonthViewFilter(): void {
     const v = (this.monthPickerValue || '').trim();
     if (!/^\d{4}-\d{2}$/.test(v)) {
-      alert('Vui lòng chọn tháng.');
+      appAlert('Vui lòng chọn tháng.');
       return;
     }
     const [ys, ms] = v.split('-');
     const year = parseInt(ys, 10);
     const monthIndex0 = parseInt(ms, 10) - 1;
     if (monthIndex0 < 0 || monthIndex0 > 11 || year < 1990 || year > 2100) {
-      alert('Tháng hoặc năm không hợp lệ.');
+      appAlert('Tháng hoặc năm không hợp lệ.');
       return;
     }
     const start = new Date(year, monthIndex0, 1);
@@ -1634,13 +1635,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         this.monthViewLoading = false;
         this.showMonthViewDialog = false;
         if (!this.filteredShipments.length) {
-          alert('Không có shipment trong tháng này.');
+          appAlert('Không có shipment trong tháng này.');
         }
       },
       error: (err) => {
         console.error('applyMonthViewFilter', err);
         this.monthViewLoading = false;
-        alert('Không tải được shipment tháng này. Vui lòng thử lại.');
+        appAlert('Không tải được shipment tháng này. Vui lòng thử lại.');
       }
     });
   }
@@ -1659,7 +1660,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         this.olderShipmentSearching = false;
         const docs = snap.docs || [];
         if (!docs.length) {
-          alert('Không tìm thấy shipment này.');
+          appAlert('Không tìm thấy shipment này.');
           this.olderShipmentOffer = true;
           return;
         }
@@ -1671,7 +1672,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         console.error('searchOlderShipment', err);
         this.olderShipmentSearching = false;
         this.olderShipmentOffer = true;
-        alert('Không tìm được shipment cũ. Vui lòng thử lại.');
+        appAlert('Không tìm được shipment cũ. Vui lòng thử lại.');
       }
     });
   }
@@ -1738,7 +1739,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const all = (snapshot?.docs || []).map(doc => this.mapShipmentDoc(doc.id, doc.data() as any));
 
       if (!all.length) {
-        alert('Không có dữ liệu shipment.');
+        appAlert('Không có dữ liệu shipment.');
         return;
       }
       const sorted = all.sort((a, b) => {
@@ -1760,7 +1761,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       XLSX.writeFile(wb, `Shipment_Lich_su_toan_bo_${stamp}.xlsx`);
     } catch (error) {
       console.error('downloadFullShipmentHistoryExcel:', error);
-      alert('Lỗi khi tải file. Vui lòng thử lại.');
+      appAlert('Lỗi khi tải file. Vui lòng thử lại.');
     }
   }
 
@@ -1773,7 +1774,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
 
   addShipment(): void {
     if (!this.canAddShipment()) {
-      alert('❌ Vui lòng nhập đầy đủ thông tin bắt buộc');
+      appAlert('❌ Vui lòng nhập đầy đủ thông tin bắt buộc');
       return;
     }
 
@@ -1805,11 +1806,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         this.applyFilters();
         this.resetNewShipment();
         this.showAddShipmentDialog = false;
-        alert('✅ Đã thêm shipment thành công!');
+        appAlert('✅ Đã thêm shipment thành công!');
       })
       .catch(error => {
         console.error('Error adding shipment:', error);
-        alert('❌ Lỗi khi thêm shipment: ' + error.message);
+        appAlert('❌ Lỗi khi thêm shipment: ' + error.message);
       });
   }
 
@@ -1830,7 +1831,8 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const materialCode = String(data.materialCode ?? '').trim().toUpperCase();
     const quantity = Number(data.quantity) || 0;
     const carton = Number(data.carton) || 0;
-    const docMode: 'pn' | 'pn-qty' = (data.checkMode === 'pn' || data.checkMode === 'pn-qty') ? data.checkMode : 'pn';
+    // Lượng Axone / Lượng FJXR ('pn-qty-axone', 'pn-qty-fjxr') là check lượng, không phải check thùng
+    const docMode: 'pn' | 'pn-qty' = String(data.checkMode ?? '').startsWith('pn-qty') ? 'pn-qty' : 'pn';
     if (!shipmentCode || !materialCode) return;
     const key = `${shipmentCode}|${materialCode}`;
     qtyMap.set(key, (qtyMap.get(key) || 0) + quantity);
@@ -2069,31 +2071,6 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     }
   }
   
-  // Load FG Inventory cache - realtime (deprecated, giữ lại để tương thích)
-  loadFGInventoryCache(): void {
-    const fgInventory$ = this.firestore.collection('fg-inventory').snapshotChanges();
-    fgInventory$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(fgInventoryActions => {
-        this.fgInventoryCache.clear();
-
-        fgInventoryActions.forEach(action => {
-          const data = action.payload.doc.data() as any;
-          const materialCodeRaw = (data.materialCode || data.maTP || '').toString();
-          const materialCode = materialCodeRaw.trim().toUpperCase();
-          if (!materialCode) return;
-
-          const ton = Number(
-            data.ton ??
-            data.stock ??
-            ((Number(data.tonDau) || 0) + (Number(data.nhap) || 0) - (Number(data.xuat) || 0))
-          ) || 0;
-
-          const cur = this.fgInventoryCache.get(materialCode) || 0;
-          this.fgInventoryCache.set(materialCode, cur + ton);
-        });
-      });
-  }
 
   // Get inventory for material code from FG Inventory cache
   getInventory(materialCode: string): number {
@@ -2113,7 +2090,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   refreshFGInventoryCache(): void {
     this.loadFGInventoryCacheOnce();
     this.loadFGCheckStatusOnce();
-    alert('✅ Đã refresh tồn kho và trạng thái Check!\n\nDữ liệu đã được cập nhật.');
+    appAlert('✅ Đã refresh tồn kho và trạng thái Check!\n\nDữ liệu đã được cập nhật.');
   }
 
 
@@ -2217,7 +2194,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             `Số lượng yêu cầu: ${shipment.quantity.toLocaleString('vi-VN')}\n\n` +
             `Vui lòng kiểm tra lại mã hàng trong FG Inventory!`;
           
-          alert(message);
+          appAlert(message);
           shipment.push = false; // Uncheck the push checkbox
           shipment.pushNo = '000';
           this.updateShipmentInFirebase(shipment);
@@ -2263,7 +2240,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           `Lỗi: ${error.message}\n\n` +
           `Push đã bị hủy!`;
         
-        alert(message);
+        appAlert(message);
         shipment.push = false; // Uncheck the push checkbox
         shipment.pushNo = '000';
         this.updateShipmentInFirebase(shipment);
@@ -2275,7 +2252,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Push final data to FG Out (manual trigger)
   pushFinalToFGOut(shipment: ShipmentItem): void {
     if (!shipment.push || !shipment.pushNo || shipment.pushNo === '000') {
-      alert('❌ Vui lòng tick Push và đảm bảo có PushNo trước khi push!');
+      appAlert('❌ Vui lòng tick Push và đảm bảo có PushNo trước khi push!');
       return;
     }
 
@@ -2339,7 +2316,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
             `Số lượng yêu cầu: ${shipment.quantity.toLocaleString('vi-VN')}\n\n` +
             `Vui lòng kiểm tra lại mã hàng trong FG Inventory!`;
           
-          alert(message);
+          appAlert(message);
           console.log(`⚠️ No FG Inventory found for material: ${shipment.materialCode}`);
           return;
         }
@@ -2381,7 +2358,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           `Lỗi: ${error.message}\n\n` +
           `Vui lòng thử lại sau!`;
         
-        alert(message);
+        appAlert(message);
         console.log(`⚠️ Error getting FG Inventory: ${error.message}`);
       }
     });
@@ -2466,7 +2443,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     
     if (remainingQuantity > 0) {
       console.log(`⚠️ Insufficient inventory: ${remainingQuantity} units short`);
-      alert(`⚠️ Cảnh báo: Không đủ tồn kho!\n\nMã hàng: ${shipment.materialCode}\nCần: ${requiredQuantity}\nThiếu: ${remainingQuantity}\n\nSẽ tạo record với dữ liệu mặc định.`);
+      appAlert(`⚠️ Cảnh báo: Không đủ tồn kho!\n\nMã hàng: ${shipment.materialCode}\nCần: ${requiredQuantity}\nThiếu: ${remainingQuantity}\n\nSẽ tạo record với dữ liệu mặc định.`);
       
       batchQuantities.push({
         batch: {batchNumber: 'BATCH999', lsx: 'LSX999', lot: 'LOT999'},
@@ -2621,6 +2598,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
          .where('pushNo', '==', shipment.pushNo)
     ).get().subscribe(snapshot => {
       
+      // Dòng FG Out đã duyệt đã trừ tồn TP — xóa rồi tạo lại sẽ trừ tồn 2 lần khi duyệt lại
+      const approvedDocs = snapshot.docs.filter((d) => (d.data() as any)?.approved === true);
+      if (approvedDocs.length) {
+        appAlert(`⚠️ Shipment ${shipment.shipmentCode} · ${shipment.materialCode} đã có ${approvedDocs.length} dòng FG Out ĐÃ DUYỆT (đã trừ tồn TP).
+` +
+          `Không chuyển lại để tránh trừ tồn 2 lần. Bỏ duyệt các dòng đó ở FG Out trước rồi chuyển lại.`);
+        return;
+      }
       if (!snapshot.empty) {
         console.log(`🗑️ Found ${snapshot.docs.length} existing FG Out records to delete`);
         const deletePromises = snapshot.docs.map(doc => {
@@ -2633,7 +2618,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           this.createFGOutRecords(fgOutRecords, shipment);
         }).catch(error => {
           console.error('❌ Error deleting old FG Out records:', error);
-          alert(`❌ Lỗi khi xóa bản ghi cũ: ${error.message}`);
+          appAlert(`❌ Lỗi khi xóa bản ghi cũ: ${error.message}`);
         });
       } else {
         console.log(`ℹ️ No existing FG Out records found, creating new ones`);
@@ -2667,7 +2652,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const pushKey = `${shipment.shipmentCode}-${shipment.materialCode}-${shipment.pushNo}`;
         this.isPushing.delete(pushKey);
         
-        alert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 Tổng lượng: ${totalQuantity}\n📦 Batches: ${batchInfo}\n🔄 PushNo: ${shipment.pushNo}`);
+        appAlert(`✅ Đã cập nhật FG Out!\n📊 Tạo ${recordCount} bản ghi\n🔢 Tổng lượng: ${totalQuantity}\n📦 Batches: ${batchInfo}\n🔄 PushNo: ${shipment.pushNo}`);
       })
       .catch((error) => {
         console.error('❌ Error transferring to FG Out:', error);
@@ -2681,7 +2666,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         const pushKey = `${shipment.shipmentCode}-${shipment.materialCode}-${shipment.pushNo}`;
         this.isPushing.delete(pushKey);
         
-        alert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
+        appAlert(`❌ Lỗi khi chuyển dữ liệu: ${error.message}`);
       });
   }
 
@@ -3385,7 +3370,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   /** Export dữ liệu chart tháng đang chọn ra Excel */
   exportChartMonthExcel(): void {
     if (!this.chartShipments.length) {
-      alert('Không có dữ liệu để export.');
+      appAlert('Không có dữ liệu để export.');
       return;
     }
     const sorted = [...this.chartShipments].sort((a, b) => {
@@ -3666,7 +3651,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     // Parse tháng
     const parts = monthInput.split(/[\/\-]/);
     if (parts.length !== 2) {
-      alert('❌ Format tháng không đúng! Vui lòng nhập MM/YYYY hoặc MM-YYYY');
+      appAlert('❌ Format tháng không đúng! Vui lòng nhập MM/YYYY hoặc MM-YYYY');
       return;
     }
     
@@ -3674,7 +3659,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const year = parseInt(parts[1]);
     
     if (month < 1 || month > 12 || year < 2020 || year > 2100) {
-      alert('❌ Tháng hoặc năm không hợp lệ!');
+      appAlert('❌ Tháng hoặc năm không hợp lệ!');
       return;
     }
     
@@ -3686,7 +3671,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     });
     
     if (shipmentsInMonth.length === 0) {
-      alert(`ℹ️ Không có shipment nào trong tháng ${month}/${year}`);
+      appAlert(`ℹ️ Không có shipment nào trong tháng ${month}/${year}`);
       return;
     }
     
@@ -3724,10 +3709,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       XLSX.utils.book_append_sheet(wb, ws, `Tháng ${month}-${year}`);
       
       XLSX.writeFile(wb, `Shipment_Thang${String(month).padStart(2, '0')}_${year}.xlsx`);
-      alert(`✅ Đã tải xuống ${shipmentsInMonth.length} shipments của tháng ${month}/${year}!`);
+      appAlert(`✅ Đã tải xuống ${shipmentsInMonth.length} shipments của tháng ${month}/${year}!`);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      alert('❌ Lỗi khi export dữ liệu. Vui lòng thử lại.');
+      appAlert('❌ Lỗi khi export dữ liệu. Vui lòng thử lại.');
     }
   }
 
@@ -3739,7 +3724,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       return carton > 0;
     });
     if (valid.length === 0) {
-      alert('ℹ️ Không có dữ liệu (cần Dispatch Date, Ngày chuẩn bị/Full Date và Carton > 0)');
+      appAlert('ℹ️ Không có dữ liệu (cần Dispatch Date, Ngày chuẩn bị/Full Date và Carton > 0)');
       return;
     }
     const monthMap = new Map<string, { d1: number; d2: number; d3: number; d4p: number }>();
@@ -3773,10 +3758,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       const wb: XLSX.WorkBook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ngày chuẩn bị');
       XLSX.writeFile(wb, `Bao_cao_ngay_chuan_bi_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      alert(`✅ Đã tải báo cáo ngày chuẩn bị (${reportData.length} tháng)`);
+      appAlert(`✅ Đã tải báo cáo ngày chuẩn bị (${reportData.length} tháng)`);
     } catch (e) {
       console.error('downloadDayPreReport:', e);
-      alert('❌ Lỗi khi tải báo cáo.');
+      appAlert('❌ Lỗi khi tải báo cáo.');
     }
   }
 
@@ -3834,11 +3819,11 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       if (skipped.length > 0) {
         message += `\n\n⚠️ Bỏ qua ${skipped.length} shipment do trùng lặp:\n${skipped.join('\n')}`;
       }
-      alert(message);
+      appAlert(message);
       
     } catch (error) {
       console.error('Error processing Excel file:', error);
-      alert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
+      appAlert(`❌ Lỗi khi import file Excel: ${error.message || error}`);
     }
   }
 
@@ -4063,7 +4048,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         .catch(error => {
           console.error('Error saving shipment to Firebase:', error);
           console.error('Shipment data:', shipmentData);
-          alert(`❌ Lỗi khi lưu shipment ${shipment.shipmentCode}: ${error.message || error}`);
+          appAlert(`❌ Lỗi khi lưu shipment ${shipment.shipmentCode}: ${error.message || error}`);
         });
     });
   }
@@ -4195,7 +4180,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       XLSX.writeFile(wb, `Shipment_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      alert('Lỗi khi export dữ liệu. Vui lòng thử lại.');
+      appAlert('Lỗi khi export dữ liệu. Vui lòng thử lại.');
     }
   }
 
@@ -4222,10 +4207,10 @@ export class ShipmentComponent implements OnInit, OnDestroy {
           console.log('All shipments deleted');
           this.shipments = [];
           this.filteredShipments = [];
-          alert('Đã xóa tất cả shipments');
+          appAlert('Đã xóa tất cả shipments');
         }).catch(error => {
           console.error('Error deleting all shipments:', error);
-          alert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
+          appAlert('Lỗi khi xóa dữ liệu. Vui lòng thử lại.');
         });
       });
     }
@@ -4330,7 +4315,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   private openPrintHtmlWindow(html: string, title?: string): Window | null {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
       return null;
     }
     if (title) printWindow.document.title = title;
@@ -4355,13 +4340,13 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   async openPKLDialog(): Promise<void> {
     const anchor = this.refreshPrintSelection();
     if (!anchor || !this.printContext?.shipmentCode) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
 
     const shipmentCode = this.printContext.shipmentCode;
     if (!shipmentCode) {
-      alert('❌ Mã Shipment không hợp lệ!');
+      appAlert('❌ Mã Shipment không hợp lệ!');
       return;
     }
 
@@ -4377,7 +4362,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       ).get().toPromise();
 
       if (!snapshot || snapshot.empty) {
-        alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
+        appAlert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
         return;
       }
 
@@ -4439,7 +4424,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       console.log('✅ Loaded PKL data:', this.pklData.length, 'pallets,', fgOutItems.length, 'items');
     } catch (error) {
       console.error('❌ Error loading PKL data:', error);
-      alert('❌ Lỗi khi tải dữ liệu PKL: ' + error.message);
+      appAlert('❌ Lỗi khi tải dữ liệu PKL: ' + error.message);
     }
   }
 
@@ -4452,7 +4437,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   // Print PKL (Packing List) - format giống FG-out: logo + AIRSPEED + 5 box + bảng
   async printPKL(): Promise<void> {
     if (!this.pklShipmentCode || this.pklData.length === 0) {
-      alert('❌ Không có dữ liệu PKL để in!');
+      appAlert('❌ Không có dữ liệu PKL để in!');
       return;
     }
 
@@ -4618,14 +4603,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       printWindow.document.write(htmlContent);
       printWindow.document.close();
     } else {
-      alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
+      appAlert('❌ Không thể mở cửa sổ in. Vui lòng bật popup!');
     }
   }
 
   async printShipmentLabel(): Promise<void> {
     const anchor = this.refreshPrintSelection();
     if (!anchor || !this.printContext?.shipmentCode) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     
@@ -4638,14 +4623,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.closePrintLabelDialog();
     } catch (error) {
       console.error('❌ Error printing shipment label:', error);
-      alert('❌ Lỗi: ' + (error?.message || String(error)));
+      appAlert('❌ Lỗi: ' + (error?.message || String(error)));
     }
   }
 
   async printPalletLabels(): Promise<void> {
     const anchor = this.refreshPrintSelection();
     if (!anchor || !this.printContext?.shipmentCode) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     
@@ -4653,12 +4638,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const qtyPallet = Number(anchor.qtyPallet) || 0;
     
     if (qtyPallet <= 0) {
-      alert('❌ Qty Pallet phải lớn hơn 0!');
+      appAlert('❌ Qty Pallet phải lớn hơn 0!');
       return;
     }
     
     if (qtyPallet > 100) {
-      alert('❌ Số lượng pallet quá lớn (>100). Vui lòng kiểm tra lại!');
+      appAlert('❌ Số lượng pallet quá lớn (>100). Vui lòng kiểm tra lại!');
       return;
     }
     
@@ -4677,7 +4662,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       this.closePrintLabelDialog();
     } catch (error) {
       console.error('❌ Error printing pallet labels:', error);
-      alert('❌ Lỗi khi in tem pallet: ' + error.message);
+      appAlert('❌ Lỗi khi in tem pallet: ' + error.message);
     }
   }
 
@@ -5586,7 +5571,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const closeDialog = options.closeDialog !== false;
     const incrementPrintCount = options.incrementPrintCount !== false;
     if (!this.selectedShipmentForPrint) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     const html = await this.buildShipmentOrderHtml({ incrementPrintCount });
@@ -5599,7 +5584,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   async printP1Only(options: { closeDialog?: boolean } = {}): Promise<void> {
     const closeDialog = options.closeDialog !== false;
     if (!this.selectedShipmentForPrint) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     const fullHtml = await this.buildShipmentOrderHtml();
@@ -5622,7 +5607,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   async printP2Only(options: { closeDialog?: boolean } = {}): Promise<void> {
     const closeDialog = options.closeDialog !== false;
     if (!this.selectedShipmentForPrint) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     const fullHtml = await this.buildShipmentOrderHtml();
@@ -5648,7 +5633,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
     const closeDialog = options.closeDialog !== false;
     const anchor = this.refreshPrintSelection();
     if (!anchor || !this.printContext?.shipmentCode) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     const shipmentCode = this.printContext.shipmentCode;
@@ -5661,7 +5646,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       ).get().toPromise();
 
       if (!fgSnap || fgSnap.empty) {
-        alert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
+        appAlert('❌ Không tìm thấy dữ liệu FG Out cho shipment này!');
         return;
       }
 
@@ -5676,12 +5661,12 @@ export class ShipmentComponent implements OnInit, OnDestroy {
         return a.localeCompare(b);
       });
     } catch (e) {
-      alert('❌ Lỗi tải dữ liệu: ' + (e as any)?.message);
+      appAlert('❌ Lỗi tải dữ liệu: ' + (e as any)?.message);
       return;
     }
 
     if (palletNames.length === 0) {
-      alert('❌ Không có pallet nào trong dữ liệu FG Out!');
+      appAlert('❌ Không có pallet nào trong dữ liệu FG Out!');
       return;
     }
 
@@ -5779,14 +5764,14 @@ export class ShipmentComponent implements OnInit, OnDestroy {
   /** Xem mẫu format Shipment Order (mở tab mới, không in). */
   async previewShipmentOrder(): Promise<void> {
     if (!this.selectedShipmentForPrint) {
-      alert('❌ Không có shipment được chọn!');
+      appAlert('❌ Không có shipment được chọn!');
       return;
     }
     const html = await this.buildShipmentOrderHtml();
     if (!html) return;
     const previewWindow = window.open('', '_blank');
     if (!previewWindow) {
-      alert('❌ Không thể mở cửa sổ. Vui lòng bật popup!');
+      appAlert('❌ Không thể mở cửa sổ. Vui lòng bật popup!');
       return;
     }
     previewWindow.document.write(html);
@@ -5801,7 +5786,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
+        appAlert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
         return;
       }
       
@@ -5864,7 +5849,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Error:', error);
-      alert('❌ Lỗi: ' + (error?.message || String(error)));
+      appAlert('❌ Lỗi: ' + (error?.message || String(error)));
     }
   }
 
@@ -5881,7 +5866,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
-        alert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
+        appAlert('❌ Không thể mở cửa sổ in. Vui lòng bật popup cho trang này!');
         return;
       }
       
@@ -5954,7 +5939,7 @@ export class ShipmentComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error('❌ Error:', error);
-      alert('❌ Lỗi: ' + (error?.message || String(error)));
+      appAlert('❌ Lỗi: ' + (error?.message || String(error)));
     }
   }
 } 

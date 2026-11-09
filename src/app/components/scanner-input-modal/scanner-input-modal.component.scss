@@ -1,6 +1,6 @@
 .scanner-input-modal {
   width: 100%;
-  background: #ffffff;
+  background: #FFFFFF;
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -11,8 +11,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 14px 16px;
-    border-bottom: 1px solid #e0e0e0;
-    background: #ffffff;
+    border-bottom: 1px solid #8F8F89;
+    background: #FFFFFF;
 
     h2 {
       margin: 0;
@@ -108,7 +108,7 @@
 
         &:focus {
           border-color: #1565c0;
-          background: #ffffff;
+          background: #FFFFFF;
         }
       }
     }

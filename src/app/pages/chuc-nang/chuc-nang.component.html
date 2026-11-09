@@ -1,0 +1,122 @@
+<div class="cn">
+  <!-- Thanh nút đầu trang -->
+  <div class="cn-bar">
+    <div class="cn-bar__nav">
+      <button type="button" class="cn-btn" (click)="goBack()"><i class="material-icons">arrow_back</i>Back</button>
+      <button type="button" class="cn-btn" (click)="goMenu()"><i class="material-icons">home</i>Menu</button>
+    </div>
+    <div class="cn-bar__title">Chức năng phần mềm <span>(chỉ admin)</span></div>
+    <div class="cn-seg">
+      <button type="button" [class.is-on]="section === 'tabs'" (click)="section = 'tabs'">Các tab ({{ rows.length }})</button>
+      <button type="button" [class.is-on]="section === 'auto'" (click)="section = 'auto'">Máy chủ tự làm ({{ automations.length }})</button>
+      <button type="button" [class.is-on]="section === 'security'" (click)="section = 'security'">Bảo mật & quyền</button>
+    </div>
+  </div>
+
+  <!-- Quy trình -->
+  <div class="cn-flows">
+    <div class="cn-flow" *ngFor="let f of flows">
+      <b>{{ f.name }}:</b>
+      <ng-container *ngFor="let s of f.steps; let last = last">
+        <span class="cn-step">{{ s }}</span><i class="material-icons cn-arrow" *ngIf="!last">arrow_forward</i>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Các tab -->
+  <ng-container *ngIf="section === 'tabs'">
+    <div class="cn-tools">
+      <input class="cn-search" type="search" [(ngModel)]="search" placeholder="Tìm chức năng, tab, dữ liệu… (vd: OTP, tồn kho, Zalo)">
+      <select class="cn-sel" [(ngModel)]="categorySel">
+        <option value="">Tất cả nhóm</option>
+        <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
+      </select>
+      <button type="button" class="cn-btn" (click)="expandAll(true)">Mở hết chi tiết</button>
+      <button type="button" class="cn-btn" (click)="expandAll(false)">Thu gọn</button>
+      <span class="cn-note">{{ viewRows.length }} tab · {{ detailCount }} tab có mô tả chi tiết</span>
+    </div>
+
+    <div class="cn-wrap">
+      <table class="cn-table">
+        <thead>
+          <tr>
+            <th class="c">#</th>
+            <th>Tab</th>
+            <th>Nhóm</th>
+            <th>Mô tả</th>
+            <th>Chức năng chính</th>
+            <th>Kiểm soát / chặn</th>
+            <th>Dữ liệu ghi vào</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of viewRows; let i = index; trackBy: trackRow">
+            <td class="c muted">{{ i + 1 }}</td>
+            <td class="nowrap">
+              <button type="button" class="cn-link" (click)="open(r.path)" [title]="'Mở ' + r.path">{{ r.title }}</button>
+              <div class="muted small">{{ r.path }}</div>
+              <span class="cn-tag" *ngIf="r.adminOnly">Admin</span>
+              <span class="cn-tag" *ngIf="r.desktopOnly">Máy tính</span>
+            </td>
+            <td class="nowrap">{{ r.category }}</td>
+            <td>{{ r.subtitle || '—' }}</td>
+            <td>
+              <ng-container *ngIf="r.detail; else noDetail">
+                <ul *ngIf="expanded.has(r.path); else firstAction">
+                  <li *ngFor="let a of r.detail.actions">{{ a }}</li>
+                </ul>
+                <ng-template #firstAction>
+                  {{ r.detail.actions[0] }}
+                  <button type="button" class="cn-more" *ngIf="r.detail.actions.length > 1 || r.detail.controls?.length || r.detail.writes?.length" (click)="toggle(r.path)">+ chi tiết</button>
+                </ng-template>
+                <button type="button" class="cn-more" *ngIf="expanded.has(r.path)" (click)="toggle(r.path)">thu gọn</button>
+              </ng-container>
+              <ng-template #noDetail><span class="muted">—</span></ng-template>
+            </td>
+            <td>
+              <ul *ngIf="r.detail?.controls?.length && expanded.has(r.path)">
+                <li *ngFor="let c of r.detail!.controls">{{ c }}</li>
+              </ul>
+              <span *ngIf="r.detail?.controls?.length && !expanded.has(r.path)" class="muted">{{ r.detail!.controls!.length }} mục</span>
+              <span *ngIf="!r.detail?.controls?.length" class="muted">—</span>
+            </td>
+            <td class="small">
+              <ng-container *ngIf="r.detail?.writes?.length; else noWrites">
+                <div *ngFor="let w of r.detail!.writes">{{ w }}</div>
+              </ng-container>
+              <ng-template #noWrites><span class="muted">—</span></ng-template>
+            </td>
+          </tr>
+          <tr *ngIf="!viewRows.length"><td colspan="7" class="c muted">Không có tab khớp.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </ng-container>
+
+  <!-- Máy chủ tự làm -->
+  <div class="cn-wrap" *ngIf="section === 'auto'">
+    <table class="cn-table">
+      <thead><tr><th class="c">#</th><th>Khi nào</th><th>Việc máy chủ làm</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let a of automations; let i = index">
+          <td class="c muted">{{ i + 1 }}</td>
+          <td class="nowrap">{{ a.when }}</td>
+          <td>{{ a.what }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Bảo mật -->
+  <div class="cn-wrap" *ngIf="section === 'security'">
+    <table class="cn-table">
+      <thead><tr><th>Mục</th><th>Chi tiết</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let s of security">
+          <td class="nowrap b">{{ s.item }}</td>
+          <td>{{ s.detail }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

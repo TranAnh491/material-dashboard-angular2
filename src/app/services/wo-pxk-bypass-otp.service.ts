@@ -15,12 +15,18 @@ export class WoPxkBypassOtpService {
     requestedBy?: string;
     nextStatus?: string;
     factory?: string;
+    /** Lý do lệch (các mã PXK thiếu) — in trong tin Zalo */
+    reason?: string;
+    /** 'delete' = mã xác nhận xóa LSX */
+    purpose?: 'bypass' | 'delete';
   }): Promise<void> {
     const payload = {
       lsx: String(opts.lsx || '').trim().toUpperCase().slice(0, 40),
       requestedBy: String(opts.requestedBy || '').trim().toUpperCase().slice(0, 20),
       nextStatus: String(opts.nextStatus || '').trim().slice(0, 20),
-      factory: String(opts.factory || '').trim().toUpperCase().slice(0, 16)
+      factory: String(opts.factory || '').trim().toUpperCase().slice(0, 16),
+      reason: String(opts.reason || '').trim().slice(0, 1800),
+      purpose: opts.purpose === 'delete' ? 'delete' : 'bypass'
     };
     const callable = this.fns.httpsCallable<typeof payload, { ok: boolean }>(
       WoPxkBypassOtpService.REQUEST_FN
@@ -28,10 +34,11 @@ export class WoPxkBypassOtpService {
     await firstValueFrom(callable(payload));
   }
 
-  async verifyOtp(code: string, lsx: string): Promise<boolean> {
+  async verifyOtp(code: string, lsx: string, purpose: 'bypass' | 'delete' = 'bypass'): Promise<boolean> {
     const payload = {
       code: String(code || '').trim(),
-      lsx: String(lsx || '').trim().toUpperCase().slice(0, 40)
+      lsx: String(lsx || '').trim().toUpperCase().slice(0, 40),
+      purpose
     };
     const callable = this.fns.httpsCallable<typeof payload, { ok: boolean }>(
       WoPxkBypassOtpService.VERIFY_FN

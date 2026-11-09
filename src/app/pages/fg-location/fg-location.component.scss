@@ -1,3 +1,4 @@
+@use '../../shared/styles/excel-theme' as xl;
 // FG Location — dashboard style
 .main-content {
   padding: 0;
@@ -43,8 +44,8 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: #FFFFFF;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .fg-loc-page-header__brand {
@@ -91,9 +92,9 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 13px;
   font-weight: 600;
@@ -107,7 +108,7 @@
 
   &:hover {
     background: #f8fafc;
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
   }
 }
 
@@ -116,16 +117,16 @@
   align-items: center;
   gap: 8px;
   padding: 10px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: #FFFFFF;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .fg-loc-subnav__home {
   width: 34px;
   height: 34px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,9 +169,9 @@
 }
 
 .card {
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 10px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
@@ -196,11 +197,11 @@
 
 // Step Container
 .step-container {
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 22px 24px;
   margin-bottom: 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
@@ -210,7 +211,7 @@
   gap: 12px;
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .step-number {
@@ -240,7 +241,7 @@
 }
 
 .factory-btn {
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid #333;
   border-radius: 8px;
   padding: 20px 16px;
@@ -354,7 +355,7 @@
   width: 100%;
   padding: 12px;
   font-size: 14px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 0;
   outline: none;
   transition: border-color 0.2s;
@@ -430,7 +431,7 @@
   font-size: 14px;
   color: #666;
   background: transparent;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -518,7 +519,7 @@
   text-align: center;
   margin-bottom: 16px;
   font-size: 14px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
 
   .material-icons {
     font-size: 18px;
@@ -572,7 +573,7 @@
   max-height: 300px;
   overflow-y: auto;
   margin-bottom: 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
 }
 
@@ -680,7 +681,7 @@
   background: #fafafa;
   border-radius: 8px;
   margin-bottom: 16px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   
   .from-location, .to-location {
     text-align: center;
@@ -767,9 +768,9 @@
   }
 
   &.secondary {
-    background: #fff;
+    background: #FFFFFF;
     color: #333;
-    border-color: #e0e0e0;
+    border-color: #6B6B66;
 
     &:hover {
       background: #f5f5f5;
@@ -845,7 +846,7 @@
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e0e0e0;
+  border: 3px solid #6B6B66;
   border-top-color: #1976D2;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -961,7 +962,7 @@ body.fg-loc-mobile-tab {
 }
 
 .modal-content {
-  background: #fff;
+  background: #FFFFFF;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
@@ -975,7 +976,7 @@ body.fg-loc-mobile-tab {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
 
     h3 {
       margin: 0;
@@ -1012,7 +1013,7 @@ body.fg-loc-mobile-tab {
   .factory-btn {
     padding: 12px 14px;
     border: 1px solid #333;
-    background: #fff;
+    background: #FFFFFF;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -1042,7 +1043,7 @@ body.fg-loc-mobile-tab {
   justify-content: space-between;
   padding: 10px 12px 8px;
   padding-top: max(10px, env(safe-area-inset-top, 0px));
-  background: #fff;
+  background: #FFFFFF;
   border-bottom: 1px solid #e5e5ea;
   flex-shrink: 0;
   position: sticky;
@@ -1124,7 +1125,7 @@ body.fg-loc-mobile-tab {
 }
 
 .fg-m-card {
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 14px;
   border: 1px solid #e5e5ea;
@@ -1146,7 +1147,7 @@ body.fg-loc-mobile-tab {
 .fg-m-bottomnav {
   display: flex;
   flex-shrink: 0;
-  background: #fff;
+  background: #FFFFFF;
   border-top: 1px solid #e5e5ea;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
@@ -1199,9 +1200,9 @@ body.fg-loc-mobile-tab {
   gap: 4px;
   width: 100%;
   padding: 16px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #6B6B66;
   border-radius: 12px;
-  background: #fff;
+  background: #FFFFFF;
   cursor: pointer;
   text-align: left;
 
@@ -1242,7 +1243,7 @@ body.fg-loc-mobile-tab {
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  background: #fff;
+  background: #FFFFFF;
   border: 2px solid #1976d2;
   border-radius: 10px;
 
@@ -1277,7 +1278,7 @@ body.fg-loc-mobile-tab {
 
   &:disabled {
     background: #ccc;
-    border-color: #ccc;
+    border-color: #6B6B66;
     cursor: not-allowed;
   }
 
@@ -1302,7 +1303,7 @@ body.fg-loc-mobile-tab {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 8px;
   margin-bottom: 10px;
   cursor: pointer;
@@ -1372,9 +1373,9 @@ body.fg-loc-mobile-tab {
 
 .fg-loc-factory-opt {
   padding: 20px 8px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
@@ -1438,9 +1439,9 @@ body.fg-loc-mobile-tab {
   align-items: center;
   gap: 8px;
   padding: 20px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 0;
-  background: #fff;
+  background: #FFFFFF;
   cursor: pointer;
   font-weight: 500;
 
@@ -1496,8 +1497,8 @@ body.fg-loc-mobile-tab {
   gap: 16px;
   flex-wrap: wrap;
   padding: 14px 18px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fff;
+  border-bottom: 1px solid #8F8F89;
+  background: #FFFFFF;
 }
 
 .fg-loc-summary-topbar__brand {
@@ -1553,9 +1554,9 @@ body.fg-loc-mobile-tab {
   gap: 5px;
   height: 34px;
   padding: 0 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 12px;
   font-weight: 600;
@@ -1570,7 +1571,7 @@ body.fg-loc-mobile-tab {
 
   &:hover {
     background: #f8fafc;
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
   }
 
   &--icon {
@@ -1587,7 +1588,7 @@ body.fg-loc-mobile-tab {
   padding: 3px;
   border-radius: 8px;
   background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
 }
 
 .fg-loc-factory-pill {
@@ -1662,7 +1663,7 @@ body.fg-loc-mobile-tab {
   gap: 16px;
   flex-wrap: wrap;
   padding: 16px 18px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .fg-loc-summary-hero__left {
@@ -1780,7 +1781,7 @@ body.fg-loc-mobile-tab {
 
   &--blue {
     background: #f8fafc;
-    border-color: #e2e8f0;
+    border-color: #6B6B66;
 
     .fg-loc-stat-card__icon {
       background: #eff6ff;
@@ -1792,7 +1793,7 @@ body.fg-loc-mobile-tab {
 
   &--green {
     background: #f8fafc;
-    border-color: #e2e8f0;
+    border-color: #6B6B66;
 
     .fg-loc-stat-card__icon {
       background: #f0fdf4;
@@ -1804,14 +1805,14 @@ body.fg-loc-mobile-tab {
 
   &--purple {
     background: #f8fafc;
-    border-color: #e2e8f0;
+    border-color: #6B6B66;
 
     .fg-loc-stat-card__icon {
-      background: #faf5ff;
-      .material-icons { color: #7c3aed; }
+      background: #EAF2FF;
+      .material-icons { color: #3478F6; }
     }
 
-    .fg-loc-stat-card__value { color: #7c3aed; }
+    .fg-loc-stat-card__value { color: #3478F6; }
   }
 }
 
@@ -1822,7 +1823,7 @@ body.fg-loc-mobile-tab {
   align-items: end;
   padding: 14px 16px;
   background: #fafbfc;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
 
   @media (max-width: 1200px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1866,9 +1867,9 @@ body.fg-loc-mobile-tab {
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   transition: border-color 0.15s;
   height: 36px;
   box-sizing: border-box;
@@ -1904,11 +1905,11 @@ body.fg-loc-mobile-tab {
   width: 100%;
   height: 36px;
   padding: 0 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   font-size: 12px;
   box-sizing: border-box;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   transition: border-color 0.15s;
 
@@ -1962,7 +1963,7 @@ body.fg-loc-mobile-tab {
 
   &--outline {
     border: 1px solid #2563eb;
-    background: #fff;
+    background: #FFFFFF;
     color: #2563eb;
 
     &:hover:not(:disabled) {
@@ -2010,7 +2011,7 @@ body.fg-loc-mobile-tab {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  background: #fff;
+  background: #FFFFFF;
   border: 2px solid #000;
   font-family: Arial, sans-serif;
 
@@ -2059,7 +2060,7 @@ body.fg-loc-mobile-tab {
   }
 
   tbody td {
-    background: #fff;
+    background: #FFFFFF;
   }
 
   tbody tr:hover td {
@@ -2123,7 +2124,7 @@ body.fg-loc-mobile-tab {
   font-weight: 600;
   text-transform: uppercase;
   box-sizing: border-box;
-  background: #fff;
+  background: #FFFFFF;
   text-align: center;
   margin: 0 auto;
   display: block;
@@ -2148,8 +2149,8 @@ body.fg-loc-mobile-tab {
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 16px;
-  border-top: 1px solid #f1f5f9;
-  background: #fff;
+  border-top: 1px solid #8F8F89;
+  background: #FFFFFF;
   font-size: 12px;
   color: #94a3b8;
 }
@@ -2163,10 +2164,10 @@ body.fg-loc-mobile-tab {
 
 .fg-loc-page-size {
   padding: 4px 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   font-size: 12px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   height: 30px;
 }
@@ -2181,9 +2182,9 @@ body.fg-loc-mobile-tab {
   min-width: 30px;
   height: 30px;
   padding: 0 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
   color: #64748b;
   font-size: 12px;
   font-weight: 600;
@@ -2198,7 +2199,7 @@ body.fg-loc-mobile-tab {
 
   &:hover:not(:disabled):not(.is-active) {
     background: #f8fafc;
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
     color: #334155;
   }
 
@@ -2231,7 +2232,7 @@ body.fg-loc-mobile-tab {
   padding: 10px 16px;
   border: 1px solid #333;
   border-radius: 0;
-  background: #fff;
+  background: #FFFFFF;
   color: #333;
   cursor: pointer;
   font-size: 13px;
@@ -2280,3 +2281,6 @@ body.fg-loc-mobile-tab {
   text-align: center;
   padding: 24px;
 }
+
+/* Giao diện kiểu Excel đồng bộ với Quản lý NVL / Outbound (05/11/2026) */
+:host .main-content:not(.fg-m-page) { @include xl.excel-theme; }

@@ -70,8 +70,41 @@ export enum TransactionType {
 }
 
 // Work Order interfaces and enums
+/** 1 dòng còn thiếu khi Xuất thiếu (LSX Partial) */
+export interface WoPartialLine {
+  code: string;
+  po: string;
+  /** Lượng PXK */
+  need: number;
+  /** Đã scan xuất tại thời điểm xuất thiếu */
+  scan: number;
+  /** Còn treo = need − scan */
+  remain: number;
+  unit: string;
+}
+
+/** 1 lần Xuất thiếu: phần đã xuất được ghi nhận, phần chưa xuất treo lại */
+export interface WoPartialExport {
+  at: Date | string;
+  by: string;
+  lines: WoPartialLine[];
+}
+
 export interface WorkOrder {
   id?: string;
+  /** Cột Partial: cho phép xuất thiếu (không có trong form import) */
+  partialAllowed?: boolean;
+  /** Standard packing chốt lúc LSX sang Ready (mã NVL → Standard) — LSX đã Ready không theo Standard mới */
+  stdSnapshot?: Record<string, number>;
+  /** JIT: đã chia NVL nhiều lần giao (Lần 2/3) → Done thành JIT tới khi giao hết */
+  jitActive?: boolean;
+  /** JIT: kho đã tick Đã giao hết các lần */
+  jitDelivered?: boolean;
+  stdSnapshotAt?: Date | any;
+  /** Phần còn treo của lần xuất thiếu gần nhất (null/không có = không treo) */
+  partialPending?: WoPartialExport | null;
+  /** Lịch sử các lần xuất thiếu */
+  partialExports?: WoPartialExport[];
   factory?: string; // ASM1 or ASM2
   year: number;
   month: number;
@@ -93,6 +126,8 @@ export interface WorkOrder {
   checkedBy?: string;
   planReceivedDate: Date;
   notes?: string;
+  /** Lần import thứ mấy của cùng LSX trong 30 ngày (2, 3…); không có = lần đầu. LSX gốc giữ nguyên. */
+  lsxSeq?: number;
   createdDate: Date;
   lastUpdated: Date;
   /** Thời điểm chuyển sang Kitting (nếu có) */
@@ -122,5 +157,7 @@ export enum WorkOrderStatus {
   READY_IQC = 'ready-iqc',
   TRANSFER = 'transfer',
   DONE = 'done',
-  DELAY = 'delay'
+  DELAY = 'delay',
+  /** Đã chia nhiều lần giao (JIT) — chưa giao hết; giao xong mới tự Done */
+  JIT = 'jit'
 } 

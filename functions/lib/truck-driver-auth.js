@@ -33,23 +33,29 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.truckDriverPassword = void 0;
 exports.toTruckAuthPassword = toTruckAuthPassword;
 exports.signInTruckDriver = signInTruckDriver;
 const admin = __importStar(require("firebase-admin"));
-/** Tài khoản app phụ Xe Tải — đăng nhập bằng mã ASP hoặc XETAI, mật khẩu 123456. */
+const params_1 = require("firebase-functions/params");
+/**
+ * Mật khẩu chung tài khoản Xe Tải — lưu trong Secret Manager, KHÔNG ghi trong mã nguồn.
+ * Đặt trước khi deploy:  firebase functions:secrets:set TRUCK_DRIVER_PASSWORD
+ * (đặt lại đúng mật khẩu tài xế đang dùng thì tài xế không phải đổi thao tác.)
+ */
+exports.truckDriverPassword = (0, params_1.defineSecret)('TRUCK_DRIVER_PASSWORD');
+/** Tài khoản app phụ Xe Tải — đăng nhập bằng mã ASP9999 hoặc XETAI, mật khẩu chung từ secret TRUCK_DRIVER_PASSWORD. */
 const TRUCK_DRIVER_ACCOUNTS = {
     ASP9999: {
         uid: 'truck-driver-asp9999',
         email: 'asp9999@asp.com',
         employeeId: 'ASP9999',
-        password: '123456',
         displayName: 'Tài xế Xe Tải'
     },
     XETAI: {
         uid: 'truck-driver-xetai',
         email: 'xetai@asp.com',
         employeeId: 'XETAI',
-        password: '123456',
         displayName: 'Tài xế Xe Tải'
     }
 };
@@ -60,9 +66,15 @@ function toTruckAuthPassword(password) {
         return p;
     return p.padEnd(6, '0');
 }
+function sharedTruckPassword() {
+    const p = String(exports.truckDriverPassword.value() || '').trim();
+    if (!p)
+        throw new Error('permission-denied'); // chưa đặt secret → không cho đăng nhập
+    return p;
+}
 async function ensureTruckDriverAuthUser(account) {
     const auth = admin.auth();
-    const authPassword = toTruckAuthPassword(account.password);
+    const authPassword = toTruckAuthPassword(sharedTruckPassword());
     const applyUpdate = async (uid) => {
         await auth.updateUser(uid, {
             email: account.email,
@@ -149,14 +161,14 @@ async function signInTruckDriver(employeeIdRaw, passwordRaw) {
         .toUpperCase();
     const password = String(passwordRaw || '').trim();
     const account = TRUCK_DRIVER_ACCOUNTS[employeeId];
-    if (!account || password !== account.password) {
+    if (!account || password !== sharedTruckPassword()) {
         throw new Error('permission-denied');
     }
     const uid = await ensureTruckDriverAuthUser(account);
     await ensureTruckDriverFirestore(account, uid);
     return {
         email: account.email,
-        authPassword: toTruckAuthPassword(account.password)
+        authPassword: toTruckAuthPassword(sharedTruckPassword())
     };
 }
 //# sourceMappingURL=truck-driver-auth.js.map

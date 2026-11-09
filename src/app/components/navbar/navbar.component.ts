@@ -1,5 +1,6 @@
 import { Component, OnInit, ElementRef, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { ROUTES } from '../../routes/sidebar-routes';
+import { OWN_NAV_TAB_PATHS } from '../../routes/app-tabs';
 import {Location, LocationStrategy, PathLocationStrategy} from '@angular/common';
 import { Router, NavigationEnd } from '@angular/router';
 import { NotificationService } from '../../services/notification.service';
@@ -343,6 +344,12 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/xe-tai';
     }
 
+    /** FG Check có thanh trên cùng riêng (tìm kiếm, Back, Về Menu): thanh hệ thống không được che, không hiện nút Home tròn. */
+    isFgCheckPage(): boolean {
+      const path = this.currentAppPath();
+      return path === '/fg-check' || path.startsWith('/fg-check/');
+    }
+
     isFgInventoryPage(): boolean {
       const path = this.currentAppPath();
       return path === '/fg-inventory' || path.startsWith('/fg-inventory/');
@@ -352,46 +359,21 @@ export class NavbarComponent implements OnInit, OnDestroy {
       return this.currentAppPath() === '/lich-lam-viec';
     }
 
+    isScrapPage(): boolean {
+      return this.currentAppPath() === '/scrap';
+    }
+
+    /** Danh mục NVL & TP: navbar trong suốt đè lên nút "Về Menu" → cho click xuyên qua. */
+    isDanhMucPage(): boolean {
+      return this.currentAppPath() === '/danh-muc-nvl-tp';
+    }
+
     /**
      * Đường dẫn các tab đã tự có nút Back / Về Menu riêng gắn trong toolbar của trang —
      * ẩn nút "Về Menu" nổi trên navbar ở các tab này để tránh trùng lặp / lệch style.
-     * Thêm path vào đây mỗi khi một tab được gắn nút điều hướng riêng.
+     * Khai báo bằng cờ `ownNav` trong routes/app-tabs.ts.
      */
-    private static readonly PAGES_WITH_OWN_NAV = new Set<string>([
-      '/dashboard',
-      '/menu',
-      '/shipment',
-      '/qc',
-      '/qc-traceability',
-      '/settings',
-      '/rm1-delivery',
-      '/inbound',
-      '/inbound-asm1',
-      '/inbound-asm2',
-      '/outbound',
-      '/outbound-asm1',
-      '/outbound-asm2',
-      '/pd-control',
-      '/shorted-materials',
-      '/nhiet-do',
-      '/equipment-checklist',
-      '/location',
-      '/fg-in',
-      '/fg-out',
-      '/fg-inventory',
-      '/fg-inventory/tp-list',
-      '/fg-location',
-      '/j-warehouse',
-      '/report',
-      '/label',
-      '/equipment',
-      '/xe-tai',
-      '/materials',
-      '/quan-ly-nguyen-lieu',
-      '/danh-muc-nvl-tp',
-      '/inventory-overview',
-      '/lich-lam-viec'
-    ]);
+    private static readonly PAGES_WITH_OWN_NAV = new Set<string>(OWN_NAV_TAB_PATHS);
 
     hasOwnNav(): boolean {
       return NavbarComponent.PAGES_WITH_OWN_NAV.has(this.currentAppPath());

@@ -416,8 +416,8 @@ html, body {
       background: #f8f9fa;
       z-index: 10;
       min-width: 50px; /* Giảm chiều rộng cột */
-      border-right: 1px solid #dee2e6 !important; /* Vertical border */
-      border-bottom: 2px solid #dee2e6 !important; /* Header bottom border */
+      border-right: 1px solid #8F8F89 !important; /* Vertical border */
+      border-bottom: 2px solid #8F8F89 !important; /* Header bottom border */
       padding: 4px 3px !important; /* Giảm padding để tận dụng không gian */
       
       &:first-child {
@@ -432,8 +432,8 @@ html, body {
     tbody td {
       min-width: 50px; /* Giảm chiều rộng cột */
       vertical-align: middle;
-      border-right: 1px solid #dee2e6 !important; /* Vertical border */
-      border-bottom: 1px solid #dee2e6 !important; /* Horizontal border */
+      border-right: 1px solid #8F8F89 !important; /* Vertical border */
+      border-bottom: 1px solid #8F8F89 !important; /* Horizontal border */
       padding: 4px 3px !important; /* Giảm padding để tận dụng không gian */
       
       &:first-child {
@@ -447,7 +447,7 @@ html, body {
     
     // Enhanced row borders for better visibility
     tbody tr {
-      border-bottom: 1px solid #dee2e6;
+      border-bottom: 1px solid #8F8F89;
       
       &:hover {
         background-color: #f8f9fa;
@@ -520,12 +520,12 @@ html, body {
 // Summary cards with white background and colored borders
 .summary-row {
   .col-lg-2:nth-child(1) .summary-card {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 3px solid #2196f3 !important;
     box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
@@ -550,12 +550,12 @@ html, body {
   }
   
   .col-lg-2:nth-child(2) .summary-card {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 3px solid #4caf50 !important;
     box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
@@ -580,12 +580,12 @@ html, body {
   }
   
   .col-lg-2:nth-child(3) .summary-card {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 3px solid #ff9800 !important;
     box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
@@ -610,12 +610,12 @@ html, body {
   }
   
   .col-lg-2:nth-child(4) .summary-card {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 3px solid #00bcd4 !important;
     box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
@@ -640,16 +640,16 @@ html, body {
   }
   
   .col-lg-2:nth-child(5) .summary-card {
-    background: #ffffff !important;
-    border: 3px solid #9c27b0 !important;
-    box-shadow: 0 2px 4px rgba(156, 39, 176, 0.2) !important;
+    background: #FFFFFF !important;
+    border: 3px solid #3478F6 !important;
+    box-shadow: 0 2px 4px rgba(52, 120, 246, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
-        color: #9c27b0 !important; /* Icon màu tím */
+        color: #3478F6 !important; /* Icon màu tím */
       }
       
       .card-category {
@@ -670,12 +670,12 @@ html, body {
   }
   
   .col-lg-2:nth-child(6) .summary-card {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 3px solid #f44336 !important;
     box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2) !important;
     
     .card-header {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-bottom: none !important;
       
       .card-header-icon i {
@@ -951,10 +951,10 @@ html, body {
 }
 
 .status-ready {
-  background-color: #f3e5f5;
+  background-color: #EAF2FF;
   
   &:hover {
-    background-color: #e1bee7;
+    background-color: #EAF2FF;
   }
 }
 
@@ -1089,7 +1089,7 @@ html, body {
     td {
       padding: 8px 6px; /* Reduced padding for more compact rows */
       vertical-align: middle;
-      border-top: 1px solid #e9ecef;
+      border-top: 1px solid #8F8F89;
       font-size: 0.9em;
     }
     
@@ -1161,13 +1161,13 @@ html, body {
   }
   
   &.mat-checkbox-checked .mat-checkbox-background {
-    background-color: #9c27b0;
+    background-color: #3478F6;
   }
 }
 
 // Selected row highlighting
 tr.selected-row {
-  background-color: rgba(156, 39, 176, 0.08) !important;
+  background-color: rgba(52, 120, 246, 0.08) !important;
 }
 
 // Bulk delete button styling
@@ -1407,7 +1407,7 @@ tr.selected-row {
   }
   
   &.mat-focused .mat-form-field-label {
-    color: #9c27b0;
+    color: #3478F6;
   }
 }
 
@@ -1480,7 +1480,7 @@ textarea.mat-input-element {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     background: #f5f5f5;
     border-radius: 8px 8px 0 0;
 
@@ -1500,7 +1500,7 @@ textarea.mat-input-element {
 .import-step {
   margin-bottom: 30px;
   padding: 20px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   background: #fafafa;
 
@@ -1525,7 +1525,7 @@ textarea.mat-input-element {
 // File Upload Area
 .file-upload-area {
   padding: 20px;
-  border: 2px dashed #ddd;
+  border: 2px dashed #6B6B66;
   border-radius: 6px;
   text-align: center;
   background: white;
@@ -1731,7 +1731,7 @@ textarea.mat-input-element {
   padding: 20px;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #6B6B66;
   
   .section-title {
     margin-bottom: 15px;
@@ -1954,7 +1954,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -2072,11 +2072,11 @@ textarea.mat-input-element {
   width: 100%;
   min-width: 80px;
   padding: 4px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 11px;
   text-align: center;
-  background: #fff;
+  background: #FFFFFF;
   
   &::placeholder {
     color: #999;
@@ -2091,7 +2091,7 @@ textarea.mat-input-element {
   }
   
   &:hover {
-    border-color: #bbb;
+    border-color: #6B6B66;
   }
 }
 
@@ -2267,7 +2267,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -2382,7 +2382,7 @@ textarea.mat-input-element {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     background: #f5f5f5;
     border-radius: 8px 8px 0 0;
 
@@ -2491,7 +2491,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -2666,7 +2666,7 @@ textarea.mat-input-element {
     position: absolute !important;
     display: none !important;
     background: white !important;
-    border: 2px solid #ddd !important;
+    border: 2px solid #6B6B66 !important;
     border-radius: 6px !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     min-width: 120px !important;
@@ -2682,7 +2682,7 @@ textarea.mat-input-element {
       display: block !important;
       padding: 10px 15px !important;
       cursor: pointer !important;
-      border-bottom: 1px solid #eee !important;
+      border-bottom: 1px solid #8F8F89 !important;
       
       &:hover {
         background-color: #e3f2fd !important;
@@ -2750,7 +2750,7 @@ textarea.mat-input-element {
       
       .modal-header {
         padding: 20px 24px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid #8F8F89;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -2796,7 +2796,7 @@ textarea.mat-input-element {
           .form-control {
             width: 100%;
             padding: 8px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid #6B6B66;
             border-radius: 4px;
             font-size: 14px;
             
@@ -2832,7 +2832,7 @@ textarea.mat-input-element {
         
         .preview-section {
           background: #f8f9fa;
-          border: 1px solid #dee2e6;
+          border: 1px solid #6B6B66;
           border-radius: 6px;
           padding: 16px;
           margin-top: 16px;
@@ -2853,7 +2853,7 @@ textarea.mat-input-element {
             
             li {
               padding: 6px 0;
-              border-bottom: 1px solid #dee2e6;
+              border-bottom: 1px solid #8F8F89;
               font-size: 13px;
               color: #495057;
               
@@ -2867,7 +2867,7 @@ textarea.mat-input-element {
       
       .dialog-actions {
         padding: 16px 24px;
-        border-top: 1px solid #eee;
+        border-top: 1px solid #8F8F89;
         display: flex;
         gap: 12px;
         justify-content: flex-end;
@@ -2907,7 +2907,7 @@ textarea.mat-input-element {
   .scan-dialog-header {
     background: #f8f9fa;
     padding: 16px 20px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid #8F8F89;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2932,7 +2932,7 @@ textarea.mat-input-element {
         width: 100%;
         height: 300px;
         background: #f5f5f5;
-        border: 2px dashed #ddd;
+        border: 2px dashed #6B6B66;
         border-radius: 8px;
         margin-bottom: 16px;
         
@@ -2963,13 +2963,13 @@ textarea.mat-input-element {
       .scanned-items-list {
         max-height: 300px;
         overflow-y: auto;
-        border: 1px solid #e9ecef;
+        border: 1px solid #6B6B66;
         border-radius: 6px;
         padding: 8px;
         
         .scanned-item {
           background: #f8f9fa;
-          border: 1px solid #e9ecef;
+          border: 1px solid #6B6B66;
           border-radius: 6px;
           padding: 12px;
           margin-bottom: 8px;
@@ -3014,7 +3014,7 @@ textarea.mat-input-element {
 
 // Print QR button styles
 .print-qr-btn {
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   border: 2px solid #4caf50 !important; // Green border for print action
   color: #000000 !important;
   font-size: 12px !important;
@@ -3041,7 +3041,7 @@ textarea.mat-input-element {
   }
   
   &:focus, &:active {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
   }
@@ -3077,7 +3077,7 @@ textarea.mat-input-element {
 }
 
 #qr-reader {
-  border: 2px solid #e0e0e0;
+  border: 2px solid #6B6B66;
   border-radius: 8px;
   overflow: hidden;
   background-color: #f8f9fa;
@@ -3157,7 +3157,7 @@ textarea.mat-input-element {
   margin-bottom: 24px;
   
   .scanner-status-card {
-    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    background: linear-gradient(135deg, #e3f2fd 0%, #EAF2FF 100%);
     border: 2px solid #2196f3;
     border-radius: 12px;
     padding: 20px;
@@ -3212,7 +3212,7 @@ textarea.mat-input-element {
   padding: 16px;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid #6B6B66;
   display: flex;
   gap: 12px;
   justify-content: center;
@@ -3472,9 +3472,9 @@ textarea.mat-input-element {
                     }
                     
                     &.status-transfer {
-                      background: #f3e5f5;
-                      color: #7b1fa2;
-                      border: 1px solid #9c27b0;
+                      background: #EAF2FF;
+                      color: #2057B5;
+                      border: 1px solid #3478F6;
                     }
                     
                     &.status-done {
@@ -3557,14 +3557,14 @@ textarea.mat-input-element {
       
       .cancel-btn {
         color: #666;
-        border-color: #ddd;
+        border-color: #6B6B66;
         padding: 12px 24px;
         font-size: 16px;
         border-radius: 8px;
         
         &:hover {
           background: #f5f5f5;
-          border-color: #bbb;
+          border-color: #6B6B66;
         }
       }
     }

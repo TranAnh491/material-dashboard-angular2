@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -119,6 +120,9 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     private firestore: AngularFirestore,
     private router: Router
   ) {}
+
+  /** trackBy: giữ DOM dòng khi danh sách đổi, tránh render lại toàn bảng. */
+  trackById = (index: number, item: { id?: string } | null | undefined): string | number => item?.id ?? index;
 
   ngOnInit(): void {
     this.updateMobileLayout();
@@ -1075,7 +1079,7 @@ export class FgLocationComponent implements OnInit, OnDestroy {
     try {
       const codes = await this.loadDistinctTpCodesInStock(this.selectedFactory);
       if (!codes.length) {
-        alert(`Không có mã TP tồn > 0 tại ${this.selectedFactory}`);
+        appAlert(`Không có mã TP tồn > 0 tại ${this.selectedFactory}`);
         return;
       }
       await this.openTpPrintWindow(codes, this.selectedFactory);
@@ -1252,7 +1256,7 @@ export class FgLocationComponent implements OnInit, OnDestroy {
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+      appAlert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
       return;
     }
     printWindow.document.write(`

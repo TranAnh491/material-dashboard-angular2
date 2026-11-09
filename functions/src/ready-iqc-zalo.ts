@@ -40,7 +40,7 @@ function lsxDocId(lsx: string): string {
     .slice(0, 80);
 }
 
-async function sendText(token: string, chatId: string, text: string): Promise<void> {
+export async function sendText(token: string, chatId: string, text: string): Promise<void> {
   const url = `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
   const res = await fetch(url, {
     method: 'POST',
@@ -53,7 +53,7 @@ async function sendText(token: string, chatId: string, text: string): Promise<vo
   }
 }
 
-async function resolvePlnChatId(db: admin.firestore.Firestore): Promise<string> {
+export async function resolvePlnChatId(db: admin.firestore.Firestore): Promise<string> {
   const snap = await db.collection('zalo_group_config').get();
   let pln = '';
   snap.docs.forEach((doc) => {

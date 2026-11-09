@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { initializeApp } from 'firebase/app';
@@ -1981,14 +1982,14 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       if (result.success) {
         this.lastSyncTime = new Date();
         this.syncStatus = result.data;
-        alert(`✅ Sync thành công!\n\n${result.message}`);
+        appAlert(`✅ Sync thành công!\n\n${result.message}`);
       } else {
-        alert(`❌ Sync thất bại!\n\n${result.message}`);
+        appAlert(`❌ Sync thất bại!\n\n${result.message}`);
       }
       
     } catch (error) {
       console.error('❌ Sync error:', error);
-      alert(`❌ Sync thất bại!\n\nLỗi: ${error.message || error}`);
+      appAlert(`❌ Sync thất bại!\n\nLỗi: ${error.message || error}`);
     } finally {
       this.isSyncing = false;
     }
@@ -2024,7 +2025,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       const data = await this.googleSheetService.fetchInventoryData().toPromise();
       
       if (!data || data.length === 0) {
-        alert('❌ Không có dữ liệu từ Google Sheets');
+        appAlert('❌ Không có dữ liệu từ Google Sheets');
         return;
       }
       
@@ -2094,11 +2095,11 @@ Qty × Unit Weight (grams) ÷ 1000 = kg
 
 ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : '✅ Data matches!'}`;
       
-      alert(alertMessage);
+      appAlert(alertMessage);
       
     } catch (error) {
       console.error('❌ Error checking D44 data:', error);
-      alert(`❌ Lỗi khi kiểm tra dữ liệu D44:\n\n${error.message || error}`);
+      appAlert(`❌ Lỗi khi kiểm tra dữ liệu D44:\n\n${error.message || error}`);
     }
   }
   */
@@ -2306,7 +2307,7 @@ ${Math.abs(totalWeight - rackTotalWeight) > 0.1 ? '⚠️ MISMATCH DETECTED!' : 
       
       console.log('✅ Step 8: Updated D4x racks in display');
       
-      alert(`🎉 Test completed!
+      appAlert(`🎉 Test completed!
       
 📊 Results:
 • CSV lines: ${lines.length}
@@ -2354,7 +2355,7 @@ Check console for detailed logs!`);
         console.log(`  ${w.position}: ${w.weight}kg → ${display?.currentLoad || 'N/A'}kg`);
       });
       
-      alert(`✅ Position Check Results:
+      appAlert(`✅ Position Check Results:
       
 📊 Total positions: ${weights.length}
 📊 With weight: ${withWeight.length}

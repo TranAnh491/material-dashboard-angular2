@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { AngularFireFunctions } from '@angular/fire/compat/functions';
@@ -30,6 +30,7 @@ import {
   pickDailyZaloAssignees,
   ZaloLinkRow
 } from '../../services/nhiet-do-zalo-settings.service';
+import { decodeSevenSegment } from './nhiet-do-seven-seg';
 
 export interface DayTempHumReading {
   tempMorning?: number | null;
@@ -56,12 +57,30 @@ export type NhietDoView = 'picker' | 'form';
 
 type DayNumberField = 'tempMorning' | 'tempAfternoon' | 'humidityMorning' | 'humidityAfternoon';
 
+const DAY_NUMBER_FIELDS: DayNumberField[] = ['tempMorning', 'tempAfternoon', 'humidityMorning', 'humidityAfternoon'];
+const DAY_NUMBER_FIELD_LABEL: Record<DayNumberField, string> = {
+  tempMorning: 'Nhiệt độ Sáng',
+  tempAfternoon: 'Nhiệt độ Chiều',
+  humidityMorning: 'Độ ẩm Sáng',
+  humidityAfternoon: 'Độ ẩm Chiều'
+};
+/** Mật khẩu xác nhận khi sửa số đã lưu. */
+const NHIET_DO_EDIT_PASS = 'F07';
+
+export interface NhietDoNumberEdit {
+  day: number;
+  field: DayNumberField;
+  label: string;
+  oldValue: number;
+  newValue: number | null;
+}
+
 @Component({
   selector: 'app-nhiet-do',
   templateUrl: './nhiet-do.component.html',
   styleUrls: ['./nhiet-do.component.scss']
 })
-export class NhietDoComponent implements OnInit {
+export class NhietDoComponent implements OnInit, OnDestroy {
   readonly collection = 'warehouse-temp-humidity-checklists';
   readonly dayNumbers = Array.from({ length: 31 }, (_, i) => i + 1);
   readonly factoryGroups: NhietDoFactoryGroup[] = buildNhietDoFactoryGroups();
@@ -88,6 +107,13 @@ export class NhietDoComponent implements OnInit {
   assessmentSign = '';
   inspectionSign = '';
   days: DayTempHumReading[] = this.emptyDays();
+  /** Số đã lưu trên Firestore — so với days để biết ô nào bị sửa. */
+  private savedDays: DayTempHumReading[] = this.emptyDays();
+
+  /** Popup nhập pass khi sửa số đã lưu. */
+  editConfirm: NhietDoNumberEdit[] | null = null;
+  editPass = '';
+  editPassError = '';
 
   isLoading = false;
   isSaving = false;
@@ -114,6 +140,26 @@ export class NhietDoComponent implements OnInit {
 
   years: number[] = [];
 
+  /** Scan màn hình đồng hồ nhiệt độ/độ ẩm bằng camera (OCR trên trình duyệt). */
+  @ViewChild('scanVideo') scanVideoRef?: ElementRef<HTMLVideoElement>;
+  showScan = false;
+  scanCameraOn = false;
+  scanBusy = false;
+  scanStatus = '';
+  scanError = '';
+  scanImageUrl = '';
+  scanRawText = '';
+  scanTemp: number | null = null;
+  scanHum: number | null = null;
+  scanDay = 1;
+  scanSlot: 'morning' | 'afternoon' = 'morning';
+  /** Điện thoại: chỉ Chụp → xem kết quả → Lưu / Chụp lại / Thoát. */
+  scanMobile = false;
+  private scanFromMobileEntry = false;
+  private scanStream: MediaStream | null = null;
+  private ocrWorker: any = null;
+  private ocrWorkerPromise: Promise<any> | null = null;
+
   constructor(
     private firestore: AngularFirestore,
     private router: Router,
@@ -128,11 +174,386 @@ export class NhietDoComponent implements OnInit {
     // Màn chọn biểu mẫu; load dữ liệu khi mở từng form
   }
 
+  ngOnDestroy(): void {
+    this.stopScanCamera();
+    const worker = this.ocrWorker;
+    this.ocrWorker = null;
+    this.ocrWorkerPromise = null;
+    if (worker) void worker.terminate().catch(() => undefined);
+  }
+
+  // ── Scan camera ──────────────────────────────────────────────────
+
+  get scanDayOptions(): number[] {
+    return this.dayNumbers.filter(d => this.isDayActive(d));
+  }
+
+  /** Chỉ Kho Thường và Kho Mát có màn hình đồng hồ để chụp. */
+  get canScan(): boolean {
+    const type = this.activeForm?.formType;
+    return type === 'regular' || type === 'special';
+  }
+
+  private isPhoneScreen(): boolean {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  get scanSlotLabel(): string {
+    return this.scanSlot === 'morning' ? 'Sáng' : 'Chiều';
+  }
+
+  get scanReadOk(): boolean {
+    return this.scanTemp != null && this.scanHum != null;
+  }
+
+  openScan(): void {
+    if (!this.activeForm || !this.canScan) return;
+    this.scanMobile = this.isPhoneScreen();
+    const now = new Date();
+    const sameMonth = now.getFullYear() === Number(this.selectedYear) && now.getMonth() + 1 === Number(this.selectedMonth);
+    this.scanDay = sameMonth ? now.getDate() : 1;
+    this.scanSlot = now.getHours() < 12 ? 'morning' : 'afternoon';
+    this.scanTemp = null;
+    this.scanHum = null;
+    this.scanRawText = '';
+    this.scanImageUrl = '';
+    this.scanError = '';
+    this.scanStatus = '';
+    this.showScan = true;
+    setTimeout(() => void this.startScanCamera(), 0);
+  }
+
+  closeScan(): void {
+    this.stopScanCamera();
+    this.showScan = false;
+    this.scanBusy = false;
+    if (this.scanFromMobileEntry) {
+      this.scanFromMobileEntry = false;
+      this.backToPicker();
+    }
+  }
+
+  async startScanCamera(): Promise<void> {
+    this.scanError = '';
+    this.scanImageUrl = '';
+    this.scanTemp = null;
+    this.scanHum = null;
+    this.scanRawText = '';
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.scanError = 'Trình duyệt không hỗ trợ camera. Dùng nút "Chọn ảnh".';
+      return;
+    }
+    this.stopScanCamera();
+    try {
+      this.scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      const video = this.scanVideoRef?.nativeElement;
+      if (!video) {
+        this.stopScanCamera();
+        return;
+      }
+      video.srcObject = this.scanStream;
+      await video.play().catch(() => undefined);
+      this.scanCameraOn = true;
+    } catch (e) {
+      console.error('[Nhiệt Độ] camera:', e);
+      this.scanError = this.scanMobile
+        ? 'Không mở được camera. Cấp quyền camera cho trình duyệt rồi thử lại.'
+        : 'Không mở được camera. Cấp quyền camera hoặc dùng nút "Chọn ảnh".';
+      this.stopScanCamera();
+    }
+  }
+
+  private stopScanCamera(): void {
+    if (this.scanStream) {
+      this.scanStream.getTracks().forEach(t => t.stop());
+      this.scanStream = null;
+    }
+    const video = this.scanVideoRef?.nativeElement;
+    if (video) video.srcObject = null;
+    this.scanCameraOn = false;
+  }
+
+  /** Chụp vùng khung ngắm giữa màn hình rồi đọc số. */
+  async captureScan(): Promise<void> {
+    const video = this.scanVideoRef?.nativeElement;
+    if (!video || !video.videoWidth || this.scanBusy) return;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const cw = Math.round(vw * 0.8);
+    const ch = Math.round(vh * 0.6);
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, Math.round((vw - cw) / 2), Math.round((vh - ch) / 2), cw, ch, 0, 0, cw, ch);
+    this.stopScanCamera();
+    this.scanImageUrl = canvas.toDataURL('image/jpeg', 0.9);
+    await this.readScanCanvas(canvas);
+  }
+
+  onScanFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d')?.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      this.stopScanCamera();
+      this.scanImageUrl = canvas.toDataURL('image/jpeg', 0.9);
+      void this.readScanCanvas(canvas);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      this.scanError = 'Không đọc được ảnh.';
+    };
+    img.src = url;
+  }
+
+  private async getOcrWorker(): Promise<any> {
+    if (this.ocrWorker) return this.ocrWorker;
+    if (!this.ocrWorkerPromise) {
+      this.ocrWorkerPromise = (async () => {
+        const mod: any = await import('tesseract.js/dist/tesseract.min.js');
+        const T: any = mod?.createWorker ? mod : mod?.default;
+        const worker = await T.createWorker();
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+        await worker.setParameters({
+          tessedit_char_whitelist: '0123456789.,%°C-',
+          tessedit_pageseg_mode: '11'
+        });
+        this.ocrWorker = worker;
+        return worker;
+      })().catch(e => {
+        this.ocrWorkerPromise = null;
+        throw e;
+      });
+    }
+    return this.ocrWorkerPromise;
+  }
+
+  private async readScanCanvas(source: HTMLCanvasElement): Promise<void> {
+    this.scanBusy = true;
+    this.scanError = '';
+    this.scanStatus = 'Đang đọc số…';
+    this.scanRawText = '';
+    try {
+      const best = { temp: null as number | null, hum: null as number | null, text: '', score: -1 };
+      const consider = (text: string) => {
+        const parsed = this.parseScanReadings(text);
+        const score = (parsed.temp != null ? 1 : 0) + (parsed.hum != null ? 1 : 0);
+        if (score > best.score) Object.assign(best, parsed, { text, score });
+      };
+
+      const variants = (['glow', 'dark', 'light'] as const).map(mode => this.prepareScanCanvas(source, mode));
+      for (const v of variants) {
+        consider(decodeSevenSegment(v.ink, v.width, v.height).join('\n'));
+        if (best.score === 2) break;
+      }
+
+      if (best.score < 2) {
+        const worker = await this.getOcrWorker();
+        for (const v of variants) {
+          const { data } = await worker.recognize(v.canvas);
+          consider(String(data?.text || ''));
+          if (best.score === 2) break;
+        }
+      }
+      this.scanRawText = best.text.trim();
+      this.scanTemp = best.temp;
+      this.scanHum = best.hum;
+      if (this.scanTemp == null && this.scanHum == null) {
+        this.scanError = 'Không đọc được số. Chụp gần hơn, đủ sáng, không lóa rồi thử lại.';
+      } else if (this.scanTemp == null || this.scanHum == null) {
+        this.scanError = 'Chỉ đọc được một giá trị. Kiểm tra và nhập bổ sung trước khi điền.';
+      }
+    } catch (e) {
+      console.error('[Nhiệt Độ] OCR failed:', e);
+      this.scanError = 'Không đọc được số (bộ đọc dự phòng cần kết nối mạng). Thử lại hoặc nhập tay.';
+    } finally {
+      this.scanBusy = false;
+      this.scanStatus = '';
+    }
+  }
+
+  /**
+   * Tách nét số thành ảnh chữ đen nền trắng, làm dày nét để nối các đoạn 7 thanh.
+   * glow: màn LED phát sáng màu (đỏ/xanh) — lấy điểm ảnh rực màu, bỏ tường trắng và nền đen.
+   * dark/light: xám → ngưỡng Otsu, lấy phần tối hoặc phần sáng làm nét.
+   */
+  private prepareScanCanvas(
+    source: HTMLCanvasElement,
+    mode: 'glow' | 'dark' | 'light'
+  ): { canvas: HTMLCanvasElement; ink: Uint8Array; width: number; height: number } {
+    const targetW = Math.min(1400, Math.max(600, source.width));
+    const scale = targetW / source.width;
+    const w = Math.round(source.width * scale);
+    const h = Math.round(source.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { canvas: source, ink: new Uint8Array(0), width: 0, height: 0 };
+    ctx.drawImage(source, 0, 0, w, h);
+    const img = ctx.getImageData(0, 0, w, h);
+    const px = img.data;
+    const total = w * h;
+    const otsu = (values: Uint8Array): number => {
+      const hist = new Array<number>(256).fill(0);
+      for (let j = 0; j < total; j++) hist[values[j]]++;
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0;
+      let wB = 0;
+      let maxVar = -1;
+      let threshold = 128;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (!wB) continue;
+        const wF = total - wB;
+        if (!wF) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const v = wB * wF * (mB - mF) * (mB - mF);
+        if (v > maxVar) {
+          maxVar = v;
+          threshold = t;
+        }
+      }
+      return threshold;
+    };
+
+    let ink = new Uint8Array(total);
+    if (mode === 'glow') {
+      const sat = new Uint8Array(total);
+      const bright = new Uint8Array(total);
+      for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+        const max = Math.max(px[i], px[i + 1], px[i + 2]);
+        sat[j] = max - Math.min(px[i], px[i + 1], px[i + 2]);
+        bright[j] = max;
+      }
+      const threshold = Math.max(70, otsu(sat));
+      for (let j = 0; j < total; j++) ink[j] = sat[j] >= threshold && bright[j] >= 110 ? 1 : 0;
+    } else {
+      const gray = new Uint8Array(total);
+      for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+        gray[j] = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
+      }
+      const threshold = otsu(gray);
+      let inkCount = 0;
+      for (let j = 0; j < total; j++) {
+        ink[j] = gray[j] <= threshold ? 1 : 0;
+        inkCount += ink[j];
+      }
+      const mostlyDark = inkCount > total / 2;
+      if (mostlyDark !== (mode === 'light')) {
+        for (let j = 0; j < total; j++) ink[j] = ink[j] ? 0 : 1;
+      }
+    }
+
+    const radius = Math.max(1, Math.round(w / (mode === 'glow' ? 300 : 500)));
+    const grown = new Uint8Array(total);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!ink[y * w + x]) continue;
+        for (let dy = -radius; dy <= radius; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -radius; dx <= radius; dx++) {
+            const xx = x + dx;
+            if (xx >= 0 && xx < w) grown[yy * w + xx] = 1;
+          }
+        }
+      }
+    }
+    ink = grown;
+
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+      const v = ink[j] ? 0 : 255;
+      px[i] = v;
+      px[i + 1] = v;
+      px[i + 2] = v;
+      px[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return { canvas, ink, width: w, height: h };
+  }
+
+  /** Theo thứ tự đọc: số hàng trên là nhiệt độ, số hàng dưới là độ ẩm. */
+  private parseScanReadings(text: string): { temp: number | null; hum: number | null } {
+    const clean = String(text || '').replace(/,/g, '.');
+    const re = /-?\d{1,3}(?:\.\d{1,2})?/g;
+    const values: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(clean)) && values.length < 2) {
+      let value = Number(m[0]);
+      if (!Number.isFinite(value)) continue;
+      if (!m[0].includes('.') && Math.abs(value) >= 100) value = value / 10;
+      values.push(value);
+    }
+    const temp = values[0] != null && values[0] >= -30 && values[0] <= 70 ? values[0] : null;
+    const hum = values[1] != null && values[1] >= 0 && values[1] <= 100 ? values[1] : null;
+    return { temp, hum };
+  }
+
+  async applyScan(): Promise<void> {
+    if (!this.activeForm || !this.canScan || this.scanBusy || this.isLoading || this.isSaving) return;
+    const temp = this.scanTemp == null || (this.scanTemp as any) === '' ? null : Number(this.scanTemp);
+    const hum = this.scanHum == null || (this.scanHum as any) === '' ? null : Number(this.scanHum);
+    if ((temp == null || !Number.isFinite(temp)) && (hum == null || !Number.isFinite(hum))) {
+      this.scanError = 'Chưa có giá trị nhiệt độ hoặc độ ẩm.';
+      return;
+    }
+    if (this.scanMobile && !this.scanReadOk) {
+      this.scanError = 'Chưa đọc đủ nhiệt độ và độ ẩm. Bấm Chụp lại.';
+      return;
+    }
+    const day = Number(this.scanDay);
+    if (!this.isDayActive(day)) {
+      this.scanError = 'Ngày không hợp lệ.';
+      return;
+    }
+    const morning = this.scanSlot === 'morning';
+    if (temp != null && Number.isFinite(temp)) {
+      this.onDayNumberChange(day, morning ? 'tempMorning' : 'tempAfternoon', temp);
+    }
+    if (hum != null && Number.isFinite(hum)) {
+      this.onDayNumberChange(day, morning ? 'humidityMorning' : 'humidityAfternoon', hum);
+    }
+    await this.saveMonth();
+    if (this.saveMessage.startsWith('Đã lưu')) {
+      this.closeScan();
+    } else {
+      this.scanError = 'Lưu không thành công. Bấm Lưu lại.';
+    }
+  }
+
   openForm(form: NhietDoFormDef): void {
     this.activeForm = form;
     this.view = 'form';
     this.saveMessage = '';
+    const phoneScan = this.isPhoneScreen() && this.canScan;
+    if (phoneScan) {
+      const now = new Date();
+      this.selectedYear = now.getFullYear();
+      this.selectedMonth = now.getMonth() + 1;
+    }
     void this.loadMonth();
+    if (phoneScan) {
+      this.scanFromMobileEntry = true;
+      this.openScan();
+    }
   }
 
   backToPicker(): void {
@@ -256,6 +677,7 @@ export class NhietDoComponent implements OnInit {
         this.inspectionSign = '';
         this.days = this.emptyDays();
       }
+      this.savedDays = this.days.map(d => ({ ...d }));
     } catch (e) {
       console.error('[Nhiệt Độ] load failed:', e);
       this.saveMessage = 'Không tải được dữ liệu.';
@@ -288,6 +710,7 @@ export class NhietDoComponent implements OnInit {
         updatedAt: new Date()
       };
       await this.firestore.collection(this.collection).doc(this.docId()).set(payload, { merge: true });
+      this.savedDays = payload.days.map(d => ({ ...d }));
       this.saveMessage = 'Đã lưu thành công!';
       setTimeout(() => { this.saveMessage = ''; }, 3000);
     } catch (e) {
@@ -301,6 +724,75 @@ export class NhietDoComponent implements OnInit {
 
   onMonthYearChange(): void {
     void this.loadMonth();
+  }
+
+  /** Các ô đã có số trên Firestore nhưng đang bị sửa / xóa. Ô trống nhập mới không cần pass. */
+  private pendingNumberEdits(): NhietDoNumberEdit[] {
+    const edits: NhietDoNumberEdit[] = [];
+    for (const day of this.dayNumbers) {
+      if (!this.isDayActive(day)) continue;
+      for (const field of DAY_NUMBER_FIELDS) {
+        const oldValue = this.numOrNull(this.savedDays[day - 1]?.[field]);
+        const newValue = this.numOrNull(this.days[day - 1]?.[field]);
+        if (oldValue != null && oldValue !== newValue) {
+          edits.push({ day, field, label: DAY_NUMBER_FIELD_LABEL[field], oldValue, newValue });
+        }
+      }
+    }
+    return edits;
+  }
+
+  private openEditConfirm(edits: NhietDoNumberEdit[]): void {
+    this.editConfirm = edits;
+    this.editPass = '';
+    this.editPassError = '';
+    setTimeout(() => (document.getElementById('nhiet-do-edit-pass') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  /** Rời ô số (sửa xong) → nếu sửa số đã lưu thì hỏi pass. */
+  onDayNumberCommitted(): void {
+    if (this.editConfirm || this.isLoading || this.isSaving) return;
+    const edits = this.pendingNumberEdits();
+    if (edits.length) this.openEditConfirm(edits);
+  }
+
+  /** Nút Lưu trên toolbar: có sửa số đã lưu thì phải qua pass. */
+  onSaveClick(): void {
+    if (this.editConfirm) return;
+    const edits = this.pendingNumberEdits();
+    if (edits.length) {
+      this.openEditConfirm(edits);
+      return;
+    }
+    void this.saveMonth();
+  }
+
+  async confirmNumberEdit(): Promise<void> {
+    if (!this.editConfirm || this.isSaving) return;
+    if (String(this.editPass || '').trim() !== NHIET_DO_EDIT_PASS) {
+      this.editPassError = 'Sai mật khẩu.';
+      return;
+    }
+    this.editPassError = '';
+    await this.saveMonth();
+    if (this.saveMessage.startsWith('Đã lưu')) {
+      this.editConfirm = null;
+      this.editPass = '';
+    } else {
+      this.editPassError = 'Lưu không thành công. Thử lại.';
+    }
+  }
+
+  /** Hủy → trả các ô vừa sửa về số đã lưu. */
+  cancelNumberEdit(): void {
+    if (this.isSaving) return;
+    for (const e of this.editConfirm || []) {
+      this.days[e.day - 1] = { ...this.days[e.day - 1], [e.field]: e.oldValue };
+    }
+    this.days = [...this.days];
+    this.editConfirm = null;
+    this.editPass = '';
+    this.editPassError = '';
   }
 
   onDayNumberChange(day: number, field: DayNumberField, value: number | string | null): void {

@@ -55,7 +55,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #8F8F89;
   background-color: #f8f9fa;
 }
 
@@ -152,7 +152,7 @@
 
 .notification-footer {
   padding: 12px 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid #8F8F89;
   text-align: center;
   background-color: #f8f9fa;
 }

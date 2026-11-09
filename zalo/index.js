@@ -23,6 +23,8 @@
 const {setGlobalOptions} = require("firebase-functions");
 const {defineSecret} = require("firebase-functions/params");
 const {onRequest} = require("firebase-functions/https");
+const {onDocumentWritten} = require("firebase-functions/firestore");
+const {onSchedule} = require("firebase-functions/scheduler");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
@@ -36,6 +38,475 @@ const ZALO_BOT_SEND_MESSAGE_URL = (token) =>
   `https://bot-api.zaloplatforms.com/bot${encodeURIComponent(token)}/sendMessage`;
 
 setGlobalOptions({maxInstances: 10});
+
+const WO_STATUS_LABELS = {
+  "waiting": "Waiting",
+  "kitting": "Kitting",
+  "ready": "Ready",
+  "ready-iqc": "Ready IQC",
+  "transfer": "Transfer",
+  "done": "Done",
+  "delay": "Delay",
+};
+
+/** Ngày hiện tại theo giờ Việt Nam: { key: "YYYY-MM-DD", start, end } (UTC Date). */
+function vnTodayRange(now = new Date()) {
+  const key = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const start = new Date(`${key}T00:00:00+07:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return {key, start, end};
+}
+
+function normalizeLsx(raw) {
+  return String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function chunkLines(title, lines, max = 1800) {
+  const chunks = [];
+  let current = title;
+  for (const line of lines) {
+    const next = `${current}\n${line}`;
+    if (next.length > max && current !== title) {
+      chunks.push(current);
+      current = `${title}\n${line}`;
+    } else {
+      current = next;
+    }
+  }
+  if (current.trim()) chunks.push(current);
+  return chunks;
+}
+
+/** Trạng thái các LSX có Ngày giao NVL (deliveryDate) là hôm nay. */
+async function buildTodayLsxStatusMessages() {
+  const {key, start, end} = vnTodayRange();
+  const [y, m, d] = key.split("-");
+  const dayLabel = `${d}/${m}/${y}`;
+  const snap = await db
+    .collection("work-orders")
+    .where("deliveryDate", ">=", start)
+    .where("deliveryDate", "<", end)
+    .get();
+  const rows = snap.docs
+    .map((doc) => doc.data() || {})
+    .filter((wo) => String(wo.productionOrder || "").trim());
+  if (!rows.length) return [`Không có LSX nào giao NVL ngày ${dayLabel}.`];
+
+  rows.sort((a, b) => {
+    const ua = a.isUrgent ? 1 : 0;
+    const ub = b.isUrgent ? 1 : 0;
+    if (ua !== ub) return ub - ua;
+    const fa = String(a.factory || "");
+    const fb = String(b.factory || "");
+    if (fa !== fb) return fa.localeCompare(fb);
+    return String(a.productionOrder).localeCompare(String(b.productionOrder));
+  });
+
+  const counts = {};
+  rows.forEach((wo) => {
+    const label = WO_STATUS_LABELS[String(wo.status || "waiting")] || "Waiting";
+    counts[label] = (counts[label] || 0) + 1;
+  });
+  const summary = Object.keys(counts).map((k) => `${k}: ${counts[k]}`).join(", ");
+  const title = `Trạng thái LSX giao NVL ngày ${dayLabel} (${rows.length} LSX)\n${summary}`;
+  const lines = rows.map((wo, i) => {
+    const label = WO_STATUS_LABELS[String(wo.status || "waiting")] || "Waiting";
+    const factory = wo.factory ? ` (${wo.factory})` : "";
+    const urgent = wo.isUrgent ? " - Ưu tiên" : "";
+    return `${i + 1}. ${String(wo.productionOrder).trim()}${factory}: ${label}${urgent}`;
+  });
+  return chunkLines(title, lines);
+}
+
+/** Bật ưu tiên (isUrgent) cho một hoặc nhiều LSX. */
+async function setLsxPriority(rawArgs) {
+  const lsxList = Array.from(new Set(
+    String(rawArgs || "")
+      .split(/[\s,;]+/)
+      .map(normalizeLsx)
+      .filter(Boolean)
+  )).slice(0, 20);
+  if (!lsxList.length) return "Nhập LSX sau chữ Ưu tiên. VD: Ưu tiên KZLSX1026/0010";
+
+  const results = [];
+  for (const lsx of lsxList) {
+    const snap = await db.collection("work-orders").where("productionOrder", "==", lsx).limit(10).get();
+    if (snap.empty) {
+      results.push(`Không tìm thấy LSX ${lsx}.`);
+      continue;
+    }
+    const pending = snap.docs.filter((doc) => !doc.data()?.isUrgent);
+    if (!pending.length) {
+      results.push(`LSX ${lsx} đã được ưu tiên trước đó.`);
+      continue;
+    }
+    const batch = db.batch();
+    pending.forEach((doc) => batch.update(doc.ref, {isUrgent: true, lastUpdated: new Date()}));
+    await batch.commit();
+    const label = WO_STATUS_LABELS[String(snap.docs[0].data()?.status || "waiting")] || "Waiting";
+    results.push(`Đã bật ưu tiên LSX ${lsx} (${label}).`);
+  }
+  return results.join("\n");
+}
+
+/** Danh sách lệnh theo nhóm đang chat (gõ "chucnang"). */
+/** Hướng dẫn chung — gửi khi gõ "Chức năng" (mọi chat). Tách 2 tin cho vừa giới hạn độ dài tin Zalo. */
+const FEATURE_GUIDE_PARTS = [
+  [
+    "📘 CHỨC NĂNG BOT KHO & CÁCH DÙNG (1/2)",
+    "Trong nhóm: gõ @Bot AI Warehouse rồi mới gõ lệnh. Chat riêng: gõ thẳng.",
+    "",
+    "1️⃣ Liên kết mã nhân viên (để nhận OTP, mật khẩu, thông báo)",
+    "• Nhắn mã NV, VD: ASP0106 → liên kết ngay",
+    "• Hoặc gõ /link → nhập mã NV → gõ /id để xác nhận",
+    "• /id → xem mã đang liên kết",
+    "• tên tôi là <Họ tên> → đổi tên hiển thị",
+    "• Mỗi mã NV chỉ gắn 1 chat; cần đổi thì báo quản trị viên",
+    "",
+    "2️⃣ Tra tồn kho NVL (cần đã liên kết mã NV)",
+    "• Nhắn mã NVL, VD: B008119",
+    "→ Tổng tồn, số bag, LinkQ, chi tiết PO + vị trí",
+    "• An <mã NVL>, VD: An B001001 → vị trí / PO / tồn các dòng của mã đang ở Danh mục Ẩn (ẩn nhầm, web không thấy)",
+    "",
+    "3️⃣ Ghi log kiểm NVL (sau khi tra mã)",
+    "• đủ → ghi ĐỦ cho mã vừa tra (trong 3 giờ)",
+    "• thiếu <ghi chú> → ghi THIẾU, VD: thiếu 2 bag",
+    "• Ghi kèm mã: đủ B008119 hoặc B008119 thiếu <ghi chú>",
+    "",
+    "4️⃣ Sửa Standard Packing",
+    "• /standar <mã NVL> <số>, VD: /standar B008119 500",
+  ].join("\n"),
+  [
+    "📘 CHỨC NĂNG BOT KHO & CÁCH DÙNG (2/2)",
+    "",
+    "5️⃣ Nhóm PLN (chỉ dùng trong nhóm PLN)",
+    "• LSX → trạng thái các LSX giao NVL hôm nay",
+    "• Ưu tiên <LSX> → bật ưu tiên, VD: Ưu tiên KZLSX1026/0010",
+    "• Bot tự báo LSX Ready-IQC (mã đang chờ IQC)",
+    "",
+    "6️⃣ Nhóm Quản lý kho",
+    "• Bot gửi báo cáo Check lượng PXK (mã không cân được)",
+    "• Rep tin báo cáo bằng: duyệt → duyệt mã trong tin đó",
+    "• Hoặc gõ: duyệt <Mã hàng>, VD: duyệt B008119",
+    "",
+    "7️⃣ Nhóm Kho",
+    "• Nhận file hướng dẫn Scan khi app bấm “Gửi Zalo”",
+    "",
+    "⚙️ Gắn nhóm (làm 1 lần, trong đúng nhóm đó)",
+    "• /nhomkho → gắn nhóm Kho",
+    "• /nhompln → gắn nhóm PLN",
+    "",
+    "ℹ️ Gõ: Chức năng → xem lại hướng dẫn này",
+  ].join("\n"),
+];
+
+/** "Chức năng": phần riêng của nhóm đang chat (nếu có) + hướng dẫn đầy đủ. */
+async function groupFeatureText(chatId) {
+  const [pln, qlk, kho] = await Promise.all([
+    db.collection("zalo_group_config").doc("pln").get(),
+    db.collection("zalo_group_config").doc("quanly_kho").get(),
+    db.collection("zalo_groups").doc("kho").get(),
+  ]);
+  const idOf = (snap) => String(snap.data()?.chatId || "").trim();
+  let group = "";
+  if (chatId === idOf(pln)) {
+    group = "📌 Nhóm này là nhóm PLN — dùng được:\n• LSX → trạng thái LSX giao NVL hôm nay\n• Ưu tiên <LSX> → bật ưu tiên LSX";
+  } else if (chatId === idOf(qlk)) {
+    group = "📌 Nhóm này là nhóm Quản lý kho — dùng được:\n• Rep tin báo cáo Check lượng PXK bằng: duyệt\n• Hoặc gõ: duyệt <Mã hàng>";
+  } else if (chatId === idOf(kho)) {
+    group = "📌 Nhóm này là nhóm Kho — nhận file hướng dẫn Scan từ app.";
+  }
+  return group ? [group, ...FEATURE_GUIDE_PARTS] : [...FEATURE_GUIDE_PARTS];
+}
+
+/**
+ * Duyệt báo cáo Check lượng PXK (giống nút Duyệt trên web):
+ * mã vào pxk-weight-check-exempt, các báo cáo pending của mã → approved.
+ */
+async function approvePxkWeightFromZalo(codeRaw, decidedBy) {
+  const pendingSnap = await db.collection("pxk-weight-check-reports").where("status", "==", "pending").get();
+  const pending = pendingSnap.docs.map((d) => ({id: d.id, ...d.data()}));
+  let code = String(codeRaw || "").trim().toUpperCase();
+  if (!code) {
+    const codes = Array.from(new Set(pending.map((r) => String(r.materialCode || "").trim().toUpperCase()).filter(Boolean)));
+    if (codes.length === 1) {
+      code = codes[0];
+    } else if (!codes.length) {
+      return "Không có báo cáo Check lượng nào đang chờ duyệt.";
+    } else {
+      return `Đang có ${codes.length} mã chờ duyệt: ${codes.join(", ")}.
+Gõ: duyệt <Mã hàng> (VD: duyệt ${codes[0]}).`;
+    }
+  }
+  const same = pending.filter((r) => String(r.materialCode || "").trim().toUpperCase() === code);
+  if (!same.length) return `Mã ${code} không có báo cáo nào đang chờ duyệt.`;
+  const latest = same[0];
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const batch = db.batch();
+  batch.set(db.collection("pxk-weight-check-exempt").doc(code), {
+    materialCode: code,
+    approvedAt: now,
+    approvedBy: decidedBy,
+    reportId: latest.id,
+    reason: String(latest.reason || ""),
+    lsx: String(latest.lsx || ""),
+    source: "zalo",
+  }, {merge: true});
+  for (const r of same) {
+    batch.update(db.collection("pxk-weight-check-reports").doc(r.id), {status: "approved", decidedAt: now, decidedBy});
+  }
+  await batch.commit();
+  return `✅ Đã duyệt mã ${code} (${same.length} báo cáo) — người duyệt ${decidedBy}.
+Mã này không còn bị check lượng.`;
+}
+
+/** Số kiểu 12,500 / 12.5 */
+function fmtQty(n) {
+  const v = Math.round((Number(n) || 0) * 100) / 100;
+  return v.toLocaleString("en-US", {maximumFractionDigits: 2});
+}
+
+function fmtDateVn(ts) {
+  if (!ts) return "";
+  const d = typeof ts.toDate === "function" ? ts.toDate() : (ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts));
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(d);
+}
+
+/** Đọc số người dùng gõ: "500", "1,000", "12.5", "12,5". */
+function parseQtyInput(raw) {
+  let s = String(raw || "").trim().replace(/\s/g, "");
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, "");
+  else if (/^\d{1,3}(\.\d{3}){2,}$/.test(s)) s = s.replace(/\./g, "");
+  else s = s.replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+  return Number(s);
+}
+
+/** Giống tab Materials: tồn = tồn đầu + nhập − xuất − XT. */
+function inventoryRowStock(d) {
+  const opening = d.openingStock !== null && d.openingStock !== undefined ? Number(d.openingStock) || 0 : 0;
+  return opening + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+}
+
+/** Giống cột BAG tab Materials: chẵn + 1 nếu có lẻ; chưa có Standard → số bag đã lưu. */
+function inventoryRowBags(d, stock, sp) {
+  if (!(sp > 0)) {
+    const stored = Number(d.totalBags || 0);
+    return stored > 0 ? Math.floor(stored) : 0;
+  }
+  if (stock <= 0) return 0;
+  const full = Math.floor(stock / sp);
+  const partial = Math.round((stock - full * sp) * 1e6) / 1e6;
+  return partial <= 1e-9 ? full : full + 1;
+}
+
+/** Tách tồn thành bịch CHẴN (đủ Standard) và LẺ (phần dư). Chưa có Standard → không tách được. */
+function inventoryRowSplit(stock, sp) {
+  if (!(sp > 0) || stock <= 0) return {full: 0, partialQty: 0, split: false};
+  const full = Math.floor(stock / sp + 1e-9);
+  const partialQty = Math.round((stock - full * sp) * 1e6) / 1e6;
+  return {full, partialQty: partialQty <= 1e-9 ? 0 : partialQty, split: true};
+}
+
+/** Nhớ tạm trong instance (đỡ lượt đọc Firestore khi tra lặp lại). */
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+const catalogCache = new Map();
+
+async function getNvlCatalogItem(code, fresh = false) {
+  const hit = catalogCache.get(code);
+  if (!fresh && hit && Date.now() - hit.ts < CATALOG_TTL_MS) return hit.item;
+  let item = null;
+  const byId = await db.collection("materials").doc(code).get();
+  if (byId.exists) {
+    item = {ref: byId.ref, data: byId.data() || {}};
+  } else {
+    const q = await db.collection("materials").where("materialCode", "==", code).limit(1).get();
+    if (!q.empty) item = {ref: q.docs[0].ref, data: q.docs[0].data() || {}};
+  }
+  catalogCache.set(code, {item, ts: Date.now()});
+  return item;
+}
+
+/** Tồn LinkQ theo nhà máy: linkQFiles/{factory}.linkQData = {mã: tồn} (cùng nguồn tab Materials / Inventory Overview). */
+const linkQCache = new Map();
+/** zalo_links theo chatId — 10 phút / instance. */
+const LINK_TTL_MS = 10 * 60 * 1000;
+const linkedProfileCache = new Map();
+/** Mã vừa tra theo chat — đọc trước ở đây, không có mới đọc Firestore zalo_last_material. */
+const lastMaterialMem = new Map();
+async function getLinkQPack(factory) {
+  const hit = linkQCache.get(factory);
+  if (hit && Date.now() - hit.ts < 30 * 60 * 1000) return hit.pack;
+  let data = null;
+  const canonical = await db.collection("linkQFiles").doc(factory).get();
+  if (canonical.exists) {
+    data = canonical.data() || null;
+  } else {
+    const snap = await db.collection("linkQFiles").where("factory", "==", factory).limit(20).get();
+    const ms = (d) => d?.uploadDate?.toMillis?.() || (d?.uploadDate?.seconds ? d.uploadDate.seconds * 1000 : 0);
+    const docs = snap.docs.map((x) => x.data() || {}).sort((a, b) => ms(b) - ms(a));
+    data = docs[0] || null;
+  }
+  const map = new Map();
+  for (const [code, stock] of Object.entries(data?.linkQData || {})) {
+    const key = String(code || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (key) map.set(key, Math.round(Number(stock) || 0));
+  }
+  const pack = {map, uploadDate: fmtDateVn(data?.uploadDate), hasFile: !!data};
+  linkQCache.set(factory, {pack, ts: Date.now()});
+  return pack;
+}
+
+/** Nhắn mã NVL → tổng tồn, số bag, chi tiết PO + vị trí (đọc inventory-materials). */
+async function buildMaterialStockMessages(code) {
+  const [invSnap, cat] = await Promise.all([
+    db.collection("inventory-materials").where("materialCode", "==", code).get(),
+    getNvlCatalogItem(code),
+  ]);
+  const linkQFactories = ["ASM1", "ASM2"];
+  const linkQ = await Promise.all(linkQFactories.map((f) => getLinkQPack(f).catch((e) => {
+    logger.warn("linkQ load failed", {f, e: String(e)});
+    return null;
+  })));
+  const linkQRows = linkQFactories
+    .map((f, i) => ({f, pack: linkQ[i]}))
+    .filter((x) => x.pack?.map.has(code))
+    .map((x) => ({f: x.f, qty: x.pack.map.get(code), date: x.pack.uploadDate}));
+
+  if (!cat && invSnap.empty && !linkQRows.length) return null;
+
+  const catSp = Number(cat?.data?.standardPacking) || 0;
+  const name = String(cat?.data?.materialName || "").trim();
+  const unit = String(cat?.data?.unit || "").trim();
+
+  const rows = invSnap.docs.map((doc) => {
+    const d = doc.data() || {};
+    const stock = inventoryRowStock(d);
+    const rowSp = Number(d.standardPacking) || 0;
+    const sp = catSp > 0 ? catSp : rowSp;
+    const imp = d.importDate;
+    return {
+      factory: String(d.factory || "?").trim().toUpperCase(),
+      po: String(d.poNumber || "").trim() || "—",
+      location: String(d.location || d.viTri || "").trim().toUpperCase() || "—",
+      imd: fmtDateVn(imp),
+      impMs: imp?.toMillis ? imp.toMillis() : (imp?.seconds ? imp.seconds * 1000 : 0),
+      stock,
+      bags: inventoryRowBags(d, stock, sp),
+      ...inventoryRowSplit(stock, sp),
+    };
+  }).filter((r) => r.stock > 1e-9);
+
+  const head = `📦 ${code}${name ? ` - ${name}` : ""}`;
+  const spLine = `Standard: ${catSp > 0 ? fmtQty(catSp) : "chưa có"}${cat?.data?.standardPackingLocked === true ? " (Lock)" : ""}`;
+  const unitTxt = unit ? ` ${unit}` : "";
+  const webByFactory = (f) => rows.filter((r) => r.factory === f).reduce((s, r) => s + r.stock, 0);
+  const linkQLine = linkQRows.length ?
+    linkQRows.map((x) => {
+      const diff = Math.round(webByFactory(x.f) - x.qty);
+      const diffTxt = Math.abs(diff) > 1 ? ` (web lệch ${diff > 0 ? "+" : ""}${fmtQty(diff)})` : " (khớp web)";
+      return `LinkQ ${x.f}: ${fmtQty(x.qty)}${diffTxt}${x.date ? ` · file ${x.date}` : ""}`;
+    }).join("\n") :
+    "LinkQ: không có mã này trong file LinkQ";
+  if (!rows.length) {
+    return [`${head}\n${spLine}\nHết tồn kho trên web (0${unitTxt}).\n${linkQLine}`];
+  }
+
+
+  rows.sort((a, b) => a.factory.localeCompare(b.factory) || a.impMs - b.impMs || a.po.localeCompare(b.po));
+  const totalStock = rows.reduce((s, r) => s + r.stock, 0);
+  const totalBags = rows.reduce((s, r) => s + r.bags, 0);
+  const totalFull = rows.reduce((s, r) => s + r.full, 0);
+  const totalPartialQty = rows.reduce((s, r) => s + r.partialQty, 0);
+  const totalPartialBags = rows.filter((r) => r.partialQty > 0).length;
+  const canSplit = rows.some((r) => r.split);
+  const splitTxt = (full, pQty, pBags) => (pQty > 0 ? `${full} chẵn · ${pBags} lẻ (${fmtQty(pQty)})` : `${full} chẵn · 0 lẻ`);
+  const factories = Array.from(new Set(rows.map((r) => r.factory)));
+
+  const splitLine = canSplit ?
+    `\nChẵn/Lẻ: ${splitTxt(totalFull, Math.round(totalPartialQty * 1e6) / 1e6, totalPartialBags)}` : "";
+  const title = `${head}\n${spLine}\nTổng: ${fmtQty(totalStock)}${unitTxt} · ${totalBags} bag · ${rows.length} dòng${splitLine}\n${linkQLine}`;
+  const lines = [];
+  for (const f of factories) {
+    const fr = rows.filter((r) => r.factory === f);
+    const fs = fr.reduce((s, r) => s + r.stock, 0);
+    const fb = fr.reduce((s, r) => s + r.bags, 0);
+    const ffull = fr.reduce((s, r) => s + r.full, 0);
+    const fpq = Math.round(fr.reduce((s, r) => s + r.partialQty, 0) * 1e6) / 1e6;
+    const fpb = fr.filter((r) => r.partialQty > 0).length;
+    lines.push(factories.length > 1 ?
+      `\n[${f}] ${fmtQty(fs)}${unitTxt} · ${fb} bag${canSplit ? ` (${splitTxt(ffull, fpq, fpb)})` : ""}` :
+      `\n[${f}]${canSplit ? ` ${splitTxt(ffull, fpq, fpb)}` : ""}`);
+    fr.forEach((r, i) => {
+      lines.push(`${i + 1}. PO ${r.po}${r.imd ? ` (${r.imd})` : ""} | ${r.location} | ${fmtQty(r.stock)} | ${r.bags} bag${r.split ? ` (${splitTxt(r.full, r.partialQty, r.partialQty > 0 ? 1 : 0)})` : ""}`);
+    });
+  }
+  return chunkLines(title, lines);
+}
+
+const HIDE_REASON_LABEL = {
+  "manual": "Ẩn tay",
+  "reset-zero": "Reset tồn = 0",
+  "reset-low-stock": "Reset tồn < 1",
+  "po-surplus": "PO dư sai (So sánh PO)",
+  "delete-request": "Đề nghị xóa (quản lý đã duyệt)",
+};
+
+/** "An <mã>" → các dòng của mã đang nằm trong Danh mục Ẩn (inventory-materials-hidden): vị trí, PO, IMD, tồn lúc ẩn. */
+async function buildHiddenMaterialMessages(code) {
+  const snap = await db.collection("inventory-materials-hidden").where("materialCode", "==", code).get();
+  if (snap.empty) {
+    return [`🙈 ${code}: không có dòng nào trong Danh mục Ẩn (đã hết hạn lưu hoặc chưa từng ẩn).`];
+  }
+  const ms = (ts) => (ts?.toMillis ? ts.toMillis() : (ts?.seconds ? ts.seconds * 1000 : (ts ? new Date(ts).getTime() : 0)));
+  const rows = snap.docs.map((doc) => {
+    const d = doc.data() || {};
+    return {
+      factory: String(d.factory || "?").trim().toUpperCase(),
+      po: String(d.poNumber || "").trim() || "—",
+      location: String(d.location || d.viTri || "").trim().toUpperCase() || "—",
+      imd: fmtDateVn(d.importDate),
+      stock: Number(d.stockAtHide) || 0,
+      reason: HIDE_REASON_LABEL[d.hideReason] || String(d.hideReason || "—"),
+      by: String(d.hiddenBy || "").trim(),
+      hiddenMs: ms(d.hiddenAt),
+      hidden: fmtDateVn(d.hiddenAt),
+      until: fmtDateVn(d.deleteAfterAt),
+    };
+  }).sort((a, b) => a.factory.localeCompare(b.factory) || b.hiddenMs - a.hiddenMs);
+  const total = rows.reduce((s, r) => s + r.stock, 0);
+  const title = `🙈 ${code} — Danh mục Ẩn: ${rows.length} dòng · tồn lúc ẩn ${fmtQty(total)}\n`
+    + "Khôi phục: Materials → More → Danh mục Ẩn → Pushback (cần OTP).";
+  const lines = rows.map((r, i) =>
+    `${i + 1}. [${r.factory}] ${r.location} | PO ${r.po}${r.imd ? ` (${r.imd})` : ""} | ${fmtQty(r.stock)}\n`
+    + `   Ẩn ${r.hidden || "?"}${r.by ? ` bởi ${r.by}` : ""} · ${r.reason}${r.until ? ` · giữ tới ${r.until}` : ""}`);
+  return chunkLines(title, lines);
+}
+
+/** /standar <mã> <số> → ghi Standard Packing vào Danh mục NVL (collection materials), như web. */
+async function updateStandardFromZalo(code, sp, editedBy) {
+  const cat = await getNvlCatalogItem(code, true);
+  if (!cat) return `Không thấy mã ${code} trong Danh mục NVL. Chưa cập nhật gì.`;
+  if (cat.data.standardPackingLocked === true) {
+    return `⚠️ Standard của ${code} đang Lock trên Danh mục NVL (hiện ${fmtQty(cat.data.standardPacking)}).\nMở Lock trên web rồi nhắn lại.`;
+  }
+  const old = Number(cat.data.standardPacking) || 0;
+  await cat.ref.set({standardPacking: sp, updatedAt: new Date(), lastEditedBy: editedBy}, {merge: true});
+  catalogCache.delete(code);
+  // Mốc để web tải lại mã vừa sửa (giống NvlCatalogFullService.markRemoteChanged)
+  await db.collection("app-meta").doc("nvl-catalog")
+    .set({updatedAt: admin.firestore.FieldValue.serverTimestamp()}, {merge: true})
+    .catch((e) => logger.warn("app-meta nvl-catalog stamp failed", e));
+  return `✅ Đã cập nhật Standard ${code}: ${old > 0 ? fmtQty(old) : "trống"} → ${fmtQty(sp)}\nNgười sửa: ${editedBy}`;
+}
 
 /**
  * Webhook endpoint để dán vào ô "Webhook URL" trong app Bot.
@@ -81,10 +552,15 @@ exports.zaloWebhook = onRequest(
     const senderId = String(message?.from?.id || "").trim();
     const rawText = message?.text;
 
-    /** Trong nhóm: bỏ @tên_bot ở đầu tin nhắn. */
+    /** Trong nhóm: bỏ @tên_bot ở đầu tin nhắn (tên bot có dấu cách: "@Bot AI Warehouse"). */
+    const BOT_MENTIONS = ["@bot ai warehouse", "@ai warehouse"];
     const extractZaloCommandText = (raw) => {
       const t = String(raw || "").trim();
       if (!t || !t.startsWith("@")) return t;
+      const lower = t.toLowerCase();
+      for (const m of BOT_MENTIONS) {
+        if (lower.startsWith(m)) return t.slice(m.length).trim();
+      }
       return t.replace(/^@[^\s]+\s+/u, "").trim();
     };
 
@@ -135,8 +611,19 @@ exports.zaloWebhook = onRequest(
     const isValidEmployeeCode = (code) => /^ASP\d{4}$/.test(String(code || "").toUpperCase());
 
     const getLinkedProfile = async (id) => {
+      const hit = linkedProfileCache.get(id);
+      if (hit && Date.now() - hit.ts < LINK_TTL_MS) return hit.data;
       const doc = await db.collection("zalo_links").doc(id).get();
-      return doc.exists ? doc.data() : null;
+      const data = doc.exists ? doc.data() : null;
+      linkedProfileCache.set(id, {data, ts: Date.now()});
+      return data;
+    };
+
+    // Một mã nhân viên chỉ gắn với một chat. OTP và mật khẩu mới gửi theo mã này,
+    // nên chat khác nhắn cùng mã KHÔNG được liên kết đè (admin xóa liên kết cũ ở tab Zalo nếu cần đổi).
+    const isMemberLinkedElsewhere = async (memberId, currentChatId) => {
+      const snap = await db.collection("zalo_links").where("memberId", "==", memberId).get();
+      return snap.docs.some((d) => d.id !== String(currentChatId));
     };
 
     const getEmployeeNameFromDirectory = async (memberId) => {
@@ -169,7 +656,17 @@ exports.zaloWebhook = onRequest(
     };
 
     // Pending conversation state (onboarding)
-    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+    // Tin tra mã NVL / đủ-thiếu / standar không cần trạng thái onboarding → không đọc zalo_pending
+    const quickText = String(text || "").trim();
+    const quickFold = quickText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").toLowerCase();
+    const isQuickCmd = typeof text === "string" && !isValidEmployeeCode(quickText) && (
+      (/^[A-Za-z0-9][A-Za-z0-9._-]{3,30}$/.test(quickText) && /\d/.test(quickText)) ||
+      /^(du|thieu)(\s|$)/.test(quickFold) ||
+      /^[a-z0-9][a-z0-9._-]{3,30}\s+(du|thieu)(\s|$)/.test(quickFold) ||
+      /^\/\s*standa?rd?\b/.test(quickFold) ||
+      /^line\s+[a-z0-9]/.test(quickFold)
+    );
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && !isQuickCmd) {
       try {
         const pendingRef = db.collection("zalo_pending").doc(chatId);
         const pendingSnap = await pendingRef.get();
@@ -201,12 +698,6 @@ exports.zaloWebhook = onRequest(
       }
     }
 
-    const CHUCNANG_TEXT =
-      "Danh sách câu lệnh:\n" +
-      "- /link   (liên kết mã nhân viên để nhận thông báo)\n" +
-      "- /id     (xem mã nhân viên đã liên kết)\n" +
-      "- /nhomkho  (trong nhóm Kho: gắn nhóm nhận file hướng dẫn Scan)\n" +
-      "- /nhompln  (trong nhóm PLN: gắn nhóm nhận báo Ready-IQC)";
 
     // Greetings:
     // - Always show intro + guidance
@@ -216,8 +707,9 @@ exports.zaloWebhook = onRequest(
           chatId,
           "Xin chào, em là trợ lý kho.\n" +
             "Gõ /link rồi nhập mã nhân viên (VD: ASP0106) để liên kết nhận thông báo qua Zalo.\n" +
-            "Gõ /id để xem mã đã liên kết.\n\n" +
-            "Gõ /chucnang để xem lại danh sách câu lệnh."
+            "Gõ /id để xem mã đã liên kết.\n" +
+            "Nhắn mã NVL (VD: B008119) để xem tồn kho; /standar <mã> <số> để sửa Standard.\n\n" +
+            "Gõ Chức năng để xem toàn bộ chức năng và cách dùng."
         );
       } catch (err) {
         logger.error("greeting handler failed", err);
@@ -226,9 +718,16 @@ exports.zaloWebhook = onRequest(
       return;
     }
 
-    if (eventName === "message.text.received" && chatId && typeof text === "string" && text.trim().toLowerCase() === "/chucnang") {
+    const chucNangKey = String(text || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[đĐ]/g, "d")
+      .toLowerCase()
+      .replace(/[\s/]+/g, "");
+    const isFeatureCmd = ["chucnang", "huongdan", "help", "menu"].includes(chucNangKey);
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && isFeatureCmd) {
       try {
-        await sendText(chatId, CHUCNANG_TEXT);
+        for (const part of await groupFeatureText(String(chatId))) await sendText(chatId, part);
       } catch (err) {
         logger.error("chucnang command failed", err);
       }
@@ -315,6 +814,73 @@ exports.zaloWebhook = onRequest(
       return;
     }
 
+    const foldedText = String(text || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    const isLsxStatusCommand = foldedText === "lsx" || foldedText === "lsx hom nay";
+
+    // Nhóm Quản lý kho: rep tin "Báo cáo Check lượng PXK" bằng "duyệt" → duyệt mã đó
+    const approveMatch = foldedText.match(/^duyet((?:[\s,;]+[a-z0-9][a-z0-9._-]*)*)$/);
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && approveMatch) {
+      try {
+        const khoSnap = await db.collection("zalo_group_config").doc("quanly_kho").get();
+        const khoChatId = String(khoSnap.data()?.chatId || "").trim();
+        if (khoChatId && String(chatId) === khoChatId) {
+          const quoted = String(
+            message?.quote?.text || message?.quote_message?.text || message?.reply_to_message?.text ||
+            message?.quoted_message?.text || message?.reply?.text || ""
+          );
+          const fromQuote = (quoted.match(/Mã hàng:\s*([A-Za-z0-9._-]+)/) || [])[1] || "";
+          // "duyệt B1 B2 B3" → duyệt nhiều mã 1 lần
+          const codes = String(approveMatch[1] || "").split(/[\s,;]+/).map((c) => c.trim().toUpperCase()).filter(Boolean);
+          if (!codes.length && fromQuote) codes.push(fromQuote.trim().toUpperCase());
+          const linked = senderId ? await getLinkedProfile(senderId).catch(() => null) : null;
+          const by = String(linked?.memberId || "").trim().toUpperCase() || `Zalo: ${senderName || senderId || "?"}`;
+          if (codes.length <= 1) {
+            await sendText(chatId, await approvePxkWeightFromZalo(codes[0] || "", by));
+          } else {
+            const results = [];
+            for (const c of Array.from(new Set(codes))) results.push(await approvePxkWeightFromZalo(c, by));
+            await sendText(chatId, results.join("\n\n"));
+          }
+        }
+      } catch (err) {
+        logger.error("duyet command failed", err);
+        await sendText(chatId, "Lỗi khi duyệt. Thử lại hoặc duyệt trên web.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+    const priorityMatch = foldedText.match(/^uu ?tien\s+(.+)$/);
+
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && (isLsxStatusCommand || priorityMatch)) {
+      try {
+        const plnSnap = await db.collection("zalo_group_config").doc("pln").get();
+        const plnChatId = String(plnSnap.data()?.chatId || "").trim();
+        if (!plnChatId) {
+          await sendText(chatId, "Chưa gắn nhóm PLN. Mở nhóm PLN, @bot rồi gõ /nhompln.");
+        } else if (String(chatId) !== plnChatId) {
+          await sendText(chatId, "Lệnh này chỉ dùng trong nhóm PLN.");
+        } else if (isLsxStatusCommand) {
+          for (const part of await buildTodayLsxStatusMessages()) {
+            await sendText(chatId, part);
+          }
+        } else {
+          await sendText(chatId, await setLsxPriority(priorityMatch[1]));
+        }
+      } catch (err) {
+        logger.error("PLN LSX command failed", err);
+        await sendText(chatId, "Lỗi khi xử lý lệnh LSX. Thử lại.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
     if (eventName === "message.text.received" && chatId && isGroupChat) {
       const nameNorm = chatName.toLowerCase().replace(/\s+/g, " ").trim();
       if (nameNorm === "kho" || nameNorm === "nhóm kho" || nameNorm === "nhom kho") {
@@ -352,9 +918,13 @@ exports.zaloWebhook = onRequest(
           const pendingSnap = await pendingRef.get().catch(() => null);
           const pending = pendingSnap?.exists ? pendingSnap.data() : null;
           const memberId = String(pending?.memberId || "").trim().toUpperCase();
-          if (pending?.intent === "link_emp" && isValidEmployeeCode(memberId)) {
+          if (pending?.intent === "link_emp" && isValidEmployeeCode(memberId) && await isMemberLinkedElsewhere(memberId, chatId)) {
+            await pendingRef.delete().catch(() => {});
+            await sendText(chatId, `Mã ${memberId} đã liên kết ở chat khác. Liên hệ quản trị viên nếu cần đổi.`);
+          } else if (pending?.intent === "link_emp" && isValidEmployeeCode(memberId)) {
             const nameFromDir = await getEmployeeNameFromDirectory(memberId);
             const name = nameFromDir || memberId;
+            linkedProfileCache.delete(chatId);
             await db.collection("zalo_links").doc(chatId).set(
               {
                 chatId,
@@ -410,6 +980,7 @@ exports.zaloWebhook = onRequest(
         }
 
         try {
+          linkedProfileCache.delete(chatId);
           await db.collection("zalo_links").doc(chatId).set(
             {
               chatId,
@@ -445,8 +1016,14 @@ exports.zaloWebhook = onRequest(
             res.status(200).json({ok: true});
             return;
           }
+          if (await isMemberLinkedElsewhere(t, chatId)) {
+            await sendText(chatId, `Mã ${t} đã liên kết ở chat khác. Liên hệ quản trị viên nếu cần đổi.`);
+            res.status(200).json({ok: true});
+            return;
+          }
           const nameFromDir = await getEmployeeNameFromDirectory(t);
           const name = nameFromDir || t;
+          linkedProfileCache.delete(chatId);
           await db.collection("zalo_links").doc(chatId).set(
             {
               chatId,
@@ -468,6 +1045,297 @@ exports.zaloWebhook = onRequest(
       }
     }
 
+    // Log kiểm NVL: "đủ" / "thiếu [ghi chú]" → ghi cho mã vừa tra trong chat này (Zalo KHÔNG gửi kèm tin được rep),
+    // hoặc nhắn kèm mã: "đủ B008119 [ghi chú]" / "B008119 đủ [ghi chú]".
+    const checkLead = foldedText.match(/^(du|thieu)(?:\s+(.*))?$/);
+    const checkTail = checkLead ? null : foldedText.match(/^([a-z0-9][a-z0-9._-]{3,30})\s+(du|thieu)(?:\s+(.*))?$/);
+    const checkMatch = checkLead || (checkTail && /\d/.test(checkTail[1]) ? checkTail : null);
+    if (eventName === "message.text.received" && chatId && typeof text === "string" && checkMatch) {
+      const words = text.trim().split(/\s+/);
+      const isCode = (tok) => /^[A-Za-z0-9][A-Za-z0-9._-]{3,30}$/.test(tok || "") && /\d/.test(tok || "");
+      let code = "";
+      let note = "";
+      const status = (checkLead ? checkLead[1] : checkTail[2]) === "du" ? "du" : "thieu";
+      if (checkTail) {
+        code = words[0];
+        note = words.slice(2).join(" ");
+      } else if (isCode(words[1])) {
+        code = words[1];
+        note = words.slice(2).join(" ");
+      } else {
+        note = words.slice(1).join(" ");
+      }
+      code = String(code || "").trim().toUpperCase();
+      const mentioned = typeof rawText === "string" && rawText.trim().startsWith("@");
+      if (!isGroupChat || mentioned) {
+        try {
+          const linked = (senderId ? await getLinkedProfile(senderId).catch(() => null) : null) ||
+            await getLinkedProfile(String(chatId)).catch(() => null);
+          const memberId = String(linked?.memberId || "").trim().toUpperCase();
+          let last = lastMaterialMem.get(String(chatId)) || null;
+          if (!last) {
+            const lastSnap = await db.collection("zalo_last_material").doc(String(chatId)).get().catch(() => null);
+            if (lastSnap?.exists) last = lastSnap.data() || null;
+          }
+          const lastMs = typeof last?.atMs === "number" ? last.atMs : (last?.at?.toMillis ? last.at.toMillis() : 0);
+          const lastFresh = last && Date.now() - lastMs < 3 * 60 * 60 * 1000;
+          if (!code && lastFresh) code = String(last.code || "").toUpperCase();
+          if (!memberId) {
+            await sendText(chatId, "Chat này chưa liên kết mã nhân viên. Nhắn mã NV (VD: ASP0106) để liên kết, rồi ghi log lại.");
+          } else if (!code) {
+            await sendText(chatId, "Chưa biết mã nào để ghi log. Tra mã trước (VD: B008119) rồi nhắn «đủ» / «thiếu», hoặc nhắn «đủ B008119».");
+          } else {
+            const sameAsLast = lastFresh && String(last.code || "").toUpperCase() === code;
+            await db.collection("zalo-material-check-log").add({
+              materialCode: code,
+              status,
+              note,
+              by: memberId,
+              byName: String(linked?.name || "").trim(),
+              senderName,
+              chatId: String(chatId),
+              chatType: chatType || "",
+              webTotal: sameAsLast ? String(last.webTotal || "") : "",
+              linkQ: sameAsLast ? String(last.linkQ || "") : "",
+              at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            await sendText(chatId, `📝 Đã ghi log: ${code} – ${status === "du" ? "ĐỦ" : "THIẾU"} (${memberId})${note ? `\nGhi chú: ${note}` : ""}`);
+          }
+        } catch (err) {
+          logger.error("material check log failed", err);
+          await sendText(chatId, "Lỗi khi ghi log. Thử lại sau.");
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
+    // "An <mã>" / "Ẩn <mã>" → vị trí các dòng của mã còn lưu trong Danh mục Ẩn (mã ẩn nhầm, tra web không thấy).
+    // Chỉ chat đã liên kết mã NV. Trong nhóm: chỉ khi @bot.
+    const hiddenMatch = eventName === "message.text.received" && chatId ?
+      foldedText.match(/^an\s+([a-z0-9][a-z0-9._-]{3,30})$/) : null;
+    if (hiddenMatch && (!isGroupChat || (typeof rawText === "string" && rawText.trim().startsWith("@")))) {
+      try {
+        const linked = (senderId ? await getLinkedProfile(senderId).catch(() => null) : null) ||
+          await getLinkedProfile(String(chatId)).catch(() => null);
+        if (!String(linked?.memberId || "").trim()) {
+          await sendText(chatId, "Chat này chưa liên kết mã nhân viên. Nhắn mã NV (VD: ASP0106) để liên kết, rồi tra lại.");
+        } else {
+          for (const part of await buildHiddenMaterialMessages(hiddenMatch[1].toUpperCase())) await sendText(chatId, part);
+        }
+      } catch (err) {
+        logger.error("hidden material lookup failed", err);
+        await sendText(chatId, "Lỗi khi tra Danh mục Ẩn. Thử lại sau.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    // "Line <mã NVL>": tồn kho mã + NVL còn ngoài line (LSX chưa nhập đủ TP) — như FG Inventory → NVL ngoài line.
+    const lineMatch = foldedText.match(/^line\s+([a-z0-9][a-z0-9._-]{3,30})$/);
+    if (eventName === "message.text.received" && chatId && lineMatch &&
+      (!isGroupChat || (typeof rawText === "string" && rawText.trim().startsWith("@")))) {
+      try {
+        const linked = (senderId ? await getLinkedProfile(senderId).catch(() => null) : null) ||
+          await getLinkedProfile(String(chatId)).catch(() => null);
+        if (!String(linked?.memberId || "").trim()) {
+          await sendText(chatId, "Chat này chưa liên kết mã nhân viên. Nhắn mã NV (VD: ASP0106) để liên kết, rồi tra lại.");
+        } else {
+          const code = lineMatch[1].toUpperCase();
+          const parts = await buildMaterialStockMessages(code);
+          if (parts) for (const part of parts) await sendText(chatId, part);
+          await sendText(chatId, await buildNvlOnLineMessage(code));
+        }
+      } catch (err) {
+        logger.error("line command failed", err);
+        await sendText(chatId, "Lỗi khi tra NVL ngoài line. Thử lại sau.");
+      }
+      res.status(200).json({ok: true});
+      return;
+    }
+
+    // Tồn kho NVL: nhắn mã NVL → tồn; "/standar <mã> <số>" → sửa Standard Packing.
+    // Chỉ chat đã liên kết mã NV (zalo_links). Trong nhóm: chỉ khi @bot.
+    if (eventName === "message.text.received" && chatId && typeof text === "string") {
+      const t = text.trim();
+      const standarMatch = t.match(/^\/\s*standa?rd?\s+([A-Za-z0-9][A-Za-z0-9._-]*)\s+([\d.,]+)\s*$/i);
+      const isStandarCmd = /^\/\s*standa?rd?\b/i.test(t);
+      const looksLikeCode = /^[A-Za-z0-9][A-Za-z0-9._-]{3,30}$/.test(t) && /\d/.test(t) && !isValidEmployeeCode(t);
+      const mentioned = typeof rawText === "string" && rawText.trim().startsWith("@");
+      if ((isStandarCmd || looksLikeCode) && (!isGroupChat || mentioned)) {
+        try {
+          const linked = (senderId ? await getLinkedProfile(senderId).catch(() => null) : null) ||
+            await getLinkedProfile(String(chatId)).catch(() => null);
+          const memberId = String(linked?.memberId || "").trim().toUpperCase();
+          if (!memberId) {
+            await sendText(chatId, "Chat này chưa liên kết mã nhân viên. Nhắn mã NV (VD: ASP0106) để liên kết, rồi tra lại.");
+          } else if (isStandarCmd) {
+            const sp = standarMatch ? parseQtyInput(standarMatch[2]) : NaN;
+            if (!standarMatch || !(sp > 0)) {
+              await sendText(chatId, "Cú pháp: /standar <mã NVL> <số standard mới>\nVD: /standar B008119 500");
+            } else {
+              await sendText(chatId, await updateStandardFromZalo(standarMatch[1].toUpperCase(), sp, memberId));
+            }
+          } else {
+            const code = t.toUpperCase();
+            const parts = await buildMaterialStockMessages(code);
+            if (!parts) {
+              await sendText(chatId, `Không tìm thấy mã ${code} trong tồn kho hay Danh mục NVL.`);
+            } else {
+              for (const part of parts) await sendText(chatId, part);
+              // Nhớ mã vừa tra → nhắn "đủ" / "thiếu" ngay sau là ghi log cho mã này
+              const head = String(parts[0] || "").split("\n").map((x) => x.trim());
+              const lastRow = {
+                code,
+                webTotal: head.find((x) => /^Tổng:/.test(x) || /^Hết tồn kho/.test(x)) || "",
+                linkQ: head.filter((x) => /^LinkQ/.test(x)).join("\n"),
+                atMs: Date.now(),
+              };
+              lastMaterialMem.set(String(chatId), lastRow);
+              await db.collection("zalo_last_material").doc(String(chatId)).set({
+                ...lastRow,
+                at: admin.firestore.FieldValue.serverTimestamp(),
+              }).catch((e) => logger.warn("save last material failed", e));
+            }
+          }
+        } catch (err) {
+          logger.error("material stock command failed", err);
+          await sendText(chatId, "Lỗi khi tra tồn kho. Thử lại sau.");
+        }
+        res.status(200).json({ok: true});
+        return;
+      }
+    }
+
     res.status(200).json({ok: true});
+  }
+);
+
+/**
+ * NVL còn ngoài line của 1 mã (cùng cách tính FG Inventory → NVL ngoài line):
+ * outbound-materials của mã (90 ngày) → các LSX → Work Order + FG In. LSX chưa nhập đủ TP:
+ * ngoài line = NVL đã xuất × (1 − TP đã nhập ÷ SL sản phẩm).
+ */
+async function buildNvlOnLineMessage(code, days = 90) {
+  const norm = (v) => String(v ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  const r4 = (n) => Math.round(n * 10000) / 10000;
+  const fmt = (n) => r4(n).toLocaleString("en-US", {maximumFractionDigits: 4});
+  const snap = await db.collection("outbound-materials").where("materialCode", "==", code).limit(3000).get();
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const outDocs = snap.docs.map((d) => d.data()).filter((x) => {
+    const t = x.exportDate?.toDate ? x.exportDate.toDate().getTime() : 0;
+    return !t || t >= cutoff;
+  });
+  const lsxRaw = Array.from(new Set(outDocs.map((x) => String(x.productionOrder || "").trim()).filter(Boolean)));
+  const wo = new Map();
+  const fg = new Map();
+  for (let i = 0; i < lsxRaw.length; i += 30) {
+    const part = lsxRaw.slice(i, i + 30);
+    const [woSnap, fgSnap] = await Promise.all([
+      db.collection("work-orders").where("productionOrder", "in", part).get(),
+      db.collection("fg-in").where("lsx", "in", part).get(),
+    ]);
+    woSnap.forEach((d) => {
+      const x = d.data();
+      const key = norm(x.productionOrder);
+      const qty = Number(x.quantity) || 0;
+      if (!key || !(qty > 0)) return;
+      const cur = wo.get(key);
+      if (cur) cur.qty += qty;
+      else wo.set(key, {lsx: String(x.productionOrder || "").trim(), productCode: String(x.productCode || ""), qty});
+    });
+    fgSnap.forEach((d) => {
+      const x = d.data();
+      const key = norm(x.lsx || x.Lsx);
+      fg.set(key, (fg.get(key) || 0) + (Number(x.quantity) || 0));
+    });
+  }
+  const lines = new Map();
+  for (const x of outDocs) {
+    const key = norm(x.productionOrder);
+    const w = wo.get(key);
+    const qty = Number(x.exportQuantity ?? x.quantity) || 0;
+    if (!w || !(qty > 0)) continue;
+    const fgQty = fg.get(key) || 0;
+    if (fgQty >= w.qty) continue;
+    const l = lines.get(key) || {lsx: w.lsx, productCode: w.productCode, woQty: w.qty, fgQty, ratio: Math.min(1, Math.max(0, fgQty / w.qty)), exported: 0};
+    l.exported += qty;
+    lines.set(key, l);
+  }
+  const rows = Array.from(lines.values())
+    .map((l) => ({...l, onLine: r4(l.exported * (1 - l.ratio))}))
+    .filter((l) => l.onLine > 0)
+    .sort((a, b) => b.onLine - a.onLine);
+  if (!rows.length) return `🏭 NVL ngoài line — ${code}\nKhông có NVL ngoài line (${days} ngày gần nhất).`;
+  const total = rows.reduce((s, l) => s + l.onLine, 0);
+  const out = [`🏭 NVL ngoài line — ${code}`, `Tổng ngoài line: ${fmt(total)} (${rows.length} LSX chưa nhập đủ TP)`];
+  rows.slice(0, 15).forEach((l) => out.push(
+    `• ${l.lsx} (${l.productCode || "—"}): ${fmt(l.onLine)} · xuất ${fmt(l.exported)} · TP ${fmt(l.fgQty)}/${fmt(l.woQty)} (${Math.round(l.ratio * 100)}%)`
+  ));
+  if (rows.length > 15) out.push(`… và ${rows.length - 15} LSX khác`);
+  return out.join("\n");
+}
+
+// ── Báo nhóm Kho khi mã Check lượng PXK được duyệt (không cần cân) ─────────
+// Duyệt trên web (Danh mục NVL/TP → Check lượng / Cân) hoặc rep "duyệt" ở nhóm Quản lý kho
+// đều ghi pxk-weight-check-exempt/{mã} → xếp hàng chờ; 5 phút gom 1 tin gửi nhóm Kho (nhiều mã 1 lần).
+const KHO_APPROVED_QUEUE = "zalo-kho-weigh-approved-queue";
+
+exports.queueWeighApprovedForKho = onDocumentWritten(
+  {document: "pxk-weight-check-exempt/{code}", region: "asia-southeast1"},
+  async (event) => {
+    const before = event.data?.before;
+    const after = event.data?.after;
+    if (!after?.exists || before?.exists) return;
+    const d = after.data() || {};
+    const code = String(d.materialCode || event.params.code || "").trim().toUpperCase();
+    if (!code) return;
+    await db.collection(KHO_APPROVED_QUEUE).doc(code).set({
+      code,
+      reason: String(d.reason || ""),
+      approvedBy: String(d.approvedBy || ""),
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+);
+
+exports.sendWeighApprovedToKho = onSchedule(
+  {schedule: "every 5 minutes", timeZone: "Asia/Ho_Chi_Minh", secrets: [ZALO_BOT_TOKEN]},
+  async () => {
+    const snap = await db.collection(KHO_APPROVED_QUEUE).get();
+    if (snap.empty) return;
+    const khoSnap = await db.collection("zalo_groups").doc("kho").get();
+    const chatId = String(khoSnap.data()?.chatId || "").trim();
+    if (!chatId) {
+      logger.warn("sendWeighApprovedToKho: chưa gắn nhóm Kho (/nhomkho) — giữ hàng chờ");
+      return;
+    }
+    const rows = snap.docs.map((doc) => doc.data()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
+    const lines = rows.map((r) => {
+      const reason = String(r.reason || "").trim();
+      const by = String(r.approvedBy || "").trim();
+      return `• ${r.code}${reason ? ` — ${reason}` : ""}${by ? ` · duyệt: ${by}` : ""}`;
+    });
+    // Tin Zalo có giới hạn độ dài → chia tối đa 25 mã / tin
+    for (let i = 0; i < lines.length; i += 25) {
+      const part = lines.slice(i, i + 25);
+      const head = i === 0
+        ? `✅ Đã duyệt KHÔNG CẦN CÂN / check lượng (${lines.length} mã):`
+        : `(tiếp) Đã duyệt không cần cân:`;
+      const text = [head, ...part, "", "Từ giờ các mã này không bắt cân khi tách tem lẻ / xuất bag lẻ / check lượng PXK."].join("\n");
+      const resp = await fetch(ZALO_BOT_SEND_MESSAGE_URL(ZALO_BOT_TOKEN.value()), {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({chat_id: chatId, text}),
+      });
+      if (!resp.ok) {
+        logger.error("sendWeighApprovedToKho: Zalo gửi lỗi", {status: resp.status, body: await resp.text().catch(() => "")});
+        return; // giữ hàng chờ, lần sau gửi lại
+      }
+    }
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    logger.info("sendWeighApprovedToKho: đã báo nhóm Kho", {count: rows.length});
   }
 );

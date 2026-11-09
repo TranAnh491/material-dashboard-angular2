@@ -8,7 +8,7 @@ $brand-soft: #eff6ff;
 $green: #16a34a;
 $red: #dc2626;
 $orange: #d97706;
-$purple: #7c3aed;
+$purple: #3478F6;
 
 :host {
   display: block;
@@ -93,7 +93,7 @@ $purple: #7c3aed;
 }
 
 .io-seg--factory {
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $line;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
@@ -178,7 +178,7 @@ $purple: #7c3aed;
 
   &:focus {
     outline: none;
-    background: #fff;
+    background: #FFFFFF;
     border-color: #93c5fd;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
   }
@@ -229,7 +229,7 @@ $purple: #7c3aed;
   padding: 0 12px;
   border: 1px solid $line;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 13px;
   font-weight: 600;
@@ -253,7 +253,7 @@ $purple: #7c3aed;
   padding: 0 14px;
   border: 1px solid $line;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 13px;
   font-weight: 600;
@@ -267,7 +267,7 @@ $purple: #7c3aed;
 
   &:hover:not(:disabled) {
     background: #f8fafc;
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
     color: $ink;
   }
 
@@ -326,7 +326,7 @@ $purple: #7c3aed;
   top: calc(100% + 6px);
   right: 0;
   min-width: 260px;
-  background: #fff;
+  background: #FFFFFF;
   border: 1px solid $line;
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
@@ -442,7 +442,7 @@ button.io-kpi {
   width: 100%;
 
   &:hover {
-    border-color: #cbd5e1;
+    border-color: #6B6B66;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   }
 }
@@ -524,7 +524,7 @@ button.io-kpi {
 }
 
 .io-kpi--purple {
-  .io-kpi__icon { background: #f5f3ff; color: $purple; }
+  .io-kpi__icon { background: #EAF2FF; color: $purple; }
 }
 
 .io-kpi--slate {
@@ -783,7 +783,7 @@ button.io-kpi {
   padding: 0 10px;
   border: 1px solid $line;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
   color: $ink;
   font-size: 13px;
   font-weight: 600;
@@ -796,7 +796,7 @@ button.io-kpi {
   padding: 0 8px;
   border-radius: 8px;
   border: 1px solid $line;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
   font-size: 13px;
   font-weight: 700;

@@ -22,9 +22,40 @@ import { AppModule } from './app/app.module';
 import { environment } from './environments/environment';
 import 'hammerjs';
 import 'firebase/compat/storage';
+import { installNetStatus } from './app/shared/net-status';
+import { installGlobalSearch } from './app/shared/global-search/global-search';
 
 if (environment.production) {
   enableProdMode();
+  // Bản chạy thật: tắt console.log / debug (hơn 1.700 chỗ) cho đỡ chậm; vẫn giữ warn / error để tra lỗi.
+  // Cần xem log trên máy thật: mở console gõ  localStorage.setItem('debugLog','1')  rồi tải lại trang.
+  let keepLog = false;
+  try { keepLog = localStorage.getItem('debugLog') === '1'; } catch { /* bỏ qua */ }
+  if (!keepLog) {
+    const noop = () => {};
+    console.log = noop;
+    console.debug = noop;
+    console.info = noop;
+  }
 }
 
-platformBrowserDynamic().bootstrapModule(AppModule);
+/**
+ * Máy còn giữ trang của bản cũ mà file JS của bản đó đã bị thay khi deploy → lỗi "Loading chunk …".
+ * Tự tải lại trang 1 lần (tối đa 1 lần / 60 giây) để lấy bản mới nhất.
+ */
+function reloadOnStaleChunk(reason: unknown): void {
+  const msg = String((reason as any)?.message || reason || '');
+  if (!/ChunkLoadError|Loading chunk [\w-]+ failed|Failed to fetch dynamically imported module/i.test(msg)) return;
+  try {
+    const last = Number(sessionStorage.getItem('stale-chunk-reload-at')) || 0;
+    if (Date.now() - last < 60000) return;
+    sessionStorage.setItem('stale-chunk-reload-at', String(Date.now()));
+  } catch { /* sessionStorage bị chặn — vẫn tải lại */ }
+  window.location.reload();
+}
+window.addEventListener('unhandledrejection', (e) => reloadOnStaleChunk(e.reason));
+window.addEventListener('error', (e) => reloadOnStaleChunk((e as ErrorEvent).error || (e as ErrorEvent).message));
+
+installNetStatus();
+
+platformBrowserDynamic().bootstrapModule(AppModule).then((ref) => installGlobalSearch(ref.injector));

@@ -104,7 +104,7 @@ async function loadImportCacheInfo(
 }
 
 function buildEmailSubject(overdueCount: number): string {
-  return `[FG Overview] Cảnh báo: quá 1 ngày chưa import tồn kho (${overdueCount} nhà máy)`;
+  return `[FG Overview] Cảnh báo: chưa import tồn kho thứ 5 tuần này (${overdueCount} nhà máy)`;
 }
 
 function buildEmailHtml(now: Date, items: ImportCacheInfo[]): string {

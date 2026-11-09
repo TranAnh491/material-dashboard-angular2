@@ -7,6 +7,12 @@
     <i class="material-icons app-update-icon">system_update_alt</i>
     <h3>Đã có bản cập nhật mới</h3>
     <p>Vui lòng tải lại trang để tiếp tục sử dụng.</p>
+    <div class="app-update-notes" *ngIf="releaseNotes.length">
+      <strong>Chức năng mới:</strong>
+      <ul>
+        <li *ngFor="let n of releaseNotes">{{ n }}</li>
+      </ul>
+    </div>
     <button type="button" class="app-update-btn" (click)="reloadNow()">Tải lại ngay</button>
   </div>
 </div>

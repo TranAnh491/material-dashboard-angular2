@@ -1,18 +1,5 @@
 import * as admin from 'firebase-admin';
-
-function isAdminOrManager(role: string | undefined | null): boolean {
-  const r = (role || '').toString().trim().toLowerCase();
-  const normalized = r
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '');
-
-  return (
-    normalized === 'admin' ||
-    normalized === 'quan ly' ||
-    r === 'admin' ||
-    r === 'quản lý'
-  );
-}
+import { assertAdmin } from './authz';
 
 function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -40,11 +27,7 @@ export async function adminUpdateUserProfile(
     throw new Error('Thiếu callerUid hoặc targetUid.');
   }
 
-  const callerDoc = await admin.firestore().collection('users').doc(callerUid).get();
-  const callerRole = callerDoc.data()?.role;
-  if (!isAdminOrManager(callerRole)) {
-    throw new Error('permission-denied');
-  }
+  await assertAdmin(callerUid);
 
   const emailRaw =
     typeof patch.email === 'string' ? patch.email.trim().toLowerCase() : undefined;

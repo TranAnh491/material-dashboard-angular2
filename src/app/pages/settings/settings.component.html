@@ -239,6 +239,39 @@
       </div>
     </section>
 
+    <section class="register-card">
+      <div class="register-card__head">
+        <div class="register-card__icon-wrap"><i class="material-icons">upload_file</i></div>
+        <div>
+          <h2 class="register-card__title">Import tài khoản</h2>
+          <p class="register-card__desc">
+            File Excel hoặc CSV có cột <strong>mã nhân viên</strong> và <strong>tên</strong>.
+            Cột bộ phận nếu có sẽ được ghi vào tài khoản.
+            Tài khoản đã tồn tại được bỏ qua. Mật khẩu là <strong>4 số cuối</strong> của mã nhân viên.
+          </p>
+        </div>
+      </div>
+      <div class="register-card__form">
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          (change)="onImportEmployeesFile($event)"
+          [disabled]="isImportingEmployees">
+        <button
+          type="button"
+          class="btn-register-green"
+          (click)="importEmployeesFromFile()"
+          [disabled]="isImportingEmployees || !importEmployeesCount">
+          <i class="material-icons">person_add</i>
+          {{ isImportingEmployees ? 'Đang import…' : 'Import' }}
+        </button>
+      </div>
+      <p class="import-employees-status" *ngIf="importEmployeesFileName || importEmployeesPreview">
+        <span *ngIf="importEmployeesFileName">{{ importEmployeesFileName }}</span>
+        <span *ngIf="importEmployeesPreview">{{ importEmployeesPreview }}</span>
+      </p>
+    </section>
+
     <!-- Notifications -->
     <div *ngIf="newUserNotifications.length > 0" class="notifications">
       <div class="notifications-header">
@@ -481,7 +514,7 @@
               <span class="detail-hint">app đăng nhập bằng mã ASP + mật khẩu</span>
             </div>
             <div class="detail-row">
-              <strong>Password:</strong> {{ firebaseUserPasswords[selectedUser.uid] || '-' }}
+              <strong>Password:</strong> {{ firebaseUserPasswords[selectedUser.uid] || 'Không lưu — bấm Đổi password để tạo mới' }}
               <button class="btn-change-password" (click)="toggleChangePasswordForm()" type="button">
                 {{ showChangePasswordForm ? 'Hủy' : 'Đổi password' }}
               </button>

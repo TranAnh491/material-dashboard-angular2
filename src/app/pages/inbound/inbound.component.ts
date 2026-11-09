@@ -1,3 +1,11 @@
+import { appAlert } from '../../shared/app-toast';
+import { inject } from '@angular/core';
+import { RolePermissionService } from '../../services/role-permission.service';
+import { isRmQtyDecimalFactory, parseRmScanQty, roundRmQty, fmtRmQty, RM_QTY_DECIMALS_4 } from '../../services/rm-scan-qty.util';
+import { stripJ5Prefix } from '../../shared/location-prefix';
+import { autoKkFields, autoKkLog } from '../../shared/auto-kk';
+import { KkHistoryLogService } from '../../services/kk-history-log.service';
+import { WeekFormat, fmtDmy, isWeekTrackedCode, parseWeekCode, weekCodeLabel, weekCodeText } from '../../shared/week-code';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
@@ -16,6 +24,7 @@ import { StorageUnitSize } from '../../models/storage-unit.model';
 import { FirebaseAuthService } from '../../services/firebase-auth.service';
 import { getDefaultRmFactory } from '../../services/rm-factory-preference.util';
 import { KkCatalogService } from '../../services/kk-catalog.service';
+import { SxxkSuspectService, SxxkSuspectInfo } from '../../services/sxxk-suspect.service';
 import { InboundLdvOtpService } from '../../services/inbound-ldv-otp.service';
 import { NvlCatalogFullService } from '../../services/nvl-catalog-full.service';
 
@@ -39,6 +48,12 @@ export interface LdvMismatchRow {
   reportedBy: string;
   createdAt: Date | null;
 }
+
+type InspectionBatchRow = {
+  id: string; code: string; po: string; need: number; std: number; needFull: number; needOdd: number;
+  scanned: number; remain: number; doneBags: number; totalBags: number; received: boolean;
+  doneCartons: number; totalCartons: number;
+};
 
 export interface InboundMaterial {
   id?: string;
@@ -68,16 +83,24 @@ export interface InboundMaterial {
   remarks: string;
   /** Bịch từ QR (i/tổng) khi scan IQC / nhận — hiển thị & ghi rm-bag-history */
   bagBatch?: string;
+  /** Week trên tem — chỉ nhập trên web (không có trong form import): 4 số theo weekFormat. */
+  week?: string;
+  /** YYWW (năm + tuần) hoặc MMYY (tháng + năm). */
+  weekFormat?: 'YYWW' | 'MMYY';
   hasQRGenerated?: boolean; // Track if QR code has been generated
   scannedQuantity?: number; // Số lượng đã scan (cộng dồn)
   /** Khóa từng tem đã quét: `${docId}::${phần4 QR}` — chặn quét trùng cùng mã/PO/IMD/bịch */
   scannedBagKeys?: string[];
+  /** Khóa từng tem thùng đã quét (scan nhập kho theo thùng): `${docId}::${phần4 QR}` — đủ số thùng thì nhận cả dòng */
+  scannedCartonKeys?: string[];
   /** Đã tạo dòng inventory (IQC) trước khi quét đủ tem — chờ scan để ghi nhận bịch / rm-bag-history */
   preScanInventoryPending?: boolean;
   /** Doc id trong collection inventory-materials khi nhập chưa scan */
   linkedInventoryDocId?: string;
   /** Số thùng — In QR in thêm N tem 57×32mm (QTY=0, Mã/PO/IMD/THÙNG i/N) */
   cartonCount?: number;
+  /** Lượng trong 1 thùng — số tem thùng = ⌈Lượng nhập ÷ Lượng trong thùng⌉, thùng cuối là lượng lẻ. */
+  cartonQty?: number;
   /** DV Lưu trữ: XS | S | M | L | XL */
   storageUnitSize?: StorageUnitSize | '';
   createdAt?: Date;
@@ -292,6 +315,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   ldvOtpBusy = false;
 
   constructor(
+    private kkLog: KkHistoryLogService,
     private firestore: AngularFirestore,
     private afAuth: AngularFireAuth,
     private factoryAccessService: FactoryAccessService,
@@ -305,8 +329,34 @@ export class InboundComponent implements OnInit, OnDestroy {
     private authService: FirebaseAuthService,
     private kkCatalog: KkCatalogService,
     private inboundLdvOtp: InboundLdvOtpService,
-    private nvlCatalogFull: NvlCatalogFullService
+    private nvlCatalogFull: NvlCatalogFullService,
+    private sxxkSuspect: SxxkSuspectService
   ) {}
+
+  /** Mã nằm trong danh sách nghi ngờ (xuất bổ sung trong bảng kê xuất SXXK, hoặc nhập tay) → kiểm 100%. */
+  sxxkSuspectOf(code: string | null | undefined): SxxkSuspectInfo | null {
+    return this.sxxkSuspect.get(code);
+  }
+
+  sxxkSuspectTitle(code: string | null | undefined): string {
+    const s = this.sxxkSuspect.get(code);
+    if (!s) return '';
+    if (s.source === 'manual') {
+      return `Kiểm 100% (nhập tay${s.by ? ' bởi ' + s.by : ''}, ${this.formatIsoDate(s.last)}): ${s.reason}`;
+    }
+    return `Kiểm 100%: mã có ${s.n} lần xuất bổ sung (SXXK, từ 01/01/2026). `
+      + `Gần nhất ${this.formatIsoDate(s.last)} · ${s.voucher}\n${s.reason}`;
+  }
+
+  /** Danh sách Kiểm 100% đã gộp vào Danh mục NVL/TP → tab Check lượng / Cân (1 nguồn). */
+  goToWeighCatalog(): void {
+    void this.router.navigate(['/danh-muc-nvl-tp'], { queryParams: { tab: 'weigh' } });
+  }
+
+  private formatIsoDate(iso: string): string {
+    const [y, m, d] = String(iso || '').split('-');
+    return y && m && d ? `${d}/${m}/${y}` : iso;
+  }
 
   goToMenu(): void {
     this.router.navigate(['/menu']);
@@ -331,11 +381,13 @@ export class InboundComponent implements OnInit, OnDestroy {
       replaceUrl: true
     });
     this.loadMaterials();
-    void this.loadLdvMismatchPending();
+
   }
 
   ngOnInit(): void {
     this.loadPermissions();
+    // Danh sách nghi ngờ từ SXXK (nhẹ, có cache) — để hiện nhãn "Kiểm 100%" trong bảng
+    void this.sxxkSuspect.load();
 
     const factoryParam = this.route.snapshot.queryParamMap.get('factory');
     if (this.isValidFactory(factoryParam)) {
@@ -354,7 +406,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       if (this.isValidFactory(f) && f !== this.selectedFactory) {
         this.selectedFactory = f;
         this.loadMaterials();
-        void this.loadLdvMismatchPending();
+    
       }
     });
 
@@ -365,7 +417,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.statusFilter = 'pending';
 
     this.loadMaterials();
-    void this.loadLdvMismatchPending();
+
   }
 
   openDateRangePopover(ev?: Event): void {
@@ -487,6 +539,14 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   /** Một lần cho đến khi invalidate (sau import DMVT). */
   private async ensureDmvtCatalogLoaded(): Promise<void> {
+    if (!this.nvlCatalogNameMap.size) {
+      try {
+        const items = await this.nvlCatalogForNames.listAll();
+        this.nvlCatalogNameMap = new Map(items.filter((i) => i.materialName).map((i) => [i.materialCode, String(i.materialName).trim()]));
+      } catch (e) {
+        console.warn('Load NVL catalog names (TBHD) failed:', e);
+      }
+    }
     if (!this.dmvtCatalogLoadPromise) {
       this.dmvtCatalogLoadPromise = this.loadDmvtCatalogFromFirestore().catch(err => {
         this.dmvtCatalogLoadPromise = null;
@@ -506,12 +566,17 @@ export class InboundComponent implements OnInit, OnDestroy {
     return code.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 1500) || '_';
   }
 
-  /** Lấy tên hàng từ danh mục DMVT theo mã */
+  /** Tên hàng: ưu tiên Danh mục NVL chính (tab Danh mục), thiếu mới lấy DMVT cũ (dmvt/ASM1). */
   getMaterialName(materialCode: string): string {
     if (!materialCode) return '';
     const key = materialCode.toString().trim().toUpperCase();
+    const main = this.nvlCatalogNameMap.get(key);
+    if (main && main.toUpperCase() !== key) return main;
     return this.dmvtCatalog[key]?.materialName ?? '';
   }
+
+  private nvlCatalogNameMap = new Map<string, string>();
+  private nvlCatalogForNames = inject(NvlCatalogFullService);
 
   /** Import file DMVT (danh mục vật tư): từ dòng 5, cột A = mã, D = tên, E = đơn vị. Lưu Firebase, ghi đè bản cũ. */
   importDMVTFromPopup(): void {
@@ -549,7 +614,7 @@ export class InboundComponent implements OnInit, OnDestroy {
           items.push({ materialCode: materialCode.toUpperCase(), materialName, unit });
         }
         if (items.length === 0) {
-          alert('File không có dữ liệu hợp lệ từ dòng 5 (cột A: mã, D: tên, E: đơn vị).');
+          appAlert('File không có dữ liệu hợp lệ từ dòng 5 (cột A: mã, D: tên, E: đơn vị).');
           return;
         }
         const itemsColRef = this.firestore.collection('dmvt').doc('ASM1').collection('items');
@@ -578,10 +643,10 @@ export class InboundComponent implements OnInit, OnDestroy {
         await this.firestore.collection('dmvt').doc('ASM1').set({ updatedAt: new Date() }, { merge: true });
         this.invalidateDmvtCatalogCache();
         void this.ensureDmvtCatalogLoaded().catch(() => {});
-        alert(`Đã import DMVT: ${items.length} mã nguyên liệu. Danh mục cũ đã được ghi đè.`);
+        appAlert(`Đã import DMVT: ${items.length} mã nguyên liệu. Danh mục cũ đã được ghi đè.`);
       } catch (err) {
         console.error('Lỗi đọc/lưu file DMVT:', err);
-        alert(err?.message || 'Lỗi khi import DMVT. Kiểm tra file (dòng 5+, cột A, D, E).');
+        appAlert(err?.message || 'Lỗi khi import DMVT. Kiểm tra file (dòng 5+, cột A, D, E).');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -594,7 +659,12 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  /** Xóa hàng loạt (tất cả / theo lô): chỉ Admin / Quản lý. */
+  canBulkDelete = false;
+  private rolePerm = inject(RolePermissionService);
+
   private loadPermissions(): void {
+    this.rolePerm.isAdminOrManager().pipe(takeUntil(this.destroy$)).subscribe((ok) => (this.canBulkDelete = !!ok));
     this.afAuth.authState.pipe(takeUntil(this.destroy$)).subscribe(user => {
       if (user) {
         // Load user permissions for ASM1
@@ -612,6 +682,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.setupWeekRange(new Date());
   }
   
+  private loadMaterialsSeq = 0;
+
   loadMaterials(): void {
     this.isLoading = true;
     this.errorMessage = '';
@@ -657,12 +729,18 @@ export class InboundComponent implements OnInit, OnDestroy {
       gwLdv,
       remarks: data?.remarks || '',
       bagBatch: data?.bagBatch || '',
+      week: data?.week || '',
+      weekFormat: data?.weekFormat === 'MMYY' ? 'MMYY' : (data?.week ? 'YYWW' : undefined),
       hasQRGenerated: data?.hasQRGenerated || false,
       scannedQuantity: data?.scannedQuantity || 0,
       scannedBagKeys: Array.isArray(data?.scannedBagKeys)
         ? data.scannedBagKeys.map((x: unknown) => String(x))
         : [],
+      scannedCartonKeys: Array.isArray(data?.scannedCartonKeys)
+        ? data.scannedCartonKeys.map((x: unknown) => String(x))
+        : [],
       cartonCount: Math.max(0, Math.floor(Number(data?.cartonCount ?? 0))),
+      cartonQty: Math.max(0, Number(data?.cartonQty) || 0),
       storageUnitSize: (data?.storageUnitSize || '') as StorageUnitSize | '',
       preScanInventoryPending: !!data?.preScanInventoryPending,
       linkedInventoryDocId: data?.linkedInventoryDocId || undefined,
@@ -672,6 +750,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   private tryLoadFromCollection(collectionName: string): void {
+    const seq = ++this.loadMaterialsSeq;
     console.log(`🔍 Trying collection: ${collectionName}`);
     
     // PERF: dùng get() thay vì snapshotChanges() để tránh listener realtime + re-render liên tục
@@ -699,6 +778,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       .get()
       .toPromise()
       .then(async snapshot => {
+        if (seq !== this.loadMaterialsSeq) return;
         const docs = snapshot?.docs || [];
         console.log(`🔍 Raw snapshot from ${collectionName} contains ${docs.length} documents`);
         let allMaterials = docs.map(doc => this.mapInboundDoc(doc.id, doc.data() as any));
@@ -707,9 +787,12 @@ export class InboundComponent implements OnInit, OnDestroy {
         } catch (e) {
           console.error('❌ Không tải được lô chưa nhận xong (ngoài khung ngày):', e);
         }
+        if (seq !== this.loadMaterialsSeq) return;
         if (allMaterials.length === 0) {
-          console.log(`❌ No data in ${collectionName}, trying other collections...`);
-          this.tryAlternativeCollections();
+          // Khung ngày chưa có dòng nhập nào (vd đầu tuần) — không phải lỗi, hiện danh sách trống
+          this.materials = [];
+          this.applyFilters();
+          this.isLoading = false;
           return;
         }
         
@@ -770,7 +853,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       })
       .catch((error) => {
         console.error(`❌ Error loading from ${collectionName}:`, error);
-        this.tryAlternativeCollections();
+        if (seq !== this.loadMaterialsSeq) return;
+        this.errorMessage = 'Lỗi tải dữ liệu Inbound: ' + (error?.message || error) + ' — bấm tải lại trang.';
       })
       .finally(() => {
         this.isLoading = false;
@@ -1001,15 +1085,33 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   /** Hàng hiển thị trong bảng; khi xem lô + có ô tìm mã thì lọc theo chuỗi nhập. */
   get batchTableRows(): InboundMaterial[] {
-    const rows = this.filteredMaterials;
-    if (!this.selectedBatchView || this.isBatchActive) {
-      return rows;
+    let rows = this.filteredMaterials;
+    if (this.selectedBatchView && !this.isBatchActive) {
+      const q = (this.batchMaterialCodeSearch || '').trim().toUpperCase();
+      if (q) rows = rows.filter(m => (m.materialCode || '').toUpperCase().includes(q));
     }
-    const q = (this.batchMaterialCodeSearch || '').trim().toUpperCase();
-    if (!q) {
-      return rows;
-    }
-    return rows.filter(m => (m.materialCode || '').toUpperCase().includes(q));
+    return this.sortReceivedLast(rows);
+  }
+
+  /** Thanh tiến độ lô: nhận càng nhiều càng xanh (0% cam → 100% xanh lá). */
+  receiveProgressColor(batch: { receivedCount?: number; count?: number }): string {
+    const total = Number(batch?.count) || 0;
+    const p = total > 0 ? Math.min(1, Math.max(0, (Number(batch?.receivedCount) || 0) / total)) : 0;
+    const hue = Math.round(28 + p * (130 - 28)); // 28 = cam, 130 = xanh lá
+    return `hsl(${hue}, 72%, ${Math.round(48 - p * 10)}%)`;
+  }
+
+  /** Mã chưa đủ (chưa nhận) lên trên, mã đủ (đã nhận) xuống dưới — giữ nguyên thứ tự trong từng nhóm. */
+  private sortRecvSrc: InboundMaterial[] | null = null;
+  private sortRecvKey = '';
+  private sortRecvOut: InboundMaterial[] = [];
+  private sortReceivedLast(rows: InboundMaterial[]): InboundMaterial[] {
+    const key = rows.map(m => (m.isReceived ? '1' : '0')).join('');
+    if (rows === this.sortRecvSrc && key === this.sortRecvKey) return this.sortRecvOut;
+    this.sortRecvSrc = rows;
+    this.sortRecvKey = key;
+    this.sortRecvOut = [...rows.filter(m => !m.isReceived), ...rows.filter(m => !!m.isReceived)];
+    return this.sortRecvOut;
   }
   
   // updatePagination(): void { // Removed pagination update
@@ -1101,6 +1203,29 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Add material to Inventory when received
+  /** Người nhập (để tự tick KK): NV của lô → NV đang nhập → tài khoản đăng nhập. */
+  private async inboundKkOperator(material: InboundMaterial): Promise<string> {
+    const fromLot = (material.employeeIds || []).find((x) => !!String(x || '').trim());
+    if (fromLot) return String(fromLot).trim().toUpperCase();
+    const cur = this.currentEmployeeIds.find((x) => !!String(x || '').trim());
+    if (cur) return String(cur).trim().toUpperCase();
+    try {
+      const user: any = await firstValueFrom(this.authService.currentUser);
+      return String(user?.employeeId || user?.email || 'inbound').trim().toUpperCase();
+    } catch {
+      return 'INBOUND';
+    }
+  }
+
+  private writeInboundKkLog(docId: string, m: InboundMaterial, imd: string, location: string, by: string, at: Date): void {
+    const log = autoKkLog({
+      inventoryDocId: docId, factory: this.selectedFactory, materialCode: m.materialCode, poNumber: m.poNumber,
+      batchNumber: imd, location, quantity: m.quantity, stock: m.quantity, unit: m.unit, by, at, source: 'inbound'
+    });
+    void this.firestore.collection('inventory-kk-history').add(log).catch((e) => console.warn('KK log (inbound)', e));
+    this.kkLog.enqueue(log);
+  }
+
   private addToInventory(material: InboundMaterial): void {
     // batchNumber trong inventory chỉ là ngày nhập: 26/08/2025 -> 26082025
     const inventoryBatchNumber = material.importDate ? (typeof material.importDate === 'string' ? material.importDate : material.importDate.toLocaleDateString('en-GB').split('/').join('')) : new Date().toLocaleDateString('en-GB').split('/').join('');
@@ -1109,8 +1234,11 @@ export class InboundComponent implements OnInit, OnDestroy {
     // Duplicate = cùng materialCode + poNumber + batchNumber (ngày nhập) + source = 'inbound'
     // Nếu duplicate, thêm số thứ tự vào cuối batchNumber (01, 02, 03...)
     this.checkForDuplicateInInventory(material, inventoryBatchNumber)
-      .then(result => {
+      .then(async result => {
         const finalBatchNumber = result.sequenceNumber;
+        // Nhập kho = đã đếm thực tế → tự tick KK bởi người nhập
+        const kkBy = await this.inboundKkOperator(material);
+        const kkAt = new Date();
       
         // Vừa nhập kho: vị trí IQC, kho J (TRA giữ nguyên).
         const inventoryLocation = this.inboundReceiveLocation(material);
@@ -1137,16 +1265,21 @@ export class InboundComponent implements OnInit, OnDestroy {
           isReceived: true,
           notes: material.notes,
           rollsOrBags: material.rollsOrBags,
+          ...(this.lotStdFromInbound(material) > 0 ? { lotStandardPacking: this.lotStdFromInbound(material) } : {}),
           supplier: material.supplier,
           remarks: material.remarks,
+          ...(material.week ? { week: material.week, weekFormat: material.weekFormat || 'YYWW' } : {}),
+          ...autoKkFields(kkBy, kkAt, 'inbound'),
           source: 'inbound', // 🔧 SỬA LỖI: Đánh dấu nguồn gốc từ inbound
           iqcStatus: this.isInboundTraMaterial(material) ? 'Pass' : 'CHỜ KIỂM',
           createdAt: new Date(),
           updatedAt: new Date()
         };
         
-        // Add to inventory-materials collection (no notification)
-        return this.firestore.collection('inventory-materials').add(inventoryMaterial).then(docRef => {
+        // Tạo dòng tồn — mã dòng cố định theo phiếu nhập, chỉ tạo 1 lần (không trùng khi 2 máy / bấm lại)
+        return this.createInventoryRowOnce(material, inventoryMaterial).then(({ ref: docRef, created }) => {
+          if (!created) return docRef; // đã có dòng tồn của phiếu này → không ghi log lần 2
+          this.writeInboundKkLog(docRef.id, material, finalBatchNumber, inventoryLocation, kkBy, kkAt);
           const tb = totalBags;
           const bb = (material.bagBatch || '').trim();
           this.rmBagHistory.log({
@@ -1205,8 +1338,29 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.updateMaterial(material);
         
         // Show error to user
-        alert(`❌ Lỗi khi thêm vào inventory:\n\nMã hàng: ${material.materialCode}\nLỗi: ${error.message}`);
+        appAlert(`❌ Lỗi khi thêm vào inventory:\n\nMã hàng: ${material.materialCode}\nLỗi: ${error.message}`);
       });
+  }
+
+  /**
+   * Tạo dòng inventory-materials cho 1 phiếu nhập, mã dòng cố định `IB_<id phiếu nhập>`, trong transaction:
+   * đã có → không tạo lại (created = false). Chống trùng dòng tồn khi 2 máy cùng nhận / bấm lại / mạng gửi lại.
+   * Phiếu nhập chưa có id (hiếm) → tạo như cũ.
+   */
+  private async createInventoryRowOnce(material: InboundMaterial, data: Record<string, any>): Promise<{ ref: any; created: boolean }> {
+    const db = this.firestore.firestore;
+    if (!material.id) {
+      const ref = await db.collection('inventory-materials').add(data);
+      return { ref, created: true };
+    }
+    const ref = db.collection('inventory-materials').doc(`IB_${material.id}`);
+    const created = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists) return false;
+      tx.set(ref, { ...data, inboundDocId: material.id });
+      return true;
+    });
+    return { ref, created };
   }
 
   /** Nhập kho inventory số lượng ngay; totalBags = 0, không ghi rm-bag-history; vị trí IQC — chờ quét tem để finalize. */
@@ -1236,15 +1390,17 @@ export class InboundComponent implements OnInit, OnDestroy {
           isReceived: true,
           notes: material.notes,
           rollsOrBags: material.rollsOrBags,
+          ...(this.lotStdFromInbound(material) > 0 ? { lotStandardPacking: this.lotStdFromInbound(material) } : {}),
           supplier: material.supplier,
           remarks: material.remarks,
+          ...(material.week ? { week: material.week, weekFormat: material.weekFormat || 'YYWW' } : {}),
           source: 'inbound',
           iqcStatus: 'CHỜ KIỂM',
           bagsPendingPhysicalScan: true,
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        return this.firestore.collection('inventory-materials').add(inventoryMaterial).then(docRef => docRef);
+        return this.createInventoryRowOnce(material, inventoryMaterial).then(({ ref }) => ref);
       })
       .then(docRef => {
         if (!material.id) throw new Error('Material không có ID');
@@ -1279,7 +1435,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.addToInventory(material);
       return Promise.resolve();
     }
-    return this.firestore.collection('inventory-materials').doc(docId).get().toPromise().then(snap => {
+    return this.firestore.collection('inventory-materials').doc(docId).get().toPromise().then(async snap => {
       if (!snap || !snap.exists) {
         console.warn('⚠️ Không tìm thấy inventory pre-scan, fallback addToInventory');
         this.addToInventory(material);
@@ -1290,7 +1446,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       const inventoryLocation = this.inboundReceiveLocation(material);
       const totalBags = Math.max(0, Math.floor(Number(material.gwLdv ?? 0)));
       const bb = (material.bagBatch || '').trim();
+      // Hoàn tất quét nhập = đã đếm thực tế → tự tick KK bởi người nhập
+      const kkBy = await this.inboundKkOperator(material);
+      const kkAt = new Date();
+      this.writeInboundKkLog(docId, material, imd, inventoryLocation, kkBy, kkAt);
       return this.firestore.collection('inventory-materials').doc(docId).update({
+        ...autoKkFields(kkBy, kkAt, 'inbound'),
         totalBags,
         openingBagsAtInit: totalBags, // số bag tồn đầu (lấy từ Inbound "số bịch")
         exportedBags: 0,
@@ -1398,33 +1559,84 @@ export class InboundComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Ghi Standard Packing lần đầu. Nếu đã có và khác lượng đơn vị thì không ghi đè, gửi mail lệch.
+  /**
+   * Standard của lô = LĐV phiếu nhập. Bỏ qua hàng trả (TRA) và LĐV vô lý (lớn hơn số lượng nhập) → 0 (dùng danh mục).
+   */
+  private lotStdFromInbound(material: InboundMaterial): number {
+    const ldv = Number(material.rollsOrBags) || 0;
+    const qty = Number(material.quantity) || 0;
+    if (!(ldv > 0) || !(qty > 0)) return 0;
+    if (material.batchNumber?.toUpperCase().startsWith('TRA')) return 0;
+    if (ldv > qty + 1e-9) return 0;
+    return ldv;
+  }
+
+  /**
+   * Danh mục tự lấy Standard mới nhất: chỉ khi lô có từ 2 bịch trở lên (số lượng ≥ 2 × LĐV) — khi đó LĐV chắc chắn là
+   * quy cách chuẩn của PO. Lô 1 bịch / lô lẻ, hàng trả (TRA), mã khóa Standard → không ghi đè.
+   * Đổi Standard: lưu lịch sử (standard-packing-history) + gửi mail báo (không cần duyệt).
+   */
   private async updateStandardPackingFromInbound(material: InboundMaterial): Promise<void> {
     try {
-      if (!material.rollsOrBags || material.rollsOrBags <= 0) return;
-      // Hàng trả (batchNumber bắt đầu bằng TRA) không dùng để ghi đè Standard Packing —
-      // số lượng trả lại thường không phản ánh đúng lượng chẵn 1 bịch/cuộn gốc.
+      const ldv = Number(material.rollsOrBags) || 0;
+      const qty = Number(material.quantity) || 0;
+      if (!(ldv > 0)) return;
       if (material.batchNumber?.toUpperCase().startsWith('TRA')) return;
       const code = (material.materialCode || '').trim();
       if (!code) return;
-      const current = await this.getStandardPacking(code);
-      if (current > 0) {
-        if (!this.ldvEquals(current, material.rollsOrBags)) {
-          await this.notifyLdvMismatch(material, current);
-        }
-        return;
-      }
-      const standardPackingValue = material.rollsOrBags;
-      const payload = { materialCode: code, standardPacking: standardPackingValue, updatedAt: new Date() };
+      if (qty + 1e-9 < 2 * ldv) return;
+      const { std: current, locked } = await this.getStandardPackingInfo(code);
+      if (locked) return;
+      if (current > 0 && this.ldvEquals(current, ldv)) return;
+      const now = new Date();
+      const payload = { materialCode: code, standardPacking: ldv, updatedAt: now };
       await this.firestore.collection('materials').doc(code).ref.set(payload, { merge: true });
       await this.firestore.collection('catalog').doc(code).ref.set(payload, { merge: true });
       void this.nvlCatalogFull.markRemoteChanged();
-      this.standardPackingCache.set(code, standardPackingValue);
+      this.standardPackingCache.set(code, ldv);
+      const changedBy = await this.currentUserCode();
+      await this.firestore.collection('standard-packing-history').add({
+        materialCode: code,
+        oldStandard: current,
+        newStandard: ldv,
+        poNumber: material.poNumber || '',
+        batchNumber: material.batchNumber || '',
+        factory: material.factory || this.selectedFactory || '',
+        quantity: qty,
+        inboundId: material.id || '',
+        changedBy,
+        source: 'inbound-auto',
+        changedAt: now
+      });
+      if (current > 0) {
+        await this.inboundLdvOtp.sendMismatchEmail({
+          materialCode: code,
+          poNumber: material.poNumber || '',
+          batchNumber: material.batchNumber || '',
+          factory: material.factory || this.selectedFactory || '',
+          rollsOrBags: ldv,
+          standardPacking: current,
+          reportedBy: changedBy,
+          autoUpdated: true
+        }).catch((e) => console.warn('Không gửi được mail đổi Standard', e));
+      }
     } catch (error) {
       console.error(`❌ Error updating Standard Packing for ${material.materialCode}:`, error);
     }
   }
-  
+
+  private async getStandardPackingInfo(materialCode: string): Promise<{ std: number; locked: boolean }> {
+    const code = materialCode.trim();
+    const [mat, cat] = await Promise.all([
+      this.firestore.collection('materials').doc(code).ref.get(),
+      this.firestore.collection('catalog').doc(code).ref.get()
+    ]);
+    const m = mat.exists ? (mat.data() as any) : {};
+    const c = cat.exists ? (cat.data() as any) : {};
+    const std = Number(m?.standardPacking) || Number(c?.standardPacking) || 0;
+    return { std, locked: m?.standardPackingLocked === true || c?.standardPackingLocked === true };
+  }
+
   private async updateUnitWeightFromInbound(material: InboundMaterial): Promise<void> {
     try {
       if (!material.unitWeight || material.unitWeight <= 0) return;
@@ -1483,6 +1695,109 @@ export class InboundComponent implements OnInit, OnDestroy {
     }
   }
   
+  // ===== GW bag nguyên (gram) — Danh mục NVL `materials/{mã}.gwBag` =====
+  private gwBagMap = new Map<string, number>();
+  private gwBagTried = new Set<string>();
+  private gwBagLoading = false;
+
+  /** GW bag của mã (0 = chưa có). Lần đầu gặp mã thì nạp theo lô (ưu tiên cache danh mục trên máy). */
+  gwBagOf(code: string | null | undefined): number {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c) return 0;
+    if (!this.gwBagTried.has(c) && !this.gwBagLoading) setTimeout(() => void this.loadGwBags(), 0);
+    return this.gwBagMap.get(c) || 0;
+  }
+
+  private async loadGwBags(): Promise<void> {
+    if (this.gwBagLoading) return;
+    const codes = [...new Set(this.materials.map(m => String(m.materialCode || '').trim().toUpperCase()).filter(Boolean))]
+      .filter(c => !this.gwBagTried.has(c));
+    if (!codes.length) return;
+    this.gwBagLoading = true;
+    try {
+      const cached = this.nvlCatalogFull.peekCached();
+      const missing: string[] = [];
+      if (cached) {
+        const byCode = new Map(cached.map(i => [i.materialCode, i]));
+        for (const c of codes) {
+          const it = byCode.get(c);
+          if (it) {
+            this.gwBagTried.add(c);
+            if (it.gwBag) this.gwBagMap.set(c, it.gwBag);
+            if (it.cartonQty) this.cartonQtyMap.set(c, it.cartonQty);
+          } else {
+            missing.push(c);
+          }
+        }
+      } else {
+        missing.push(...codes);
+      }
+      const docIdPath = firebase.firestore.FieldPath.documentId();
+      for (let i = 0; i < missing.length; i += 10) {
+        const chunk = missing.slice(i, i + 10);
+        const snap = await this.firestore.collection('materials', ref => ref.where(docIdPath, 'in', chunk)).get().toPromise();
+        chunk.forEach(c => this.gwBagTried.add(c));
+        snap?.forEach(doc => {
+          const gw = Number((doc.data() as any)?.gwBag) || 0;
+          if (gw > 0) this.gwBagMap.set(doc.id.toUpperCase(), gw);
+          const cq = Number((doc.data() as any)?.cartonQty) || 0;
+          if (cq > 0) this.cartonQtyMap.set(doc.id.toUpperCase(), cq);
+        });
+      }
+    } catch (e) {
+      console.warn('[Inbound] loadGwBags:', e);
+      codes.forEach(c => this.gwBagTried.add(c));
+    } finally {
+      this.gwBagLoading = false;
+    }
+  }
+
+  /**
+   * Mã KHÔNG cần cân khi Outbound (đã duyệt ở báo cáo Check lượng PXK → pxk-weight-check-exempt)
+   * thì không bắt nhập GW bag. Các mã còn lại phải có GW bag.
+   */
+  private gwExemptCodes: Set<string> | null = null;
+  private gwExemptLoading = false;
+
+  private ensureGwExemptCodes(): void {
+    if (this.gwExemptCodes || this.gwExemptLoading) return;
+    this.gwExemptLoading = true;
+    this.firestore.firestore.collection('pxk-weight-check-exempt').get()
+      .then(snap => { this.gwExemptCodes = new Set(snap.docs.map(d => d.id.trim().toUpperCase())); })
+      .catch(() => { this.gwExemptCodes = new Set(); })
+      .finally(() => { this.gwExemptLoading = false; });
+  }
+
+  /** Mã không cần GW bag: chỉ mã trong danh sách Kiểm 100% mới phải có GW bag; mã đã duyệt không cần cân cũng bỏ qua. */
+  isGwExempt(code: string | null | undefined): boolean {
+    this.ensureGwExemptCodes();
+    const c = String(code || '').trim().toUpperCase();
+    if (!c || this.gwExemptCodes?.has(c)) return true;
+    return !this.sxxkSuspect.get(c);
+  }
+
+  /** Mã cần GW bag mà chưa có → tô đỏ ô để nhập. */
+  isGwMissing(code: string | null | undefined): boolean {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c || !this.gwExemptCodes || this.isGwExempt(c) || !this.gwBagTried.has(c)) return false;
+    return !this.gwBagOf(c);
+  }
+
+  async saveGwBag(code: string, raw: string): Promise<void> {
+    const c = String(code || '').trim().toUpperCase();
+    const gw = Math.max(0, Math.round(Number(raw) || 0));
+    if (!c || gw === (this.gwBagMap.get(c) || 0)) return;
+    try {
+      const user = await this.afAuth.currentUser;
+      const email = user ? user.email || user.uid : '';
+      const by = email.includes('@') ? email.split('@')[0].toUpperCase() : email.toUpperCase();
+      await this.nvlCatalogFull.setGwBag(c, gw, by);
+      if (gw) this.gwBagMap.set(c, gw); else this.gwBagMap.delete(c);
+    } catch (e: any) {
+      appAlert('❌ Không lưu được GW bag: ' + (e?.message || e));
+    }
+  }
+
   // Load unit weights từ danh mục materials — chỉ đọc doc theo mã đang có trên list (tránh .get() cả collection)
   private async loadUnitWeightsFromCatalog(): Promise<void> {
     try {
@@ -1774,7 +2089,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   async openLabelReadingGuide(): Promise<void> {
     const win = window.open('', '_blank');
     if (!win) {
-      alert('Trình duyệt đang chặn cửa sổ mới. Hãy cho phép popup rồi mở lại Hướng dẫn đọc tem.');
+      appAlert('Trình duyệt đang chặn cửa sổ mới. Hãy cho phép popup rồi mở lại Hướng dẫn đọc tem.');
       return;
     }
     win.document.write('<!DOCTYPE html><title>Hướng Dẫn Đọc Tem Nguyên Liệu</title><p style="font-family:Arial,sans-serif;padding:24px">Đang tạo tem mẫu…</p>');
@@ -1904,6 +2219,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     .real-stage .info-row.material-code { font-size: 17.7408px !important; line-height: 1.05 !important; }
     .real-stage .info-row.material-code.material-code-main { font-size: 21.356368px !important; line-height: 1.05 !important; }
     .real-stage .info-row.info-row-type { font-size: 11px !important; font-weight: 800 !important; margin: 0.15mm 0 0 0 !important; }
+    .real-stage .info-row.info-row-bag-lot { display: flex !important; flex-wrap: wrap !important; column-gap: 1.5mm !important; row-gap: 0.3mm !important; white-space: normal !important; max-width: 100% !important; }
+    .real-stage .bag-lot-item { white-space: nowrap !important; }
     .real-stage .icon-badge {
       position: absolute !important; bottom: 1mm !important; right: 1mm !important;
       width: 6mm !important; height: 6mm !important; display: flex !important;
@@ -2031,7 +2348,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     if (this.hasStorageUnit(material)) return;
     const code = this.dvLuuTruCatalog.normalizeMaterialCode(material.materialCode);
     if (!code) {
-      alert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
+      appAlert('Vui lòng nhập mã NVL trước khi chọn DV Lưu trữ.');
       return;
     }
     this.storageUnitPickerMaterialCode = code;
@@ -2060,7 +2377,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.closeStorageUnitPicker();
     } catch (e) {
       console.error(e);
-      alert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
+      appAlert('Không lưu được DV Lưu trữ. Vui lòng thử lại.');
     } finally {
       this.isSavingStorageUnit = false;
     }
@@ -2406,7 +2723,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.applyFilters();
     } catch (e: any) {
       console.error(e);
-      alert(`❌ Lỗi nhập chưa scan: ${e?.message || e}`);
+      appAlert(`❌ Lỗi nhập chưa scan: ${e?.message || e}`);
     } finally {
       this.isLoading = false;
     }
@@ -2479,7 +2796,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.tbhdAcknowledgedBatches.add(batchNumber);
     } catch (e) {
       console.error('❌ Lưu xác nhận TBHD thất bại:', e);
-      alert('Không lưu được xác nhận TBHD. Thử lại.');
+      appAlert('Không lưu được xác nhận TBHD. Thử lại.');
     }
   }
 
@@ -2785,7 +3102,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     ];
     
     if (!allowedTypes.includes(file.type)) {
-      alert('❌ Chỉ hỗ trợ file Excel (.xlsx, .xls) hoặc CSV');
+      appAlert('❌ Chỉ hỗ trợ file Excel (.xlsx, .xls) hoặc CSV');
       return;
     }
     
@@ -2808,7 +3125,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         if (jsonData.length < 2) {
-          alert('❌ File không có dữ liệu hoặc format không đúng');
+          appAlert('❌ File không có dữ liệu hoặc format không đúng');
           this.isLoading = false;
           this.errorMessage = '';
           return;
@@ -2860,7 +3177,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         }
         
         if (materialsToAdd.length === 0) {
-          alert('❌ Không có dữ liệu hợp lệ để import');
+          appAlert('❌ Không có dữ liệu hợp lệ để import');
           this.isLoading = false;
           this.errorMessage = '';
           return;
@@ -2931,14 +3248,14 @@ export class InboundComponent implements OnInit, OnDestroy {
         
       } catch (error) {
         console.error('❌ Error processing file:', error);
-        alert(`❌ Lỗi xử lý file: ${error.message}`);
+        appAlert(`❌ Lỗi xử lý file: ${error.message}`);
         this.isLoading = false;
         this.errorMessage = '';
       }
     };
     
     reader.onerror = () => {
-      alert('❌ Lỗi đọc file');
+      appAlert('❌ Lỗi đọc file');
       this.isLoading = false;
       this.errorMessage = '';
     };
@@ -3165,19 +3482,19 @@ export class InboundComponent implements OnInit, OnDestroy {
         console.log(`  - Materials bị lỗi: ${errorCount}`);
         console.log(`  - Dòng bị skip (thiếu data): ${skippedRows ? skippedRows.length : 0}`);
         
-        alert(message);
+        appAlert(message);
         
         // 🔧 FIX: KHÔNG gọi addNewMaterialsToList() vì snapshotChanges() đã tự động load rồi
         // Nếu gọi thêm sẽ bị duplicate x2
         // this.addNewMaterialsToList(materials); // ← COMMENTED OUT
         console.log(`✅ Import completed. snapshotChanges() will auto-load new materials.`);
       } else {
-        alert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
+        appAlert(`❌ Import thất bại: ${errorCount} materials bị lỗi`);
       }
       
     } catch (error) {
       console.error('❌ Error adding materials to Firebase:', error);
-      alert(`❌ Lỗi import: ${error.message}`);
+      appAlert(`❌ Lỗi import: ${error.message}`);
     } finally {
       this.isLoading = false;
       this.errorMessage = '';
@@ -3214,6 +3531,104 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Material update methods
+  // ===== Week trên tem: popup chọn YYWW / MMYY rồi nhập 2 ô =====
+  weekPopup: { material: InboundMaterial; format: WeekFormat; a: string; b: string } | null = null;
+
+  weekLabelOf(m: InboundMaterial): string {
+    return weekCodeLabel(m.weekFormat || 'YYWW', m.week);
+  }
+
+  /** Mã theo dõi Week bật ở Danh mục NVL (+Week) — nạp 1 lần, vài lượt đọc. */
+  weekTrackedCodes: Set<string> | null = null;
+  private weekTrackedLoading = false;
+
+  /** Mã tick Week ở Danh mục NVL mà lô chưa nhập Week. */
+  weekMissing(m: InboundMaterial): boolean {
+    if (!this.weekTrackedCodes && !this.weekTrackedLoading) {
+      this.weekTrackedLoading = true;
+      void this.nvlCatalogFull.loadWeekTrackedCodes()
+        .then((s) => { this.weekTrackedCodes = s; })
+        .catch(() => { this.weekTrackedCodes = new Set(); });
+    }
+    return !m.week && isWeekTrackedCode(m.materialCode, this.weekTrackedCodes);
+  }
+
+  openWeekPopup(m: InboundMaterial): void {
+    if (!this.canEditMaterials) return;
+    const format: WeekFormat = m.weekFormat === 'MMYY' ? 'MMYY' : 'YYWW';
+    const v = String(m.week || '');
+    this.weekPopup = { material: m, format, a: v.slice(0, 2), b: v.slice(2, 4) };
+    setTimeout(() => (document.getElementById('weekPopupA') as HTMLInputElement | null)?.focus(), 60);
+  }
+
+  setWeekPopupFormat(f: WeekFormat): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.format = f;
+    this.weekPopup.a = '';
+    this.weekPopup.b = '';
+    setTimeout(() => (document.getElementById('weekPopupA') as HTMLInputElement | null)?.focus(), 30);
+  }
+
+  /** Gõ đủ 2 số ô đầu → nhảy sang ô sau. */
+  onWeekPopupA(v: string): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.a = String(v || '').replace(/\D/g, '').slice(0, 2);
+    if (this.weekPopup.a.length === 2) (document.getElementById('weekPopupB') as HTMLInputElement | null)?.focus();
+  }
+
+  onWeekPopupB(v: string): void {
+    if (!this.weekPopup) return;
+    this.weekPopup.b = String(v || '').replace(/\D/g, '').slice(0, 2);
+  }
+
+  get weekPopupValue(): string {
+    const p = this.weekPopup;
+    if (!p) return '';
+    const a = p.a.padStart(2, '0');
+    const b = p.b.padStart(2, '0');
+    return p.a && p.b ? a + b : '';
+  }
+
+  get weekPopupPreview(): string {
+    const p = this.weekPopup;
+    if (!p || !this.weekPopupValue) return '';
+    const w = parseWeekCode(p.format, this.weekPopupValue);
+    if (!w) return p.format === 'YYWW' ? '⚠️ Tuần không hợp lệ (1–52/53)' : '⚠️ Tháng không hợp lệ (1–12)';
+    return `${weekCodeText(p.format, this.weekPopupValue)} · ${fmtDmy(w.start)} – ${fmtDmy(w.end)}`;
+  }
+
+  get weekPopupValid(): boolean {
+    const p = this.weekPopup;
+    return !!p && !!parseWeekCode(p.format, this.weekPopupValue);
+  }
+
+  closeWeekPopup(): void {
+    this.weekPopup = null;
+  }
+
+  saveWeekPopup(clear = false): void {
+    const p = this.weekPopup;
+    if (!p) return;
+    if (!clear && !this.weekPopupValid) return;
+    const m = p.material;
+    m.week = clear ? '' : this.weekPopupValue;
+    m.weekFormat = clear ? undefined : p.format;
+    this.weekPopup = null;
+    this.updateMaterial(m);
+    // Mã đã có Week → Danh mục NVL tự bật theo dõi Week
+    if (m.week) {
+      void this.nvlCatalogFull.ensureWeekTracked(m.materialCode).then(() => {
+        this.weekTrackedCodes?.add(String(m.materialCode || '').trim().toUpperCase());
+      }).catch((e) => console.warn('ensureWeekTracked', e));
+    }
+    // Đã nhận kho → Week sang dòng tồn (mục Week ở Quản lý NVL, kiểm soát Outbound)
+    if (m.linkedInventoryDocId) {
+      void this.firestore.collection('inventory-materials').doc(m.linkedInventoryDocId)
+        .update({ week: m.week || '', weekFormat: m.week ? m.weekFormat : null, updatedAt: new Date() })
+        .catch((e) => console.warn('Sync week → inventory', e));
+    }
+  }
+
   updateMaterial(material: InboundMaterial): void {
     if (!this.canEditMaterials) return;
 
@@ -3231,7 +3646,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       poNumber: material.poNumber,
       quantity: material.quantity,
       unit: material.unit,
-      location: material.location,
+      location: stripJ5Prefix(material.location),
       type: material.type,
       expiryDate: material.expiryDate,
       qualityCheck: material.qualityCheck,
@@ -3244,7 +3659,10 @@ export class InboundComponent implements OnInit, OnDestroy {
       gwLdv: this.gwLdvForFirestore(material),
       remarks: material.remarks,
       bagBatch: material.bagBatch || '',
+      week: material.week || '',
+      weekFormat: material.week ? (material.weekFormat || 'YYWW') : null,
       cartonCount: Math.max(0, Math.floor(Number(material.cartonCount ?? 0))),
+      cartonQty: Math.max(0, Number(material.cartonQty) || 0),
       storageUnitSize: material.storageUnitSize || null,
       preScanInventoryPending: !!material.preScanInventoryPending,
       linkedInventoryDocId: material.linkedInventoryDocId || null,
@@ -3317,14 +3735,14 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   // Delete all materials from inbound tab
   deleteAllMaterials(): void {
-    if (!this.canDeleteMaterials) {
-      this.errorMessage = 'Bạn không có quyền xóa materials';
+    if (!this.canDeleteMaterials || !this.canBulkDelete) {
+      appAlert('❌ Xóa tất cả chỉ dành cho Admin / Quản lý.');
       return;
     }
     
     const totalCount = this.materials.length;
     if (totalCount === 0) {
-      alert('Không có dữ liệu nào để xóa');
+      appAlert('Không có dữ liệu nào để xóa');
       return;
     }
     
@@ -3332,7 +3750,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     const materialsInInventory = this.materials.filter(m => m.isReceived);
     const materialsNotInInventory = this.materials.filter(m => !m.isReceived);
     
-    let warningMessage = `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ASM1?\n\n`;
+    let warningMessage = `⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa TẤT CẢ ${totalCount} materials trong tab Inbound ${this.selectedFactory}?\n\n`;
     
     if (materialsInInventory.length > 0) {
       const materialCodes = materialsInInventory.map(m => m.materialCode).join(', ');
@@ -3352,9 +3770,12 @@ export class InboundComponent implements OnInit, OnDestroy {
     warningMessage += `• Không thể hoàn tác!\n\n`;
     warningMessage += `Nhập "DELETE" để xác nhận:`;
     
-    const confirmed = confirm(warningMessage);
-    
-    if (!confirmed) return;
+    // Bắt gõ đúng DELETE (trước đây chỉ OK/Cancel — dễ bấm nhầm xóa hết)
+    const typed = prompt(warningMessage);
+    if (String(typed || '').trim().toUpperCase() !== 'DELETE') {
+      if (typed !== null) appAlert('Chưa xóa — phải gõ đúng chữ DELETE.');
+      return;
+    }
     
     // Show loading state
     this.isLoading = true;
@@ -3365,7 +3786,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     
     if (materialIds.length === 0) {
       this.isLoading = false;
-      alert('Không có materials nào để xóa');
+      appAlert('Không có materials nào để xóa');
       return;
     }
     
@@ -3390,7 +3811,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     
     Promise.all(deletePromises)
       .then(() => {
-        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ASM1`);
+        console.log(`✅ Successfully deleted ${materialIds.length} materials from Inbound ${this.selectedFactory}`);
         if (materialsInInventory.length > 0) {
           console.log(`ℹ️ Note: ${materialsInInventory.length} materials remain in inventory with received status`);
         }
@@ -3400,11 +3821,11 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.isLoading = false;
         
         // Show success message
-        let successMessage = `✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ASM1`;
+        let successMessage = `✅ Đã xóa thành công ${materialIds.length} materials từ tab Inbound ${this.selectedFactory}`;
         if (materialsInInventory.length > 0) {
           successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại và không bị ảnh hưởng`;
         }
-        alert(successMessage);
+        appAlert(successMessage);
         
         // Close dropdown
         this.showMorePopup = false;
@@ -3417,7 +3838,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.errorMessage = `Lỗi xóa tất cả materials: ${error.message}`;
         this.isLoading = false;
         
-        alert(`❌ Lỗi xóa materials: ${error.message}`);
+        appAlert(`❌ Lỗi xóa materials: ${error.message}`);
       });
   }
   
@@ -3433,16 +3854,26 @@ export class InboundComponent implements OnInit, OnDestroy {
   /**
    * Tem thùng 57×32mm (cùng format cột QR): N tem, QR `Mã|PO|0|DDMMYYYY-i/N` — QTY = 0 (dán ngoài thùng).
    */
-  private buildCartonLabelPayloads(material: InboundMaterial): { qrData: string; cartonIndex: number; cartonTotal: number }[] | null {
-    const n = Math.max(0, Math.floor(Number(material.cartonCount ?? 0)));
+  private buildCartonLabelPayloads(material: InboundMaterial): { qrData: string; cartonIndex: number; cartonTotal: number; cartonQty: number | null }[] | null {
+    const per = Number(material.cartonQty) || 0;
+    const total = Number(material.quantity) || 0;
+    // Có Lượng trong thùng → số thùng = ⌈lượng nhập ÷ lượng thùng⌉, thùng cuối = phần lẻ; dòng cũ thì theo Số thùng đã lưu
+    const n = per > 0 && total > 0 ? Math.ceil(total / per - 1e-9) : Math.max(0, Math.floor(Number(material.cartonCount ?? 0)));
     if (n < 1 || !material.materialCode?.trim() || !material.poNumber?.trim()) return null;
     const imd = this.getInboundQrImdString(material);
-    const out: { qrData: string; cartonIndex: number; cartonTotal: number }[] = [];
+    const out: { qrData: string; cartonIndex: number; cartonTotal: number; cartonQty: number | null }[] = [];
     for (let i = 1; i <= n; i++) {
+      // QR giữ lượng = 0 (tem thùng, không lẫn với tem bag); lượng thùng in thành chữ trên tem
       const qrData = `${material.materialCode.trim()}|${material.poNumber.trim()}|0|${imd}-${i}/${n}`;
-      out.push({ qrData, cartonIndex: i, cartonTotal: n });
+      const qty = per > 0 && total > 0 ? (i < n ? per : Math.round((total - per * (n - 1)) * 10000) / 10000) : null;
+      out.push({ qrData, cartonIndex: i, cartonTotal: n, cartonQty: qty });
     }
     return out;
+  }
+
+  /** Số tem thùng sẽ in (0 = chưa có Lượng trong thùng / Số thùng). */
+  cartonLabelCount(material: InboundMaterial): number {
+    return this.buildCartonLabelPayloads(material)?.length || 0;
   }
 
   private getInboundTraIconType(batchNumber: string): 'PD' | 'EN' | null {
@@ -3478,7 +3909,8 @@ export class InboundComponent implements OnInit, OnDestroy {
         labelType: this.formatInboundLabelType(material.type),
         kind: 'carton' as const,
         cartonIndex: p.cartonIndex,
-        cartonTotal: p.cartonTotal
+        cartonTotal: p.cartonTotal,
+        cartonQty: p.cartonQty
       });
     }
     return out;
@@ -3488,6 +3920,61 @@ export class InboundComponent implements OnInit, OnDestroy {
     const v = Math.max(0, Math.floor(Number(material.cartonCount ?? 0)));
     material.cartonCount = v;
     this.updateMaterial(material);
+  }
+
+  /** Lượng trong thùng → tính lại Số thùng, lưu dòng + Danh mục NVL (cột Lượng thùng). */
+  onCartonQtyCommit(material: InboundMaterial): void {
+    const per = Math.max(0, Math.round((Number(material.cartonQty) || 0) * 10000) / 10000);
+    material.cartonQty = per;
+    const total = Number(material.quantity) || 0;
+    material.cartonCount = per > 0 && total > 0 ? Math.ceil(total / per - 1e-9) : 0;
+    this.updateMaterial(material);
+    const code = String(material.materialCode || '').trim().toUpperCase();
+    if (code && per > 0 && per !== this.catalogCartonQtyOf(code)) {
+      this.cartonQtyMap.set(code, per);
+      void this.afAuth.currentUser.then((u) => {
+        const email = u ? u.email || u.uid : '';
+        const by = email.includes('@') ? email.split('@')[0].toUpperCase() : email.toUpperCase();
+        return this.nvlCatalogFull.setCartonQty(code, per, by);
+      }).catch((e) => console.warn('save cartonQty catalog:', e));
+    }
+  }
+
+  /** Lượng thùng trong Danh mục NVL (nạp cùng GW bag). */
+  private cartonQtyMap = new Map<string, number>();
+  catalogCartonQtyOf(code: string | null | undefined): number {
+    const c = String(code || '').trim().toUpperCase();
+    if (c) this.gwBagOf(c);
+    return this.cartonQtyMap.get(c) || 0;
+  }
+
+  /** Mã bật "Xuất thùng" trong Danh mục NVL (cache chung 6 tiếng, không thêm lượt đọc mỗi lần scan). */
+  private cartonAllowSet: Set<string> | null = null;
+  private async ensureCartonAllowSet(): Promise<Set<string>> {
+    if (!this.cartonAllowSet) this.cartonAllowSet = await this.nvlCatalogFull.loadAllowExportByCartonSet();
+    return this.cartonAllowSet;
+  }
+
+  /** Cột QR THÙNG: chỉ in tem thùng của dòng. */
+  async printCartonQr(material: InboundMaterial): Promise<void> {
+    const code = String(material.materialCode || '').trim().toUpperCase();
+    if (!(Number(material.cartonQty) > 0)) {
+      const fromCatalog = this.catalogCartonQtyOf(code);
+      if (fromCatalog > 0 && !material.isReceived) {
+        material.cartonQty = fromCatalog;
+        this.onCartonQtyCommit(material);
+      }
+    }
+    if (!this.cartonLabelCount(material)) {
+      appAlert('Nhập "Lượng trong thùng" trước khi in tem thùng.');
+      return;
+    }
+    const allow = await this.ensureCartonAllowSet().catch(() => null);
+    if (allow && !allow.has(code)) {
+      appAlert(`Mã ${code} chưa bật "Xuất thùng" trong Danh mục NVL — bật trước rồi mới in / scan tem thùng.`);
+      return;
+    }
+    await this.printQRCode(material, true);
   }
 
   private escapeHtmlPrint(s: string): string {
@@ -3542,8 +4029,10 @@ export class InboundComponent implements OnInit, OnDestroy {
     batchNumber: string,
     cartonIndex: number,
     cartonTotal: number,
-    labelType: string
+    labelType: string,
+    cartonQty: number | null = null
   ): string {
+    if (cartonQty != null && cartonQty > 0) f = { ...f, quantity: String(cartonQty) };
     const bagLotRow = this.buildInboundBagLotRowHtml('THÙNG', `${cartonIndex}/${cartonTotal}`, batchNumber);
     const typeRow = this.buildInboundLabelTypeRowHtml(labelType);
     return `
@@ -3562,30 +4051,78 @@ export class InboundComponent implements OnInit, OnDestroy {
   private renderInboundQrLabelContainerHtml(qr: any): string {
     const f = this.parseInboundQrLabelDisplayFields(qr.qrData);
     const labelType = String(qr.labelType || '');
-    const infoHtml =
+    let infoHtml =
       qr.kind === 'carton'
         ? this.buildInboundQrCartonLabelInfoSectionHtml(
             f,
             qr.batchNumber || '',
             qr.cartonIndex,
             qr.cartonTotal,
-            labelType
+            labelType,
+            qr.cartonQty ?? null
           )
         : this.buildInboundQrBagLabelInfoSectionHtml(f, qr.batchNumber || '', labelType);
     const iconHtml = qr.iconType ? `<div class="icon-badge">${qr.iconType}</div>` : '';
     const loc = this.formatInboundLabelHomeLoc(qr.homeLoc);
     const locHtml = loc ? `<div class="req-loc">${this.escapeInboundLabelHtml(loc)}</div>` : '';
     const hasIcon = qr.iconType ? ' has-icon' : '';
+    // NVL TRA là cuộn duy nhất trong kho → chấm tròn đen ở đầu dòng chữ cuối (góc trái dưới phần chữ, không đè QR)
+    if (qr.soleRoll) infoHtml = this.prependSoleRollDot(infoHtml);
+    const soleDotHtml = '';
     return `
-                    <div class="qr-container${hasIcon}">
+                    <div class="qr-container${hasIcon}" style="position:relative;">
                       <div class="qr-section">
                         <img src="${qr.qrImage}" class="qr-image" alt="QR Code ${qr.index}">
                       </div>
                       ${infoHtml}
                       ${iconHtml}
                       ${locHtml}
+                      ${soleDotHtml}
                     </div>
                   `;
+  }
+
+  /** Chèn chấm tròn đen vào đầu dòng chữ cuối cùng của tem (style inline để mọi mẫu in đều có). */
+  private prependSoleRollDot(infoHtml: string): string {
+    const dot = '<span class="sole-roll-dot" style="display:inline-block;width:2.4mm;height:2.4mm;border-radius:50%;background:#000;'
+      + 'margin-right:1mm;vertical-align:middle;flex:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>';
+    const i = infoHtml.lastIndexOf('<div class="info-row');
+    if (i < 0) return infoHtml + dot;
+    const j = infoHtml.indexOf('>', i);
+    return infoHtml.slice(0, j + 1) + dot + infoHtml.slice(j + 1);
+  }
+
+  /**
+   * NVL TRA: nếu lô trả chỉ 1 cuộn / bịch và trong kho (cùng nhà máy) không còn dòng tồn nào khác của mã này
+   * → đánh dấu tem "cuộn duy nhất" (in chấm tròn góc trái dưới).
+   */
+  private async markInboundSoleRollLabels(material: InboundMaterial, qrImages: any[]): Promise<void> {
+    try {
+      if (!this.isInboundTraMaterial(material)) return;
+      const bags = qrImages.filter((q) => q.kind !== 'carton');
+      if (bags.length !== 1) return;
+      const code = String(material.materialCode || '').trim();
+      if (!code) return;
+      const factory = material.factory || this.selectedFactory;
+      const snap = await this.firestore.firestore.collection('inventory-materials')
+        .where('materialCode', '==', code).get();
+      const lot = String(material.batchNumber || '').trim().toUpperCase();
+      const po = String(material.poNumber || '').trim().toUpperCase();
+      let otherStock = false;
+      snap.forEach((doc) => {
+        if (otherStock) return;
+        const d = doc.data() as any;
+        if (String(d.factory || '') !== factory) return;
+        // Bỏ qua chính lô TRA này (đã nhận kho thì có dòng tồn riêng)
+        if (String(d.batchNumber || '').trim().toUpperCase() === lot && String(d.poNumber || '').trim().toUpperCase() === po) return;
+        const opening = d.openingStock != null ? Number(d.openingStock) || 0 : 0;
+        const stock = opening + (Number(d.quantity) || 0) - (Number(d.exported) || 0) - (Number(d.xt) || 0);
+        if (stock > 1e-6) otherStock = true;
+      });
+      if (!otherStock) bags[0].soleRoll = true;
+    } catch (e) {
+      console.warn('[Inbound] markInboundSoleRollLabels failed', e);
+    }
   }
 
   /**
@@ -3704,20 +4241,20 @@ export class InboundComponent implements OnInit, OnDestroy {
                       </div>`;
   }
 
-  async printQRCode(material: InboundMaterial): Promise<void> {
+  async printQRCode(material: InboundMaterial, onlyCarton = false): Promise<void> {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
 
     const QRCode = await import('qrcode') as any;
-    const payloads = this.buildInboundQrLabelPayloads(material);
+    const payloads = onlyCarton ? null : this.buildInboundQrLabelPayloads(material);
     const cartonPayloads = this.buildCartonLabelPayloads(material);
     if (!payloads && !cartonPayloads) {
-      alert(
+      appAlert(
         'Không tạo được tem. Kiểm tra:\n' +
         '• Tem bịch: lượng đơn vị > 0, số bịch ≥ 1, lượng nhập > (số bịch − 1) × lượng đơn vị\n' +
-        '• Tem thùng: nhập Số thùng ≥ 1 (cột sau Số bịch)'
+        '• Tem thùng: nhập Lượng trong thùng (cột sau Số bịch)'
       );
       return;
     }
@@ -3781,11 +4318,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       qrImages = [...qrImages, ...cartonEntries];
 
       if (qrImages.length === 0) {
-        alert('Không tạo được tem để in.');
+        appAlert('Không tạo được tem để in.');
         return;
       }
 
       await this.attachInboundLabelHomeLocs(qrImages);
+      await this.markInboundSoleRollLabels(material, qrImages);
 
       // Create print window with real QR codes
       const newWindow = window.open('', '_blank');
@@ -3906,6 +4444,19 @@ export class InboundComponent implements OnInit, OnDestroy {
                   margin: 0.15mm 0 0 0 !important;
                   line-height: 1.05 !important;
                   letter-spacing: 0.2px !important;
+                }
+
+                .info-row.info-row-bag-lot {
+                  display: flex !important;
+                  flex-wrap: wrap !important;
+                  column-gap: 1.5mm !important;
+                  row-gap: 0.3mm !important;
+                  white-space: normal !important;
+                  max-width: 100% !important;
+                }
+
+                .bag-lot-item {
+                  white-space: nowrap !important;
                 }
                 
                 .icon-badge {
@@ -4140,7 +4691,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('Error generating QR codes:', error);
-      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+      appAlert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
 
@@ -4189,11 +4740,11 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   openPrintAllBatchModal(): void {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
     if (this.distinctBatchNumbersForPrint.length === 0) {
-      alert('Không có lô hàng trong khung ngày hiện tại.');
+      appAlert('Không có lô hàng trong khung ngày hiện tại.');
       return;
     }
     this.printAllBatchSelection = '';
@@ -4207,7 +4758,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   async confirmPrintAllBatchAndRun(): Promise<void> {
     const batchNumber = (this.printAllBatchSelection || '').trim();
     if (!batchNumber) {
-      alert('Vui lòng chọn lô hàng trước khi in.');
+      appAlert('Vui lòng chọn lô hàng trước khi in.');
       return;
     }
     this.showPrintAllBatchModal = false;
@@ -4241,16 +4792,21 @@ export class InboundComponent implements OnInit, OnDestroy {
 
     const items = this.filteredMaterials;
     if (items.length === 0) {
-      alert('Không có dữ liệu để in');
+      appAlert('Không có dữ liệu để in');
       return;
     }
 
     try {
       await this.ensureDmvtCatalogLoaded();
     } catch {
-      alert('Không tải được danh mục DMVT. Kiểm tra kết nối và thử lại.');
+      appAlert('Không tải được danh mục DMVT. Kiểm tra kết nối và thử lại.');
       return;
     }
+
+    // Danh sách nghi ngờ (SXXK) — lỗi thì vẫn in TBHD bình thường
+    await this.sxxkSuspect.load();
+    const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+    const suspectCodes = new Set(items.map(m => this.sxxkSuspect.get(m.materialCode) ? String(m.materialCode || '').trim().toUpperCase() : '').filter(Boolean));
 
     const QRCode = await import('qrcode') as any;
     const batchNumber = this.selectedBatchView;
@@ -4262,8 +4818,16 @@ export class InboundComponent implements OnInit, OnDestroy {
     const batchQR = await QRCode.toDataURL(batchNumber, { width: 150, margin: 1 });
     const supplierQR = supplier ? await QRCode.toDataURL(supplier, { width: 150, margin: 1 }) : '';
 
+    const suspectNote = (code: string | undefined): string => {
+      const s = this.sxxkSuspect.get(code);
+      if (!s) return '';
+      const why = s.source === 'manual'
+        ? esc(s.reason)
+        : `Xuất bổ sung ${s.n} lần · gần nhất ${esc(this.formatIsoDate(s.last))}`;
+      return `<div class="k100">⚠ KIỂM 100%</div><div class="k100-why">${why}</div>`;
+    };
     const tableRows = items.map((m, i) => `
-      <tr>
+      <tr${this.sxxkSuspect.get(m.materialCode) ? ' class="row-k100"' : ''}>
         <td style="text-align:center">${i + 1}</td>
         <td><strong>${m.materialCode || ''}</strong></td>
         <td>${this.getMaterialName(m.materialCode || '')}</td>
@@ -4273,7 +4837,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         <td style="text-align:center">${m.gwLdv != null && Number.isFinite(Number(m.gwLdv)) ? Math.floor(Number(m.gwLdv)) : ''}</td>
         <td style="text-align:center">${Math.floor(Number(m.cartonCount ?? 0)) || ''}</td>
         <td style="text-align:right">${m.unitWeight != null ? this.formatNumber(m.unitWeight) : ''}</td>
-        <td>${m.remarks || ''}</td>
+        <td>${suspectNote(m.materialCode)}${m.remarks || ''}</td>
       </tr>`).join('');
 
     const printWindow = window.open('', '_blank');
@@ -4420,6 +4984,18 @@ export class InboundComponent implements OnInit, OnDestroy {
       border: 1px solid #000;
     }
 
+    .k100-banner {
+      margin: 10px 0 4px;
+      padding: 6px 10px;
+      border: 2px solid #000;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .k100-banner small { font-weight: normal; font-size: 10px; }
+    tr.row-k100 td { background: #ececec !important; }
+    .k100 { font-weight: bold; font-size: 11px; white-space: nowrap; }
+    .k100-why { font-size: 9px; color: #333; margin-bottom: 2px; }
+
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -4491,6 +5067,9 @@ export class InboundComponent implements OnInit, OnDestroy {
     </div>
   </div>
 
+  ${suspectCodes.size ? `<div class="k100-banner">⚠ Lô này có ${suspectCodes.size} mã cần KIỂM 100%: ${esc([...suspectCodes].join(', '))}
+    <br><small>Mã từng bị xuất bổ sung trong bảng kê xuất SXXK (từ 01/01/2026) hoặc được thêm tay — dòng tô xám, xem cột Lưu Ý.</small></div>` : ''}
+
   <table>
     <thead>
       <tr>
@@ -4519,14 +5098,14 @@ export class InboundComponent implements OnInit, OnDestroy {
 
   async executePrintAllQRCodesForBatch(batchNumber: string): Promise<void> {
     if (!this.canGenerateQR) {
-      alert('Bạn không có quyền tạo QR code');
+      appAlert('Bạn không có quyền tạo QR code');
       return;
     }
 
     const QRCode = await import('qrcode') as any;
     const bn = (batchNumber || '').trim();
     if (!bn) {
-      alert('Thiếu mã lô hàng.');
+      appAlert('Thiếu mã lô hàng.');
       return;
     }
 
@@ -4534,7 +5113,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       m => (m.batchNumber || '').trim() === bn
     );
     if (pool.length === 0) {
-      alert(`Không có dòng nào thuộc lô "${bn}" trong khung ngày hiện tại.`);
+      appAlert(`Không có dòng nào thuộc lô "${bn}" trong khung ngày hiện tại.`);
       return;
     }
 
@@ -4550,7 +5129,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     );
 
     if (printableMaterials.length === 0 && cartonMaterials.length === 0) {
-      alert(
+      appAlert(
         `Lô "${bn}" không có dòng nào đủ điều kiện:\n` +
           '• Tem bịch: lượng đơn vị, số bịch, lượng nhập theo quy tắc chia tem\n' +
           '• Tem thùng 57×32mm: nhập Số thùng ≥ 1 (cột sau Số bịch, QTY = 0)'
@@ -4665,9 +5244,17 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
 
       if (qrImages.length === 0) {
-        alert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
+        appAlert('Không tạo được tem để in (kiểm tra lại dữ liệu).');
       } else {
       await this.attachInboundLabelHomeLocs(qrImages);
+      // NVL TRA: chấm tròn trên tem nếu là cuộn duy nhất trong kho
+      for (const m of printableMaterials) {
+        if (!this.isInboundTraMaterial(m)) continue;
+        const own = qrImages.filter((q: any) => q.kind !== 'carton'
+          && String(q.materialCode || '') === String(m.materialCode || '')
+          && String(q.poNumber || '') === String(m.poNumber || ''));
+        await this.markInboundSoleRollLabels(m, own);
+      }
 
       // Create print window with all QR codes
       const newWindow = window.open('', '_blank');
@@ -4790,6 +5377,19 @@ export class InboundComponent implements OnInit, OnDestroy {
                   margin: 0.15mm 0 0 0 !important;
                   line-height: 1.05 !important;
                   letter-spacing: 0.2px !important;
+                }
+
+                .info-row.info-row-bag-lot {
+                  display: flex !important;
+                  flex-wrap: wrap !important;
+                  column-gap: 1.5mm !important;
+                  row-gap: 0.3mm !important;
+                  white-space: normal !important;
+                  max-width: 100% !important;
+                }
+
+                .bag-lot-item {
+                  white-space: nowrap !important;
                 }
                 
                 .icon-badge {
@@ -5023,13 +5623,13 @@ export class InboundComponent implements OnInit, OnDestroy {
         if (bagQrCount > 0) summaryParts.push(`${bagQrCount} tem bịch`);
         if (cartonLabelCount > 0) summaryParts.push(`${cartonLabelCount} tem thùng (QTY=0)`);
         if (summaryParts.length > 0) {
-          alert(`✅ Đã tạo: ${summaryParts.join(' + ')} trong một cửa sổ in.`);
+          appAlert(`✅ Đã tạo: ${summaryParts.join(' + ')} trong một cửa sổ in.`);
         }
       }
       }
     } catch (error) {
       console.error('Error generating all QR codes:', error);
-      alert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
+      appAlert('Có lỗi khi tạo QR codes. Vui lòng thử lại.');
     }
   }
   
@@ -5041,7 +5641,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   addMaterial(): void {
     if (!this.canAddMaterials) {
-      alert('❌ Bạn không có quyền thêm material mới');
+      appAlert('❌ Bạn không có quyền thêm material mới');
       return;
     }
     
@@ -5079,12 +5679,12 @@ export class InboundComponent implements OnInit, OnDestroy {
         this.materials.unshift(newMaterial);
         this.applyFilters();
         
-        alert('✅ Material mới đã được thêm thành công!');
+        appAlert('✅ Material mới đã được thêm thành công!');
       })
       .catch((error) => {
         console.error('❌ Error adding new material:', error);
         this.errorMessage = 'Lỗi thêm material mới: ' + error.message;
-        alert('❌ Lỗi thêm material mới: ' + error.message);
+        appAlert('❌ Lỗi thêm material mới: ' + error.message);
       });
   }
   
@@ -5107,7 +5707,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         'Batch': material.batchNumber || '',
         'Material': material.materialCode || '',
         'PO': material.poNumber || '',
-        'Qty': Number(material.quantity || 0).toFixed(2),
+        'Qty': this.inboundQtyText(material.quantity),
         'Unit': material.unit || '',
         'Location': material.location || '',
         'Type': material.type || '',
@@ -5196,12 +5796,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       
       let searchInfo = '';
       
-      alert(`✅ Đã xuất ${exportData.length} records ra file Excel\n📊 Bộ lọc: ${statusText}\n📝 Mô tả: ${description}${timeRangeInfo}${searchInfo}`);
+      appAlert(`✅ Đã xuất ${exportData.length} records ra file Excel\n📊 Bộ lọc: ${statusText}\n📝 Mô tả: ${description}${timeRangeInfo}${searchInfo}`);
       
     } catch (error) {
       console.error('❌ Export error:', error);
       this.errorMessage = 'Lỗi export: ' + error.message;
-      alert('Lỗi export: ' + error.message);
+      appAlert('Lỗi export: ' + error.message);
     }
   }
   
@@ -5247,7 +5847,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       const reportData = this.generateInboundReportData();
       
       if (reportData.length === 0) {
-        alert('Không có dữ liệu để tạo report!');
+        appAlert('Không có dữ liệu để tạo report!');
         return;
       }
       
@@ -5285,12 +5885,12 @@ export class InboundComponent implements OnInit, OnDestroy {
       XLSX.writeFile(workbook, fileName);
       
       console.log('✅ Report đã được tải xuống:', fileName);
-      alert(`Report đã được tải xuống: ${fileName}`);
+      appAlert(`Report đã được tải xuống: ${fileName}`);
       
     } catch (error: any) {
       console.error('❌ Lỗi tạo report:', error);
       this.errorMessage = 'Lỗi tạo report: ' + error.message;
-      alert('Lỗi tạo report: ' + error.message);
+      appAlert('Lỗi tạo report: ' + error.message);
     }
   }
 
@@ -5345,7 +5945,7 @@ export class InboundComponent implements OnInit, OnDestroy {
             Math.round((material.batchEndTime.getTime() - material.batchStartTime.getTime()) / (1000 * 60)) + ' phút' : 'N/A',
           this.getStatusText(material),
           material.supplier || 'N/A',
-          Number(material.quantity || 0).toFixed(2),
+          this.inboundQtyText(material.quantity),
           material.remarks || 'N/A'
         ];
         
@@ -5381,7 +5981,7 @@ export class InboundComponent implements OnInit, OnDestroy {
             duration > 0 ? duration : 'N/A',
             this.getStatusText(material),
             material.supplier || 'N/A',
-            Number(material.quantity || 0).toFixed(2),
+            this.inboundQtyText(material.quantity),
             material.remarks || 'N/A'
           ];
           
@@ -5531,7 +6131,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     if (standard <= 0 || this.ldvEquals(standard, ldv)) return;
     const reportedBy = await this.currentUserCode();
     await this.saveLdvMismatchPending(material, standard, reportedBy);
-    void this.loadLdvMismatchPending();
+
     if (material.ldvMismatchMailedFor != null && this.ldvEquals(material.ldvMismatchMailedFor, ldv)) return;
     await this.inboundLdvOtp.sendMismatchEmail({
       materialCode: code,
@@ -5552,7 +6152,10 @@ export class InboundComponent implements OnInit, OnDestroy {
     if (!material.id) return;
     const ref = this.firestore.collection('inbound-ldv-mismatches').doc(material.id).ref;
     const snap = await ref.get();
-    const prevCreated = snap.exists ? snap.data()?.['createdAt'] : null;
+    const prev = snap.exists ? snap.data() : null;
+    // Đã bị Xóa (không hợp lý) với đúng lượng đơn vị này → không đưa lại vào danh mục chờ duyệt
+    if (prev?.['status'] === 'rejected' && this.ldvEquals(Number(prev['rollsOrBags']) || 0, Number(material.rollsOrBags) || 0)) return;
+    const prevCreated = prev ? prev['createdAt'] : null;
     const data: Record<string, unknown> = {
       inboundId: material.id,
       materialCode: (material.materialCode || '').trim(),
@@ -5680,6 +6283,37 @@ export class InboundComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Xóa dòng lệch Standard không hợp lý: không đổi Standard, đánh dấu rejected (không tự hiện lại). */
+  async rejectLdvMismatch(row: LdvMismatchRow, typed?: string): Promise<void> {
+    if (this.ldvApproveBusyId) return;
+    const pass = String(typed ?? this.ldvApprovePass ?? '').trim();
+    this.ldvApprovePass = pass;
+    if (pass !== this.ldvApprovePassword) {
+      this.ldvApproveError = 'Sai mật khẩu duyệt.';
+      return;
+    }
+    if (!confirm(`Xóa dòng lệch Standard của ${row.materialCode} (LĐV ${row.rollsOrBags}, Standard ${row.standardPacking})?\nStandard giữ nguyên.`)) return;
+    this.ldvApproveError = '';
+    this.ldvApproveBusyId = row.id;
+    try {
+      const rejectedBy = await this.currentUserCode();
+      const now = new Date();
+      await this.firestore.collection('inbound-ldv-mismatches').doc(row.id).update({
+        status: 'rejected',
+        rejectedBy,
+        rejectedAt: now,
+        updatedAt: now
+      });
+      this.ldvMismatchRows = this.ldvMismatchRows.filter(r => r.id !== row.id);
+      this.ldvMismatchPendingCount = this.ldvMismatchRows.length;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.ldvApproveError = msg || 'Không xóa được.';
+    } finally {
+      this.ldvApproveBusyId = '';
+    }
+  }
+
   async requestRollsOrBagsEdit(m: InboundMaterial): Promise<void> {
     if (!this.canEditMaterials || !m.id || !this.isRollsOrBagsLocked(m)) return;
     this.ldvOtpMaterial = m;
@@ -5779,9 +6413,13 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.rollsOrBagsEditDraft = '';
     this.updateMaterial(m);
     if (next > 0) {
-      void this.notifyLdvMismatch(m).catch(err => {
-        console.error('Không gửi được mail lệch lượng đơn vị', err);
-      });
+      const lotStd = this.lotStdFromInbound(m);
+      if (m.linkedInventoryDocId && lotStd > 0) {
+        void this.firestore.collection('inventory-materials').doc(m.linkedInventoryDocId)
+          .update({ lotStandardPacking: lotStd, updatedAt: new Date() })
+          .catch(err => console.warn('Không cập nhật được Standard của lô', err));
+      }
+      void this.updateStandardPackingFromInbound(m);
     }
   }
 
@@ -6004,6 +6642,14 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   openBatchModal(): void {
+    // Mỗi lần bắt đầu nhận hàng: bắt quét lại thẻ nhân viên, đổi tên ô để trình duyệt không gợi ý mã cũ
+    if (!this.isBatchActive) {
+      this.isEmployeeCodeSaved = false;
+      this.employeeScanError = '';
+      this.employeeFieldName = 'emp-' + Date.now();
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 80);
+    }
     this.showBatchModal = true;
     this.isBatchScanningMode = true; // Enable the new input interface
     console.log('🚀 Mở modal batch processing với giao diện input trực tiếp');
@@ -6226,7 +6872,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         console.log(`  - isReceived: false (reverted)`);
         console.log(`  - target.checked: false (reverted)`);
         
-      alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+      appAlert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
         console.log(`📢 Đã hiển thị alert lỗi cho người dùng`);
         console.log(`❌ Kết thúc xử lý onReceivedChange với lỗi cho ${material.materialCode}`);
         console.log(`  - Thời gian xử lý: ${duration}ms`);
@@ -6403,7 +7049,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       console.log(`  - Tổng materials: ${batchMaterials.length}`);
       console.log(`  - Materials đã nhận: ${batchMaterials.length}`);
       
-      alert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}${timeRangeInfo}${filterInfo}\n\n💡 Lưu ý: Materials đã nhận sẽ được ẩn khỏi bảng khi bộ lọc là "Chưa"`);
+      appAlert(`🎉 Hoàn thành lô hàng ${this.currentBatchNumber}!\n\n📊 Thống kê:\n📦 Tổng materials: ${batchMaterials.length}\n✅ Đã nhận: ${batchMaterials.length}${timeRangeInfo}${filterInfo}\n\n💡 Lưu ý: Materials đã nhận sẽ được ẩn khỏi bảng khi bộ lọc là "Chưa"`);
       
       // Refresh the display để cập nhật theo bộ lọc hiện tại
       console.log(`🔄 Đang refresh display sau khi hoàn thành lô hàng...`);
@@ -6592,7 +7238,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       console.error('❌ Error starting camera scanner:', error);
-      alert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
+      appAlert('Không thể khởi động camera. Vui lòng kiểm tra quyền truy cập camera.');
       this.stopCameraMode();
     }
   }
@@ -6606,7 +7252,69 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
 
   // Lưu mã nhân viên
+  // ===== Bắt buộc QUÉT thẻ nhân viên khi bắt đầu nhận hàng =====
+  // Trình duyệt hay lưu mã đã nhập → nhân viên bấm chọn mã cũ thay vì quét. Chỉ nhận khi
+  // các ký tự được gõ liên tục rất nhanh như máy quét; dán / chọn gợi ý / gõ tay → từ chối.
+  /** Tên ô đổi mỗi lần mở để trình duyệt không gợi ý mã đã lưu */
+  employeeFieldName = 'emp-' + Date.now();
+  employeeScanError = '';
+  private empKeyTimes: number[] = [];
+  /** Giá trị ô bị thay bằng gợi ý / dán (không qua bàn phím) */
+  private empNonKeyInput = false;
+  private static readonly EMP_SCAN_MAX_GAP_MS = 60;
+
+  onEmployeeCodeKeydown(event: KeyboardEvent): void {
+    if (event.key && event.key.length === 1) {
+      this.empKeyTimes.push(performance.now());
+      this.employeeScanError = '';
+    }
+  }
+
+  onEmployeeCodePaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    this.employeeScanError = 'Không được dán mã — hãy quét thẻ nhân viên.';
+  }
+
+  /** Ký tự gần nhất có liên tục nhanh như máy quét không (≥ 7 ký tự, khoảng cách ≤ 60ms). */
+  private employeeLooksScanned(value: string): boolean {
+    if (this.empNonKeyInput) return false;
+    const t = this.empKeyTimes.slice(-Math.max(7, value.length));
+    if (t.length < 7) return false;
+    for (let i = 1; i < t.length; i++) {
+      if (t[i] - t[i - 1] > InboundComponent.EMP_SCAN_MAX_GAP_MS) return false;
+    }
+    return true;
+  }
+
+  private resetEmployeeScan(clearValue: boolean): void {
+    this.empKeyTimes = [];
+    this.empNonKeyInput = false;
+    if (clearValue) {
+      this.employeeCode = '';
+      const el = document.getElementById('employeeCodeInput') as HTMLInputElement | null;
+      if (el) el.value = '';
+    }
+  }
+
   saveEmployeeCode(): void {
+    const raw = String(this.employeeCode || '').trim().toUpperCase();
+    if (!raw) return;
+    if (!this.employeeLooksScanned(raw)) {
+      this.employeeScanError = '❌ Phải QUÉT thẻ nhân viên — không gõ tay, không chọn mã trình duyệt đã lưu.';
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 50);
+      return;
+    }
+    const m = /ASP\d{4}/.exec(raw);
+    if (!m) {
+      this.employeeScanError = `❌ Mã quét "${raw}" không đúng dạng ASP + 4 số.`;
+      this.resetEmployeeScan(true);
+      setTimeout(() => (document.getElementById('employeeCodeInput') as HTMLInputElement | null)?.focus(), 50);
+      return;
+    }
+    this.employeeCode = m[0];
+    this.employeeScanError = '';
+    this.resetEmployeeScan(false);
     if (this.employeeCode && this.employeeCode.trim()) {
       this.isEmployeeCodeSaved = true;
       console.log('✅ Mã nhân viên đã được lưu:', this.employeeCode);
@@ -6676,21 +7384,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         console.log('⚠️ No available batches found');
         this.availableBatches = [];
         
-        // Thử load tất cả documents để debug
-        console.log('🔍 Trying to load all documents for debugging...');
-        const allSnapshot = await this.firestore.collection('inbound-materials').get().toPromise();
-        if (allSnapshot && !allSnapshot.empty) {
-          console.log(`📊 Total documents in collection: ${allSnapshot.docs.length}`);
-          allSnapshot.docs.slice(0, 3).forEach((doc, index) => {
-            const data = doc.data() as any;
-            console.log(`📄 Sample doc ${index + 1}:`, {
-              factory: data.factory,
-              isReceived: data.isReceived,
-              batchNumber: data.batchNumber,
-              materialCode: data.materialCode
-            });
-          });
-        }
+        // (Đã bỏ đoạn debug đọc TOÀN BỘ inbound-materials khi không có lô — tốn hàng nghìn read mỗi lần)
       }
     } catch (error) {
       console.error('❌ Error loading available batches:', error);
@@ -6743,6 +7437,8 @@ export class InboundComponent implements OnInit, OnDestroy {
       this.scannedMaterialsList = [];
       this.inspectionCurrentLocation = '';
       this.inspectionLocationInput = '';
+      this.inspectionScanLog = [];
+      this.inspectionIdentity = null;
       
       // Mở modal scan kiểm hàng
       this.showInspectionScanModal = true;
@@ -6771,6 +7467,8 @@ export class InboundComponent implements OnInit, OnDestroy {
     this.scannedMaterialsList = [];
     this.inspectionCurrentLocation = '';
     this.inspectionLocationInput = '';
+    this.inspectionScanLog = [];
+    this.inspectionIdentity = null;
   }
 
   processInspectionLocationScan(): void {
@@ -6786,7 +7484,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     };
     const loc = isReturnBatch ? rawLoc : normalizeIqcLocation(rawLoc);
     if (!loc) {
-      alert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
+      appAlert('⚠️ Vui lòng nhập/scan vị trí (pallet)');
       return;
     }
     this.inspectionCurrentLocation = loc;
@@ -6802,12 +7500,343 @@ export class InboundComponent implements OnInit, OnDestroy {
   }
   
   // Xử lý scan QR code khi kiểm hàng
+  /** Bảng tra QR → dòng nhập của lô đang kiểm (dựng lại khi đổi lô / danh sách thay đổi / tra trượt). */
+  private inspQrIndex: { batch: string; src: InboundMaterial[]; len: number; map: Map<string, InboundMaterial> } | null = null;
+
+  private buildInspectionQrIndex(): void {
+    const batch = this.inspectionBatchNumber;
+    const map = new Map<string, InboundMaterial>();
+    for (const m of this.materials) {
+      if (m.batchNumber !== batch) continue;
+      const payloads = this.buildInboundQrLabelPayloads(m);
+      if (!payloads) continue;
+      for (const p of payloads) if (!map.has(p.qrData)) map.set(p.qrData, m);
+    }
+    this.inspQrIndex = { batch, src: this.materials, len: this.materials.length, map };
+  }
+
+  private findInspectionMaterialByQr(code: string): InboundMaterial | undefined {
+    const idx = this.inspQrIndex;
+    if (!idx || idx.batch !== this.inspectionBatchNumber || idx.src !== this.materials || idx.len !== this.materials.length) {
+      this.buildInspectionQrIndex();
+    }
+    const hit = this.inspQrIndex!.map.get(code);
+    // Kiểm lại đúng dòng đó (lượng / số bịch có thể vừa sửa) — rẻ vì chỉ 1 dòng
+    if (hit && this.buildInboundQrLabelPayloads(hit)?.some(p => p.qrData === code)) return hit;
+    // Trượt hoặc bảng cũ → dựng lại 1 lần rồi tra tiếp
+    this.buildInspectionQrIndex();
+    return this.inspQrIndex!.map.get(code);
+  }
+
+  /** Scan liên tục: gom việc lọc/vẽ lại bảng (không chạy lại toàn bộ sau từng tem). */
+  private applyFiltersTimer: any = null;
+  private scheduleApplyFilters(): void {
+    if (this.applyFiltersTimer) clearTimeout(this.applyFiltersTimer);
+    this.applyFiltersTimer = setTimeout(() => {
+      this.applyFiltersTimer = null;
+      this.applyFilters();
+    }, 250);
+  }
+
+  // ===== Bảng scan nhập kho (giống bảng scan xuất kho Outbound): báo màu + âm thanh, thẻ nhận diện, tiến độ lô, vừa scan =====
+  inspectionScanLog: Array<{ time: Date; code: string; po: string; bag: string; qty: number }> = [];
+  inspectionIdentity: {
+    code: string; name: string; po: string; bag: string; qty: number;
+    tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray'; title?: string }>;
+  } | null = null;
+  private inspectionScanVersion = 0;
+  private inspectionAudioCtx: AudioContext | null = null;
+
   async processInspectionScan(): Promise<void> {
+    const qr = this.inspectionQRInput.trim();
+    if (!qr) { await this.processInspectionScanCore(); return; }
+    const parts = qr.split('|');
+    const before = this.inspectionScanResult;
+    const isCartonTem = parts.length >= 4 && String(parts[2] || '').trim() === '0';
+    if (this.inspectionScanMode === 'carton') {
+      await this.processInspectionCartonScan(qr);
+    } else if (isCartonTem) {
+      this.inspectionQRInput = '';
+      this.focusInspectionQrInput();
+      this.inspectionScanResult = {
+        success: false,
+        message: '⚠️ Đây là tem THÙNG (lượng = 0) — đang scan theo BAG. Chuyển sang "Theo thùng" để nhập kho theo thùng.'
+      };
+    } else {
+      await this.processInspectionScanCore();
+    }
+    const res = this.inspectionScanResult;
+    if (!res || res === before) return;
+    this.inspectionScanVersion++;
+    if (res.success && res.material && this.inspectionScanMode === 'carton') {
+      const m = res.material;
+      const p4 = String(parts[3] || '').trim();
+      const di = p4.indexOf('-');
+      const carton = di >= 0 ? p4.slice(di + 1) : '';
+      this.inspectionScanLog = [
+        { time: new Date(), code: m.materialCode, po: m.poNumber, bag: `Thùng ${carton}`, qty: 0 },
+        ...this.inspectionScanLog
+      ].slice(0, 300);
+      this.setInspectionIdentity(m, `Thùng ${carton}`, Number(m.quantity) || 0, '');
+    } else if (res.success && res.material) {
+      const m = res.material;
+      const p4 = String(parts[3] || '').trim();
+      const p = this.rmBagHistory.parseQrPart4(p4);
+      const qtyDecimal = isRmQtyDecimalFactory(this.selectedFactory);
+      const qty = qtyDecimal ? parseRmScanQty(parts[2], RM_QTY_DECIMALS_4) : (parseFloat(String(parts[2] || '').trim()) || 0);
+      this.inspectionScanLog = [
+        { time: new Date(), code: m.materialCode, po: m.poNumber, bag: p4, qty },
+        ...this.inspectionScanLog
+      ].slice(0, 300);
+      this.setInspectionIdentity(m, p.bagFractionLabel || '', qty, p.splitTag || '');
+    } else if (res.material) {
+      this.setInspectionIdentity(res.material, '', Number(parts[2]) || 0, '');
+    }
+    this.playInspectionBeep(!!res.success);
+  }
+
+  /** Lượng hiển thị / xuất file: ASM1 tối đa 4 số lẻ, nhà máy khác 2 số lẻ (như cũ). */
+  inboundQtyText(n: unknown): string {
+    const v = Number(n) || 0;
+    return isRmQtyDecimalFactory(this.selectedFactory) ? fmtRmQty(v, RM_QTY_DECIMALS_4) : v.toFixed(2);
+  }
+
+  /** Scan nhập kho theo bag (tem bịch, cộng lượng) hoặc theo thùng (tem thùng QTY=0, đủ số thùng thì nhận cả dòng). */
+  inspectionScanMode: 'bag' | 'carton' = 'bag';
+
+  setInspectionScanMode(mode: 'bag' | 'carton'): void {
+    if (this.inspectionScanMode === mode) return;
+    this.inspectionScanMode = mode;
+    this.inspectionScanResult = {
+      success: true,
+      message: mode === 'carton'
+        ? '📦 Scan theo THÙNG — quét tem thùng (lượng = 0); đủ số thùng của dòng thì nhận cả dòng'
+        : '🏷 Scan theo BAG — quét tem từng bịch, cộng dồn lượng'
+    };
+    this.focusInspectionQrInput();
+  }
+
+  private focusInspectionQrInput(): void {
+    setTimeout(() => {
+      const input = document.getElementById('inspectionQRInput') as HTMLInputElement;
+      if (input) input.focus();
+    }, 100);
+  }
+
+  private async processInspectionCartonScan(code: string): Promise<void> {
+    this.inspectionQRInput = '';
+    this.focusInspectionQrInput();
+    const parts = code.split('|');
+    const p4 = String(parts[3] || '').trim();
+    if (parts.length < 4 || !p4) {
+      this.inspectionScanResult = { success: false, message: '⚠️ Tem thùng cần đủ 4 phần: Mã|PO|0|DDMMYYYY-i/N' };
+      return;
+    }
+    if (String(parts[2] || '').trim() !== '0') {
+      this.inspectionScanResult = {
+        success: false,
+        message: '⚠️ Đây là tem BAG — đang scan theo thùng. Chuyển sang "Theo bag" để nhập kho theo bịch.'
+      };
+      return;
+    }
+    const cartonCode = String(parts[0] || '').trim().toUpperCase();
+    const allow = await this.ensureCartonAllowSet().catch(() => null);
+    if (allow && !allow.has(cartonCode)) {
+      this.inspectionScanResult = {
+        success: false,
+        message: `❌ Mã ${cartonCode} chưa bật "Xuất thùng" trong Danh mục NVL — bật trước rồi mới nhập kho theo tem thùng.`
+      };
+      return;
+    }
+    const found = this.materials.find((m) =>
+      m.batchNumber === this.inspectionBatchNumber && !!this.buildCartonLabelPayloads(m)?.some((p) => p.qrData === code)
+    );
+    if (!found || !found.id) {
+      this.inspectionScanResult = {
+        success: false,
+        message: `❌ Không tìm thấy tem thùng trong lô ${this.inspectionBatchNumber}: ${code}`,
+        errorDetail: 'Mã / PO / IMD / số thùng không khớp dòng nào có số thùng trong lô.'
+      };
+      return;
+    }
+    if (found.isReceived && !found.preScanInventoryPending) {
+      this.inspectionScanResult = { success: false, message: '⚠️ Mã hàng này đã được nhận rồi', material: found };
+      return;
+    }
+    const materialId = found.id;
+    const key = this.inboundScannedBagKey(materialId, p4);
+    const prevKeys = [...(found.scannedCartonKeys || [])];
+    if (prevKeys.includes(key)) {
+      this.inspectionScanResult = { success: false, message: `⚠️ Tem thùng này đã quét rồi (${p4}).`, material: found };
+      return;
+    }
+    const nextKeys = [...prevKeys, key];
+    const total = Math.max(0, Math.floor(Number(found.cartonCount ?? 0)));
+    const isComplete = nextKeys.length >= total;
+    const prevScannedQty = found.scannedQuantity || 0;
+    const materialIndex = this.materials.findIndex((m) => m.id === materialId);
+    const apply = (keys: string[], qty: number, received: boolean | null) => {
+      for (const t of materialIndex !== -1 ? [found, this.materials[materialIndex]] : [found]) {
+        t.scannedCartonKeys = keys;
+        t.scannedQuantity = qty;
+        if (received !== null) t.isReceived = received;
+      }
+    };
+
+    if (isComplete) {
+      const finalizePreScan = !!(found.preScanInventoryPending && found.linkedInventoryDocId);
+      const wasReceived = !!found.isReceived;
+      const fullQty = Number(found.quantity) || 0;
+      const locationToUse = this.inboundReceiveLocation(found);
+      found.location = locationToUse;
+      if (materialIndex !== -1) this.materials[materialIndex].location = locationToUse;
+      apply(nextKeys, fullQty, true);
+      this.inspectionScanResult = {
+        success: true,
+        message: `✅ Đã nhận hàng theo thùng (${nextKeys.length}/${total} thùng · ${fullQty})`,
+        material: found
+      };
+      this.scheduleApplyFilters();
+      const update: any = { isReceived: true, scannedQuantity: fullQty, scannedCartonKeys: nextKeys, updatedAt: new Date() };
+      if (locationToUse) update.location = locationToUse;
+      this.firestore.collection('inbound-materials').doc(materialId).update(update).then(() => {
+        if (finalizePreScan) return this.finalizePreScanInventory(found);
+        this.addToInventory(found);
+      }).catch((error) => {
+        console.error('❌ Firebase update failed (carton):', error);
+        apply(prevKeys, prevScannedQty, finalizePreScan ? wasReceived : false);
+        appAlert(`❌ Lỗi cập nhật: ${error.message}`);
+        this.scheduleApplyFilters();
+      });
+    } else {
+      apply(nextKeys, prevScannedQty, null);
+      this.inspectionScanResult = {
+        success: true,
+        message: `✅ Đã scan thùng ${nextKeys.length}/${total}. Còn ${total - nextKeys.length} thùng`,
+        material: found
+      };
+      this.scheduleApplyFilters();
+      const update: any = { scannedCartonKeys: nextKeys, updatedAt: new Date() };
+      if (this.inspectionCurrentLocation) {
+        update.location = this.inspectionCurrentLocation;
+        found.location = this.inspectionCurrentLocation;
+        if (materialIndex !== -1) this.materials[materialIndex].location = this.inspectionCurrentLocation;
+      }
+      this.firestore.collection('inbound-materials').doc(materialId).update(update).catch((error) => {
+        console.error('❌ Firebase update failed (carton):', error);
+        apply(prevKeys, prevScannedQty, null);
+      });
+    }
+  }
+
+  private setInspectionIdentity(m: InboundMaterial, bag: string, qty: number, splitTag: string): void {
+    const c = String(m.materialCode || '').trim().toUpperCase();
+    const tags: Array<{ text: string; tone: 'red' | 'amber' | 'blue' | 'gray'; title?: string }> = [];
+    const k100 = this.sxxkSuspect.get(c);
+    if (k100) {
+      tags.push({ text: 'KIỂM 100%', tone: 'red', title: k100.source === 'manual' ? `Nhập tay: ${k100.reason}` : `${k100.n} lần xuất bổ sung (SXXK) — ${k100.reason}` });
+    }
+    if (!this.isGwExempt(c) && !this.gwBagOf(c)) tags.push({ text: 'Chưa có GW bag', tone: 'amber', title: 'Mã thuộc Kiểm 100% — cần cân và nhập GW bag' });
+    if (splitTag) tags.push({ text: `Tem lẻ ${splitTag}`, tone: 'blue' });
+    const need = Number(m.quantity) || 0;
+    const sc = Number(m.scannedQuantity) || 0;
+    if (sc > need + 0.0001) tags.push({ text: `Vượt ${this.inboundQtyText(sc - need)}`, tone: 'red' });
+    else if (need > 0 && sc >= need - 0.0001) tags.push({ text: 'Đủ lượng', tone: 'blue' });
+    if (m.iqcStatus) tags.push({ text: `IQC: ${m.iqcStatus}`, tone: 'gray' });
+    this.inspectionIdentity = { code: c, name: this.getMaterialName(c), po: m.poNumber || '', bag, qty, tags };
+  }
+
+  /** Đúng: 1 tiếng bíp cao. Sai: 2 tiếng bíp trầm. */
+  private playInspectionBeep(ok: boolean): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      this.inspectionAudioCtx ||= new Ctx();
+      const ctx = this.inspectionAudioCtx!;
+      const tone = (start: number, freq: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = 'square';
+        gain.gain.value = 0.08;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur);
+      };
+      if (ok) tone(0, 1400, 0.12);
+      else { tone(0, 420, 0.18); tone(0.26, 420, 0.18); }
+    } catch { /* trình duyệt chặn âm thanh — bỏ qua */ }
+  }
+
+  private inspectionRowsMemo: { src: unknown; batch: string; ver: number; rows: InspectionBatchRow[] } =
+    { src: null, batch: '', ver: -1, rows: [] };
+
+  /** Tiến độ từng mã + PO của lô đang nhập: cần / đã scan / còn, bag chẵn + lẻ theo lượng đơn vị. */
+  get inspectionBatchRows(): InspectionBatchRow[] {
+    const memo = this.inspectionRowsMemo;
+    if (memo.src === this.materials && memo.batch === this.inspectionBatchNumber && memo.ver === this.inspectionScanVersion) return memo.rows;
+    const r2 = (n: number) => Math.round(n * 10000) / 10000;
+    const rows: InspectionBatchRow[] = this.materials
+      .filter((m) => m.batchNumber === this.inspectionBatchNumber)
+      .map((m) => {
+        const need = r2(Number(m.quantity) || 0);
+        const std = Number(m.rollsOrBags) || 0;
+        const scanned = r2(Number(m.scannedQuantity) || 0);
+        const bag = this.getInboundBagScanSummary(m);
+        const needFull = std > 0 ? Math.floor(r2(need / std)) : 0;
+        return {
+          id: m.id || '', code: m.materialCode, po: m.poNumber, need, std, needFull,
+          needOdd: std > 0 ? r2(need - needFull * std) : 0,
+          scanned, remain: r2(need - scanned),
+          doneBags: bag.scannedBags, totalBags: bag.totalBags, received: !!m.isReceived,
+          doneCartons: (m.scannedCartonKeys || []).length,
+          totalCartons: Math.max(0, Math.floor(Number(m.cartonCount ?? 0)))
+        };
+      })
+      .sort((a, b) => Number(b.scanned > 0 && !b.received) - Number(a.scanned > 0 && !a.received) || a.code.localeCompare(b.code));
+    this.inspectionRowsMemo = { src: this.materials, batch: this.inspectionBatchNumber, ver: this.inspectionScanVersion, rows };
+    return rows;
+  }
+
+  inspectionNeedBagText(r: InspectionBatchRow): string {
+    if (!(r.std > 0)) return '—';
+    const parts: string[] = [];
+    if (r.needFull) parts.push(`${r.needFull}×${r.std}`);
+    if (r.needOdd > 0) parts.push(`lẻ ${r.needOdd}`);
+    return parts.join(' + ') || '0';
+  }
+
+  get inspectionDoneCount(): number {
+    return this.inspectionBatchRows.filter((r) => r.received).length;
+  }
+
+  /** % lô theo bag (nếu có số bịch), không thì theo lượng. */
+  get inspectionBatchStats(): { done: number; total: number; percent: number } {
+    let done = 0;
+    let total = 0;
+    let qDone = 0;
+    let qNeed = 0;
+    let allBags = true;
+    for (const r of this.inspectionBatchRows) {
+      qNeed += r.need;
+      qDone += Math.min(r.need, Math.max(0, r.received ? r.need : r.scanned));
+      if (r.totalBags > 0) { total += r.totalBags; done += Math.min(r.totalBags, r.received ? r.totalBags : r.doneBags); }
+      else allBags = false;
+    }
+    const percent = allBags && total > 0 ? (done / total) * 100 : (qNeed > 0 ? (qDone / qNeed) * 100 : 0);
+    return { done, total, percent: Math.min(100, Math.round(percent * 10) / 10) };
+  }
+
+  trackInspectionRow(_: number, r: InspectionBatchRow): string {
+    return r.id || `${r.code}|${r.po}`;
+  }
+
+  private async processInspectionScanCore(): Promise<void> {
     const scannedCode = this.inspectionQRInput.trim();
     console.log('📦 Processing Inspection scan:', scannedCode);
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -6821,16 +7850,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log(`📊 Found ${batchMaterials.length} materials in batch ${this.inspectionBatchNumber}`);
 
     // Tìm material bằng cách so sánh QR data được tạo từ material với QR được scan
-    let foundMaterial: InboundMaterial | undefined = undefined;
-    
-    for (const material of batchMaterials) {
-      const payloads = this.buildInboundQrLabelPayloads(material);
-      if (!payloads) continue;
-      if (payloads.some(p => p.qrData === scannedCode)) {
-        foundMaterial = material;
-        break;
-      }
-    }
+    const foundMaterial: InboundMaterial | undefined = this.findInspectionMaterialByQr(scannedCode); // tra bảng băm của lô
 
     if (foundMaterial) {
       console.log('✅ Found matching material:', foundMaterial);
@@ -6886,12 +7906,14 @@ export class InboundComponent implements OnInit, OnDestroy {
           }
           const nextBagKeys = [...prevBagKeys, bagKey];
 
-          const scannedQty = parseFloat(parts[2]?.trim() || '0') || 0;
+          // ASM1: tem số lẻ tối đa 2 số ("12.5" / "12,55"), cộng dồn làm tròn để không lệch 20.2999…
+          const qtyDecimal = isRmQtyDecimalFactory(this.selectedFactory);
+          const scannedQty = qtyDecimal ? parseRmScanQty(parts[2], RM_QTY_DECIMALS_4) : (parseFloat(parts[2]?.trim() || '0') || 0);
           console.log(`📊 Parsed scanned quantity: ${scannedQty} from QR code`);
 
           const currentScannedQty = foundMaterial.scannedQuantity || 0;
-          const newScannedQty = currentScannedQty + scannedQty;
-          const totalQuantity = foundMaterial.quantity;
+          const newScannedQty = qtyDecimal ? roundRmQty(currentScannedQty + scannedQty, RM_QTY_DECIMALS_4) : currentScannedQty + scannedQty;
+          const totalQuantity = qtyDecimal ? roundRmQty(Number(foundMaterial.quantity) || 0, RM_QTY_DECIMALS_4) : foundMaterial.quantity;
 
           console.log(`📊 Current scanned: ${currentScannedQty}, Adding: ${scannedQty}, New total: ${newScannedQty}, Required: ${totalQuantity}`);
 
@@ -6953,7 +7975,7 @@ export class InboundComponent implements OnInit, OnDestroy {
             };
             
             // Refresh filtered materials NGAY
-            this.applyFilters();
+            this.scheduleApplyFilters();
             
             // 🔥 Update Firebase trong background (không block UI)
             const firebaseUpdate: any = {
@@ -6987,20 +8009,20 @@ export class InboundComponent implements OnInit, OnDestroy {
               }
               foundMaterial.scannedQuantity = currentScannedQty;
               foundMaterial.scannedBagKeys = prevBagKeys;
-              alert(`❌ Lỗi cập nhật: ${error.message}`);
-              this.applyFilters();
+              appAlert(`❌ Lỗi cập nhật: ${error.message}`);
+              this.scheduleApplyFilters();
             });
             
           } else {
             // Chưa đủ - chỉ cập nhật số lượng đã scan
             this.inspectionScanResult = {
               success: true,
-              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${remainingQty.toFixed(2)}${this.formatInboundBagScanMessageSuffix(foundMaterial)}`,
+              message: `✅ Đã scan: ${newScannedQty}/${totalQuantity}. Cần scan thêm ${this.inboundQtyText(remainingQty)}${this.formatInboundBagScanMessageSuffix(foundMaterial)}`,
               material: foundMaterial
             };
             
             // Refresh UI ngay
-            this.applyFilters();
+            this.scheduleApplyFilters();
             
             // Update Firebase trong background (cập nhật location nếu đã scan vị trí)
             const partialUpdate: any = {
@@ -7143,6 +8165,12 @@ export class InboundComponent implements OnInit, OnDestroy {
   onEmployeeCodeInput(event: any): void {
     const input = event.target;
     const value = input.value;
+    // Chọn gợi ý tự điền / dán / kéo thả: không phải gõ phím
+    const it = String(event?.inputType || '');
+    if (!it || it === 'insertReplacementText' || it === 'insertFromPaste' || it === 'insertFromDrop' || it === 'insertFromAutocomplete') {
+      if (value) this.empNonKeyInput = true;
+    }
+    if (!value) this.resetEmployeeScan(false);
     if (value) {
       // Tự động viết hoa và cập nhật ngModel
       this.employeeCode = value.toUpperCase();
@@ -7184,15 +8212,15 @@ export class InboundComponent implements OnInit, OnDestroy {
   
   async deleteByBatch(): Promise<void> {
     if (!this.batchToDelete || this.batchToDelete.trim() === '') {
-      alert('❌ Vui lòng nhập mã lô hàng');
+      appAlert('❌ Vui lòng nhập mã lô hàng');
       return;
     }
     
-    if (!this.canDeleteMaterials) {
-      alert('❌ Bạn không có quyền xóa materials');
+    if (!this.canDeleteMaterials || !this.canBulkDelete) {
+      appAlert('❌ Xóa theo lô chỉ dành cho Admin / Quản lý.');
       return;
     }
-    
+
     const batchNumber = this.batchToDelete.trim();
     
     // Find materials with the specified batch number
@@ -7201,7 +8229,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     );
     
     if (materialsToDelete.length === 0) {
-      alert(`❌ Không tìm thấy materials nào với lô hàng "${batchNumber}"`);
+      appAlert(`❌ Không tìm thấy materials nào với lô hàng "${batchNumber}"`);
       return;
     }
     
@@ -7259,11 +8287,11 @@ export class InboundComponent implements OnInit, OnDestroy {
       
       // Show success message
       let successMessage = `✅ Đã xóa thành công lô hàng "${batchNumber}"\n`;
-      successMessage += `📊 Xóa ${materialIds.length} materials từ tab Inbound ASM1`;
+      successMessage += `📊 Xóa ${materialIds.length} materials từ tab Inbound ${this.selectedFactory}`;
       if (materialsInInventory.length > 0) {
         successMessage += `\n\n📦 ${materialsInInventory.length} materials đã trong Inventory vẫn tồn tại`;
       }
-      alert(successMessage);
+      appAlert(successMessage);
       
       // Close modal and reload data
       this.closeDeleteByBatchModal();
@@ -7271,7 +8299,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       
     } catch (error) {
       console.error(`❌ Error deleting batch ${batchNumber}:`, error);
-      alert(`❌ Lỗi xóa lô hàng: ${error.message}`);
+      appAlert(`❌ Lỗi xóa lô hàng: ${error.message}`);
     } finally {
       this.isLoading = false;
     }
@@ -7354,7 +8382,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('👤 Verifying QA employee - raw input:', scannedData);
 
     if (!scannedData) {
-      alert('⚠️ Vui lòng nhập mã nhân viên');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên');
       return;
     }
 
@@ -7387,7 +8415,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     } else {
       // Employee is not authorized
       console.log('❌ Employee not authorized for IQC:', employeeId);
-      alert(`❌ Nhân viên không có quyền thực hiện IQC!\n\nMã nhân viên: ${employeeId}\n\nChỉ các mã sau được phép:\n- ASP0106\n- ASP1752`);
+      appAlert(`❌ Nhân viên không có quyền thực hiện IQC!\n\nMã nhân viên: ${employeeId}\n\nChỉ các mã sau được phép:\n- ASP0106\n- ASP1752`);
       this.iqcScanInput = '';
     }
   }
@@ -7397,7 +8425,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('🔬 Processing IQC scan:', scannedCode);
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -7446,14 +8474,14 @@ export class InboundComponent implements OnInit, OnDestroy {
         poNumber: m.poNumber,
         internalBatch: m.internalBatch 
       })));
-      alert(`❌ Không tìm thấy material với mã: ${scannedCode}`);
+      appAlert(`❌ Không tìm thấy material với mã: ${scannedCode}`);
       this.iqcScanInput = '';
     }
   }
 
   async updateIQCStatus(status: string): Promise<void> {
     if (!this.scannedMaterial) {
-      alert('⚠️ Chưa scan material');
+      appAlert('⚠️ Chưa scan material');
       return;
     }
 
@@ -7462,7 +8490,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     try {
       const materialId = this.scannedMaterial.id;
       if (!materialId) {
-        alert('❌ Material không có ID');
+        appAlert('❌ Material không có ID');
         return;
       }
 
@@ -7498,7 +8526,7 @@ export class InboundComponent implements OnInit, OnDestroy {
       }
 
       console.log(`✅ IQC status updated to: ${status}`);
-      alert(`✅ Đã cập nhật trạng thái IQC: ${status}${nextLoc ? ` · vị trí ${nextLoc}` : ''}`);
+      appAlert(`✅ Đã cập nhật trạng thái IQC: ${status}${nextLoc ? ` · vị trí ${nextLoc}` : ''}`);
 
       // Reset for next scan
       this.scannedMaterial = null;
@@ -7517,7 +8545,7 @@ export class InboundComponent implements OnInit, OnDestroy {
 
     } catch (error) {
       console.error('❌ Error updating IQC status:', error);
-      alert(`❌ Lỗi cập nhật trạng thái: ${error.message}`);
+      appAlert(`❌ Lỗi cập nhật trạng thái: ${error.message}`);
     }
   }
 
@@ -7591,7 +8619,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     console.log('👤 Verifying Return Goods employee - raw input:', scannedData);
 
     if (!scannedData) {
-      alert('⚠️ Vui lòng nhập mã nhân viên');
+      appAlert('⚠️ Vui lòng nhập mã nhân viên');
       return;
     }
 
@@ -7616,7 +8644,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         }
       }, 100);
     } else {
-      alert('⚠️ Mã nhân viên phải có ít nhất 7 ký tự');
+      appAlert('⚠️ Mã nhân viên phải có ít nhất 7 ký tự');
       this.returnGoodsEmployeeInput = '';
     }
   }
@@ -7631,7 +8659,7 @@ export class InboundComponent implements OnInit, OnDestroy {
     const scannedCode = this.returnGoodsQRInput.trim();
 
     if (!scannedCode) {
-      alert('⚠️ Vui lòng nhập mã QR');
+      appAlert('⚠️ Vui lòng nhập mã QR');
       return;
     }
 
@@ -7650,7 +8678,9 @@ export class InboundComponent implements OnInit, OnDestroy {
 
     const materialCode = parts[0].trim();
     const poNumber = parts[1].trim();
-    const quantity = parseFloat(parts[2].trim()) || 0;
+    const quantity = isRmQtyDecimalFactory(this.selectedFactory)
+      ? parseRmScanQty(parts[2], RM_QTY_DECIMALS_4)
+      : (parseFloat(parts[2].trim()) || 0);
 
     // Tìm materials có batchNumber bắt đầu bằng "TRA"
     const traMaterials = this.materials.filter(m => 
@@ -7742,7 +8772,7 @@ export class InboundComponent implements OnInit, OnDestroy {
   /** Nhận toàn bộ dòng hàng trả (TRA) chưa nhận — chỉ sau khi quét mã nhân viên; không bắt buộc quét QR từng dòng. */
   async receiveReturnGoodsWithoutQrScan(): Promise<void> {
     if (!this.returnGoodsEmployeeVerified) {
-      alert('⚠️ Vui lòng xác thực nhân viên trước.');
+      appAlert('⚠️ Vui lòng xác thực nhân viên trước.');
       return;
     }
     const traPending = this.materials.filter(
@@ -7752,7 +8782,7 @@ export class InboundComponent implements OnInit, OnDestroy {
         !m.isReceived
     );
     if (traPending.length === 0) {
-      alert('Không có dòng hàng trả (TRA) nào chờ nhận.');
+      appAlert('Không có dòng hàng trả (TRA) nào chờ nhận.');
       return;
     }
     if (!confirm(`Nhận ${traPending.length} dòng hàng trả (không quét QR)?`)) {

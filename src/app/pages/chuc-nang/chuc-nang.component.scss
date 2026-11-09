@@ -1,0 +1,51 @@
+/* Tab Chức năng — kiểu Excel: kẻ ô xám, tiêu đề xám nhạt, ít màu */
+:host { display: block; }
+
+.cn { display: flex; flex-direction: column; gap: 8px; min-height: 100vh; padding: 8px 12px; box-sizing: border-box;
+  background: #fff; color: #111; font-size: 13px; }
+
+.cn-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid #d0d0d0; }
+.cn-bar__nav { display: flex; gap: 6px; padding-right: 10px; border-right: 1px solid #d0d0d0; }
+.cn-bar__title { font-size: 16px; font-weight: 700; span { font-weight: 600; color: #64748b; } }
+
+.cn-btn { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid #b7b7b7; border-radius: 4px; background: #fff; color: #111; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  .material-icons { font-size: 18px; }
+  &:hover { background: #f2f2f2; } }
+
+.cn-seg { margin-left: auto; display: inline-flex; border: 1px solid #b7b7b7; border-radius: 4px; overflow: hidden;
+  button { height: 34px; padding: 0 12px; border: 0; background: #fff; font-size: 13px; font-weight: 600; color: #111; cursor: pointer;
+    & + button { border-left: 1px solid #d0d0d0; }
+    &.is-on { background: #e3e3e3; font-weight: 700; }
+    &:hover:not(.is-on) { background: #f2f2f2; } } }
+
+.cn-flows { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px solid #d0d0d0; background: #fafafa; }
+.cn-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; b { margin-right: 4px; } }
+.cn-step { padding: 2px 6px; border: 1px solid #d0d0d0; background: #fff; }
+.cn-arrow { font-size: 16px; color: #64748b; }
+
+.cn-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cn-search { height: 36px; box-sizing: border-box; flex: 1; min-width: 240px; max-width: 420px; padding: 0 8px;
+  border: 1px solid #b7b7b7; border-radius: 4px; font-size: 13px; }
+.cn-sel { height: 36px; padding: 0 8px; border: 1px solid #b7b7b7; border-radius: 4px; background: #fff; font-size: 13px; }
+.cn-note { color: #64748b; font-size: 12px; }
+
+.cn-wrap { overflow: auto; border: 1px solid #b7b7b7; }
+.cn-table { width: 100%; border-collapse: collapse;
+  th, td { border: 1px solid #d0d0d0; padding: 4px 6px; text-align: left; vertical-align: top; line-height: 1.4; }
+  th { position: sticky; top: 0; z-index: 1; background: #f2f2f2; border-color: #b7b7b7; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  tbody tr:hover > td { background: #f7f9fc; }
+  ul { margin: 0; padding-left: 16px; }
+  li { margin: 1px 0; }
+  .c { text-align: center; }
+  .nowrap { white-space: nowrap; }
+  .b { font-weight: 700; }
+  .muted { color: #64748b; }
+  .small { font-size: 12px; } }
+
+.cn-link { border: 0; background: transparent; padding: 0; font-size: 13px; font-weight: 700; color: #1d4ed8; cursor: pointer;
+  &:hover { text-decoration: underline; } }
+.cn-tag { display: inline-block; margin: 2px 4px 0 0; padding: 0 5px; border: 1px solid #d0d0d0; font-size: 11px; color: #475569; }
+.cn-more { margin-left: 4px; border: 0; background: transparent; padding: 0; color: #1d4ed8; font-size: 12px; cursor: pointer;
+  &:hover { text-decoration: underline; } }

@@ -40,7 +40,11 @@
     </button>
     <button type="button" class="pid-tile" (click)="openDaKiemLabelModal()" [disabled]="isPrintingDaKiemLabels">
       <span class="pid-tile__icon"><i class="material-icons">task_alt</i></span>
-      <span class="pid-tile__name">{{ isPrintingDaKiemLabels ? 'Đang in' : 'Đã Kiểm' }}</span>
+      <span class="pid-tile__name">{{ isPrintingDaKiemLabels && daKiemWord === 'Đã Kiểm' ? 'Đang in' : 'Đã Kiểm' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openDaKiemLabelModal('WEEK')" [disabled]="isPrintingDaKiemLabels">
+      <span class="pid-tile__icon"><i class="material-icons">date_range</i></span>
+      <span class="pid-tile__name">{{ isPrintingDaKiemLabels && daKiemWord === 'WEEK' ? 'Đang in' : 'Week' }}</span>
     </button>
     <button type="button" class="pid-tile" (click)="openReturnLabelModal()" [disabled]="isPrintingReturnLabels">
       <span class="pid-tile__icon"><i class="material-icons">undo</i></span>
@@ -57,6 +61,10 @@
     <button type="button" class="pid-tile" (click)="openSafetyLabelModal()" [disabled]="isPrintingSafetyLabels">
       <span class="pid-tile__icon"><i class="material-icons">health_and_safety</i></span>
       <span class="pid-tile__name">{{ isPrintingSafetyLabels ? 'Đang in' : 'Tem an toàn' }}</span>
+    </button>
+    <button type="button" class="pid-tile" (click)="openZoneSignModal()" [disabled]="isPrintingZoneSigns">
+      <span class="pid-tile__icon"><i class="material-icons">flag</i></span>
+      <span class="pid-tile__name">{{ isPrintingZoneSigns ? 'Đang in' : 'Biển khu vực' }}</span>
     </button>
     <button type="button" class="pid-tile" (click)="openFormSignModal()" [disabled]="isPrintingFormSigns">
       <span class="pid-tile__icon"><i class="material-icons">description</i></span>
@@ -150,13 +158,13 @@
   <div class="modal-overlay" *ngIf="showDaKiemLabelModal" (click)="closeDaKiemLabelModal()">
     <div class="modal-content pass-label-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
-        <h3>In tem Đã Kiểm</h3>
+        <h3>In tem {{ daKiemWord }}</h3>
         <button class="btn-close" (click)="closeDaKiemLabelModal()">
           <i class="material-icons">close</i>
         </button>
       </div>
       <div class="modal-body">
-        <p class="pass-label-hint">Tem <strong>57mm × 32mm</strong>, chữ <strong>Đã Kiểm</strong> căn giữa (cùng kích cỡ tem PASS).</p>
+        <p class="pass-label-hint">Tem <strong>57mm × 32mm</strong>, chữ <strong>{{ daKiemWord }}</strong> căn giữa, dòng <strong>ngày in</strong> nhỏ ở dưới.</p>
         <div class="pass-label-input-wrap">
           <label class="pass-label-qty-label" for="daKiemLabelQuantity">Số lượng tem cần in</label>
           <input id="daKiemLabelQuantity"
@@ -168,7 +176,7 @@
                  placeholder="Ví dụ: 10">
         </div>
         <p class="pass-label-preview text-muted" *ngIf="canPrintDaKiemLabels">
-          Sẽ in <strong>{{ daKiemLabelQuantity | number }}</strong> tem Đã Kiểm
+          Sẽ in <strong>{{ daKiemLabelQuantity | number }}</strong> tem {{ daKiemWord }}
         </p>
         <p class="pass-label-error" *ngIf="daKiemLabelError">{{ daKiemLabelError }}</p>
       </div>
@@ -176,7 +184,7 @@
         <button class="btn-cancel" (click)="closeDaKiemLabelModal()">Hủy</button>
         <button class="btn-print-confirm" (click)="printDaKiemLabels()" [disabled]="isPrintingDaKiemLabels || !canPrintDaKiemLabels">
           <i class="material-icons">print</i>
-          In tem Đã Kiểm
+          In tem {{ daKiemWord }}
         </button>
       </div>
     </div>
@@ -255,6 +263,41 @@
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" (click)="closeSafetyLabelModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Biển khu vực A4 -->
+  <div class="modal-overlay" *ngIf="showZoneSignModal" (click)="closeZoneSignModal()">
+    <div class="modal-content form-sign-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Biển khu vực</h3>
+        <button class="btn-close" (click)="closeZoneSignModal()">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="pass-label-hint">Khổ <strong>A4 ngang</strong>, nền vàng, dải đen “KHU VỰC”, có dòng tiếng Anh. Bấm biển cần in.</p>
+        <div class="form-sign-list">
+          <button type="button"
+                  class="form-sign-pick"
+                  *ngFor="let item of zoneSigns"
+                  (click)="printZoneSign(item.id)"
+                  [disabled]="isPrintingZoneSigns">
+            <span class="zone-sign-pick__badge">KHU VỰC</span>
+            <span class="form-sign-pick__text">
+              <strong>{{ item.vi }}</strong>
+              <small>{{ item.en }}</small>
+            </span>
+            <i class="material-icons">print</i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeZoneSignModal()">Đóng</button>
+        <button class="btn-print-confirm" (click)="printZoneSign('all')" [disabled]="isPrintingZoneSigns">
+          <i class="material-icons">print</i> In cả 6 biển
+        </button>
       </div>
     </div>
   </div>

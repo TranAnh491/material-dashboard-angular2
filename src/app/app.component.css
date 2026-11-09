@@ -18,7 +18,7 @@
   width: 90%;
   padding: 32px 28px;
   border-radius: 12px;
-  background: #ffffff;
+  background: #FFFFFF;
   text-align: center;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
 }
@@ -66,7 +66,7 @@
   width: 100%;
   margin-top: 6px;
   padding: 10px 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 14px;
   box-sizing: border-box;
@@ -77,3 +77,20 @@
   font-size: 13px;
   margin-top: -4px;
 }
+
+/* Ghi chú chức năng mới trong popup tải lại */
+.app-update-card { max-width: 460px; }
+.app-update-notes {
+  width: 100%;
+  max-height: 45vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid #6B6B66;
+  border-radius: 8px;
+  background: #f7f7f5;
+  text-align: left;
+  font-size: 13px;
+  color: #252823;
+}
+.app-update-notes ul { margin: 6px 0 0; padding-left: 18px; }
+.app-update-notes li { margin: 3px 0; line-height: 1.4; }

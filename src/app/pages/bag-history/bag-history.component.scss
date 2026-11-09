@@ -4,7 +4,7 @@
   display: block;
   width: 100%;
   max-width: 100%;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .bag-history-page {
@@ -13,7 +13,7 @@
   box-sizing: border-box;
   padding: 1rem 1.25rem 2rem;
   margin: 0;
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
   font-size: 14px;
   line-height: 1.45;
@@ -42,7 +42,7 @@
   padding: 0;
   border: 1px solid #0a0a0a;
   border-radius: 50%;
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
   cursor: pointer;
   flex-shrink: 0;
@@ -77,7 +77,7 @@
   overflow: auto;
   padding: 1.25rem 1.35rem;
   border: 1px solid #0a0a0a;
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
 }
@@ -128,7 +128,7 @@
     font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
     font-size: 0.8125em;
     padding: 0.1em 0.35em;
-    border: 1px solid #d4d4d4;
+    border: 1px solid #6B6B66;
     background: #fafafa;
     color: #0a0a0a;
   }
@@ -174,7 +174,7 @@
   min-height: 36px;
   padding: 0 1rem;
   border: 1px solid #0a0a0a;
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
   font-size: 13px;
   font-weight: 600;
@@ -261,7 +261,7 @@ $control-h: 40px;
   margin-bottom: 1rem;
   padding: 1rem 1rem 1.125rem;
   border: 1px solid #0a0a0a;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .toolbar {
@@ -292,7 +292,7 @@ $control-h: 40px;
     box-sizing: border-box;
     border: 1px solid #0a0a0a;
     border-radius: 0;
-    background: #fff;
+    background: #FFFFFF;
     color: #0a0a0a;
     font-size: 13px;
     font-weight: 400;
@@ -345,7 +345,7 @@ $control-h: 40px;
   }
 
   .btn-clear {
-    background: #fff;
+    background: #FFFFFF;
     color: #0a0a0a;
   }
 }
@@ -372,7 +372,7 @@ $control-h: 40px;
     font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
     font-size: 0.85em;
     padding: 0.1em 0.3em;
-    border: 1px solid #d4d4d4;
+    border: 1px solid #6B6B66;
     background: #fafafa;
   }
 }
@@ -388,7 +388,7 @@ $control-h: 40px;
   box-sizing: border-box;
   overflow-x: auto;
   border: 1px solid #0a0a0a;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .data-table {
@@ -420,8 +420,8 @@ $control-h: 40px;
   tbody td {
     padding: 0.6rem 0.75rem;
     text-align: left;
-    border-right: 1px solid #d4d4d4;
-    border-bottom: 1px solid #d4d4d4;
+    border-right: 1px solid #8F8F89;
+    border-bottom: 1px solid #8F8F89;
     color: #0a0a0a;
     vertical-align: middle;
     word-wrap: break-word;
@@ -490,7 +490,7 @@ $control-h: 40px;
   text-align: center;
   font-size: 13px;
   color: #525252;
-  border-top: 1px solid #d4d4d4;
+  border-top: 1px solid #8F8F89;
 }
 
 /* Popup More — loại trừ mã */
@@ -518,7 +518,7 @@ $control-h: 40px;
   overflow: auto;
   padding: 1.25rem 1.35rem;
   border: 1px solid #0a0a0a;
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
 }
@@ -643,7 +643,7 @@ $control-h: 40px;
 }
 
 .btn-cb-cancel {
-  background: #fff;
+  background: #FFFFFF;
   color: #0a0a0a;
 }
 
@@ -657,3 +657,95 @@ $control-h: 40px;
   border-color: #737373;
   cursor: not-allowed;
 }
+
+/* ===== Giao diện Notepad ===== */
+:host { display: block; }
+.cb-np-page {
+  height: 100vh;
+  padding: 10px;
+  box-sizing: border-box;
+  background: #e9edf2;
+}
+.cb-np {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+.cb-np__title {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 10px;
+  background: #f3f3f3; border-bottom: 1px solid #e1e1e1;
+  font-size: 12.5px; color: #1f1f1f;
+}
+.cb-np__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-np__menu {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 12.5px;
+}
+.cb-np__menu label {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 0; font-weight: 400; color: #1f1f1f; white-space: nowrap;
+}
+.cb-np__menu select,
+.cb-np__menu input {
+  height: 24px; padding: 0 4px;
+  border: 1px solid #7a7a7a; border-radius: 0;
+  font: 12.5px 'Segoe UI', Tahoma, sans-serif;
+  background: #fff;
+}
+.cb-np__menu input { width: 96px; font-family: Consolas, 'Courier New', monospace; text-transform: uppercase; }
+.cb-np__menu button {
+  height: 24px; padding: 0 10px;
+  border: 1px solid transparent; border-radius: 0;
+  background: transparent; color: #1f1f1f;
+  font-size: 12.5px; cursor: pointer; white-space: nowrap;
+}
+.cb-np__menu button:hover:not(:disabled) { background: #e5f1fb; border-color: #cce4f7; }
+.cb-np__menu button:disabled { color: #a0a0a0; cursor: default; }
+.cb-np__sep { width: 1px; height: 18px; background: #d0d0d0; margin: 0 2px; }
+.cb-np__body {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  padding: 6px 8px;
+  font: 13px/1.4 Consolas, 'Courier New', monospace;
+  color: #000;
+  white-space: pre;
+}
+.cb-np__line { min-height: 1.4em; }
+.cb-np__line.is-head { color: #1d4ed8; font-weight: 700; }
+.cb-np__line.is-warn { color: #b91c1c; }
+.cb-np__line.is-muted { color: #6b7280; }
+.cb-np__line.is-ignored { color: #9ca3af; text-decoration: line-through; }
+.cb-np__tick { cursor: pointer; color: #1d4ed8; text-decoration: none; display: inline-block; }
+.cb-np__tick:hover { background: #e5f1fb; }
+.cb-np__status {
+  display: flex; height: 22px; align-items: center;
+  background: #f3f3f3; border-top: 1px solid #e1e1e1;
+  font-size: 11.5px; color: #333;
+}
+.cb-np__status span { padding: 0 14px; border-left: 1px solid #d6d6d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-np__status span:first-child { border-left: 0; }
+.cb-np__status span:nth-child(2) { flex: 1; }
+
+/* Nút thanh menu: cùng kiểu nút Back / Menu các tab khác */
+.cb-np__menu { padding: 6px 10px; gap: 6px 8px; background: #fff; }
+.cb-np__menu button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #6B6B66;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 13px;
+}
+.cb-np__menu button:hover:not(:disabled) { background: #f1f5f9; border-color: #334155; }
+.cb-np__menu button:disabled { color: #94a3b8; border-color: #cbd5e1; }
+.cb-np__menu select, .cb-np__menu input { height: 32px; border-radius: 8px; border-color: #6B6B66; padding: 0 8px; }
+.cb-np__sep { height: 24px; }

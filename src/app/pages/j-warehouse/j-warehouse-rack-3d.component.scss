@@ -20,8 +20,8 @@
   align-items: center;
   gap: 8px 14px;
   padding: 8px 14px;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  background: #FFFFFF;
+  border-bottom: 1px solid #8F8F89;
   flex-shrink: 0;
 }
 
@@ -128,14 +128,14 @@
 
 .jw-rack3d__cctv-modes {
   display: inline-flex;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .jw-rack3d__cctv-mode {
   border: none;
-  background: #fff;
+  background: #FFFFFF;
   color: #475569;
   font-size: 11px;
   font-weight: 700;
@@ -144,7 +144,7 @@
   cursor: pointer;
 
   & + & {
-    border-left: 1px solid #cbd5e1;
+    border-left: 1px solid #8F8F89;
   }
 
   &--on {
@@ -158,8 +158,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
   color: #0f172a;
   border-radius: 6px;
   padding: 4px 10px;

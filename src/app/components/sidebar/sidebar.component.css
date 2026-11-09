@@ -4,7 +4,7 @@
 
 .sidebar-wrapper {
   padding: 10px 0 5px 0;
-  background-color: #ffffff !important;
+  background-color: #FFFFFF !important;
   margin-top: 160px;
   position: relative;
   overflow: hidden;
@@ -61,7 +61,7 @@
   justify-content: center;
   position: fixed;
   z-index: 10;
-  background-color: #ffffff;
+  background-color: #FFFFFF;
   border: none;
   width: 260px;
   top: 0;

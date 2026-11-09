@@ -1,0 +1,77 @@
+.kvt { padding: 14px 18px 30px; background: #f8fafc; min-height: 100vh; box-sizing: border-box; color: #0f172a; }
+.kvt__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.kvt__title { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 2px;
+  strong { font-size: 18px; font-weight: 800; } small { font-size: 12px; color: #64748b; } }
+.kvt__fac { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;
+  button { height: 36px; padding: 0 14px; border: none; background: #fff; font-weight: 700; cursor: pointer; color: #334155; }
+  button.on { background: #1e293b; color: #fff; } }
+.kvt__run { height: 40px; padding: 0 18px; border: none; border-radius: 8px; background: #16a34a; color: #fff; font-weight: 800; font-size: 15px;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  &:disabled { opacity: 0.6; cursor: default; } }
+.kvt__bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;
+  input { flex: 1; min-width: 220px; height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; font-size: 13px; }
+  button { height: 32px; padding: 0 10px; border: 1px solid #cbd5e1; border-radius: 99px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #334155; }
+  button.on { background: #1e293b; border-color: #1e293b; color: #fff; }
+  select { height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px; font-size: 13px; background: #fff; } }
+.kvt__sum { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 12px; border-radius: 10px; background: #eff6ff; border: 1px solid #bfdbfe;
+  strong { font-size: 24px; font-weight: 900; color: #1d4ed8; } span { font-size: 13px; color: #1e3a8a; } }
+.kvt__msg { color: #64748b; margin: 8px 0; &.kvt__msg--err { color: #b91c1c; } }
+.kvt__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.kvt__cell { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0;
+  strong { font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kvt__pct { font-size: 18px; font-weight: 900; }
+  small { font-size: 11px; color: #64748b; }
+  &.is-done { border-color: #86efac; background: #f0fdf4; .kvt__pct { color: #15803d; } }
+  &.is-todo { border-color: #fcd34d; background: #fffbeb; .kvt__pct { color: #b45309; } }
+  &.is-empty { opacity: 0.55; }
+  &.is-extra { border-style: dashed; border-color: #a5b4fc; } }
+.kvt__bar2 { display: block; height: 5px; margin-top: 4px; border-radius: 99px; background: #e2e8f0; overflow: hidden;
+  span { display: block; height: 100%; background: #16a34a; } }
+.is-todo .kvt__bar2 span { background: #f59e0b; }
+.rotating { animation: kvt-spin 1s linear infinite; }
+@keyframes kvt-spin { to { transform: rotate(360deg); } }
+/* Nút điều hướng: cùng kiểu nút thường (chữ nhật, cao 36px), không icon tròn */
+.kvt__nav { display: inline-flex; gap: 6px; }
+.kvt__btn {
+  height: 36px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a;
+  display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: 13px; cursor: pointer;
+  .material-icons { font-size: 18px; }
+  &:hover { background: #f1f5f9; }
+}
+.kvt__fac button, .kvt__run { height: 36px; }
+
+/* Gom theo dãy kệ */
+.kvt__group { margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden;
+  &.is-done { border-color: #86efac; } &.is-todo { border-color: #fcd34d; } }
+.kvt__ghead { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; background: transparent; cursor: pointer; text-align: left; color: #0f172a;
+  strong { font-size: 15px; font-weight: 800; min-width: 70px; }
+  &:hover { background: #f8fafc; } }
+.kvt__gcount { font-size: 12px; color: #64748b; white-space: nowrap; }
+.kvt__gpct { font-size: 16px; font-weight: 900; min-width: 56px; }
+.is-done > .kvt__ghead .kvt__gpct { color: #15803d; }
+.is-todo > .kvt__ghead .kvt__gpct { color: #b45309; }
+.kvt__bar2--wide { flex: 1; max-width: 260px; margin-top: 0; }
+.kvt__group .kvt__grid { padding: 0 12px 12px; }
+
+.kvt__cell--link { cursor: pointer; }
+.kvt__cell--link:hover { outline: 2px solid #1565c0; outline-offset: -1px; }
+
+.kvt__tablewrap { overflow-x: auto; background: #fff; border: 1px solid #dfe3ea; border-radius: 8px; }
+.kvt__table {
+  width: 100%; border-collapse: collapse; font-size: 14px;
+  th, td { padding: 8px 10px; border-bottom: 1px solid #eef0f4; text-align: center; white-space: nowrap; }
+  th { background: #f4f6fa; font-weight: 600; position: sticky; top: 0; }
+  td.kvt__name { text-align: left; white-space: normal; min-width: 180px; }
+  td.kvt__num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.is-done td { background: #f1f8f1; }
+}
+.kvt__kk { font-size: 20px; color: #b0b7c3; vertical-align: middle; }
+.kvt__kk.on { color: #2e7d32; }
+
+/* Tỷ lệ sử dụng vị trí — canh phải */
+.kvt__use { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; white-space: nowrap;
+  b { font-size: 16px; font-weight: 900; color: #1d4ed8; min-width: 52px; text-align: right; }
+  small { font-size: 12px; color: #64748b; min-width: 64px; } }
+.kvt__bar2--use { width: 160px; flex: none; margin-top: 0;
+  span { background: #2563eb !important; } }
+.kvt__sum { flex-wrap: wrap; }

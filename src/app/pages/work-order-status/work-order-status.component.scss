@@ -150,9 +150,9 @@ html, body {
   gap: 10px;
   min-height: 52px;
   padding: 8px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .wo-guide-icon__mark {
@@ -162,9 +162,9 @@ html, body {
   flex: 0 0 28px;
   width: 28px;
   height: 28px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #334155;
 
   .material-icons {
@@ -231,9 +231,9 @@ html, body {
 
 .wo-guide-table-wrap {
   overflow-x: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .wo-guide-table {
@@ -243,7 +243,7 @@ html, body {
 
   th,
   td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #6B6B66;
     padding: 8px 10px;
     text-align: center;
     vertical-align: middle;
@@ -328,7 +328,7 @@ html, body {
   height: 36px;
   min-width: 140px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -418,7 +418,7 @@ html, body {
 
   &:focus {
     border-color: #99f6e4;
-    background: #fff;
+    background: #FFFFFF;
     outline: none;
   }
 
@@ -520,7 +520,7 @@ html, body {
     width: 88px;
     height: 40px;
     padding: 0 10px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
     font-size: 16px;
     font-weight: 800;
@@ -574,7 +574,7 @@ html, body {
   min-width: 0;
   height: 40px;
   padding: 0 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 700;
@@ -586,12 +586,12 @@ html, body {
 .pxk-skip-catalog-add__kind {
   height: 40px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   color: #0f172a;
-  background: #fff;
+  background: #FFFFFF;
   min-width: 110px;
 }
 
@@ -623,7 +623,7 @@ html, body {
 .pxk-skip-catalog-table-wrap {
   max-height: min(62vh, 560px);
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   flex: 1;
 }
@@ -660,7 +660,7 @@ html, body {
   min-width: 0;
   height: 38px;
   padding: 0 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   font-size: 14px;
   color: #0f172a;
@@ -704,9 +704,9 @@ html, body {
   padding: 0;
   max-height: min(48vh, 360px);
   overflow-y: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 .staff-catalog-item {
@@ -715,7 +715,7 @@ html, body {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px 8px 14px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #8F8F89;
 
   &:last-child {
     border-bottom: none;
@@ -760,9 +760,9 @@ html, body {
 }
 
 .prep-catalog-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 12px;
-  background: #fff;
+  background: #FFFFFF;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
@@ -774,7 +774,7 @@ html, body {
   gap: 12px;
   padding: 14px 16px;
   background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid #8F8F89;
 }
 
 .prep-catalog-head__left {
@@ -807,8 +807,8 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 0.8125rem;
@@ -838,7 +838,7 @@ html, body {
 }
 
 .prep-kpi {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #6B6B66;
   border-radius: 10px;
   padding: 10px 12px;
   background: #f8fafc;
@@ -877,7 +877,7 @@ html, body {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
-  background: #fff;
+  background: #FFFFFF;
 
   th,
   td {
@@ -912,7 +912,7 @@ html, body {
   color: #64748b;
   font-size: 0.875rem;
   background: #f8fafc;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed #6B6B66;
   border-radius: 8px;
 }
 
@@ -1116,8 +1116,8 @@ html, body {
       background: #f8f9fa;
       z-index: 10;
       min-width: 56px; /* Reduced minimum column width (30% smaller) */
-      border-right: 1px solid #dee2e6 !important; /* Vertical border */
-      border-bottom: 2px solid #dee2e6 !important; /* Header bottom border */
+      border-right: 1px solid #8F8F89 !important; /* Vertical border */
+      border-bottom: 2px solid #8F8F89 !important; /* Header bottom border */
       padding: 8px 6px !important; /* Reduced padding for compact look */
       
       &:first-child {
@@ -1132,8 +1132,8 @@ html, body {
     tbody td {
       min-width: 56px; /* Reduced minimum cell width (30% smaller) */
       vertical-align: middle;
-      border-right: 1px solid #dee2e6 !important; /* Vertical border */
-      border-bottom: 1px solid #dee2e6 !important; /* Horizontal border */
+      border-right: 1px solid #8F8F89 !important; /* Vertical border */
+      border-bottom: 1px solid #8F8F89 !important; /* Horizontal border */
       padding: 6px 6px !important; /* Reduced padding for compact look */
       
       &:first-child {
@@ -1147,7 +1147,7 @@ html, body {
     
     // Enhanced row borders for better visibility
     tbody tr {
-      border-bottom: 1px solid #dee2e6;
+      border-bottom: 1px solid #8F8F89;
       
       &:hover {
         background-color: #f8f9fa;
@@ -1572,10 +1572,10 @@ html, body {
 }
 
 .status-ready {
-  background-color: #f3e5f5;
+  background-color: #EAF2FF;
   
   &:hover {
-    background-color: #e1bee7;
+    background-color: #EAF2FF;
   }
 }
 
@@ -1701,7 +1701,7 @@ html, body {
     td {
       padding: 8px 6px; /* Reduced padding for more compact rows */
       vertical-align: middle;
-      border-top: 1px solid #e9ecef;
+      border-top: 1px solid #8F8F89;
       font-size: 0.9em;
     }
     
@@ -1756,13 +1756,13 @@ html, body {
   }
   
   &.mat-checkbox-checked .mat-checkbox-background {
-    background-color: #9c27b0;
+    background-color: #3478F6;
   }
 }
 
 // Selected row highlighting
 tr.selected-row {
-  background-color: rgba(156, 39, 176, 0.08) !important;
+  background-color: rgba(52, 120, 246, 0.08) !important;
 }
 
 // LSX thiếu: màu đỏ
@@ -2008,7 +2008,7 @@ tr.selected-row {
   }
   
   &.mat-focused .mat-form-field-label {
-    color: #9c27b0;
+    color: #3478F6;
   }
 }
 
@@ -2117,7 +2117,7 @@ textarea.mat-input-element {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     background: #f5f5f5;
     border-radius: 8px 8px 0 0;
 
@@ -2137,7 +2137,7 @@ textarea.mat-input-element {
 .import-step {
   margin-bottom: 30px;
   padding: 20px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   background: #fafafa;
 
@@ -2162,7 +2162,7 @@ textarea.mat-input-element {
 // File Upload Area
 .file-upload-area {
   padding: 20px;
-  border: 2px dashed #ddd;
+  border: 2px dashed #6B6B66;
   border-radius: 6px;
   text-align: center;
   background: white;
@@ -2368,7 +2368,7 @@ textarea.mat-input-element {
   padding: 20px;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #6B6B66;
   
   .section-title {
     margin-bottom: 15px;
@@ -2493,7 +2493,7 @@ textarea.mat-input-element {
     margin-bottom: -10px;
 
     .btn-home-workorder {
-      background: #ffffff;
+      background: #FFFFFF;
       color: #000000;
       border: 1px solid #000000;
       padding: 12px 20px;
@@ -2522,7 +2522,7 @@ textarea.mat-input-element {
     }
 
     .btn-bag-workorder {
-      background: #ffffff;
+      background: #FFFFFF;
       color: #1565c0;
       border: 1px solid #1565c0;
       padding: 12px 20px;
@@ -2635,7 +2635,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -2919,7 +2919,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -3218,7 +3218,7 @@ textarea.mat-input-element {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid #8F8F89;
     background: #f5f5f5;
     border-radius: 8px 8px 0 0;
 
@@ -3342,7 +3342,7 @@ textarea.mat-input-element {
     flex-shrink: 0;
     margin-top: 4px;
     padding-top: 12px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #8F8F89;
     justify-content: flex-start;
   }
 
@@ -3438,7 +3438,7 @@ textarea.mat-input-element {
   
   &:hover {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
   }
   
   span {
@@ -3613,7 +3613,7 @@ textarea.mat-input-element {
     position: absolute !important;
     display: block !important;
     background: white !important;
-    border: 2px solid #ddd !important;
+    border: 2px solid #6B6B66 !important;
     border-radius: 6px !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
     min-width: 120px !important;
@@ -3623,7 +3623,7 @@ textarea.mat-input-element {
       display: block !important;
       padding: 10px 15px !important;
       cursor: pointer !important;
-      border-bottom: 1px solid #eee !important;
+      border-bottom: 1px solid #8F8F89 !important;
       
       &:hover {
         background-color: #e3f2fd !important;
@@ -3685,7 +3685,7 @@ textarea.mat-input-element {
       
       .modal-header {
         padding: 20px 24px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid #8F8F89;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -3731,7 +3731,7 @@ textarea.mat-input-element {
           .form-control {
             width: 100%;
             padding: 8px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid #6B6B66;
             border-radius: 4px;
             font-size: 14px;
             
@@ -3767,7 +3767,7 @@ textarea.mat-input-element {
         
         .preview-section {
           background: #f8f9fa;
-          border: 1px solid #dee2e6;
+          border: 1px solid #6B6B66;
           border-radius: 6px;
           padding: 16px;
           margin-top: 16px;
@@ -3788,7 +3788,7 @@ textarea.mat-input-element {
             
             li {
               padding: 6px 0;
-              border-bottom: 1px solid #dee2e6;
+              border-bottom: 1px solid #8F8F89;
               font-size: 13px;
               color: #495057;
               
@@ -3802,7 +3802,7 @@ textarea.mat-input-element {
       
       .dialog-actions {
         padding: 16px 24px;
-        border-top: 1px solid #eee;
+        border-top: 1px solid #8F8F89;
         display: flex;
         gap: 12px;
         justify-content: flex-end;
@@ -3842,7 +3842,7 @@ textarea.mat-input-element {
   .scan-dialog-header {
     background: #f8f9fa;
     padding: 16px 20px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid #8F8F89;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -3867,7 +3867,7 @@ textarea.mat-input-element {
         width: 100%;
         height: 300px;
         background: #f5f5f5;
-        border: 2px dashed #ddd;
+        border: 2px dashed #6B6B66;
         border-radius: 8px;
         margin-bottom: 16px;
         
@@ -3898,13 +3898,13 @@ textarea.mat-input-element {
       .scanned-items-list {
         max-height: 300px;
         overflow-y: auto;
-        border: 1px solid #e9ecef;
+        border: 1px solid #6B6B66;
         border-radius: 6px;
         padding: 8px;
         
         .scanned-item {
           background: #f8f9fa;
-          border: 1px solid #e9ecef;
+          border: 1px solid #6B6B66;
           border-radius: 6px;
           padding: 12px;
           margin-bottom: 8px;
@@ -3949,7 +3949,7 @@ textarea.mat-input-element {
 
 // Print QR button styles
 .print-qr-btn {
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   border: 2px solid #000000 !important;
   color: #000000 !important;
   font-size: 12px !important;
@@ -3976,13 +3976,13 @@ textarea.mat-input-element {
   }
   
   &:focus, &:active {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2) !important;
   }
 
   &.pxk-imported {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     border: 2px solid #2196f3 !important;
     color: #2196f3 !important;
     .material-icons {
@@ -3997,7 +3997,7 @@ textarea.mat-input-element {
       }
     }
     &:focus, &:active {
-      background: #ffffff !important;
+      background: #FFFFFF !important;
       border-color: #2196f3 !important;
       color: #2196f3 !important;
       box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3) !important;
@@ -4035,7 +4035,7 @@ textarea.mat-input-element {
 }
 
 #qr-reader {
-  border: 2px solid #e0e0e0;
+  border: 2px solid #6B6B66;
   border-radius: 8px;
   overflow: hidden;
   background-color: #f8f9fa;
@@ -4115,7 +4115,7 @@ textarea.mat-input-element {
   margin-bottom: 24px;
   
   .scanner-status-card {
-    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    background: linear-gradient(135deg, #e3f2fd 0%, #EAF2FF 100%);
     border: 2px solid #2196f3;
     border-radius: 12px;
     padding: 20px;
@@ -4169,7 +4169,7 @@ textarea.mat-input-element {
   padding: 16px;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #e9ecef;
+  border: 1px solid #6B6B66;
   display: flex;
   gap: 12px;
   justify-content: center;
@@ -4427,9 +4427,9 @@ textarea.mat-input-element {
                     }
                     
                     &.status-transfer {
-                      background: #f3e5f5;
-                      color: #7b1fa2;
-                      border: 1px solid #9c27b0;
+                      background: #EAF2FF;
+                      color: #2057B5;
+                      border: 1px solid #3478F6;
                     }
                     
                     &.status-done {
@@ -4510,14 +4510,14 @@ textarea.mat-input-element {
       
       .cancel-btn {
         color: #666;
-        border-color: #ddd;
+        border-color: #6B6B66;
         padding: 12px 24px;
         font-size: 16px;
         border-radius: 8px;
         
         &:hover {
           background: #f5f5f5;
-          border-color: #bbb;
+          border-color: #6B6B66;
         }
       }
     }
@@ -4683,7 +4683,7 @@ textarea.mat-input-element {
   flex-wrap: wrap;
   gap: 10px;
   padding: 12px 8px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid #8F8F89;
   background: #fafafa;
 }
 
@@ -4702,10 +4702,10 @@ textarea.mat-input-element {
   min-width: 56px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 13px;
-  background: #fff;
+  background: #FFFFFF;
 }
 
 /* Chiều cao dòng LSX ~85% so với trước */
@@ -4835,7 +4835,7 @@ textarea.mat-input-element {
 .pxk-bypass-otp-input {
   width: 100%;
   height: 40px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #6B6B66;
   border-radius: 8px;
   padding: 0 12px;
   font-size: 20px;
@@ -4896,8 +4896,8 @@ textarea.mat-input-element {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: #FFFFFF;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   padding: 10px 12px;
   min-height: 64px;
@@ -4912,7 +4912,7 @@ textarea.mat-input-element {
 }
 
 .wo-stat--btn {
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -4980,9 +4980,9 @@ textarea.mat-input-element {
   gap: 6px;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #111827;
   font-size: 12px;
   font-weight: 700;
@@ -5041,7 +5041,7 @@ textarea.mat-input-element {
   gap: 8px;
   flex-wrap: nowrap;
   background: #eceff3;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   padding: 8px 10px;
   flex-shrink: 0;
@@ -5055,9 +5055,9 @@ textarea.mat-input-element {
   min-width: 160px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
 
   .material-icons {
     font-size: 16px;
@@ -5092,9 +5092,9 @@ textarea.mat-input-element {
   select {
     height: 32px;
     padding: 0 8px;
-    border: 1px solid #d1d5db;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
-    background: #fff;
+    background: #FFFFFF;
     font-size: 13px;
     color: #111827;
     max-width: 150px;
@@ -5102,8 +5102,8 @@ textarea.mat-input-element {
 }
 
 .wo-table-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: #FFFFFF;
+  border: 1px solid #6B6B66;
   border-radius: 6px;
   overflow: hidden;
   flex: 1;
@@ -5122,17 +5122,17 @@ textarea.mat-input-element {
   width: 100%;
   border-collapse: collapse;
   min-width: 1180px;
-  background: #fff;
+  background: #FFFFFF;
 
   th,
   td {
-    border: 1px solid #e5e7eb;
+    border: 1px solid #6B6B66;
     padding: 10px 8px;
     text-align: center;
     vertical-align: middle;
     font-size: 12px;
     color: #111827;
-    background: #fff;
+    background: #FFFFFF;
   }
 
   th {
@@ -5256,9 +5256,9 @@ textarea.mat-input-element {
   gap: 4px;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #111827;
   font-size: 11px;
   font-weight: 700;
@@ -5380,8 +5380,8 @@ textarea.mat-input-element {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
+  border-top: 1px solid #8F8F89;
+  background: #FFFFFF;
   flex-shrink: 0;
   margin-top: auto;
 }
@@ -5400,9 +5400,9 @@ textarea.mat-input-element {
 .wo-pager__size,
 .wo-pager__btn {
   height: 32px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
-  background: #fff;
+  background: #FFFFFF;
   color: #111827;
 }
 
@@ -5486,3 +5486,123 @@ textarea.mat-input-element {
   }
 }
 
+/* LSX import lại trong 30 ngày: số lần import trước LSX */
+.wo-lsx-seq {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ea580c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+
+/* Tìm theo mã NVL đang chờ soạn */
+.wo-search--nvl { flex: 0 1 260px; border-color: #0d9488;
+  .material-icons { color: #0d9488; } }
+.wo-search__go { height: 24px; padding: 0 10px; border: none; border-radius: 4px; background: #0d9488; color: #fff;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  &:disabled { opacity: .5; cursor: default; } }
+.wo-nvl-info { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; border-radius: 6px;
+  background: #f0fdfa; border: 1px solid #99f6e4; font-size: 13px; color: #134e4a;
+  .material-icons { font-size: 18px; color: #0d9488; }
+  button { margin-left: auto; height: 28px; padding: 0 10px; border: 1px solid #0d9488; border-radius: 4px; background: #fff;
+    color: #0f766e; font-weight: 700; cursor: pointer; } }
+.wo-nvl-need { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 4px; background: #ccfbf1;
+  color: #0f766e; font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+/* Popup vượt quyền PXK: lý do lệch */
+.pxk-bypass-otp-reason { margin: 8px 0; padding: 8px 10px; border-radius: 6px; background: #fff7ed; border: 1px solid #fdba74; font-size: 12px; color: #7c2d12;
+  strong { display: block; margin-bottom: 4px; }
+  pre { margin: 0; white-space: pre-wrap; font-family: inherit; max-height: 180px; overflow: auto; } }
+
+/* Cột Partial: cho phép xuất thiếu */
+.wo-partial { white-space: nowrap; text-align: center;
+  input[type=checkbox] { width: 16px; height: 16px; vertical-align: middle; cursor: pointer; } }
+.wo-partial-btn { margin-left: 4px; height: 24px; padding: 0 8px; border: 1px solid #d97706; border-radius: 4px; background: #fffbeb;
+  color: #92400e; font-size: 11px; font-weight: 700; cursor: pointer; vertical-align: middle;
+  &:disabled { opacity: .5; cursor: default; } }
+.wo-partial-pending { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 4px; background: #fee2e2; color: #b91c1c;
+  font-size: 11px; font-weight: 700; vertical-align: middle; cursor: help; }
+
+/* Tab LSX Bổ sung */
+.wo-tab--bs { border-color: #d97706; color: #92400e; }
+.wo-tab--bs.wo-tab--on { background: #d97706; border-color: #d97706; color: #fff; }
+
+/* Số LSX chờ bổ sung trên tab */
+.wo-tab__badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: 6px;
+  padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 800; line-height: 1; }
+
+/* Thống kê tuần — kiểu Excel */
+.wk-stats { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+  background: #fff; border: 1px solid #b7b7b7; border-radius: 6px; padding: 12px; box-sizing: border-box; font-size: 13px; color: #111; }
+.wk-stats__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  strong { font-size: 15px; margin-right: 6px; }
+  select { height: 36px; border: 1px solid #b7b7b7; border-radius: 4px; padding: 0 6px; background: #fff; } }
+.wk-stats__info { color: #444; }
+.wk-stats__grow { flex: 1; }
+.wk-btn { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 12px; border: 1px solid #b7b7b7;
+  border-radius: 4px; background: #fff; color: #111; font-weight: 600; cursor: pointer;
+  .material-icons { font-size: 18px; }
+  &:hover { background: #f2f2f2; }
+  &:disabled { opacity: .5; cursor: default; } }
+.wk-stats__note { margin: 6px 0; color: #555; font-size: 12px; }
+.wk-stats__wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid #b7b7b7; }
+.wk-table { width: 100%; border-collapse: collapse;
+  th, td { border: 1px solid #d0d0d0; padding: 3px 8px; height: 24px; white-space: nowrap; text-align: left; }
+  thead th { position: sticky; top: 0; background: #f2f2f2; border-color: #b7b7b7; font-size: 12px; }
+  tfoot th { position: sticky; bottom: 0; background: #f2f2f2; border-color: #b7b7b7; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .b { font-weight: 700; }
+  .wk-row { cursor: pointer; &:hover td { background: #f7f9fc; } }
+  .wk-row--zero td { color: #9a9a9a; cursor: default; }
+  .wk-sub td { background: #fafafa; font-size: 12px; small { color: #666; } } }
+
+/* Xóa LSX bằng mã Zalo 4 số */
+.del-lsx { width: min(720px, calc(100vw - 32px)); background: #fff; border: 1px solid #b7b7b7; border-radius: 6px; padding: 12px;
+  box-sizing: border-box; font-size: 13px; color: #111; display: flex; flex-direction: column; gap: 8px;
+  .wk-table .c { text-align: center; } }
+.del-lsx__head { display: flex; align-items: center; justify-content: space-between; strong { font-size: 15px; } }
+.del-lsx__row { display: flex; align-items: center; gap: 6px;
+  input[type=search] { flex: 1; height: 36px; box-sizing: border-box; border: 1px solid #b7b7b7; border-radius: 4px; padding: 0 8px; } }
+.del-lsx__otp { width: 110px; height: 36px; box-sizing: border-box; border: 1px solid #b7b7b7; border-radius: 4px; padding: 0 8px;
+  font-size: 18px; letter-spacing: 4px; text-align: center; }
+.wk-btn--danger { border-color: #b91c1c; color: #b91c1c; }
+.del-lsx__msg { margin: 0; font-weight: 600; }
+.del-lsx__note { margin: 0; color: #666; font-size: 12px; }
+.del-lsx__link { align-self: flex-start; border: none; background: none; padding: 0; color: #1f4e9c; cursor: pointer; text-decoration: underline; font-size: 12px; }
+
+/* JIT: đã chia nhiều lần giao, chưa giao hết */
+.status-jit { background-color: #fff3e0; &:hover { background-color: #ffe0b2; } }
+
+
+/* ---- Tiêu đề cột Tình trạng: bấm để xem ý nghĩa ---- */
+.wo-table th.wo-th-info {
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.wo-table th.wo-th-info:hover { text-decoration: underline; }
+.wo-th-info__ic {
+  font-size: 14px !important;
+  vertical-align: middle;
+  margin-left: 3px;
+  color: #64748b;
+}
+
+.wo-status-info {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.wo-status-info__flow { margin: 0 0 10px; font-size: 13px; }
+.wo-status-info__table { width: 100%; }
+.wo-status-info__table td { vertical-align: top; text-align: left; line-height: 1.4; }
+.wo-status-info__name { font-weight: 700; white-space: nowrap; }

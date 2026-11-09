@@ -146,7 +146,7 @@ export class BieuMauComponent {
       { name: 'Vùng 1', color: '#1e88e5', building: 'J4', fromM: 0, toM: half, team: 'Team 1', leader: '', members: '' },
       { name: 'Vùng 2', color: '#43a047', building: 'J4', fromM: half, toM: this.BUILDING_LENGTH_M, team: 'Team 2', leader: '', members: '' },
       { name: 'Vùng 3', color: '#fb8c00', building: 'J5', fromM: 0, toM: half, team: 'Team 3', leader: '', members: '' },
-      { name: 'Vùng 4', color: '#8e24aa', building: 'J5', fromM: half, toM: this.BUILDING_LENGTH_M, team: 'Team 4', leader: '', members: '' }
+      { name: 'Vùng 4', color: '#3478F6', building: 'J5', fromM: half, toM: this.BUILDING_LENGTH_M, team: 'Team 4', leader: '', members: '' }
     ];
   }
 

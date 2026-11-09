@@ -1,3 +1,4 @@
+import { appAlert } from '../../shared/app-toast';
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
@@ -372,9 +373,9 @@ export class SxxkComponent implements OnInit {
         await this.processWorkbook(importType, wb);
         await this.saveRawMeta();
         const label = TABS.find(t => t.importKey === importType)?.label || importType;
-        alert(`✅ Đã lưu file thô ${label} và tính lại. Tổng ${this.rows.length} mã NVL.`);
+        appAlert(`✅ Đã lưu file thô ${label} và tính lại. Tổng ${this.rows.length} mã NVL.`);
       } catch (err) {
-        alert('Lỗi import: ' + (err as Error).message);
+        appAlert('Lỗi import: ' + (err as Error).message);
       } finally {
         this.isLoading = false;
         input.value = '';
@@ -398,13 +399,13 @@ export class SxxkComponent implements OnInit {
         const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
         const loaded = await this.processMultiWorkbook(wb);
         if (loaded.length === 0) {
-          alert('Không tìm thấy sheet NHAP/XUAT/TONDAU/BCTK. Kiểm tra tên sheet trong file.');
+          appAlert('Không tìm thấy sheet NHAP/XUAT/TONDAU/BCTK. Kiểm tra tên sheet trong file.');
           return;
         }
         await this.saveRawMeta({ workbookFile: file.name });
-        alert(`✅ Đã lưu file thô và tính từ ${loaded.length} sheet: ${loaded.join(', ')}. Tổng ${this.rows.length} mã NVL.`);
+        appAlert(`✅ Đã lưu file thô và tính từ ${loaded.length} sheet: ${loaded.join(', ')}. Tổng ${this.rows.length} mã NVL.`);
       } catch (err) {
-        alert('Lỗi import: ' + (err as Error).message);
+        appAlert('Lỗi import: ' + (err as Error).message);
       } finally {
         this.isLoading = false;
         input.value = '';
@@ -706,7 +707,7 @@ export class SxxkComponent implements OnInit {
       setTimeout(() => this.savedMsg = '', 3000);
     } catch (e) {
       console.error('[SXXK] Save error:', e);
-      alert('Lỗi lưu Firebase: ' + (e as Error).message);
+      appAlert('Lỗi lưu Firebase: ' + (e as Error).message);
     }
   }
 
@@ -721,7 +722,7 @@ export class SxxkComponent implements OnInit {
   recalcAll(): void {
     this.readRawAndCalculate().then(() => {
       if (this.rows.length > 0) {
-        alert(`✅ Đã đọc dữ liệu thô và tính ${this.rows.length} mã NVL.`);
+        appAlert(`✅ Đã đọc dữ liệu thô và tính ${this.rows.length} mã NVL.`);
       }
     });
   }

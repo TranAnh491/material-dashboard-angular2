@@ -63,49 +63,6 @@
 </div>
 
 <div class="eq-shell" *ngIf="!mobileUi">
-  <aside class="eq-side">
-    <div class="eq-brand">
-      <span class="eq-brand__mark">W</span>
-      <div>
-        <strong>Warehouse</strong>
-        <small>Management System</small>
-      </div>
-    </div>
-
-    <nav class="eq-nav">
-      <button type="button" (click)="go('/dashboard')">
-        <i class="material-icons">home</i> Trang chủ
-      </button>
-
-      <p class="eq-nav__label"><i class="material-icons">precision_manufacturing</i> Quản lý thiết bị</p>
-      <button type="button" [class.is-on]="view === 'check'" (click)="setView('check')">
-        <i class="material-icons">fact_check</i> Kiểm tra thiết bị
-      </button>
-      <button type="button" [class.is-on]="view === 'list'" (click)="setView('list')">
-        <i class="material-icons">list_alt</i> Danh sách thiết bị
-      </button>
-      <button type="button" [class.is-on]="view === 'groups'" (click)="setView('groups')">
-        <i class="material-icons">account_tree</i> Nhóm thiết bị
-      </button>
-      <button type="button" [class.is-on]="view === 'items'" (click)="setView('items')">
-        <i class="material-icons">checklist</i> Hạng mục kiểm tra
-      </button>
-      <button type="button" [class.is-on]="view === 'history'" (click)="setView('history')">
-        <i class="material-icons">history</i> Lịch sử kiểm tra
-      </button>
-      <button type="button" [class.is-on]="view === 'labels'" (click)="setView('labels')">
-        <i class="material-icons">qr_code_2</i> In tem QR
-      </button>
-      <button type="button" [class.is-on]="view === 'scan'" (click)="setView('scan')">
-        <i class="material-icons">qr_code_scanner</i> Quét kiểm tra
-      </button>
-
-      <button type="button" [class.is-on]="view === 'staff'" (click)="setView('staff')">
-        <i class="material-icons">groups</i> Nhân sự
-      </button>
-    </nav>
-  </aside>
-
   <div class="eq-main">
     <header class="eq-top">
       <button type="button" class="eq-nav-btn" (click)="goBack()">Back</button>
@@ -138,13 +95,92 @@
       </div>
     </header>
 
-    <div class="eq-scroll">
+    <nav class="eq-tabs">
+      <button type="button" *ngFor="let t of tabs" [class.is-on]="view === t.key" (click)="setView(t.key)">
+        <i class="material-icons">{{ t.icon }}</i> {{ t.label }}
+      </button>
+    </nav>
+
+    <div class="eq-scroll ps__child--consume">
       <p class="eq-toast" *ngIf="message" [class.is-error]="messageError">{{ message }}</p>
 
-      <ng-container *ngIf="view === 'check'">
-        <h1 class="eq-title" *ngIf="!showInspect && !showMaintenanceForm"><i class="material-icons">fact_check</i> KIỂM TRA TRANG THIẾT BỊ KHO</h1>
+      <div class="eq-modal" *ngIf="dialogOpen && dialogEquipment">
+        <div class="eq-panel eq-panel--popup">
+          <div class="eq-panel__title">
+            <div>
+              <h2>{{ dialogEquipment.equipmentName }}</h2>
+              <p>{{ dialogEquipment.managementCode }} · {{ subcategoryName(dialogEquipment.subcategoryId) }}</p>
+            </div>
+            <button type="button" class="eq-btn" (click)="closePanel()">Đóng</button>
+          </div>
 
-        <section class="eq-cards" *ngIf="!showInspect && !showMaintenanceForm">
+          <div class="eq-panel__grid">
+            <label>Ngày kiểm tra
+              <input type="date" [(ngModel)]="dialogDate" [max]="todayIso" (change)="onPanelDate()">
+            </label>
+            <label>Người kiểm tra
+              <select [(ngModel)]="dialogInspector">
+                <option *ngFor="let p of inspectorOptions" [value]="p">{{ p }}</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="eq-panel__itemhead">
+            <strong>Hạng mục</strong>
+            <button type="button" class="eq-btn" (click)="allItemsPass()">Tất cả Đạt</button>
+          </div>
+          <div class="eq-item-row" *ngFor="let row of itemRows">
+            <div class="eq-item-row__main">
+              <span class="eq-item-row__name">{{ itemTitle(row.name) }}<small class="eq-item-detail" *ngIf="itemDetail(row.name)">{{ itemDetail(row.name) }}</small></span>
+              <span class="eq-choice">
+                <button type="button" class="eq-pill eq-pill--pass" [class.is-on]="row.result === 'PASS'" (click)="onItemResult(row, 'PASS')">Đạt</button>
+                <button type="button" class="eq-pill eq-pill--fail" [class.is-on]="row.result === 'FAIL'" (click)="onItemResult(row, 'FAIL')">Không đạt</button>
+              </span>
+            </div>
+            <input *ngIf="row.result === 'FAIL'" class="eq-item-row__note" [(ngModel)]="row.note" placeholder="Ghi chú lỗi của hạng mục">
+          </div>
+
+          <p class="eq-required">Kết quả chung</p>
+          <div class="eq-pills">
+            <button type="button" class="eq-pill eq-pill--pass" [class.is-on]="dialogResult === 'PASS'" (click)="dialogResult = 'PASS'">Đạt</button>
+            <button type="button" class="eq-pill eq-pill--fail" [class.is-on]="dialogResult === 'FAIL'" (click)="dialogResult = 'FAIL'">Không đạt</button>
+            <button type="button" class="eq-pill" [class.is-on]="dialogResult === 'NA'" (click)="dialogResult = 'NA'">Không áp dụng</button>
+          </div>
+          <label *ngIf="dialogResult === 'FAIL'">Mô tả lỗi *
+            <textarea [(ngModel)]="dialogDefect" rows="2"></textarea>
+          </label>
+
+          <details class="eq-more">
+            <summary>Ghi chú, ảnh, hành động khắc phục</summary>
+            <label>Ghi chú
+              <textarea [(ngModel)]="dialogNotes" rows="2" maxlength="500"></textarea>
+            </label>
+            <label>Hành động khắc phục
+              <textarea [(ngModel)]="dialogAction" rows="2" maxlength="500"></textarea>
+            </label>
+            <div class="eq-photos">
+              <img *ngIf="dialogImage" [src]="dialogImage" alt="">
+              <label class="eq-add-photo">
+                <i class="material-icons">add</i>
+                Thêm ảnh
+                <input type="file" accept="image/*" hidden (change)="onImage($event)">
+              </label>
+            </div>
+          </details>
+
+          <div class="eq-panel__actions">
+            <button type="button" class="eq-btn" (click)="closePanel()">Hủy</button>
+            <button type="button" class="eq-btn eq-btn--primary" (click)="saveInspection()" [disabled]="dialogSaving">
+              {{ dialogSaving ? 'Đang lưu...' : 'Lưu' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ng-container *ngIf="view === 'overview'">
+        <h1 class="eq-title"><i class="material-icons">dashboard</i> Tổng quan {{ month }}/{{ year }}</h1>
+
+        <section class="eq-cards">
           <article>
             <span class="eq-card-ico eq-card-ico--blue"><i class="material-icons">local_shipping</i></span>
             <div><small>Tổng thiết bị</small><strong>{{ stats.total }}</strong><em>thiết bị</em></div>
@@ -175,7 +211,7 @@
           </article>
         </section>
 
-        <section class="eq-maint" *ngIf="!showInspect && !showMaintenanceForm">
+        <section class="eq-maint">
           <div class="wo-stats eq-maint__kpi">
             <article class="wo-stat">
               <i class="material-icons">home_repair_service</i>
@@ -250,111 +286,7 @@
           </div>
         </section>
 
-        <div class="eq-filters__actions" *ngIf="!showInspect && !showMaintenanceForm">
-          <button type="button" class="eq-btn eq-btn--primary" (click)="showInspect = true; showMaintenanceForm = false">
-            <i class="material-icons">fact_check</i> Kiểm tra
-          </button>
-        </div>
-
-        <div class="eq-modal" *ngIf="dialogOpen && dialogEquipment">
-          <aside class="eq-panel eq-panel--popup">
-            <h2><i class="material-icons">fact_check</i> KIỂM TRA THIẾT BỊ</h2>
-            <div class="eq-panel__head">
-              <div class="eq-photo" aria-hidden="true">
-                <svg viewBox="0 0 120 78">
-                  <rect x="8" y="28" width="70" height="28" rx="4" fill="#f5c542"/>
-                  <rect x="18" y="18" width="28" height="14" rx="3" fill="#f0b429"/>
-                  <circle cx="28" cy="62" r="8" fill="#334155"/>
-                  <circle cx="62" cy="62" r="8" fill="#334155"/>
-                  <rect x="78" y="36" width="34" height="6" rx="2" fill="#64748b"/>
-                  <rect x="104" y="22" width="6" height="28" rx="2" fill="#475569"/>
-                </svg>
-              </div>
-              <div>
-                <strong>{{ dialogEquipment.equipmentName }}</strong>
-                <p>Mã quản lý: {{ dialogEquipment.managementCode }}</p>
-                <p>Nhóm: {{ subcategoryName(dialogEquipment.subcategoryId) }}</p>
-                <p>NV phụ trách: {{ dialogEquipment.responsiblePerson || 'Chưa phân công' }}</p>
-              </div>
-            </div>
-
-            <div class="eq-panel__grid">
-              <label>Ngày kiểm tra *
-                <input type="date" [(ngModel)]="dialogDate" [max]="todayIso" (change)="onPanelDate()">
-              </label>
-              <label>Người kiểm tra *
-                <select [(ngModel)]="dialogInspector">
-                  <option *ngFor="let p of inspectorOptions" [value]="p">{{ p }}</option>
-                </select>
-              </label>
-            </div>
-
-            <h3>Hạng mục kiểm tra</h3>
-            <table class="eq-items-table">
-              <thead>
-                <tr><th>STT</th><th>Hạng mục</th><th>Kết quả</th><th>Ghi chú</th></tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of itemRows; let i = index">
-                  <td>{{ i + 1 }}</td>
-                  <td>{{ itemTitle(row.name) }}<small class="eq-item-detail" *ngIf="itemDetail(row.name)">{{ itemDetail(row.name) }}</small></td>
-                  <td>
-                    <select [ngModel]="row.result" (ngModelChange)="onItemResult(row, $event)">
-                      <option value="">—</option>
-                      <option value="PASS">Đạt</option>
-                      <option value="FAIL">Không đạt</option>
-                    </select>
-                  </td>
-                  <td><input [(ngModel)]="row.note" placeholder=""></td>
-                </tr>
-              </tbody>
-            </table>
-
-            <p class="eq-required">Kết quả tổng thể *</p>
-            <div class="eq-pills">
-              <button type="button" class="eq-pill eq-pill--pass" [class.is-on]="dialogResult === 'PASS'" (click)="dialogResult = 'PASS'">
-                <i class="material-icons">check_circle</i> Đạt
-              </button>
-              <button type="button" class="eq-pill eq-pill--fail" [class.is-on]="dialogResult === 'FAIL'" (click)="dialogResult = 'FAIL'">
-                <i class="material-icons">cancel</i> Không đạt
-              </button>
-              <button type="button" class="eq-pill" [class.is-on]="dialogResult === 'NA'" (click)="dialogResult = 'NA'">Không áp dụng</button>
-              <button type="button" class="eq-pill" [class.is-on]="dialogResult === 'NOT_CHECKED'" (click)="dialogResult = 'NOT_CHECKED'">Chưa kiểm tra</button>
-            </div>
-
-            <label>Ghi chung
-              <textarea [(ngModel)]="dialogNotes" rows="2" maxlength="500"></textarea>
-              <small>{{ dialogNotes.length }}/500</small>
-            </label>
-            <label *ngIf="dialogResult === 'FAIL'">Mô tả lỗi
-              <textarea [(ngModel)]="dialogDefect" rows="2"></textarea>
-            </label>
-
-            <p class="eq-required">Hình ảnh (nếu có)</p>
-            <div class="eq-photos">
-              <img *ngIf="dialogImage" [src]="dialogImage" alt="">
-              <label class="eq-add-photo">
-                <i class="material-icons">add</i>
-                Thêm ảnh
-                <input type="file" accept="image/*" hidden (change)="onImage($event)">
-              </label>
-            </div>
-
-            <label>Hành động khắc phục
-              <textarea [(ngModel)]="dialogAction" rows="2" maxlength="500"></textarea>
-              <small>{{ dialogAction.length }}/500</small>
-            </label>
-
-            <div class="eq-panel__actions">
-              <button type="button" class="eq-btn" (click)="closePanel()">Hủy</button>
-              <button type="button" class="eq-btn eq-btn--primary" (click)="saveInspection()" [disabled]="dialogSaving">
-                {{ dialogSaving ? 'Đang lưu...' : 'Lưu kiểm tra' }}
-              </button>
-            </div>
-          </aside>
-        </div>
-
-        <section class="eq-charts" *ngIf="!showInspect && !showMaintenanceForm">
+        <section class="eq-charts">
           <article>
             <h3>Tình trạng kiểm tra trong tháng {{ month }}/{{ year }}</h3>
             <div class="eq-legend">
@@ -409,12 +341,11 @@
         </section>
       </ng-container>
 
-      <section class="eq-inspect-page" *ngIf="view === 'check' && showMaintenanceForm">
+      <section class="eq-inspect-page" *ngIf="view === 'maint'">
         <div class="eq-page__bar">
           <h1 class="eq-title">Bảo dưỡng định kỳ</h1>
           <button type="button" class="eq-btn" (click)="printMaintenanceForm(false)">In A3</button>
           <button type="button" class="eq-btn" (click)="printMaintenanceForm(true)">Tải về</button>
-          <button type="button" class="eq-btn" (click)="closeMaintenanceForm()">Đóng</button>
         </div>
         <div class="eq-form-head">
           <div>
@@ -467,208 +398,338 @@
         </ng-container>
       </section>
 
-      <section class="eq-inspect-page" *ngIf="view === 'check' && showInspect">
+      <section class="eq-inspect-page eqk" *ngIf="view === 'check'">
         <div class="eq-page__bar">
-          <h1 class="eq-title">Danh sách kiểm tra</h1>
-          <button type="button" class="eq-btn" (click)="printChecklistA3(false)">In A3</button>
-          <button type="button" class="eq-btn" (click)="printChecklistA3(true)">Tải về</button>
-          <button type="button" class="eq-btn" (click)="showInspect = false">Đóng</button>
+          <h1 class="eq-title"><i class="material-icons">fact_check</i> Kiểm tra thiết bị {{ month }}/{{ year }}</h1>
+          <div class="eqk-actions">
+            <button type="button" class="eq-btn" (click)="printChecklistA3(false)"><i class="material-icons">print</i> In A3</button>
+            <button type="button" class="eq-btn" (click)="printChecklistA3(true)"><i class="material-icons">download</i> Tải về</button>
+          </div>
         </div>
-        <p class="eq-hint">Tick ô đúng ngày để kiểm tra. Ngày chưa tới và Chủ nhật thì không kiểm tra được. Thiết bị lịch tuần chỉ kiểm vào thứ 2, các ngày khác bị khóa. Thiết bị kiểm tra bằng QR code không tick trên máy tính.</p>
-        <div class="eq-table-card">
-          <table class="eq-table">
+
+        <div class="eqk-summary">
+          <div class="eqk-progress">
+            <div class="eqk-progress__head">
+              <span>Tiến độ kỳ hiện tại</span>
+              <strong>{{ stats.completed }}/{{ stats.total }} <small>({{ stats.completion }})</small></strong>
+            </div>
+            <div class="eqk-progress__bar">
+              <i class="is-pass" [style.width.%]="stats.total ? stats.passed * 100 / stats.total : 0"></i>
+              <i class="is-fail" [style.width.%]="stats.total ? stats.failed * 100 / stats.total : 0"></i>
+            </div>
+          </div>
+          <button type="button" class="eqk-kpi" [class.is-on]="filterResult === 'all'" (click)="filterResult = 'all'; checkPage = 1">
+            <small>Tất cả</small><strong>{{ stats.total }}</strong>
+          </button>
+          <button type="button" class="eqk-kpi eqk-kpi--pass" [class.is-on]="filterResult === 'PASS'" (click)="filterResult = 'PASS'; checkPage = 1">
+            <small>Đạt</small><strong>{{ stats.passed }}</strong>
+          </button>
+          <button type="button" class="eqk-kpi eqk-kpi--fail" [class.is-on]="filterResult === 'FAIL'" (click)="filterResult = 'FAIL'; checkPage = 1">
+            <small>Không đạt</small><strong>{{ stats.failed }}</strong>
+          </button>
+          <button type="button" class="eqk-kpi eqk-kpi--open" [class.is-on]="filterResult === 'NOT_CHECKED'" (click)="filterResult = 'NOT_CHECKED'; checkPage = 1">
+            <small>Chưa kiểm</small><strong>{{ stats.outstanding }}</strong>
+          </button>
+        </div>
+
+        <div class="eqk-legend">
+          <span><b class="eqk-cell eqk-cell--pass"><i class="material-icons">check</i></b> Đạt</span>
+          <span><b class="eqk-cell eqk-cell--fail"><i class="material-icons">close</i></b> Không đạt</span>
+          <span><b class="eqk-cell eqk-cell--open"></b> Chưa kiểm (bấm để kiểm)</span>
+          <span><b class="eqk-cell eqk-cell--lock"></b> Chủ nhật / lịch tuần chỉ thứ 2</span>
+          <span><b class="eqk-qr">QR</b> Kiểm bằng điện thoại</span>
+          <em>{{ filtered.length }} thiết bị</em>
+        </div>
+
+        <ng-container *ngIf="checkView as cv">
+        <nav class="eqk-pager" *ngIf="cv.total">
+          <span>Hiển thị <b>{{ cv.from }}–{{ cv.to }}</b> / {{ cv.total }} thiết bị</span>
+          <div class="eqk-pager__btns">
+            <button type="button" [disabled]="cv.page <= 1" (click)="checkPage = 1" title="Trang đầu"><i class="material-icons">first_page</i></button>
+            <button type="button" [disabled]="cv.page <= 1" (click)="checkPage = cv.page - 1" title="Trang trước"><i class="material-icons">chevron_left</i></button>
+            <button type="button" *ngFor="let n of cv.pages" class="eqk-pager__num" [class.is-on]="n === cv.page" (click)="checkPage = n">{{ n }}</button>
+            <button type="button" [disabled]="cv.page >= cv.pageCount" (click)="checkPage = cv.page + 1" title="Trang sau"><i class="material-icons">chevron_right</i></button>
+            <button type="button" [disabled]="cv.page >= cv.pageCount" (click)="checkPage = cv.pageCount" title="Trang cuối"><i class="material-icons">last_page</i></button>
+          </div>
+        </nav>
+        <div class="eq-table-card eqk-card">
+          <table class="eq-table eqk-table">
             <thead>
               <tr>
-                <th>STT</th>
-                <th>Tên thiết bị</th>
-                <th>Mã số quản lý</th>
-                <th>ID</th>
-                <th>Người phụ trách</th>
-                <th *ngFor="let d of days" class="eq-day" [class.is-day]="d === selectedDay" [class.is-sunday]="isSundayDay(d)">
-                  <span class="eq-day__w">{{ weekdayLabel(d) }}</span>
-                  <span class="eq-day__n">{{ d }}</span>
+                <th class="eqk-stick eqk-stick--no">#</th>
+                <th class="eqk-stick eqk-stick--name">Thiết bị</th>
+                <th>Phụ trách</th>
+                <th *ngFor="let d of days" class="eqk-day" [class.is-today]="isTodayDay(d)" [class.is-sunday]="isSundayDay(d)">
+                  <span class="eqk-day__w">{{ weekdayLabel(d) }}</span>
+                  <span class="eqk-day__n">{{ d }}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let eq of equipment; let i = index; trackBy: trackEq" [class.eq-row--view]="isQrCheck(eq)">
-                <td>{{ i + 1 }}</td>
-                <td class="eq-name">{{ eq.equipmentName }}</td>
-                <td>{{ eq.managementCode }}</td>
-                <td><input class="eq-inline eq-inline--code" [(ngModel)]="eq.responsibleEmployeeId" (blur)="saveRow(eq)" placeholder="ASP0106"></td>
-                <td>{{ eq.responsiblePerson || '—' }}</td>
-                <td *ngFor="let d of days" class="eq-day"
-                    [class.is-sunday]="isSundayDay(d)"
-                    [class.is-locked]="isWeeklyLockedDay(eq, d)"
-                    [class.eq-day--pass]="dayTone(eq, d) === 'pass'"
-                    [class.eq-day--fail]="dayTone(eq, d) === 'fail'"
-                    [class.eq-day--open]="dayTone(eq, d) === 'open'">
-                  <span *ngIf="isCellLocked(eq, d)" class="eq-day-lock" [title]="dayLockTitle(d, eq)"><i class="material-icons">lock</i></span>
-                  <span *ngIf="!isCellLocked(eq, d) && isQrCheck(eq)" class="eq-status-dot"
-                        [class.is-pass]="dayTone(eq, d) === 'pass'"
-                        [class.is-fail]="dayTone(eq, d) === 'fail'"
-                        [class.is-open]="dayTone(eq, d) === 'open'"
-                        title="Kiểm tra bằng QR code"></span>
-                  <button *ngIf="!isCellLocked(eq, d) && !isQrCheck(eq) && dayTone(eq, d) === 'pass'"
-                          type="button" class="eq-status-dot is-pass eq-dot-btn"
-                          (click)="openInspectDay(eq, d)"
-                          title="Đã kiểm bằng máy tính"></button>
-                  <button *ngIf="!isCellLocked(eq, d) && !isQrCheck(eq) && dayTone(eq, d) === 'fail'"
-                          type="button" class="eq-status-dot is-fail eq-dot-btn"
-                          (click)="openInspectDay(eq, d)"
-                          title="Không đạt"></button>
-                  <input *ngIf="!isCellLocked(eq, d) && !isQrCheck(eq) && dayTone(eq, d) !== 'pass' && dayTone(eq, d) !== 'fail'" type="checkbox"
-                         [checked]="checkedDay(eq, d)"
-                         [disabled]="!canInspectDay(d, eq)"
-                         (click)="$event.preventDefault(); openInspectDay(eq, d)"
-                         [title]="dayLockTitle(d, eq)">
+              <tr *ngFor="let eq of cv.rows; let i = index; trackBy: trackEq" [class.is-qr]="isQrCheck(eq)">
+                <td class="eqk-stick eqk-stick--no">{{ cv.from + i }}</td>
+                <td class="eqk-stick eqk-stick--name">
+                  <div class="eqk-name">
+                    <strong>{{ eq.equipmentName }}</strong>
+                    <b class="eqk-qr" *ngIf="isQrCheck(eq)" title="Kiểm tra bằng QR code trên điện thoại">QR</b>
+                    <b class="eqk-freq" *ngIf="eq.frequency === 'weekly'" title="Lịch tuần: chỉ kiểm thứ 2">Tuần</b>
+                  </div>
+                  <small>{{ eq.managementCode }}</small>
+                </td>
+                <td class="eqk-owner">
+                  <span>{{ eq.responsiblePerson || '—' }}</span>
+                  <input *ngIf="canManage" class="eq-inline eq-inline--code" [(ngModel)]="eq.responsibleEmployeeId" (change)="saveRow(eq)" placeholder="ASP0106">
+                  <small *ngIf="!canManage">{{ eq.responsibleEmployeeId || '—' }}</small>
+                </td>
+                <td *ngFor="let d of days" class="eqk-day" [class.is-today]="isTodayDay(d)" [title]="dayLockTitle(d, eq)">
+                  <ng-container [ngSwitch]="isCellLocked(eq, d) ? 'lock' : dayTone(eq, d)">
+                    <span *ngSwitchCase="'lock'" class="eqk-cell eqk-cell--lock"></span>
+                    <ng-container *ngSwitchCase="'pass'">
+                      <span *ngIf="isQrCheck(eq)" class="eqk-cell eqk-cell--pass"><i class="material-icons">check</i></span>
+                      <button *ngIf="!isQrCheck(eq)" type="button" class="eqk-cell eqk-cell--pass" (click)="openInspectDay(eq, d)"><i class="material-icons">check</i></button>
+                    </ng-container>
+                    <ng-container *ngSwitchCase="'fail'">
+                      <span *ngIf="isQrCheck(eq)" class="eqk-cell eqk-cell--fail"><i class="material-icons">close</i></span>
+                      <button *ngIf="!isQrCheck(eq)" type="button" class="eqk-cell eqk-cell--fail" (click)="openInspectDay(eq, d)"><i class="material-icons">close</i></button>
+                    </ng-container>
+                    <ng-container *ngSwitchCase="'open'">
+                      <span *ngIf="isQrCheck(eq)" class="eqk-cell eqk-cell--open is-qr"></span>
+                      <button *ngIf="!isQrCheck(eq)" type="button" class="eqk-cell eqk-cell--open"
+                              [disabled]="!canInspectDay(d, eq)" (click)="openInspectDay(eq, d)"></button>
+                    </ng-container>
+                    <span *ngSwitchDefault class="eqk-cell eqk-cell--future"></span>
+                  </ng-container>
                 </td>
               </tr>
-              <tr *ngIf="!equipment.length">
-                <td [attr.colspan]="5 + days.length">Chưa có thiết bị.</td>
+              <tr *ngIf="!cv.total">
+                <td class="eqk-empty" [attr.colspan]="3 + days.length">Không có thiết bị khớp bộ lọc.</td>
               </tr>
             </tbody>
           </table>
         </div>
+        </ng-container>
       </section>
 
-      <section class="eq-page eq-list-dash" *ngIf="view === 'list'">
-        <div class="wo-stats">
-          <article class="wo-stat">
-            <i class="material-icons">precision_manufacturing</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Tổng thiết bị</span><strong class="wo-stat__value">{{ equipment.length }}</strong></div>
-          </article>
-          <article class="wo-stat">
-            <i class="material-icons">check_circle</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Đang sử dụng</span><strong class="wo-stat__value">{{ countStatus('ACTIVE') }}</strong></div>
-          </article>
-          <article class="wo-stat">
-            <i class="material-icons">home_repair_service</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Bảo dưỡng trong</span><strong class="wo-stat__value">{{ countMaintenance('internal') }}</strong></div>
-          </article>
-          <article class="wo-stat">
-            <i class="material-icons">outbound</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Bảo dưỡng ngoài</span><strong class="wo-stat__value">{{ countMaintenance('external') }}</strong></div>
-          </article>
-          <article class="wo-stat">
-            <i class="material-icons">computer</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Kiểm tra máy tính</span><strong class="wo-stat__value">{{ countCheckBy('computer') }}</strong></div>
-          </article>
-          <article class="wo-stat">
-            <i class="material-icons">qr_code_2</i>
-            <div class="wo-stat__body"><span class="wo-stat__label">Kiểm tra QR</span><strong class="wo-stat__value">{{ countCheckBy('qr') }}</strong></div>
-          </article>
-        </div>
-        <div class="wo-toolbar">
-          <div class="wo-tabs"><span class="wo-tab wo-tab--on">Danh sách thiết bị</span></div>
-          <div class="wo-actions">
-            <button type="button" class="wo-action" (click)="openCreate()">Thêm thiết bị</button>
-            <button type="button" class="wo-action" (click)="printSelectedLabels()" [disabled]="!labelSelection.size">In tem QR ({{ labelSelection.size }})</button>
-            <button type="button" class="wo-action" (click)="askDelete()" [disabled]="!labelSelection.size">Xóa đã chọn ({{ labelSelection.size }})</button>
-            <button type="button" class="wo-action" (click)="excelInput.click()">Nhập Excel</button>
-            <button type="button" class="wo-action" (click)="exportExcel()">Xuất Excel</button>
+      <section class="eql" *ngIf="view === 'list'">
+        <header class="eql-head">
+          <div class="eql-head__title">
+            <h1>Danh sách thiết bị</h1>
+            <span>{{ filtered.length }}<ng-container *ngIf="hasListFilter"> / {{ equipment.length }}</ng-container> thiết bị</span>
           </div>
+          <div class="eql-head__actions">
+            <button type="button" class="eq-btn" (click)="excelInput.click()"><i class="material-icons">upload_file</i> Nhập Excel</button>
+            <button type="button" class="eq-btn" (click)="exportExcel()"><i class="material-icons">download</i> Xuất Excel</button>
+            <button type="button" class="eq-btn eq-btn--primary" (click)="openCreate()"><i class="material-icons">add</i> Thêm thiết bị</button>
+          </div>
+        </header>
+
+        <div class="eql-filters">
+          <div class="eql-chips">
+            <button type="button" *ngFor="let f of statusFilters" class="eql-chip" [class.is-on]="filterStatus === f.key" (click)="setStatusFilter(f.key)">
+              {{ f.label }} <b>{{ statusCount(f.key) }}</b>
+            </button>
+          </div>
+          <select class="eql-select" [(ngModel)]="filterSubcategory" title="Lọc theo nhóm">
+            <option value="">Tất cả nhóm</option>
+            <optgroup *ngFor="let g of groupOptions" [label]="g.name">
+              <option *ngFor="let s of g.subs" [value]="s.id">{{ s.name }}</option>
+            </optgroup>
+          </select>
+          <button type="button" class="eql-link" *ngIf="hasListFilter" (click)="clearListFilters()">Xóa lọc</button>
         </div>
-        <div class="wo-table-card">
-          <div class="wo-table-scroll">
-        <table class="eq-table eq-table--plain">
-          <thead>
-            <tr>
-              <th><input type="checkbox" [checked]="filteredSelected" (change)="toggleAllFiltered()"></th>
-              <th>STT</th><th>Tên thiết bị</th><th>Mã số quản lý</th><th>Nhóm</th><th>ID</th><th>Người phụ trách</th><th>Tần suất</th><th>Trạng thái</th><th>Kiểm tra bằng</th><th>Bảo dưỡng</th><th>Chu kỳ bảo dưỡng</th><th>Ngày bắt đầu</th><th>In tem</th><th>Sửa</th><th>Lịch sử</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let eq of filtered; trackBy: trackEq">
-              <td><input type="checkbox" [checked]="labelSelection.has(eq.equipmentId)" (change)="toggleLabel(eq.equipmentId)"></td>
-              <td>{{ eq.stt }}</td>
-              <td>{{ eq.equipmentName }}</td>
-              <td>{{ eq.managementCode }}</td>
-              <td>{{ subcategoryName(eq.subcategoryId) }}</td>
-              <td><input class="eq-inline eq-inline--code" [(ngModel)]="eq.responsibleEmployeeId" (blur)="saveRow(eq)" placeholder="ASP0106"></td>
-              <td><input class="eq-inline" [(ngModel)]="eq.responsiblePerson" (blur)="saveRow(eq)" placeholder="Tên"></td>
-              <td>
-                <select class="eq-inline" [ngModel]="eq.frequency" (ngModelChange)="setFrequency(eq, $event)">
-                  <option value="daily">Ngày</option>
-                  <option value="weekly">Tuần</option>
-                  <option value="monthly">Tháng</option>
-                </select>
-              </td>
-              <td>
-                <select class="eq-inline" [ngModel]="eq.status" (ngModelChange)="setStatus(eq, $event)">
-                  <option value="ACTIVE">Đang sử dụng</option>
-                  <option value="REPAIR">Đang sửa chữa</option>
-                  <option value="INACTIVE">Không sử dụng</option>
-                  <option value="SPARE">Dự phòng</option>
-                </select>
-              </td>
-              <td>
-                <select class="eq-inline" [ngModel]="eq.checkBy || 'computer'" (ngModelChange)="setCheckBy(eq, $event)">
-                  <option value="qr">QR code</option>
-                  <option value="computer">Máy tính</option>
-                </select>
-              </td>
-              <td>
-                <select class="eq-inline" [ngModel]="eq.maintenanceBy || ''" (ngModelChange)="setMaintenance(eq, $event)">
-                  <option value="">—</option>
-                  <option value="internal">Nội bộ</option>
-                  <option value="external">Bên ngoài</option>
-                </select>
-              </td>
-              <td class="eq-cycle">
-                <select *ngIf="eq.maintenanceBy" class="eq-inline" [ngModel]="eq.maintenanceCycle || ''" (ngModelChange)="setMaintenanceCycle(eq, $event)">
-                  <option value="">—</option>
-                  <option value="month">1 tháng</option>
-                  <option value="quarter">3 tháng</option>
-                  <option value="half">Theo 6 tháng</option>
-                  <option value="year">Theo 1 năm</option>
-                  <option value="custom">Tùy chọn</option>
-                </select>
-                <input *ngIf="eq.maintenanceBy && eq.maintenanceCycle === 'custom'" type="number" class="eq-inline eq-inline--days" min="1" placeholder="Lặp lại (ngày)" [ngModel]="eq.maintenanceRepeatDays || ''" (ngModelChange)="setMaintenanceRepeat(eq, $event)">
-              </td>
-              <td>
-                <input *ngIf="eq.maintenanceBy" type="date" class="eq-inline" [ngModel]="eq.maintenanceStartDate || ''" (ngModelChange)="setMaintenanceStart(eq, $event)">
-              </td>
-              <td><button type="button" class="eq-col-btn" (click)="printOne(eq)">In tem</button></td>
-              <td><button type="button" class="eq-col-btn" (click)="openEdit(eq)">Sửa</button></td>
-              <td><button type="button" class="eq-col-btn" (click)="openHistory(eq)">Lịch sử</button></td>
-            </tr>
-          </tbody>
-        </table>
+
+        <div class="eql-selbar" *ngIf="labelSelection.size">
+          <strong>Đã chọn {{ labelSelection.size }}</strong>
+          <button type="button" class="eq-btn" (click)="printSelectedLabels()"><i class="material-icons">qr_code_2</i> In tem QR</button>
+          <span class="eql-selbar__move">
+            <select class="eql-select" [(ngModel)]="bulkGroup" [disabled]="bulkMoving">
+              <option value="">Chuyển sang nhóm…</option>
+              <optgroup *ngFor="let g of groupOptions" [label]="g.name">
+                <option *ngFor="let s of g.subs" [value]="s.id">{{ s.name }}</option>
+              </optgroup>
+            </select>
+            <button type="button" class="eq-btn eq-btn--primary" (click)="moveSelected()" [disabled]="!bulkGroup || bulkMoving">{{ bulkMoving ? 'Đang chuyển…' : 'Chuyển' }}</button>
+          </span>
+          <button type="button" class="eq-btn eq-btn--danger-soft" (click)="askDelete()"><i class="material-icons">delete</i> Xóa</button>
+          <button type="button" class="eql-link" (click)="clearSelection()">Bỏ chọn</button>
+        </div>
+
+        <p class="eql-hint">Sửa trực tiếp trong bảng — tự lưu khi rời ô. <b>Enter</b> lưu và xuống dòng · <b>Shift+Enter</b> lên dòng · <b>Esc</b> hoàn tác · ô chọn lưu ngay.</p>
+
+        <div class="eql-table-wrap">
+          <table class="eql-table">
+            <thead>
+              <tr>
+                <th class="eql-col-check"><input type="checkbox" [checked]="filteredSelected" (change)="toggleAllFiltered()" title="Chọn tất cả"></th>
+                <th class="eql-col-stt">STT</th>
+                <th>Tên thiết bị</th>
+                <th>Mã số quản lý</th>
+                <th>Người phụ trách</th>
+                <th>ID</th>
+                <th>Tần suất</th>
+                <th>Trạng thái</th>
+                <th>Kiểm tra bằng</th>
+                <th>Bảo dưỡng</th>
+                <th>Nhóm</th>
+                <th class="eql-col-actions"></th>
+              </tr>
+            </thead>
+            <tbody *ngFor="let sec of listSections; trackBy: trackSection">
+              <tr class="eql-group">
+                <td class="eql-col-check"><input type="checkbox" [checked]="sectionSelected(sec.rows)" (change)="toggleSection(sec.rows)" title="Chọn cả nhóm"></td>
+                <td colspan="11">
+                  <div class="eql-group__row">
+                    <button type="button" class="eql-group__toggle" (click)="toggleListGroup(sec.id)">
+                      <i class="material-icons">{{ listCollapsed.has(sec.id) ? 'chevron_right' : 'expand_more' }}</i>
+                      <strong>{{ sec.name }}</strong>
+                      <span class="eql-badge">{{ sec.rows.length }}</span>
+                      <small>{{ sec.categoryName }}</small>
+                    </button>
+                    <button type="button" class="eql-link" (click)="openCreate(sec.id)"><i class="material-icons">add</i> Thêm vào nhóm</button>
+                  </div>
+                </td>
+              </tr>
+              <ng-container *ngIf="!listCollapsed.has(sec.id)">
+                <tr *ngFor="let eq of sec.rows; trackBy: trackEq" class="eql-row" [attr.data-eq]="eq.equipmentId"
+                    [class.is-recent]="eq.equipmentId === recentId" [class.is-selected]="labelSelection.has(eq.equipmentId)">
+                  <td class="eql-col-check"><input type="checkbox" [checked]="labelSelection.has(eq.equipmentId)" (change)="toggleLabel(eq.equipmentId)"></td>
+                  <td class="eql-col-stt">
+                    {{ eq.stt }}
+                    <i class="material-icons eq-row-state" *ngIf="rowState.get(eq.equipmentId) as st"
+                       [class.is-saving]="st === 'saving'" [class.is-saved]="st === 'saved'" [class.is-error]="st === 'error'"
+                       [title]="st === 'saving' ? 'Đang lưu…' : st === 'saved' ? 'Đã lưu' : 'Chưa lưu được — sửa lại ô để thử lại'">{{ st === 'saving' ? 'sync' : st === 'saved' ? 'check_circle' : 'error' }}</i>
+                  </td>
+                  <td><input class="eql-input eql-input--name" data-col="name" [(ngModel)]="eq.equipmentName" [title]="eq.equipmentName"
+                             (focus)="onCellFocus($event)" (keydown)="onCellKey($event, eq, 'equipmentName')" (change)="saveRow(eq)"></td>
+                  <td class="eql-code">{{ eq.managementCode }}</td>
+                  <td><input class="eql-input" data-col="person" [(ngModel)]="eq.responsiblePerson" placeholder="Chưa gán" list="eq-staff-names" autocomplete="off"
+                             (focus)="onCellFocus($event)" (keydown)="onCellKey($event, eq, 'responsiblePerson')" (change)="onRowPerson(eq)"></td>
+                  <td><input class="eql-input eql-input--code" data-col="asp" [(ngModel)]="eq.responsibleEmployeeId" placeholder="ASP…"
+                             (focus)="onCellFocus($event)" (keydown)="onCellKey($event, eq, 'responsibleEmployeeId')" (change)="saveRow(eq)"></td>
+                  <td>
+                    <select class="eql-input" [ngModel]="eq.frequency" (ngModelChange)="setFrequency(eq, $event)">
+                      <option value="daily">Ngày</option>
+                      <option value="weekly">Tuần</option>
+                      <option value="monthly">Tháng</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select class="eql-input eql-status" [attr.data-status]="eq.status" [ngModel]="eq.status" (ngModelChange)="setStatus(eq, $event)">
+                      <option value="ACTIVE">Đang sử dụng</option>
+                      <option value="REPAIR">Đang sửa chữa</option>
+                      <option value="INACTIVE">Không sử dụng</option>
+                      <option value="SPARE">Dự phòng</option>
+                    </select>
+                  </td>
+                  <td>
+                    <span class="eql-seg">
+                      <button type="button" [class.is-on]="(eq.checkBy || 'computer') === 'computer'" (click)="setCheckBy(eq, 'computer')" title="Tick trên máy tính">Máy tính</button>
+                      <button type="button" [class.is-on]="eq.checkBy === 'qr'" (click)="setCheckBy(eq, 'qr')" title="Quét QR bằng điện thoại">QR</button>
+                    </span>
+                  </td>
+                  <td class="eql-maint">
+                    <select class="eql-input" [ngModel]="eq.maintenanceBy || ''" (ngModelChange)="setMaintenance(eq, $event)">
+                      <option value="">Không</option>
+                      <option value="internal">Nội bộ</option>
+                      <option value="external">Bên ngoài</option>
+                    </select>
+                    <ng-container *ngIf="eq.maintenanceBy">
+                      <select class="eql-input" [ngModel]="eq.maintenanceCycle || ''" (ngModelChange)="setMaintenanceCycle(eq, $event)" title="Chu kỳ">
+                        <option value="">Chu kỳ…</option>
+                        <option value="month">1 tháng</option>
+                        <option value="quarter">3 tháng</option>
+                        <option value="half">6 tháng</option>
+                        <option value="year">1 năm</option>
+                        <option value="custom">Tùy chọn</option>
+                      </select>
+                      <input *ngIf="eq.maintenanceCycle === 'custom'" type="number" class="eql-input eql-input--days" min="1" placeholder="Số ngày"
+                             [ngModel]="eq.maintenanceRepeatDays || ''" (ngModelChange)="setMaintenanceRepeat(eq, $event)" title="Lặp lại sau (ngày)">
+                      <input type="date" class="eql-input eql-input--date" [ngModel]="eq.maintenanceStartDate || ''" (ngModelChange)="setMaintenanceStart(eq, $event)" title="Ngày bắt đầu">
+                    </ng-container>
+                  </td>
+                  <td>
+                    <select class="eql-input eql-input--group" [ngModel]="eq.subcategoryId" (ngModelChange)="setGroup(eq, $event)" [title]="subcategoryName(eq.subcategoryId)">
+                      <optgroup *ngFor="let g of groupOptions" [label]="g.name">
+                        <option *ngFor="let s of g.subs" [value]="s.id">{{ s.name }}</option>
+                      </optgroup>
+                    </select>
+                  </td>
+                  <td class="eql-col-actions">
+                    <button type="button" class="eql-icon" (click)="openEdit(eq)" title="Sửa đầy đủ"><i class="material-icons">edit</i></button>
+                    <button type="button" class="eql-icon" (click)="printOne(eq)" title="In tem QR"><i class="material-icons">qr_code_2</i></button>
+                    <button type="button" class="eql-icon" (click)="openHistory(eq)" title="Lịch sử kiểm tra"><i class="material-icons">history</i></button>
+                  </td>
+                </tr>
+              </ng-container>
+            </tbody>
+          </table>
+          <div class="eql-empty" *ngIf="!listSections.length">
+            <i class="material-icons">inventory_2</i>
+            <p>{{ hasListFilter ? 'Không có thiết bị khớp bộ lọc.' : 'Chưa có thiết bị nào.' }}</p>
+            <button type="button" class="eq-btn" *ngIf="hasListFilter" (click)="clearListFilters()">Xóa lọc</button>
+            <button type="button" class="eq-btn eq-btn--primary" *ngIf="!hasListFilter" (click)="openCreate()"><i class="material-icons">add</i> Thêm thiết bị</button>
           </div>
         </div>
       </section>
 
-      <section class="eq-page" *ngIf="view === 'groups'">
-        <h1 class="eq-title">Nhóm thiết bị</h1>
-        <article class="eq-block" *ngFor="let g of grouped">
-          <h2>{{ g.roman }}. {{ g.name }}</h2>
-          <p *ngFor="let sub of g.subs; let si = index">{{ si + 1 }}. {{ sub.name }} — {{ sub.rows.length }} thiết bị</p>
-        </article>
-      </section>
+      <section class="eqc" *ngIf="view === 'items'">
+        <header class="eql-head">
+          <div class="eql-head__title">
+            <h1>Hạng mục kiểm tra</h1>
+            <span>Mỗi nhóm có danh sách hạng mục riêng, dùng khi kiểm tra thiết bị.</span>
+          </div>
+          <span class="eqc-state" [attr.data-state]="catalogState" *ngIf="catalogState">
+            <i class="material-icons">{{ catalogState === 'saving' ? 'sync' : catalogState === 'saved' ? 'check_circle' : 'error' }}</i>
+            {{ catalogState === 'saving' ? 'Đang lưu…' : catalogState === 'saved' ? 'Đã lưu' : 'Chưa lưu được' }}
+          </span>
+        </header>
+        <p class="eql-hint">Sửa chữ trong ô rồi bấm ra ngoài hoặc <b>Enter</b> để lưu · gõ vào ô cuối thẻ rồi <b>Enter</b> để thêm · <b>×</b> để xóa.</p>
 
-      <section class="eq-page" *ngIf="view === 'items'">
-        <h1 class="eq-title">Hạng mục kiểm tra</h1>
-        <article class="eq-block" *ngFor="let g of checklistGroups">
-          <h2>{{ g.name }}</h2>
-          <div *ngFor="let sub of g.subs">
-            <h3>{{ sub.name }}</h3>
-            <div class="eq-item-edit" *ngFor="let item of sub.items; let i = index">
-              <input class="eq-inline" [(ngModel)]="sub.items[i]" (blur)="saveCatalog()">
-              <button type="button" class="eq-col-btn" (click)="removeCheckItem(sub, i)">Xóa</button>
-            </div>
-            <button type="button" class="eq-btn" (click)="addCheckItem(sub)">Thêm hạng mục</button>
+        <ng-container *ngFor="let g of checklistGroups">
+          <h2 class="eqc-cat">{{ g.name }}</h2>
+          <div class="eqc-grid">
+            <article class="eqc-card" *ngFor="let sub of g.subs">
+              <header class="eqc-card__head">
+                <strong>{{ sub.name }}</strong>
+                <small>{{ groupCount(sub.id) }} thiết bị · {{ sub.items.length }} hạng mục</small>
+              </header>
+              <ol class="eqc-items">
+                <li *ngFor="let item of sub.items; let i = index; trackBy: trackIndex">
+                  <span class="eqc-no">{{ i + 1 }}</span>
+                  <input class="eql-input" [(ngModel)]="sub.items[i]" (change)="saveCatalog()" (keydown.enter)="blurInput($event)">
+                  <button type="button" class="eql-icon eql-icon--danger" (click)="removeCheckItem(sub, i)" title="Xóa hạng mục"><i class="material-icons">close</i></button>
+                </li>
+                <li class="eqc-empty" *ngIf="!sub.items.length">Chưa có hạng mục.</li>
+              </ol>
+              <form class="eqc-add" (ngSubmit)="addItemFromDraft(sub)">
+                <input class="eql-input" [(ngModel)]="itemDrafts[sub.id]" [name]="'draft-' + sub.id" placeholder="Thêm hạng mục, Enter để lưu" autocomplete="off">
+                <button type="submit" class="eql-icon" title="Thêm"><i class="material-icons">add</i></button>
+              </form>
+            </article>
           </div>
-        </article>
-        <article class="eq-block">
-          <h2>Bảo dưỡng nội bộ</h2>
-          <p class="eq-hint">Nhập các mục cần bảo dưỡng.</p>
-          <div class="eq-item-edit" *ngFor="let item of maintenanceItems; let i = index">
-            <input class="eq-inline" [(ngModel)]="maintenanceItems[i]" (blur)="saveCatalog()">
-            <button type="button" class="eq-col-btn" (click)="removeMaintenanceItem(i)">Xóa</button>
-          </div>
-          <button type="button" class="eq-btn" (click)="addMaintenanceItem()">Thêm mục bảo dưỡng</button>
-        </article>
+        </ng-container>
+
+        <h2 class="eqc-cat">Bảo dưỡng nội bộ</h2>
+        <div class="eqc-grid">
+          <article class="eqc-card">
+            <header class="eqc-card__head">
+              <strong>Các mục cần bảo dưỡng</strong>
+              <small>{{ maintenanceItems.length }} mục</small>
+            </header>
+            <ol class="eqc-items">
+              <li *ngFor="let item of maintenanceItems; let i = index; trackBy: trackIndex">
+                <span class="eqc-no">{{ i + 1 }}</span>
+                <input class="eql-input" [(ngModel)]="maintenanceItems[i]" (change)="saveCatalog()" (keydown.enter)="blurInput($event)">
+                <button type="button" class="eql-icon eql-icon--danger" (click)="removeMaintenanceItem(i)" title="Xóa mục"><i class="material-icons">close</i></button>
+              </li>
+              <li class="eqc-empty" *ngIf="!maintenanceItems.length">Chưa có mục bảo dưỡng.</li>
+            </ol>
+            <form class="eqc-add" (ngSubmit)="addMaintenanceFromDraft()">
+              <input class="eql-input" [(ngModel)]="itemDrafts[MAINT_DRAFT]" name="draft-maint" placeholder="Thêm mục bảo dưỡng, Enter để lưu" autocomplete="off">
+              <button type="submit" class="eql-icon" title="Thêm"><i class="material-icons">add</i></button>
+            </form>
+          </article>
+        </div>
       </section>
 
       <section class="eq-page" *ngIf="view === 'history'">
@@ -692,7 +753,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let eq of equipment; let i = index; trackBy: trackEq">
+              <tr *ngFor="let eq of filtered; let i = index; trackBy: trackEq">
                 <td>{{ i + 1 }}</td>
                 <td class="eq-name">{{ eq.equipmentName }}</td>
                 <td>{{ eq.managementCode }}</td>
@@ -701,7 +762,7 @@
                   <span *ngIf="!isCellLocked(eq, d)" class="eq-status-dot" [class.is-done]="checkedDay(eq, d)" [title]="checkedDay(eq, d) ? 'Đã kiểm' : 'Chưa kiểm'"></span>
                 </td>
               </tr>
-              <tr *ngIf="!equipment.length"><td [attr.colspan]="3 + days.length">Chưa có thiết bị.</td></tr>
+              <tr *ngIf="!filtered.length"><td [attr.colspan]="3 + days.length">Chưa có thiết bị.</td></tr>
             </tbody>
           </table>
         </div>
@@ -763,71 +824,65 @@
   </div>
 
   <input #excelInput type="file" accept=".xlsx,.xls" hidden (change)="onExcel($event)">
+  <datalist id="eq-staff-names">
+    <option *ngFor="let person of staff" [value]="person.name">{{ person.employeeId }}</option>
+  </datalist>
 
   <div class="eq-modal" *ngIf="showForm">
-    <form class="eq-dialog" (ngSubmit)="saveEquipment()">
-      <h2>{{ editing ? 'Sửa thiết bị' : 'Thêm thiết bị' }}</h2>
-      <label>Mã số quản lý
-        <input [(ngModel)]="form.managementCode" name="code" [readonly]="editing" required>
-      </label>
-      <label>Tên thiết bị
-        <input [(ngModel)]="form.equipmentName" name="name" required>
-      </label>
-      <label>Nhóm
-        <select [(ngModel)]="form.categoryId" name="cat" (ngModelChange)="onFormCategory()">
-          <option *ngFor="let c of categoryOptions" [value]="c.id">{{ c.name }}</option>
-        </select>
-      </label>
-      <label>Nhóm con
-        <select [(ngModel)]="form.subcategoryId" name="sub">
-          <option *ngFor="let s of formSubcategories" [value]="s.id">{{ s.name }}</option>
-        </select>
-      </label>
-      <label>ID
-        <input [(ngModel)]="form.responsibleEmployeeId" name="asp" placeholder="ASP0106">
-      </label>
-      <label>Người phụ trách
-        <input [(ngModel)]="form.responsiblePerson" name="person" placeholder="Để trống nếu chưa gán">
-      </label>
-      <label>Tần suất
-        <select [(ngModel)]="form.frequency" name="freq">
-          <option value="daily">Ngày</option>
-          <option value="weekly">Tuần</option>
-          <option value="monthly">Tháng</option>
-        </select>
-      </label>
-      <label>Trạng thái
-        <select [(ngModel)]="form.status" name="status">
-          <option value="ACTIVE">Đang sử dụng</option>
-          <option value="REPAIR">Đang sửa chữa</option>
-          <option value="INACTIVE">Không sử dụng</option>
-          <option value="SPARE">Dự phòng</option>
-        </select>
-      </label>
-      <label>Kiểm tra bằng
-        <select [(ngModel)]="form.checkBy" name="checkBy">
-          <option value="qr">QR code</option>
-          <option value="computer">Máy tính</option>
-        </select>
-      </label>
-      <div class="eq-panel__actions">
-        <button type="button" class="eq-btn" (click)="showForm = false">Hủy</button>
-        <button type="submit" class="eq-btn eq-btn--primary">Lưu</button>
-      </div>
-    </form>
-  </div>
+    <form class="eq-dialog eq-dialog--form" (ngSubmit)="saveEquipment(false)" (keydown.escape)="closeForm()">
+      <h2>{{ editing ? 'Sửa thiết bị ' + form.managementCode : 'Thêm thiết bị' }}</h2>
 
-  <div class="eq-modal" *ngIf="showListPassword">
-    <form class="eq-dialog" (ngSubmit)="confirmListPassword()">
-      <h2>Danh sách thiết bị</h2>
-      <p>Nhập mật khẩu để mở mục này.</p>
-      <label>Mật khẩu
-        <input type="password" [(ngModel)]="listPassword" name="listPass" autocomplete="off" required autofocus>
+      <label>Nhóm
+        <select [(ngModel)]="form.subcategoryId" name="sub" (ngModelChange)="onFormGroup()">
+          <optgroup *ngFor="let g of groupOptions" [label]="g.name">
+            <option *ngFor="let s of g.subs" [value]="s.id">{{ s.name }}</option>
+          </optgroup>
+        </select>
       </label>
-      <p class="eq-toast is-error" *ngIf="listPasswordError">{{ listPasswordError }}</p>
+      <label>Tên thiết bị *
+        <input #formName [(ngModel)]="form.equipmentName" name="name" autocomplete="off" placeholder="VD: Xe nâng điện PTE15N">
+      </label>
+      <label>Mã số quản lý *
+        <input [(ngModel)]="form.managementCode" name="code" [readonly]="editing" autocomplete="off" placeholder="VD: WH-XNĐ_012">
+        <small class="eq-field-hint" *ngIf="!editing && form.managementCode && form.managementCode === suggestedCode">Mã gợi ý theo nhóm — sửa được.</small>
+      </label>
+
+      <div class="eq-form-grid">
+        <label>Người phụ trách
+          <input [(ngModel)]="form.responsiblePerson" name="person" list="eq-staff-names" autocomplete="off"
+                 (ngModelChange)="onFormPerson($event)" placeholder="Chọn từ Nhân sự hoặc gõ tên">
+        </label>
+        <label>ID
+          <input [(ngModel)]="form.responsibleEmployeeId" name="asp" autocomplete="off" placeholder="ASP0106">
+        </label>
+        <label>Tần suất
+          <select [(ngModel)]="form.frequency" name="freq">
+            <option value="daily">Ngày</option>
+            <option value="weekly">Tuần</option>
+            <option value="monthly">Tháng</option>
+          </select>
+        </label>
+        <label>Trạng thái
+          <select [(ngModel)]="form.status" name="status">
+            <option value="ACTIVE">Đang sử dụng</option>
+            <option value="REPAIR">Đang sửa chữa</option>
+            <option value="INACTIVE">Không sử dụng</option>
+            <option value="SPARE">Dự phòng</option>
+          </select>
+        </label>
+        <label>Kiểm tra bằng
+          <select [(ngModel)]="form.checkBy" name="checkBy">
+            <option value="computer">Máy tính</option>
+            <option value="qr">QR code</option>
+          </select>
+        </label>
+      </div>
+      <p class="eq-toast is-error" *ngIf="formError">{{ formError }}</p>
+
       <div class="eq-panel__actions">
-        <button type="button" class="eq-btn" (click)="cancelListPassword()">Hủy</button>
-        <button type="submit" class="eq-btn eq-btn--primary">Mở</button>
+        <button type="button" class="eq-btn" (click)="closeForm()" [disabled]="formSaving">Hủy</button>
+        <button type="button" class="eq-btn" *ngIf="!editing" (click)="saveEquipment(true)" [disabled]="formSaving">Lưu &amp; thêm tiếp</button>
+        <button type="submit" class="eq-btn eq-btn--primary" [disabled]="formSaving">{{ formSaving ? 'Đang lưu…' : 'Lưu' }}</button>
       </div>
     </form>
   </div>
@@ -835,11 +890,7 @@
   <div class="eq-modal" *ngIf="showDelete">
     <form class="eq-dialog" (ngSubmit)="confirmDelete()">
       <h2>Xóa {{ labelSelection.size }} thiết bị</h2>
-      <p>Thiết bị đã chọn sẽ bị xóa khỏi hệ thống. Nhập mật khẩu để xác nhận.</p>
-      <label>Mật khẩu
-        <input type="password" [(ngModel)]="deletePassword" name="deletePass" autocomplete="off" required>
-      </label>
-      <p class="eq-toast is-error" *ngIf="deleteError">{{ deleteError }}</p>
+      <p>Thiết bị đã chọn và toàn bộ lịch sử kiểm tra của chúng sẽ bị xóa khỏi hệ thống. Không hoàn tác được.</p>
       <div class="eq-panel__actions">
         <button type="button" class="eq-btn" (click)="showDelete = false" [disabled]="deleting">Hủy</button>
         <button type="submit" class="eq-btn eq-btn--danger" [disabled]="deleting">{{ deleting ? 'Đang xóa...' : 'Xóa' }}</button>

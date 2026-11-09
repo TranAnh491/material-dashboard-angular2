@@ -26,7 +26,7 @@
   </div>
 
   <!-- ═══ Mobile: Apple-style WMS shell (logic unchanged) ═══ -->
-  <div class="ob-m" *ngIf="isMobile">
+  <div class="ob-m" *ngIf="isMobile" [class.ob-m--scanning]="isBatchScanningMode && exportMode === 'NL'">
     <header class="ob-m-header ob-m-header--mock">
       <div class="ob-m-header__row1">
         <button type="button" class="ob-m-header__iconbtn" (click)="goMobileMenu()" aria-label="Menu">
@@ -127,17 +127,65 @@
               <span>Đang cập nhật…</span>
             </div>
             <ng-container *ngIf="!isSavingBatchData">
-              <div class="ob-m-scan__chiprow">
-                <span class="ob-m-chip-pill">
-                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                  <b>LSX</b>&nbsp;{{ batchProductionOrder || '…' }}
-                </span>
-                <span class="ob-m-chiprow__sep" aria-hidden="true">·</span>
-                <span class="ob-m-chip-pill">
-                  <i class="material-icons ob-m-chip-pill__ico">check_circle</i>
-                  <b>NV</b>&nbsp;{{ batchEmployeeId || '…' }}
-                </span>
+              <!-- PDA: 1 màn hình — mã vừa scan + đã xuất/cần trong LSX, danh sách PXK cuộn bên trong -->
+              <div class="ob-pda__flash"
+                   [class.ob-pda__flash--ok]="scanFlash?.kind === 'ok'"
+                   [class.ob-pda__flash--err]="scanFlash?.kind === 'err'">
+                <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+                <span>{{ scanFlash?.text || 'Sẵn sàng — scan tem bag' }}</span>
               </div>
+
+              <div class="ob-pda__cur" *ngIf="scanIdentity as id">
+                <div class="ob-pda__cur-head">
+                  <strong>{{ id.code }}</strong>
+                  <span>PO {{ id.po || '—' }} · bag {{ id.bag || '—' }} · +{{ id.qty | number:'1.0-4' }}</span>
+                </div>
+                <ng-container *ngIf="mobileScanCurrentRow as r; else obPdaNoPxk">
+                  <div class="ob-pda__nums">
+                    <div class="ob-pda__num ob-pda__num--done">
+                      <span>Đã xuất</span>
+                      <b>{{ r.exported + r.scanned | number:'1.0-4' }}</b>
+                    </div>
+                    <div class="ob-pda__num">
+                      <span>Cần</span>
+                      <b>{{ r.need | number:'1.0-4' }}</b>
+                    </div>
+                    <div class="ob-pda__num"
+                         [class.ob-pda__num--ok]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                         [class.ob-pda__num--over]="r.remain < -0.0001">
+                      <span>{{ r.remain < -0.0001 ? 'Vượt' : 'Còn' }}</span>
+                      <b>{{ (r.remain < 0 ? -r.remain : r.remain) | number:'1.0-4' }}</b>
+                    </div>
+                  </div>
+                  <div class="ob-pda__cur-bag" *ngIf="r.std > 0">Bag {{ r.doneBags }}/{{ r.needBags }} · còn {{ scanRemainBagText(r) }}</div>
+                </ng-container>
+                <ng-template #obPdaNoPxk>
+                  <div class="ob-pda__cur-bag ob-pda__cur-bag--warn">Mã này không có trên PXK của LSX</div>
+                </ng-template>
+                <div class="ob-pda__tags" *ngIf="id.tags.length">
+                  <span *ngFor="let t of id.tags" class="ob-pda__tag ob-pda__tag--{{ t.tone }}">{{ t.text }}</span>
+                </div>
+              </div>
+
+              <div class="ob-pda__lsx">
+                <span class="ob-pda__lsx-id"><b>{{ batchProductionOrder || '…' }}</b> · NV {{ batchEmployeeId || '…' }}</span>
+                <div class="ob-pda__bar" *ngIf="scanPxkProgress.length"><div [style.width.%]="scanLsxBagStats.percent"></div></div>
+                <span class="ob-pda__lsx-pct" *ngIf="scanPxkProgress.length">{{ scanPxkDoneCount }}/{{ scanPxkProgress.length }} mã đủ</span>
+              </div>
+
+              <div class="ob-pda__list">
+                <p class="ob-pda__empty" *ngIf="!scanPxkProgress.length">{{ isProductionOrderScanned ? 'LSX chưa có PXK (hoặc đang tải)…' : 'Chưa scan LSX.' }}</p>
+                <div class="ob-pda__row"
+                     *ngFor="let r of scanPxkProgress; trackBy: trackScanPxkRow"
+                     [class.is-cur]="scanIdentity?.code === r.code"
+                     [class.is-done]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                     [class.is-over]="r.remain < -0.0001">
+                  <span class="ob-pda__row-code">{{ r.code }}<small>{{ r.po || '—' }}</small></span>
+                  <span class="ob-pda__row-qty">{{ r.exported + r.scanned | number:'1.0-4' }}/{{ r.need | number:'1.0-4' }}</span>
+                  <span class="ob-pda__row-remain">{{ r.remain < -0.0001 ? '+' + ((-r.remain) | number:'1.0-4') : (r.remain <= 0.0001 ? '✓' : (r.remain | number:'1.0-4')) }}</span>
+                </div>
+              </div>
+
               <div class="ob-m-scan__acts">
                 <button type="button" class="ob-m-btn ob-m-btn--ghost" (click)="showScanReview()" *ngIf="pendingScanData.length > 0 && !showScanReviewModal">
                   <i class="material-icons">fact_check</i>
@@ -167,7 +215,14 @@
       <!-- Mobile Xuất BS list -->
       <section class="ob-m-bs" *ngIf="exportMode === 'BS'">
         <div class="ob-m-bs__toolbar">
-          <span class="ob-m-bs__title">📦 Xuất Bổ Sung <b>({{ filteredBsItems.length }}/{{ bsSearchQuery ? bsItems.length : bsPendingCount }})</b></span>
+          <span class="ob-m-bs__title">📦 Xuất Bổ Sung <b>({{ bsSearchQuery.trim() || bsDateFilter ? filteredBsItems.length + '/' : '' }}{{ bsPendingCount }})</b></span>
+          <select class="ob-m-bs__days" [(ngModel)]="bsDateFilter" aria-label="Lọc theo ngày">
+            <option value="">Ngày</option>
+            <option *ngFor="let d of bsDateOptions" [value]="d.key">{{ d.label }} ({{ d.count }})</option>
+          </select>
+          <select class="ob-m-bs__days" [(ngModel)]="bsDays" (ngModelChange)="onBsDaysChange()" [disabled]="bsLoading" aria-label="Khoảng ngày import">
+            <option *ngFor="let d of bsDayOptions" [ngValue]="d">{{ d ? d + ' ngày' : 'Tất cả' }}</option>
+          </select>
           <button type="button" class="ob-m-bs__refresh" (click)="loadBsItems()" [disabled]="bsLoading" aria-label="Làm mới">
             <i class="material-icons" [class.spinning]="bsLoading">refresh</i>
           </button>
@@ -177,7 +232,7 @@
           <input type="text"
                  class="ob-m-bs__search-input"
                  [(ngModel)]="bsSearchQuery"
-                 placeholder="Tìm LSX, mã hàng, PO… (cả đã xuất)"
+                 placeholder="Tìm LSX, mã hàng, PO…"
                  autocomplete="off" />
           <button type="button" class="ob-m-bs__search-clear" *ngIf="bsSearchQuery" (click)="clearBsSearch()" aria-label="Xoá tìm kiếm">
             <i class="material-icons">close</i>
@@ -187,19 +242,23 @@
         <div class="ob-m-bs__scroll">
           <div *ngIf="bsLoading" class="ob-m-bs__state">Đang tải…</div>
           <div *ngIf="!bsLoading && bsError" class="ob-m-bs__state ob-m-bs__state--err">{{ bsError }}</div>
-          <div *ngIf="!bsLoading && !bsError && bsItems.length === 0 && !bsSearchQuery" class="ob-m-bs__state">Không có mã nào cần xuất BS.</div>
-          <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && bsPendingCount === 0 && !bsSearchQuery" class="ob-m-bs__state">Không có mã chưa xuất. Gõ tìm để xem phiếu đã xuất.</div>
-          <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="ob-m-bs__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
+          <div *ngIf="!bsLoading && !bsError && bsPendingCount === 0" class="ob-m-bs__state">Không có mã nào cần xuất BS.</div>
+          <div *ngIf="!bsLoading && !bsError && bsPendingCount > 0 && !bsSearchQuery.trim() && !bsDateFilter" class="ob-m-bs__state">Gõ mã / LSX / PO hoặc chọn Ngày để xem — đang có {{ bsPendingCount }} dòng chưa xuất.</div>
+          <div *ngIf="!bsLoading && !bsError && bsPendingCount > 0 && (bsSearchQuery.trim() || bsDateFilter) && filteredBsItems.length === 0" class="ob-m-bs__state">Không tìm thấy dòng chưa xuất khớp "{{ bsSearchQuery }}".</div>
 
-          <div class="ob-m-bs__card" *ngFor="let item of filteredBsItems; trackBy: trackByIndex" [class.ob-m-bs__card--done]="item.exported">
+          <div class="ob-m-bs__card" *ngFor="let item of bsVisibleItems; trackBy: trackByIndex" [class.ob-m-bs__card--done]="item.exported">
             <div class="ob-m-bs__card-main">
               <div class="ob-m-bs__code">{{ item.materialCode }}</div>
               <div class="ob-m-bs__meta">
+                <span>{{ bsDateText(item) }}</span>
+                <span aria-hidden="true">·</span>
                 <span>{{ item.lsx || '—' }}</span>
                 <span aria-hidden="true">·</span>
                 <span>PO {{ item.po }}</span>
                 <span aria-hidden="true">·</span>
                 <span>{{ item.quantity | number }} {{ item.unit }}</span>
+                <span aria-hidden="true">·</span>
+                <span>{{ bsBagInfo(item)?.needText }}</span>
               </div>
               <div class="ob-m-bs__name" *ngIf="item.tenVatTu">{{ item.tenVatTu }}</div>
               <div class="ob-m-bs__iqc">
@@ -290,7 +349,7 @@
             <div class="ob-m-dl"><span>Bịch</span><b>{{ material.bagBatch || '—' }}</b></div>
             <div class="ob-m-dl"><span>Chẵn</span><b>{{ isPackChan(material) ? 'Chẵn' : '—' }}</b></div>
             <div class="ob-m-dl"><span>Lẻ</span><b>{{ packLeQtyText(material) || '—' }}</b></div>
-            <div class="ob-m-dl"><span>SP</span><b>{{ getStandardPacking(material.materialCode) || '—' }}</b></div>
+            <div class="ob-m-dl"><span>SP</span><b>{{ stdFor(material.materialCode, material.poNumber) || '—' }}</b></div>
             <div class="ob-m-dl"><span>Số lần quét</span><b>×{{ material.scanCount ?? 0 }}</b></div>
             <div class="ob-m-dl"><span>Ngày xuất</span><b>{{ material.createdAt | date:'dd/MM/yyyy HH:mm' }}</b></div>
             <div class="ob-m-dl"><span>NV</span><b>{{ getDisplayEmployeeId(material.employeeId) }}</b></div>
@@ -485,6 +544,7 @@
                  (blur)="onScannerInputBlur()"
                  placeholder="Quét barcode / QR…"
                  class="scanner-input ob-toolbar__scan"
+                 [class.ob-toolbar__scan--big]="isBatchScanningMode"
                  [class.active]="isScannerInputActive || showScanningSetupModal"
                  autocomplete="off">
 
@@ -498,6 +558,12 @@
                 <i class="material-icons">{{ isProductionOrderScanned ? 'check_circle' : 'description' }}</i>
                 LSX {{ batchProductionOrder || '…' }}
               </span>
+              <button type="button" class="ob-bs-lsx" [class.ob-bs-lsx--on]="bsLsxMode || isBsLsxActive"
+                      (click)="toggleBsLsxMode()" [disabled]="bsLsxSwitching"
+                      title="Chọn LSX Bổ sung (BS …): mã import thêm chỉ xuất được khi chọn đúng Bổ sung LSX">
+                <i class="material-icons">{{ (bsLsxMode || isBsLsxActive) ? 'check_box' : 'check_box_outline_blank' }}</i>
+                Bổ sung LSX
+              </button>
               <span class="status-item-desktop" [class.scanned]="isEmployeeIdScanned">
                 <i class="material-icons">{{ isEmployeeIdScanned ? 'check_circle' : 'person' }}</i>
                 NV {{ batchEmployeeId || '…' }}
@@ -559,7 +625,11 @@
               </a>
               <a class="dropdown-item" href="javascript:void(0)" (click)="openBsImportPopup()">
                 <i class="material-icons">playlist_add</i>
-                Import BS
+                Import BS / IQC
+              </a>
+              <a class="dropdown-item" href="javascript:void(0)" (click)="openIqcList()">
+                <i class="material-icons">fact_check</i>
+                Danh mục Xuất IQC
               </a>
               <a class="dropdown-item" href="javascript:void(0)" (click)="openQcRuleModal()">
                 <i class="material-icons">policy</i>
@@ -572,6 +642,118 @@
             <i class="material-icons">refresh</i>
             Refresh
           </button>
+          <button type="button" class="refresh-btn" (click)="openLsxLog()" title="Xem log chi tiết từng bag đã scan của 1 LSX (1–3 lượt đọc)">
+            <i class="material-icons">receipt_long</i>
+            Log LSX
+          </button>
+        </div>
+
+        <!-- Bảng scan (máy tính): báo xanh/đỏ + âm thanh, tiến độ PXK, danh sách bag vừa scan -->
+        <div class="ob-scan-board" *ngIf="isBatchScanningMode && !isMobile">
+          <div class="ob-scan-flash"
+               [class.ob-scan-flash--ok]="scanFlash?.kind === 'ok'"
+               [class.ob-scan-flash--err]="scanFlash?.kind === 'err'">
+            <i class="material-icons">{{ scanFlash?.kind === 'err' ? 'error' : (scanFlash?.kind === 'ok' ? 'check_circle' : 'qr_code_scanner') }}</i>
+            <span>{{ scanFlash?.text || (isProductionOrderScanned && isEmployeeIdScanned ? 'Sẵn sàng — scan tem bag' : 'Scan LSX và mã nhân viên để bắt đầu') }}</span>
+          </div>
+          <div class="ob-scan-meta">
+            <div class="ob-scan-progress" *ngIf="scanPxkProgress.length" [title]="'Theo bag (Standard Packing) · theo lượng ' + scanLsxPercent + '%'">
+              <span class="ob-scan-progress__label">{{ batchProductionOrder }}</span>
+              <div class="ob-scan-progress__bar"><div [style.width.%]="scanLsxBagStats.percent"></div></div>
+              <strong>{{ scanLsxBagStats.percent }}%</strong>
+              <span class="ob-scan-progress__bags" *ngIf="scanLsxBagStats.total">{{ scanLsxBagStats.done }}/{{ scanLsxBagStats.total }} bag</span>
+            </div>
+            <button type="button" class="ob-scan-act" (click)="pauseSaveBatch()" [disabled]="!pendingScanData.length || isSavingBatchData"
+                    title="Lưu các bag đã scan, giữ nguyên LSX + NV để scan tiếp">
+              <i class="material-icons">pause_circle</i> Tạm dừng &amp; lưu ({{ pendingScanData.length }})
+            </button>
+            <button type="button" class="ob-scan-act" (click)="downloadLsxLog(batchProductionOrder)" [disabled]="!batchProductionOrder"
+                    title="Tải Excel log từng bag đã lưu của LSX">
+              <i class="material-icons">download</i> Tải log LSX
+            </button>
+          </div>
+          <div class="ob-scan-id" *ngIf="scanIdentity">
+            <div class="ob-scan-id__main">
+              <strong>{{ scanIdentity.code }}</strong>
+              <span>{{ scanIdentity.name || '—' }}</span>
+              <small>PO {{ scanIdentity.po }} · bag {{ scanIdentity.bag || '—' }} · {{ scanIdentity.qty | number }}</small>
+            </div>
+            <div class="ob-scan-id__tags">
+              <button type="button" class="ob-scan-act" (click)="openWeighReport(scanIdentity.code, scanIdentity.po, batchProductionOrder)"
+                      title="Báo mã này không cân được (dây rút, lá đồng, theo bộ, để trong khay…) — gửi duyệt như Check lượng PXK">
+                <i class="material-icons">flag</i> Report
+              </button>
+              <span *ngFor="let t of scanIdentity.tags" class="ob-scan-tag ob-scan-tag--{{ t.tone }}" [title]="t.title || ''">{{ t.text }}</span>
+              <span class="ob-scan-tag ob-scan-tag--gray" *ngIf="!scanIdentity.tags.length">Không có ghi chú</span>
+            </div>
+          </div>
+          <div class="ob-scan-board__cols ob-scan-board__cols--pxk">
+            <section class="ob-scan-card">
+              <header>
+                <strong>Tiến độ theo PXK</strong>
+                <span *ngIf="batchProductionOrder">{{ batchProductionOrder }}</span>
+                <span class="ob-scan-card__sum" *ngIf="scanPxkProgress.length">{{ scanPxkDoneCount }}/{{ scanPxkProgress.length }} dòng đủ</span>
+              </header>
+              <p class="ob-scan-card__empty" *ngIf="!scanPxkProgress.length">{{ isProductionOrderScanned ? 'LSX chưa có PXK (hoặc đang tải).' : 'Chưa scan LSX.' }}</p>
+              <div class="ob-scan-card__body" *ngIf="scanPxkProgress.length">
+                <table>
+                  <thead><tr><th>Mã</th><th>PO</th><th class="n">Cần</th><th title="Lượng cần theo bag: bag chẵn × Standard + lẻ">Bag cần</th><th class="n">Đã xuất</th><th class="n">Vừa scan</th><th class="n">Còn</th><th class="n" title="Bag đã xuất + vừa scan / tổng bag (theo Standard Packing)">Bag</th><th title="Bag còn phải xuất: chẵn + lẻ">Còn bag</th><th></th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let r of scanPxkProgress; trackBy: trackScanPxkRow"
+                        [class.is-done]="r.remain <= 0.0001 && r.remain >= -0.0001"
+                        [class.is-over]="r.remain < -0.0001"
+                        [class.is-active]="r.scanned > 0">
+                      <td><strong>{{ r.code }}</strong></td>
+                      <td [class.ob-scan-po--nostock]="r.stock !== null && r.stock <= 0.0001"
+                          [title]="r.stock === null ? '' : (r.stock <= 0.0001 ? 'Mã + PO này không còn tồn kho' : ('Tồn kho: ' + (r.stock | number)))">{{ r.po || '—' }}</td>
+                      <td class="n">{{ r.need | number }}</td>
+                      <td [title]="r.std > 0 ? ('Standard ' + r.std) : 'Chưa có Standard Packing'">{{ scanNeedBagText(r) }}</td>
+                      <td class="n">{{ r.exported | number }}</td>
+                      <td class="n">{{ r.scanned | number }}</td>
+                      <td class="n">{{ r.remain | number }}</td>
+                      <td class="n">{{ r.std > 0 ? (r.doneBags + '/' + r.needBags) : r.doneBags }}</td>
+                      <td [title]="r.std > 0 ? ('Standard ' + r.std) : 'Chưa có Standard Packing'">{{ scanRemainBagText(r) }}</td>
+                      <td>
+                        <button type="button" class="ob-scan-temle" *ngIf="r.std > 0 && r.remainOddQty > 0"
+                                [class.ob-scan-temle--nopo]="r.stock !== null && r.stock <= 0.0001"
+                                (click)="openTemLeOb(r)"
+                                [title]="r.stock !== null && r.stock <= 0.0001 ? 'Không có tồn đúng PO ' + (r.po || '') + ' — kiểm tra PO trước khi tách tem lẻ' : 'Tự lấy bịch trong tồn kho, tách và in tem lẻ TL (phần xuất) + CL (phần còn lại)'">
+                          <i class="material-icons">print</i> Tem lẻ
+                        </button>
+                        <button type="button" class="ob-scan-crumb" *ngIf="scanCrumbLots(r).length" (click)="addScanCrumb(r)"
+                                title="Thiếu dưới 1 và lô của mã + PO chỉ còn đúng số lẻ đó → xuất luôn phần lẻ (đưa vào Vừa scan, lưu cùng các tem)">
+                          <i class="material-icons">add_task</i> Xuất lẻ {{ r.remain | number:'1.0-4' }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section class="ob-scan-card">
+              <header>
+                <strong>Vừa scan</strong>
+                <span class="ob-scan-card__sum">{{ pendingScanData.length }} bag · {{ pendingScanTotalQty | number }}</span>
+              </header>
+              <p class="ob-scan-card__empty" *ngIf="!pendingScanData.length">Chưa có bag nào.</p>
+              <div class="ob-scan-card__body" *ngIf="pendingScanData.length">
+                <table>
+                  <thead><tr><th>#</th><th>Giờ</th><th>Mã</th><th>PO</th><th>IMD / bag</th><th class="n">Lượng</th><th></th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let it of pendingScanNewestFirst; let i = index">
+                      <td>{{ pendingScanData.length - i }}</td>
+                      <td>{{ it.scanTime | date:'HH:mm:ss' }}</td>
+                      <td><strong>{{ it.materialCode }}</strong></td>
+                      <td>{{ it.poNumber }}</td>
+                      <td>{{ it.importDate }}</td>
+                      <td class="n">{{ it.quantity | number }}</td>
+                      <td><button type="button" class="ob-scan-del" (click)="removePendingScan(it)" title="Xóa dòng scan sai">✕</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </div>
 
         <div class="ob-toolbar__row ob-toolbar__row--hist">
@@ -674,34 +856,127 @@
       <i class="material-icons">error</i>
       {{errorMessage}}
     </div>
+    <!-- Xuất BS: thống kê LSX theo số dòng -->
+    <div class="wx-overlay" *ngIf="showBsLsxStats" (click)="showBsLsxStats = false">
+      <div class="wx bs-lsx-stats" (click)="$event.stopPropagation()" role="dialog" aria-label="LSX nhiều dòng BS">
+        <div class="wx__head">
+          <h3>📊 LSX nhiều dòng BS nhất ({{ bsLsxStats.length }} LSX · {{ bsPendingCount }} dòng chưa xuất)</h3>
+          <button type="button" class="wx__x" (click)="showBsLsxStats = false">✕</button>
+        </div>
+        <p class="wx__info">Chỉ tính dòng chưa xuất, chưa ẩn trong khoảng ngày đang tải. Bấm 1 LSX để lọc danh sách.</p>
+        <div class="bs-lsx-stats__body">
+          <table class="bs-table">
+            <thead>
+              <tr><th>#</th><th>LSX</th><th class="num">Số dòng</th><th class="num">Số mã</th><th class="num">Tổng lượng còn</th><th class="num">Dòng trùng</th><th>Import từ</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of bsLsxStats; let i = index" class="bs-lsx-stats__row" (click)="pickBsLsx(s.lsx)" title="Lọc danh sách theo {{ s.lsx }}">
+                <td>{{ i + 1 }}</td>
+                <td class="mono strong">{{ s.lsx }}</td>
+                <td class="num strong">{{ s.lines | number }}</td>
+                <td class="num">{{ s.codes | number }}</td>
+                <td class="num">{{ s.qty | number:'1.0-4' }}</td>
+                <td class="num"><span class="bs-dup-tag" *ngIf="s.dups">{{ s.dups }}</span><ng-container *ngIf="!s.dups">—</ng-container></td>
+                <td>{{ s.firstDate }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Xuất BS list (desktop) ── -->
     <div class="bs-section" *ngIf="exportMode === 'BS' && !isMobile">
       <div class="bs-section__toolbar">
         <span class="bs-section__title">📦 Danh sách Xuất Bổ Sung ({{ selectedFactory }})</span>
-        <span class="bs-section__count">{{ filteredBsItems.length }}/{{ bsSearchQuery ? bsItems.length : bsPendingCount }}</span>
+        <span class="bs-section__count" title="Dòng đang lọc / dòng chưa xuất">{{ bsSearchQuery.trim() || bsDateFilter || bsShowAll || bsShowHidden || bsAnyColFilter || bsDupOnly ? filteredBsItems.length + '/' : '' }}{{ bsPendingCount }} chưa xuất</span>
+        <button type="button" class="bs-section__refresh" [class.bs-section__btn--on]="bsShowAll" (click)="bsShowAll = !bsShowAll"
+                title="Hiện tất cả dòng chưa xuất (không cần gõ tìm)">
+          <i class="material-icons">{{ bsShowAll ? 'visibility' : 'list' }}</i> {{ bsShowAll ? 'Đang hiện tất cả' : 'Hiển thị tất cả' }}
+        </button>
+        <label class="bs-section__chk" title="Mặc định dòng đã xuất / đã ẩn / đã xóa luôn ẩn (kể cả khi Hiển thị tất cả). Tick để hiện cả các dòng đó — xem cột Đã xuất.">
+          <input type="checkbox" [(ngModel)]="bsShowHidden" (ngModelChange)="bsSelected.clear()"> Hiện cả đã xuất / đã ẩn
+        </label>
+        <button type="button" class="bs-section__refresh" (click)="showBsLsxStats = true" [disabled]="!bsPendingCount"
+                title="Danh sách LSX theo số dòng BS chưa xuất — nhiều nhất trước; bấm 1 LSX để lọc">
+          📊 LSX nhiều dòng
+        </button>
+        <button type="button" class="bs-section__refresh bs-dup-btn" *ngIf="bsDupPendingCount || bsDupOnly" [class.bs-section__btn--on]="bsDupOnly"
+                (click)="bsDupOnly = !bsDupOnly; bsSelected.clear()"
+                title="Dòng trùng: cùng mã + LSX + PO + lượng. Bấm để chỉ xem các dòng trùng (rồi chọn để Ẩn / Xóa bớt).">
+          ⚠ {{ bsDupPendingCount }} dòng trùng
+        </button>
         <div class="bs-section__search">
           <i class="material-icons">search</i>
-          <input type="text" [(ngModel)]="bsSearchQuery" placeholder="Tìm LSX, mã hàng, PO… (cả đã xuất)" autocomplete="off">
+          <input type="text" [(ngModel)]="bsSearchQuery" placeholder="Tìm LSX, mã hàng, PO…" autocomplete="off">
           <button type="button" *ngIf="bsSearchQuery" (click)="clearBsSearch()" title="Xoá tìm kiếm">
             <i class="material-icons">close</i>
           </button>
         </div>
+        <select class="bs-section__days" [(ngModel)]="bsDateFilter" [class.bs-section__days--on]="bsDateFilter"
+                title="Lọc theo ngày import phiếu BS — chọn ngày là hiện luôn, không cần gõ tìm">
+          <option value="">Ngày: tất cả</option>
+          <option *ngFor="let d of bsDateOptions" [value]="d.key">{{ d.label }} ({{ d.count }})</option>
+        </select>
+        <select class="bs-section__days" [(ngModel)]="bsDays" (ngModelChange)="onBsDaysChange()" [disabled]="bsLoading"
+                title="Chỉ tải phiếu BS import trong khoảng này (phiếu LSX Chung luôn tải)">
+          <option *ngFor="let d of bsDayOptions" [ngValue]="d">{{ d ? d + ' ngày gần nhất' : 'Tất cả (chậm)' }}</option>
+        </select>
+        <button type="button" class="bs-section__refresh" (click)="exportBsExcel()" [disabled]="bsLoading || bsExporting || !bsItems.length"
+                title="Tải Excel danh sách BS đang tải (theo khoảng ngày): ngày import, trạng thái WO của LSX, tồn kho mã + PO, đã xuất chưa">
+          <i class="material-icons" [class.spinning]="bsExporting">{{ bsExporting ? 'sync' : 'download' }}</i> {{ bsExporting ? 'Đang tạo…' : 'Excel' }}
+        </button>
         <button type="button" class="bs-section__refresh" (click)="loadBsItems()" [disabled]="bsLoading">
           <i class="material-icons" [class.spinning]="bsLoading">refresh</i> Làm mới
         </button>
       </div>
+      <div class="bs-pager" *ngIf="!bsLoading && filteredBsItems.length">
+        <span>Dòng {{ bsPageStart + 1 }}–{{ bsPageStart + bsVisibleItems.length }} / <b>{{ filteredBsItems.length }}</b></span>
+        <button type="button" (click)="bsGoPage(1)" [disabled]="bsPageSafe <= 1" title="Trang đầu">«</button>
+        <button type="button" (click)="bsGoPage(bsPageSafe - 1)" [disabled]="bsPageSafe <= 1" title="Trang trước">‹</button>
+        <span>Trang
+          <input type="number" min="1" [max]="bsPageCount" [ngModel]="bsPageSafe" (change)="bsGoPage($any($event.target).value)">
+          / {{ bsPageCount }}</span>
+        <button type="button" (click)="bsGoPage(bsPageSafe + 1)" [disabled]="bsPageSafe >= bsPageCount" title="Trang sau">›</button>
+        <button type="button" (click)="bsGoPage(bsPageCount)" [disabled]="bsPageSafe >= bsPageCount" title="Trang cuối">»</button>
+        <select [(ngModel)]="bsPageSize" (ngModelChange)="bsGoPage(1)" title="Số dòng mỗi trang">
+          <option *ngFor="let n of bsPageSizeOptions" [ngValue]="n">{{ n }} / trang</option>
+        </select>
+        <span class="bs-pager__hint">Lọc số: &lt;1 · &gt;5 · &lt;=10 · &gt;=100 · =0 · 10-20</span>
+      </div>
+      <div class="bs-bulk" *ngIf="bsSelected.size">
+        <strong>Đã chọn {{ bsSelected.size }} dòng</strong>
+        <button type="button" class="bs-section__refresh" (click)="bulkBsAction('hide')" [disabled]="bsBulkBusy"
+                title="Ẩn khỏi danh sách BS — xem lại / bỏ ẩn bằng ô 'Hiện cả đã xuất / đã ẩn'">
+          <i class="material-icons">visibility_off</i> Ẩn
+        </button>
+        <button type="button" class="bs-section__refresh" *ngIf="bsSelectedHasHidden" (click)="bulkBsAction('unhide')" [disabled]="bsBulkBusy">
+          <i class="material-icons">visibility</i> Bỏ ẩn
+        </button>
+        <button type="button" class="bs-section__refresh bs-bulk__del" (click)="bulkBsAction('delete')" [disabled]="bsBulkBusy"
+                title="Xóa khỏi danh sách BS (như nút xóa từng dòng)">
+          <i class="material-icons">delete</i> Xóa
+        </button>
+        <button type="button" class="bs-section__refresh" (click)="bsSelected.clear()" [disabled]="bsBulkBusy">Bỏ chọn</button>
+        <i class="material-icons spinning" *ngIf="bsBulkBusy">sync</i>
+      </div>
 
       <div *ngIf="bsLoading" class="bs-section__state">Đang tải…</div>
       <div *ngIf="!bsLoading && bsError" class="bs-section__state bs-section__state--err">{{ bsError }}</div>
-      <div *ngIf="!bsLoading && !bsError && bsItems.length === 0 && !bsSearchQuery" class="bs-section__state">Không có mã nào cần xuất Bổ Sung.</div>
-      <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && bsPendingCount === 0 && !bsSearchQuery" class="bs-section__state">Không có mã chưa xuất. Gõ tìm để xem phiếu đã xuất.</div>
-      <div *ngIf="!bsLoading && !bsError && bsItems.length > 0 && filteredBsItems.length === 0" class="bs-section__state">Không tìm thấy phiếu khớp "{{ bsSearchQuery }}".</div>
+      <div *ngIf="!bsLoading && !bsError && bsPendingCount === 0" class="bs-section__state">Không có mã nào cần xuất Bổ Sung.</div>
+      <div *ngIf="!bsLoading && !bsError && bsPendingCount > 0 && !bsSearchQuery.trim() && !bsDateFilter && !bsShowAll && !bsShowHidden && !bsAnyColFilter && !bsDupOnly" class="bs-section__state">🔍 Gõ mã hàng, LSX, PO, chọn Ngày hoặc bấm "Hiển thị tất cả" để xem — đang có {{ bsPendingCount }} dòng chưa xuất ({{ bsDays ? bsDays + ' ngày gần nhất' : 'tất cả' }}).</div>
+      <div *ngIf="!bsLoading && !bsError && bsPendingCount > 0 && (bsSearchQuery.trim() || bsDateFilter) && filteredBsItems.length === 0" class="bs-section__state">Không tìm thấy dòng chưa xuất khớp "{{ bsSearchQuery }}".</div>
 
-      <div class="bs-table-wrap" *ngIf="!bsLoading && filteredBsItems.length > 0">
+      <div class="bs-table-wrap" *ngIf="!bsLoading && (filteredBsItems.length > 0 || bsAnyColFilter || bsShowAll || bsShowHidden || bsDupOnly)">
         <table class="bs-table">
           <thead>
             <tr>
+              <th class="center bs-table__chk">
+                <input type="checkbox" [checked]="bsAllFilteredSelected" (change)="toggleBsSelectAll()"
+                       [disabled]="!filteredBsItems.length" title="Chọn / bỏ chọn toàn bộ dòng đang lọc">
+              </th>
               <th class="bs-table__idx">#</th>
+              <th>Ngày</th>
               <th>LSX</th>
               <th>Mã hàng</th>
               <th>Tên VT</th>
@@ -709,24 +984,56 @@
               <th>IQC Status</th>
               <th class="num">Lượng cần xuất</th>
               <th>ĐVT</th>
+              <th title="Lượng cần theo bag: bag chẵn × Standard + lẻ">Bag cần</th>
+              <th title="Trạng thái dòng: Đã xuất / Xuất 1 phần / Đã ẩn / Đã xóa / Chưa">Đã xuất</th>
               <th class="center">Hành động</th>
+              <th class="center">Xóa</th>
+            </tr>
+            <tr class="bs-table__filters">
+              <th></th>
+              <th>
+                <button type="button" class="bs-filter-clear" *ngIf="bsAnyColFilter" (click)="clearBsColFilters()" title="Xóa lọc cột">✕</button>
+              </th>
+              <th><input type="text" [(ngModel)]="bsColFilter.date" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.lsx" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.code" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.name" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.po" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.iqc" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.qty" placeholder="Số / <1…" autocomplete="off"
+                         title="Gõ số = đúng số đó (0 không ra 10, 100). Điều kiện: <1 · >5 · <=10 · >=100 · 10-20"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.unit" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.bag" placeholder="Lọc…" autocomplete="off"></th>
+              <th><input type="text" [(ngModel)]="bsColFilter.status" placeholder="Lọc…" autocomplete="off" title="vd: đã xuất, chưa, ẩn, xóa, 1 phần"></th>
+              <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of filteredBsItems; let i = index; trackBy: trackByIndex" [class.bs-table__row--done]="item.exported">
-              <td class="bs-table__idx">{{ i + 1 }}</td>
+            <tr *ngIf="!filteredBsItems.length"><td colspan="15" class="center muted">Không có dòng khớp bộ lọc.</td></tr>
+            <tr *ngFor="let item of bsVisibleItems; let i = index; trackBy: trackByIndex" [class.bs-table__row--done]="item.exported"
+                [class.bs-table__row--sel]="isBsSelected(item)" [class.bs-table__row--hidden]="item.hidden">
+              <td class="center bs-table__chk"><input type="checkbox" [checked]="isBsSelected(item)" (change)="toggleBsSelect(item)"></td>
+              <td class="bs-table__idx">{{ bsPageStart + i + 1 }}</td>
+              <td class="mono">{{ bsDateText(item) }}</td>
               <td class="mono">{{ item.lsx || '—' }}</td>
-              <td class="strong">{{ item.materialCode }}</td>
+              <td class="strong">{{ item.materialCode }}<span class="bs-dup-tag" *ngIf="bsDupCount(item) > 1"
+                  title="Trùng: cùng mã + LSX + PO + lượng với {{ bsDupCount(item) - 1 }} dòng khác">Trùng ×{{ bsDupCount(item) }}</span></td>
               <td class="muted">{{ item.tenVatTu }}</td>
               <td>{{ item.po }}</td>
               <td>
                 <span class="bs-iqc" [ngClass]="bsIqcClass(item.iqcStatus)">{{ item.iqcStatus || '—' }}</span>
               </td>
-              <td class="num strong">{{ item.quantity | number }}</td>
+              <td class="num strong">{{ item.quantity | number }}<small class="bs-partial" *ngIf="item.prevExported">đã xuất {{ item.prevExported | number }} · còn {{ item.quantity - item.prevExported | number }}</small></td>
               <td>{{ item.unit }}</td>
+              <td [title]="bsBagInfo(item)?.std ? ('Standard ' + bsBagInfo(item)?.std) : 'Chưa có Standard Packing'">{{ bsBagInfo(item)?.needText }}</td>
+              <td class="bs-status" [class.bs-status--done]="item.exported && !item.deleted" [class.bs-status--off]="item.deleted || item.hidden"
+                  [class.bs-status--part]="!item.exported && !item.hidden && (item.prevExported || 0) > 0">{{ bsStatusText(item) }}</td>
               <td class="center">
                 <span class="bs-table__done" *ngIf="item.exported">Đã xuất</span>
                 <button type="button" class="bs-table__go" *ngIf="!item.exported" (click)="openBsScanDialog(item)">Xuất kho</button>
+              </td>
+              <td class="center">
                 <button type="button" class="bs-table__del" (click)="deleteBsItem(item)" title="Xoá khỏi danh sách BS">
                   <i class="material-icons">delete</i>
                 </button>
@@ -1082,19 +1389,38 @@
 
     <!-- Progress bar -->
     <div class="bs-scan-dialog__progress" *ngIf="bsScanItem">
-      <span>Đã scan: <strong>{{ bsScanTotal | number }}</strong> / cần: <strong>{{ bsScanItem.quantity | number }} {{ bsScanItem.unit }}</strong></span>
+      <span>Đã scan: <strong>{{ bsScanDoneTotal | number }}</strong> / cần: <strong>{{ bsScanItem.quantity | number }} {{ bsScanItem.unit }}</strong>
+        <small *ngIf="bsScanItem.prevExported"> (đã xuất trước {{ bsScanItem.prevExported | number }} + lần này {{ bsScanTotal | number }})</small></span>
       <span class="bs-scan-dialog__pct"
-            [style.color]="bsScanTotal >= bsScanItem.quantity ? '#2e7d32' : '#b71c1c'">
-        {{ bsScanItem.quantity > 0 ? ((bsScanTotal / bsScanItem.quantity) * 100 | number:'1.0-0') : 0 }}%
+            [style.color]="bsScanDoneTotal >= bsScanItem.quantity ? '#2e7d32' : '#b71c1c'">
+        {{ bsScanItem.quantity > 0 ? ((bsScanDoneTotal / bsScanItem.quantity) * 100 | number:'1.0-0') : 0 }}%
       </span>
     </div>
 
+    <!-- Chẵn / lẻ như Xuất NL -->
+    <div class="bs-scan-dialog__bags" *ngIf="bsBagInfo(bsScanItem, bsScanDoneTotal) as b">
+      <span>Bag cần: <strong>{{ b.needText }}</strong></span>
+      <span>Còn: <strong>{{ b.remainText }}</strong></span>
+      <span *ngIf="!b.std" class="bs-scan-dialog__warn">Chưa có Standard Packing</span>
+      <button type="button" class="ob-scan-temle" *ngIf="b.std > 0 && b.remainOddQty > 0" [disabled]="bsSaving"
+              (click)="openBsTemLe()" title="Tự lấy bag lẻ đang tồn của PO, tách và in tem lẻ TL (phần xuất) + CL (phần còn lại)">
+        <i class="material-icons">print</i> Tem lẻ {{ b.remainOddQty | number:'1.0-4' }}
+      </button>
+    </div>
+
     <!-- Scanner input -->
+    <button type="button" class="bs-scan-focus-warn" *ngIf="!bsScanInputFocused && !bsSaving" (click)="focusBsScanInput()"
+            title="Con trỏ không ở ô scan — máy quét sẽ gõ sai chỗ. Bấm để quay lại ô scan.">
+      <i class="material-icons">error</i> Con trỏ không ở ô scan — bấm để quay lại
+    </button>
     <div class="bs-scan-dialog__input-row">
       <input id="bs-scan-input"
              type="text"
              class="bs-scan-dialog__input"
+             [class.bs-scan-dialog__input--lost]="!bsScanInputFocused && !bsSaving"
              [(ngModel)]="bsScanInput"
+             (focus)="bsScanInputFocused = true"
+             (blur)="bsScanInputFocused = false"
              (keydown)="onBsScanKeydown($event)"
              placeholder="Quét QR code tem bịch (Enter để xác nhận)…"
              autocomplete="off"
@@ -1134,8 +1460,12 @@
 
     <!-- Footer -->
     <div class="bs-scan-dialog__footer">
+      <button type="button" class="bs-scan-dialog__cancel" *ngIf="bsScanItem" [disabled]="bsSaving"
+              (click)="openWeighReport(bsScanItem.materialCode, bsScanItem.po, bsScanItem.lsx, '', 'Xuất BS — Outbound')"
+              title="Báo mã này không cân được (dây rút, lá đồng, theo bộ, để trong khay…) — gửi duyệt như Check lượng PXK">🚩 Report</button>
       <button type="button" class="bs-scan-dialog__cancel" (click)="closeBsScanDialog()" [disabled]="bsSaving">Huỷ</button>
       <button type="button" class="bs-scan-dialog__done"
+              [title]="bsScanItem && bsScanDoneTotal < bsScanItem.quantity ? 'Chưa đủ lượng — Done sẽ lưu phần đã scan, phiếu vẫn ở danh sách để scan tiếp' : 'Ghi nhận xuất kho'"
               [disabled]="bsSaving || bsScanLines.length === 0"
               (click)="doneBsScan()">
         {{ bsSaving ? 'Đang lưu…' : 'Done — Ghi nhận xuất kho' }}
@@ -1220,6 +1550,41 @@
   </div>
 </div>
 
+<!-- Danh mục Xuất IQC (chỉ xem) -->
+<div class="wx-overlay wx-overlay--top" *ngIf="showIqcList" (click)="showIqcList = false">
+  <div class="wx bs-lsx-stats" (click)="$event.stopPropagation()" role="dialog" aria-label="Danh mục Xuất IQC">
+    <div class="wx__head">
+      <h3>Danh mục Xuất IQC — {{ selectedFactory }} ({{ iqcListFiltered.length }} dòng)</h3>
+      <button type="button" class="wx__x" (click)="showIqcList = false">✕</button>
+    </div>
+    <p class="wx__info">Các dòng đã import Xuất IQC — tồn kho đã tự trừ lúc import. Chỉ xem.</p>
+    <input type="search" class="wx__input" [(ngModel)]="iqcListQuery" placeholder="Tìm mã, PO, LSX, người import…" autocomplete="off">
+    <div class="bs-lsx-stats__body">
+      <p class="wx__info" *ngIf="iqcListLoading">Đang tải…</p>
+      <p class="wx__info" *ngIf="!iqcListLoading && !iqcListFiltered.length">Chưa có dòng Xuất IQC.</p>
+      <table class="bs-table" *ngIf="!iqcListLoading && iqcListFiltered.length">
+        <thead>
+          <tr><th>Ngày import</th><th>Người</th><th>LSX</th><th>Mã</th><th>Tên VT</th><th>PO</th><th class="num">Lượng</th><th class="num">Đã trừ</th><th class="num">Thiếu</th><th>ĐVT</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of iqcListFiltered | slice:0:1000" [class.bs-table__row--sel]="r.shortage > 0">
+            <td>{{ r.at ? (r.at | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+            <td>{{ r.by || '—' }}</td>
+            <td class="mono">{{ r.lsx || '—' }}</td>
+            <td class="strong">{{ r.code }}</td>
+            <td class="muted">{{ r.name }}</td>
+            <td>{{ r.po }}</td>
+            <td class="num">{{ r.qty | number:'1.0-4' }}</td>
+            <td class="num">{{ r.deducted | number:'1.0-4' }}</td>
+            <td class="num">{{ r.shortage ? (r.shortage | number:'1.0-4') : '—' }}</td>
+            <td>{{ r.unit }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="px-import-overlay" *ngIf="showBsImportPopup" (click)="closeBsImportPopup()">
   <div class="px-import-dialog" (click)="$event.stopPropagation()" role="dialog" aria-label="Import BS">
     <div class="px-import-dialog__head">
@@ -1274,7 +1639,13 @@
     </div>
 
     <div class="px-import-dialog__foot">
+      <button type="button" (click)="openIqcList()" [disabled]="bsImportBusy" title="Xem các lần Xuất IQC đã import (chỉ xem)">Danh mục Xuất IQC</button>
       <button type="button" (click)="closeBsImportPopup()" [disabled]="bsImportBusy">Đóng</button>
+      <button type="button" class="px-import-dialog__iqc" (click)="importIqcAndDeduct()"
+              [disabled]="bsImportBusy || !bsImportRows.length"
+              title="Cùng file — trừ tồn kho NGAY theo mã + PO (ưu tiên vị trí IQC, IMD cũ trước), không cần scan. Có bước xác nhận.">
+        {{ bsImportBusy ? 'Đang xử lý…' : 'Xuất IQC — trừ tồn ngay' }}
+      </button>
       <button type="button" class="px-import-dialog__apply" (click)="saveBsImportRows()"
               [disabled]="bsImportBusy || !bsImportRows.length">
         {{ bsImportBusy ? 'Đang lưu…' : 'Lưu vào Xuất BS' }}
@@ -1282,3 +1653,286 @@
     </div>
   </div>
 </div>
+
+<!-- Log LSX kiểu notepad: chi tiết từng bag đã scan xuất -->
+<div class="lsx-log-overlay" *ngIf="showLsxLog" (click)="showLsxLog = false">
+  <div class="lsx-log" (click)="$event.stopPropagation()" role="dialog" aria-label="Log LSX">
+    <div class="lsx-log__head">
+      <h3>Log LSX — chi tiết từng bag</h3>
+      <button class="lsx-log__close" type="button" (click)="showLsxLog = false">✕</button>
+    </div>
+    <div class="lsx-log__bar">
+      <input type="text" [(ngModel)]="lsxLogQuery" (keyup.enter)="loadLsxLog()" placeholder="Nhập / scan LSX…" autocomplete="off">
+      <button type="button" class="refresh-btn" (click)="loadLsxLog()" [disabled]="lsxLogLoading || !lsxLogQuery.trim()">
+        {{ lsxLogLoading ? 'Đang đọc…' : 'Xem' }}
+      </button>
+      <button type="button" class="refresh-btn" (click)="downloadLsxLog(lsxLogShownLsx)" *ngIf="lsxLogLines.length">Tải .txt</button>
+      <span class="lsx-log__sum" *ngIf="lsxLogLines.length">
+        {{ lsxLogShownLsx }} · {{ lsxLogLines.length }} lần scan · tổng {{ lsxLogTotalQty | number }}
+      </span>
+    </div>
+    <p class="lsx-log__err" *ngIf="lsxLogError">{{ lsxLogError }}</p>
+    <div class="lsx-log__table" *ngIf="lsxLogLines.length">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Thời gian</th><th>Người</th><th>Mã hàng</th><th>PO</th><th>IMD</th><th>Bag</th><th>Tem</th><th>Lượng</th><th>Vị trí</th><th>Cách</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let l of lsxLogLines; let i = index">
+            <td>{{ i + 1 }}</td>
+            <td>{{ lsxLogTime(l.t) }}</td>
+            <td>{{ l.by || '—' }}</td>
+            <td><strong>{{ l.code }}</strong></td>
+            <td>{{ l.po || '—' }}</td>
+            <td>{{ l.imd || '—' }}</td>
+            <td>{{ l.bag || '—' }}</td>
+            <td>{{ l.tag || '' }}</td>
+            <td class="lsx-log__num">{{ l.qty | number }}</td>
+            <td>{{ l.loc || '—' }}</td>
+            <td>{{ l.m }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- In tem lẻ từ dòng PXK: tự lấy bịch trong tồn kho → tách TL (xuất) + CL (còn lại), nhập GW CL -->
+<div class="wx-overlay" *ngIf="temLeOb">
+  <div class="wx" role="dialog" aria-label="In tem lẻ">
+    <div class="wx__head">
+      <h3>🏷 In tem lẻ — {{ temLeOb.code }}</h3>
+      <button type="button" class="wx__x" (click)="closeTemLeOb()" [disabled]="temLeOb.busy">✕</button>
+    </div>
+    <p class="wx__info">
+      PO {{ temLeOb.po || '—' }} · Standard {{ temLeOb.std | number }}
+    </p>
+    <p class="wx__info" *ngIf="!temLeOb.loading || temLeOb.oddQty > 0">
+      Cần {{ temLeOb.need | number }} · Đã xuất {{ temLeOb.exported | number }}<ng-container *ngIf="temLeOb.scanned > 0"> · Đang scan {{ temLeOb.scanned | number }}</ng-container>
+      · Còn lại <strong>{{ temLeOb.remain | number }}</strong>
+      <ng-container *ngIf="temLeOb.remain > 0">
+        → <ng-container *ngIf="temLeOb.remainFull > 0">{{ temLeOb.remainFull }} bịch chẵn × {{ temLeOb.std | number }} (scan nguyên bịch) + </ng-container>lẻ <strong>{{ temLeOb.oddQty | number }}</strong> (tách tem lẻ)
+      </ng-container>
+    </p>
+    <p class="wx__info" *ngIf="temLeOb.loading && !(temLeOb.oddQty > 0)">Đang đọc lại lượng đã xuất…</p>
+    <p class="wx__info" *ngIf="temLeOb.loading">Đang đọc tồn kho…</p>
+    <ng-container *ngIf="!temLeOb.loading && temLeOb.picks.length">
+      <label class="ob-temle__row">
+        <span>Bịch lấy ra tách (IMD cũ trước)</span>
+        <select class="wx__input" [(ngModel)]="temLeOb.pickIdx" [disabled]="temLeOb.busy">
+          <option *ngFor="let p of temLeOb.picks; let i = index" [ngValue]="i">{{ temLeObPickLabel(p) }}</option>
+        </select>
+      </label>
+      <ng-container *ngIf="temLeObPick as p">
+        <p class="wx__info" *ngIf="p.kind === 'EXACT'">
+          Bịch <strong>{{ p.clTag }}</strong> (IMD {{ p.imd }}) đúng bằng lượng lẻ — không cần tách, scan tem {{ p.clTag }} để xuất.
+        </p>
+        <p class="wx__info" *ngIf="p.kind === 'LAST'">
+          PO {{ p.po }} chỉ còn <strong>1 bag lẻ</strong> (IMD {{ p.imd }}, {{ p.sourceQty | number }}) — xuất nguyên bag,
+          <strong>không cần tách, không có CL</strong>. Scan tem hiện có của bag này{{ p.clTag ? ' (' + p.clTag + ')' : '' }} để xuất.
+        </p>
+        <ng-container *ngIf="p.kind !== 'EXACT' && p.kind !== 'LAST'">
+          <p class="wx__info" *ngIf="p.kind === 'COMBO'">
+            Lấy <strong>{{ p.clTag ? 'bịch ' + p.clTag : 'bag lẻ' }} {{ p.partQty | number }}</strong> + tách <strong>{{ (temLeOb.oddQty - (p.partQty || 0)) | number }}</strong>
+            từ 1 bịch chẵn {{ temLeOb.std | number }} (IMD {{ p.imd }}) → <strong>gom chung thành 1 bịch {{ temLeOb.oddQty | number }}</strong>,
+            dán tem TL. Bỏ tem cũ của {{ p.clTag ? 'bịch ' + p.clTag : 'bag lẻ' }} {{ p.partQty | number }} và bịch chẵn đã tách.
+          </p>
+          <p class="wx__info">
+            Tem in ra: <strong>TL</strong> {{ temLeOb.oddQty | number }} (xuất — chụp hình khi scan) ·
+            <strong>CL</strong> {{ temLeObClQty | number }} (để lại kho)
+          </p>
+          <ng-container *ngIf="temLeOb.needWeigh">
+            <label class="ob-temle__row">
+              <span>GW bịch CL (gram)</span>
+              <input type="number" class="wx__input" min="0" [(ngModel)]="temLeOb.gwClInput" [disabled]="temLeOb.busy"
+                     (keyup.enter)="confirmTemLeOb()">
+            </label>
+            <label class="ob-temle__row" *ngIf="!(temLeOb.gwFullKnown > 0)">
+              <span>GW bag nguyên (gram) — danh mục chưa có</span>
+              <input type="number" class="wx__input" min="0" [(ngModel)]="temLeOb.gwFullInput" [disabled]="temLeOb.busy">
+            </label>
+            <p class="ow__muted" *ngIf="temLeOb.gwFullKnown > 0">GW bag nguyên theo danh mục: {{ temLeOb.gwFullKnown | number }} g</p>
+          </ng-container>
+          <p class="ow__muted" *ngIf="!temLeOb.needWeigh">Mã không thuộc danh mục cân — không cần nhập GW.</p>
+        </ng-container>
+      </ng-container>
+    </ng-container>
+    <p class="wx__msg" *ngIf="temLeOb.error">{{ temLeOb.error }}</p>
+    <div class="wx__foot">
+      <button type="button" class="wx__btn" [disabled]="temLeOb.busy"
+              (click)="openWeighReport(temLeOb.code, temLeOb.po, bsScanOpen ? (bsScanItem?.lsx || '') : batchProductionOrder, '', bsScanOpen ? 'Xuất BS — Outbound' : 'Tách lẻ & cân — Outbound')"
+              title="Báo mã này không cân được (dây rút, lá đồng, theo bộ, để trong khay…) — gửi duyệt như Check lượng PXK">🚩 Report</button>
+      <button type="button" class="wx__btn" (click)="closeTemLeOb()" [disabled]="temLeOb.busy">Đóng</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="confirmTemLeOb()"
+              [disabled]="temLeOb.busy || temLeOb.loading || !temLeObPick || temLeObPick.kind === 'EXACT' || temLeObPick.kind === 'LAST'">
+        {{ temLeOb.busy ? 'Đang in…' : 'Tách & in tem' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Bag lẻ (Check lượng PXK): chụp hình bag trên cân + nhập trọng lượng → mới nhận bag -->
+<!-- Bag TL khi xuất: bắt buộc chụp hình -->
+<div class="wx-overlay" *ngIf="tlPhoto">
+  <div class="wx tl-photo" (click)="$event.stopPropagation()" role="dialog" aria-label="Chụp hình bag TL">
+    <div class="wx__head">
+      <h3>📷 Chụp hình bag {{ tlPhoto.tag }} — {{ tlPhoto.code }}</h3>
+      <button type="button" class="wx__x" (click)="cancelTlPhoto()" [disabled]="tlPhoto.busy">✕</button>
+    </div>
+    <p class="tl-photo__sub">PO {{ tlPhoto.po || '—' }}{{ tlPhoto.imd ? ' · IMD ' + tlPhoto.imd : '' }} · Bắt buộc chụp hình bag (thấy rõ tem) trước khi xuất.</p>
+    <div class="tl-photo__view">
+      <video #tlPhotoVideo [hidden]="!!tlPhoto.photo" autoplay playsinline muted></video>
+      <img *ngIf="tlPhoto.preview" [src]="tlPhoto.preview" alt="Hình bag TL">
+    </div>
+    <p class="tl-photo__err" *ngIf="tlPhoto.err">{{ tlPhoto.err }}</p>
+    <div class="tl-photo__foot">
+      <button type="button" class="wx__btn wx__btn--primary" *ngIf="!tlPhoto.photo" (click)="captureTlPhoto()" [disabled]="!tlPhoto.cameraOn || tlPhoto.busy">Chụp</button>
+      <label class="wx__btn tl-photo__file" *ngIf="!tlPhoto.photo">
+        Chọn / chụp ảnh
+        <input type="file" accept="image/*" capture="environment" (change)="onTlPhotoFile($event)" hidden>
+      </label>
+      <button type="button" class="wx__btn" *ngIf="tlPhoto.photo" (click)="retakeTlPhoto()" [disabled]="tlPhoto.busy">Chụp lại</button>
+      <span class="tl-photo__grow"></span>
+      <button type="button" class="wx__btn" (click)="cancelTlPhoto()" [disabled]="tlPhoto.busy">Hủy tem</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="confirmTlPhoto()" [disabled]="!tlPhoto.photo || tlPhoto.busy">
+        {{ tlPhoto.busy ? 'Đang lưu…' : 'Xác nhận & xuất' }}</button>
+    </div>
+  </div>
+</div>
+
+<!-- Đếm bag CL lẻ duy nhất còn lại (mã PCS, tồn mã < 5000) -->
+<div class="wx-overlay" *ngIf="clCount">
+  <div class="wx cl-count" (click)="$event.stopPropagation()" role="dialog" aria-label="Đếm bag CL">
+    <div class="cl-count__box">
+      <i class="material-icons">warning</i>
+      <div>
+        <strong>Cần đếm chính xác lượng tồn kho còn lại</strong>
+        <div>{{ clCount.code }} · PO {{ clCount.po || '—' }}{{ clCount.imd ? ' · IMD ' + clCount.imd : '' }}</div>
+        <div>Bag CL (lẻ) duy nhất còn lại của mã — tồn mã sau khi xuất còn {{ clCount.totalAfter | number:'1.0-4' }} {{ clCount.unit }}.</div>
+        <div>Hệ thống ghi bag này còn <b>{{ clCount.oddQty | number:'1.0-4' }}</b> {{ clCount.unit }}.</div>
+      </div>
+    </div>
+    <label class="cl-count__lab">Số lượng đếm thực tế còn lại của bag ({{ clCount.unit }})</label>
+    <input id="cl-count-input" class="cl-count__input" type="number" min="0" step="any" [(ngModel)]="clCount.input"
+           (keydown.enter)="confirmClCount()" [disabled]="clCount.busy" autocomplete="off">
+    <p class="cl-count__err" *ngIf="clCount.err">{{ clCount.err }}</p>
+    <div class="cl-count__report" *ngIf="clCount.reportOpen">
+      <span>Lý do không đếm được (bỏ qua, không cần nhập):</span>
+      <button type="button" class="wx__btn" *ngFor="let rs of clSkipReasons" (click)="reportClSkip(rs)" [disabled]="clCount.busy">{{ rs }}</button>
+    </div>
+    <div class="cl-count__foot">
+      <button type="button" class="wx__btn cl-count__report-btn" (click)="clCount.reportOpen = !clCount.reportOpen" [disabled]="clCount.busy">Báo cáo</button>
+      <button type="button" class="wx__btn" (click)="cancelClCount()" [disabled]="clCount.busy">Hủy tem</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="confirmClCount()" [disabled]="clCount.busy">
+        {{ clCount.busy ? 'Đang lưu…' : 'Xác nhận & tiếp tục' }}</button>
+    </div>
+  </div>
+</div>
+
+<div class="wx-overlay" *ngIf="oddWeigh">
+  <div class="wx ow" role="dialog" aria-label="Cân bag lẻ">
+    <div class="wx__head">
+      <h3>⚖ Cân bag lẻ — {{ oddWeigh.code }}</h3>
+      <button type="button" class="wx__x" (click)="cancelOddWeigh()" [disabled]="oddWeigh.busy">✕</button>
+    </div>
+    <p class="wx__info">
+      PO {{ oddWeigh.po || '—' }} · {{ oddWeigh.lsx }}<br>
+      Bag vừa scan <strong>{{ oddWeigh.bagQty | number }}</strong> · Standard {{ oddWeigh.std | number }} ·
+      Lẻ theo PXK <strong>{{ oddWeigh.oddQty | number }}</strong>
+      <span class="ow__warn" *ngIf="oddWeigh.bagQty !== oddWeigh.oddQty"> (khác lượng bag vừa scan — % tính theo bag vừa scan)</span>
+    </p>
+
+    <label class="ow__nocam" title="Máy không có / không dùng camera: chỉ nhập số gram, không chụp hình (lưu theo máy)">
+      <input type="checkbox" [checked]="oddWeighNoCamera" (change)="toggleOddWeighNoCamera()">
+      <span>Không dùng camera — chỉ nhập số</span>
+    </label>
+    <div class="ow__body" [class.ow__body--nocam]="oddWeighNoCamera">
+    <div class="ow__left" *ngIf="!oddWeighNoCamera">
+    <div class="ow__cam">
+      <video #oddWeighVideo [hidden]="oddWeigh.photo" playsinline muted autoplay></video>
+      <img *ngIf="oddWeigh.photoPreview" [src]="oddWeigh.photoPreview" alt="Hình bag lẻ">
+      <span class="ow__cam-hint" *ngIf="!oddWeigh.photo && !oddWeigh.cameraOn">Đặt bag lẻ lên cân, thấy rõ số cân rồi chụp.</span>
+      <div class="ow__frame" *ngIf="!oddWeigh.photo && oddWeigh.cameraOn" aria-hidden="true">
+        <span>Đặt màn hình cân + bag vào khung · Space = chụp</span>
+      </div>
+    </div>
+    <div class="ow__cam-act">
+      <button type="button" class="wx__btn wx__btn--primary" *ngIf="!oddWeigh.photo" (click)="captureOddWeighPhoto()" [disabled]="!oddWeigh.cameraOn">📷 Chụp</button>
+      <button type="button" class="wx__btn" *ngIf="oddWeigh.photo" (click)="retakeOddWeighPhoto()" [disabled]="oddWeigh.busy">Chụp lại</button>
+      <label class="wx__btn ow__file">
+        Chọn / chụp ảnh
+        <input type="file" accept="image/*" capture="environment" (change)="onOddWeighFile($event)">
+      </label>
+    </div>
+    </div>
+    <div class="ow__right">
+
+    <div class="ow__fields">
+      <label>
+        <span>Trọng lượng bag lẻ (gram)</span>
+        <input id="oddWeighOdd" type="text" inputmode="decimal" class="wx__input" autocomplete="off"
+               [(ngModel)]="oddWeigh.weightOddInput" (keyup.enter)="saveOddWeigh()">
+      </label>
+      <label *ngIf="!(oddWeigh.catalogWeight > 0)">
+        <span>Trọng lượng chẵn cuộn (gram) — danh mục chưa có</span>
+        <input type="text" inputmode="decimal" class="wx__input" autocomplete="off"
+               [(ngModel)]="oddWeigh.weightFullInput" (keyup.enter)="saveOddWeigh()">
+      </label>
+      <p class="ow__muted" *ngIf="oddWeigh.catalogWeight > 0">Chẵn cuộn theo danh mục: {{ oddWeigh.catalogWeight | number }} g</p>
+      <p class="ow__pct" *ngIf="oddWeighPercent != null" [class.ow__pct--bad]="!oddWeighPercentOk(oddWeighPercent!)">
+        {{ oddWeighPercent! | number:'1.1-1' }}% · {{ oddWeighPercentOk(oddWeighPercent!) ? 'OK' : 'Không đạt (lệch > ±5%)' }}
+      </p>
+    </div>
+    </div>
+    </div>
+
+    <p class="wx__msg" *ngIf="oddWeigh.error">{{ oddWeigh.error }}</p>
+    <div class="wx__foot ow__foot">
+      <button type="button" class="wx__btn" (click)="openWeighReport(oddWeigh.code, oddWeigh.po, oddWeigh.lsx, oddWeigh.maKho)" [disabled]="oddWeigh.busy"
+              title="Mã không cân được (dây rút, lá đồng, theo bộ…) — gửi duyệt">Báo không cân được</button>
+      <button type="button" class="wx__btn" *ngIf="oddWeighReported" (click)="acceptOddWeighWithoutWeight()">Nhận bag (đã báo)</button>
+      <span class="ow__spacer"></span>
+      <button type="button" class="wx__btn" (click)="cancelOddWeigh()" [disabled]="oddWeigh.busy">Hủy bag</button>
+      <button type="button" class="wx__btn wx__btn--primary" (click)="saveOddWeigh()" [disabled]="oddWeigh.busy || (!oddWeigh.photo && !oddWeighNoCamera)">
+        {{ oddWeigh.busy ? 'Đang lưu…' : 'Lưu & nhận bag' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Report: mã không cân được (tách lẻ & cân) → danh sách Check lượng PXK chờ duyệt -->
+<div class="wx-overlay" *ngIf="weighReport" [class.wx-overlay--top]="!!oddWeigh || !!temLeOb" (click)="weighReport = null">
+  <div class="wx" (click)="$event.stopPropagation()" role="dialog" aria-label="Report không cân">
+    <div class="wx__head">
+      <h3>Report — không cân được</h3>
+      <button type="button" class="wx__x" (click)="weighReport = null">✕</button>
+    </div>
+    <p class="wx__info"><strong>{{ weighReport.code }}</strong><ng-container *ngIf="weighReport.po"> · PO {{ weighReport.po }}</ng-container><ng-container *ngIf="weighReport.lsx"> · {{ weighReport.lsx }}</ng-container></p>
+    <div class="wx__opts">
+      <label *ngFor="let r of weighReasons" class="wx__opt">
+        <input type="radio" name="wxReason" [value]="r" [(ngModel)]="weighReport.choice"> {{ r }}
+      </label>
+      <label class="wx__opt">
+        <input type="radio" name="wxReason" [value]="weighOther" [(ngModel)]="weighReport.choice"> Lý do khác
+      </label>
+      <input *ngIf="weighReport.choice === weighOther" type="text" class="wx__input" [(ngModel)]="weighReport.other"
+             placeholder="Nhập lý do…" maxlength="200" autocomplete="off">
+    </div>
+    <p class="wx__msg" *ngIf="weighReport.msg" [class.wx__msg--ok]="weighReport.ok">{{ weighReport.msg }}</p>
+    <div class="wx__foot">
+      <button type="button" class="wx__btn" (click)="weighReport = null">{{ weighReport.ok ? 'Đóng' : 'Hủy' }}</button>
+      <button type="button" class="wx__btn wx__btn--primary" *ngIf="!weighReport.ok" [disabled]="weighReport.busy" (click)="submitWeighReport()">
+        {{ weighReport.busy ? 'Đang gửi…' : 'Gửi' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Lô chưa có Week (mã theo dõi Week) → bắt nhập Week theo tem trước khi xuất -->
+<app-week-input-popup *ngIf="weekAsk as wa"
+                      title="Nhập Week cho lô"
+                      [subtitle]="wa.subtitle"
+                      [note]="wa.note"
+                      saveLabel="Lưu & xuất"
+                      (saved)="onWeekAskSaved($event)"
+                      (cancelled)="onWeekAskCancelled()"></app-week-input-popup>

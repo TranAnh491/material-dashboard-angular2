@@ -35,20 +35,32 @@ async function sendOtpToZalo(
   lsx: string,
   requestedBy: string,
   nextStatus: string,
-  factory: string
+  factory: string,
+  reason: string,
+  purpose: 'bypass' | 'delete' = 'bypass'
 ): Promise<void> {
   const groupSnap = await db.doc(KHO_GROUP_DOC).get();
   const chatId = String(groupSnap.data()?.chatId || '').trim();
   if (!chatId) {
     throw new Error('Chưa gắn nhóm Quản lý kho trong zalo_group_config/quanly_kho.');
   }
-  const lines = [
+  const lines = purpose === 'delete' ? [
+    `🗑 YÊU CẦU XÓA LỆNH SẢN XUẤT (Work Order)`,
+    `Thời điểm: ${vnNowLabel(new Date())}`,
+    requestedBy ? `Người yêu cầu: ${requestedBy}` : '',
+    factory ? `Nhà máy: ${factory}` : '',
+    `LSX: ${lsx}`,
+    reason ? `Chi tiết: ${reason}` : '',
+    `Mã xác nhận xóa: ${code}`,
+    `Hiệu lực: 10 phút (một lần, chỉ LSX này)`
+  ].filter(Boolean) : [
     `🔐 Vượt quyền PXK lệch (Work Order)`,
     `Thời điểm: ${vnNowLabel(new Date())}`,
     requestedBy ? `Người yêu cầu: ${requestedBy}` : '',
     factory ? `Nhà máy: ${factory}` : '',
     `LSX: ${lsx}`,
     nextStatus ? `Tình trạng: ${nextStatus}` : '',
+    reason ? `Lý do lệch: ${reason}` : 'Lý do lệch: PXK còn mã thiếu (chưa xác định chi tiết)',
     `Mã xác nhận: ${code}`,
     `Hiệu lực: 10 phút (một lần, chỉ LSX này)`
   ].filter(Boolean);
@@ -66,20 +78,23 @@ async function sendOtpToZalo(
 
 export async function requestWoPxkBypassOtp(
   db: admin.firestore.Firestore,
-  opts?: { lsx?: string; requestedBy?: string; nextStatus?: string; factory?: string }
+  opts?: { lsx?: string; requestedBy?: string; nextStatus?: string; factory?: string; reason?: string; purpose?: string }
 ): Promise<void> {
   const token = zaloBotToken.value().trim();
   if (!token) {
     throw new Error('Thiếu ZALO_BOT_TOKEN');
   }
   const lsx = String(opts?.lsx || '').trim().toUpperCase().slice(0, 40);
-  const docId = woPxkBypassOtpDocId(lsx);
+  const purpose: 'bypass' | 'delete' = opts?.purpose === 'delete' ? 'delete' : 'bypass';
+  // Mã xóa LSX tách riêng mã vượt quyền PXK
+  const docId = (purpose === 'delete' ? 'DEL_' : '') + woPxkBypassOtpDocId(lsx);
   if (!lsx || !docId) {
     throw new Error('Thiếu LSX để gửi OTP vượt quyền.');
   }
   const requestedBy = String(opts?.requestedBy || '').trim().toUpperCase().slice(0, 20);
   const nextStatus = String(opts?.nextStatus || '').trim().slice(0, 20);
   const factory = String(opts?.factory || '').trim().toUpperCase().slice(0, 16);
+  const reason = String(opts?.reason || '').trim().slice(0, 1800);
   const code = random4DigitCode();
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + OTP_TTL_MS);
   await db.collection(OTP_COLLECTION).doc(docId).set({
@@ -89,23 +104,26 @@ export async function requestWoPxkBypassOtp(
     requestedBy: requestedBy || '',
     nextStatus,
     factory,
+    reason,
+    purpose,
     expiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
-  await sendOtpToZalo(db, code, token, lsx, requestedBy, nextStatus, factory);
+  await sendOtpToZalo(db, code, token, lsx, requestedBy, nextStatus, factory, reason, purpose);
 }
 
 export async function verifyWoPxkBypassOtp(
   db: admin.firestore.Firestore,
   codeRaw: string,
-  lsxRaw: string
+  lsxRaw: string,
+  purposeRaw?: string
 ): Promise<{ ok: true; lsx: string }> {
   const code = String(codeRaw || '').trim();
   if (!/^\d{4}$/.test(code)) {
     throw new Error('Mã OTP phải gồm 4 chữ số.');
   }
   const lsx = String(lsxRaw || '').trim().toUpperCase().slice(0, 40);
-  const docId = woPxkBypassOtpDocId(lsx);
+  const docId = (purposeRaw === 'delete' ? 'DEL_' : '') + woPxkBypassOtpDocId(lsx);
   if (!lsx || !docId) {
     throw new Error('Thiếu LSX để xác nhận OTP.');
   }

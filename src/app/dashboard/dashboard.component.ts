@@ -1,3 +1,4 @@
+import { appAlert } from '../shared/app-toast';
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, HostBinding } from '@angular/core';
 import { Router } from '@angular/router';
 import Chart from 'chart.js/auto';
@@ -14,6 +15,7 @@ import { MaterialLifecycleService } from '../services/material-lifecycle.service
 import { WoCreatedByStaffService } from '../services/wo-created-by-staff.service';
 import { WorkOrderOutboundCreatedByService } from '../services/work-order-outbound-created-by.service';
 import * as XLSX from 'xlsx';
+import { APP_TABS, DESKTOP_ONLY_TAB_PATHS, getAppTab } from '../routes/app-tabs';
 
 interface WorkOrderStatusRow {
   code: string;
@@ -316,10 +318,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** % Accuracy hiển thị “tháng này” (đồng bộ với donut) — nhập tay qua modal chung (danh mục Accuracy/Turnover). */
   matAccuracyThisMonth = 99.85;
+  /** Mục tiêu độ chính xác kiểm kê (%) — trước đây nhãn "Target Achieved" ghi cứng, luôn hiện đạt. */
+  readonly accuracyTarget = 99.5;
+  /** Thanh tiến độ Accuracy bắt đầu từ mức này để chênh lệch 99,x% nhìn thấy được */
+  readonly accBarMin = 95;
+  accBarPct(v: number): number {
+    const n = Number(v) || 0;
+    return Math.max(0, Math.min(100, ((n - this.accBarMin) / (100 - this.accBarMin)) * 100));
+  }
   fgAccuracyThisMonth = 100;
 
   /** FGs Inventory Turnover — 12 tháng 2026 (cột có số; tháng chưa có dữ liệu: chỉ nhãn) + target tháng — nhập tay qua modal chung. */
-  readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `Thg ${i + 1}`);
+  readonly fgTurnoverMonthLabels = Array.from({ length: 12 }, (_, i) => `T${i + 1}`);
   fgTurnoverMonthValues: (number | null)[] = [
     1.33, 0.4, 0.83, 0.8, 1, null, null, null, null, null, null, null
   ];
@@ -384,27 +394,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   mobileDrillCategory: string | null = null;
   mobileSearchExpanded = false;
 
-  /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). */
-  private readonly desktopOnlyTabPaths: string[] = [
-    '/dashboard',
-    '/bag-history',
-    '/fg-overview',
-    '/qc',
-    '/qc-traceability',
-    '/label',
-    '/work-order-status',
-    '/shipment',
-    '/inventory-overview',
-    '/fg-out',
-    '/fg-inventory',
-    '/pallet-id',
-    '/checklist',
-    '/equipment',
-    '/sxxk',
-    '/settings',
-    '/zalo',
-    '/shorted-materials'
-  ];
+  /** Giống menu.component: ẩn trên mobile PDA (mở đầy đủ trên desktop). Nguồn chung ở routes/app-tabs.ts. */
+  private readonly desktopOnlyTabPaths: string[] = DESKTOP_ONLY_TAB_PATHS;
 
   readonly mobileCategoryOrder = [
     'Main',
@@ -417,61 +408,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     'Admin'
   ];
 
-  // Menu tabs for icon grid (+ Main giống menu hệ thống)
-  menuTabs = [
-    { path: '/work-order-status', title: 'Work Order', icon: 'assignment', category: 'Main' },
-    { path: '/lich-lam-viec', title: 'Lịch Làm Việc', icon: 'event_note', category: 'Main' },
-    { path: '/shipment', title: 'Shipment', icon: 'local_shipping', category: 'Main' },
-    {
-      path: '/location',
-      title: 'Materials',
-      icon: 'inventory_2',
-      category: 'Main',
-      subtitle: 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-    },
-    // Report
-    { path: '/report', title: 'Report', icon: 'analytics', category: 'Report' },
-    { path: '/shorted-materials', title: 'Shorted materials', icon: 'difference', category: 'Report' },
-    // RM — tất cả đã gộp thành trang dùng chung ASM1 + ASM2 (nút chuyển nhà máy trong trang)
-    { path: '/inbound', title: 'RM Inbound', icon: 'arrow_downward', category: 'RM' },
-    { path: '/outbound', title: 'RM Outbound', icon: 'arrow_upward', category: 'RM' },
-    { path: '/materials', title: 'RM Inventory', icon: 'inventory', category: 'RM' },
-    { path: '/quan-ly-nguyen-lieu', title: 'Quản lý Nguyên Liệu', icon: 'fact_check', category: 'RM' },
-    { path: '/inventory-overview', title: 'RM Overview', icon: 'assessment', category: 'RM' },
-    { path: '/bag-history', title: 'Control Batch', icon: 'history', category: 'RM' },
-
-    { path: '/qc', title: 'Quality', icon: 'verified', category: 'Quality' },
-    { path: '/equipment-checklist', title: 'Quản lý thiết bị', icon: 'precision_manufacturing', category: 'Quality', subtitle: 'Checklist thiết bị kho, tem QR và nhắc Zalo' },
-    { path: '/qc-traceability', title: 'Traceability', icon: 'timeline', category: 'Quality' },
-
-    // ASM FG
-    { path: '/fg-in', title: 'FG In', icon: 'input', category: 'ASM FG' },
-    { path: '/fg-out', title: 'FG Out', icon: 'output', category: 'ASM FG' },
-    { path: '/fg-check', title: 'FG Check', icon: 'fact_check', category: 'ASM FG' },
-    { path: '/fg-inventory', title: 'FG Inventory', icon: 'inventory_2', category: 'ASM FG' },
-    { path: '/fg-overview', title: 'FG Overview', icon: 'table_chart', category: 'ASM FG' },
-    { path: '/fg-location', title: 'FG Location', icon: 'edit_location', category: 'ASM FG' },
-    { path: '/pallet-id', title: 'In tem nội bộ', icon: 'print', category: 'ASM FG' },
-
-    // Production
-    { path: '/pd-control', title: 'PD Control', icon: 'precision_manufacturing', category: 'Production' },
-
-    // Tools & Operations
-    { path: '/materials-dashboard', title: 'Materials Dashboard', icon: 'grid_view', category: 'Tools' },
-    { path: '/rm1-delivery', title: 'RM Delivery', icon: 'local_shipping', category: 'Tools' },
-    { path: '/fgs-dashboard', title: 'FGs Dashboard', icon: 'grid_view', category: 'Tools' },
-    { path: '/label', title: 'Label', icon: 'label', category: 'Tools' },
-    { path: '/stock-check', title: 'Stock Check', icon: 'inventory_2', category: 'Tools' },
-
-    // Admin & Reports
-    { path: '/index', title: 'Bonded Report', icon: 'analytics', category: 'Admin' },
-    { path: '/checklist', title: 'Safety & Quality', icon: 'checklist', category: 'Admin' },
-    { path: '/equipment', title: 'Training', icon: 'integration_instructions', category: 'Admin' },
-    { path: '/sxxk', title: 'SXXK', icon: 'inventory_2', category: 'Admin' },
-    { path: '/scrap', title: 'Scrap', icon: 'delete_sweep', category: 'Admin' },
-    { path: '/zalo', title: 'Zalo', icon: 'chat', category: 'Admin' },
-    { path: '/settings', title: 'Settings', icon: 'settings', category: 'Admin' }
-  ];
+  // Lưới module mobile — nguồn chung ở routes/app-tabs.ts (tab có khai báo `dashboard`)
+  menuTabs: Array<{ path: string; title: string; icon: string; category: string; subtitle?: string }> =
+    APP_TABS.filter(t => t.dashboard).map(t => ({
+      path: t.path,
+      title: t.title,
+      icon: t.dashboard!.icon,
+      category: t.dashboard!.category,
+      subtitle: t.subtitle,
+    }));
 
   constructor(
     private firestore: AngularFirestore,
@@ -563,47 +508,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (tab?.subtitle) {
       return tab.subtitle;
     }
-    const byPath: Record<string, string> = {
-      '/dashboard': 'Bảng tổng quan và chỉ số vận hành',
-      '/work-order-status': 'Theo dõi trạng thái lệnh sản xuất',
-      '/lich-lam-viec': 'Phân công tuần: soạn LSX, nhận NVL, giao LSX theo nhóm',
-      '/shipment': 'Kế hoạch và theo dõi giao hàng',
-      '/location': 'Đổi vị trí cho toàn bộ nguyên vật liệu',
-      '/report': 'Báo cáo và phân tích',
-      '/shorted-materials': 'Theo dõi nguyên liệu bị thiếu',
-      '/pd-control': 'Giám sát điều khiển sản xuất',
-      '/inbound': 'Nhập kho nguyên liệu (ASM1 & ASM2)',
-      '/outbound': 'Xuất kho nguyên liệu (ASM1 & ASM2)',
-      '/materials': 'Quản lý tồn kho nguyên liệu (ASM1 & ASM2)',
-      '/quan-ly-nguyen-lieu': 'Kiểm tra KK theo loại hàng, mã hàng và vị trí',
-      '/inventory-overview': 'Xem tổng quan tồn kho (ASM1 & ASM2)',
-      '/bag-history': 'Kiểm soát batch và bịch xuất',
-      '/label': 'In tem nhãn nguyên liệu',
-      '/qc': 'Kiểm tra chất lượng nguyên liệu',
-      '/nhiet-do': 'Ghi nhận và theo dõi nhiệt độ',
-      '/equipment-checklist': 'Checklist thiết bị kho, tem QR và nhắc kiểm tra',
-      '/qc-traceability': 'Truy xuất nguồn gốc nguyên liệu',
-      '/fg-in': 'Nhập thành phẩm vào kho',
-      '/fg-out': 'Xuất thành phẩm',
-      '/fg-check': 'Kiểm tra thành phẩm trước khi xuất',
-      '/fg-inventory': 'Quản lý tồn kho thành phẩm',
-      '/fg-overview': 'Tổng quan tồn kho thành phẩm',
-      '/fg-location': 'Đổi vị trí và nhà máy thành phẩm',
-      '/pallet-id': 'In tem nội bộ kho',
-      '/materials-dashboard': 'Bảng tổng hợp nguyên vật liệu',
-      '/rm1-delivery': 'Giao nguyên liệu cho sản xuất',
-      '/fgs-dashboard': 'Bảng tổng hợp thành phẩm',
-      '/stock-check': 'Kiểm kê và đối chiếu tồn kho',
-      '/index': 'Báo cáo kho ngoại quan',
-      '/sxxk': 'Quản lý sản xuất xuất khẩu',
-      '/scrap': 'Quản lý phế liệu',
-      '/checklist': 'An toàn và chất lượng',
-      '/equipment': 'Đào tạo nhân viên kho',
-      '/settings': 'Cài đặt tài khoản và phân quyền',
-      '/zalo': 'Tích hợp thông báo Zalo',
-    };
-    if (tab?.path && byPath[tab.path]) {
-      return byPath[tab.path];
+    const appTab = tab?.path ? getAppTab(tab.path) : undefined;
+    if (appTab?.subtitle) {
+      return appTab.subtitle;
     }
     const hit = this.menuTabs.find(
       (t) => t.path === tab?.path || t.title === tab?.title
@@ -1601,7 +1508,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!woId) return;
     const wo = this.workOrders.find((w) => w.id === woId);
     if (!wo) {
-      alert('Không tìm thấy LSX này. Bấm Run để tải lại dữ liệu.');
+      appAlert('Không tìm thấy LSX này. Bấm Run để tải lại dữ liệu.');
       return;
     }
     this.woEditSource = wo;
@@ -1623,6 +1530,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeWoLsxModal(): void {
     if (this.woEditSaving) return;
     this.closeWoPxkModal();
+    this.closeWoLogModal();
     this.showWoLsxModal = false;
     this.woEditSource = null;
   }
@@ -1634,10 +1542,293 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.woPxkLines = [];
   }
 
+  // ===== Show Log LSX: notepad đầy đủ thông tin LSX + PXK + từng bag/cuộn đã scan =====
+  showWoLogModal = false;
+  woLogLoading = false;
+  woLogText = '';
+  woLogLsx = '';
+
+  closeWoLogModal(): void {
+    this.showWoLogModal = false;
+    this.woLogLoading = false;
+  }
+
+  async openWoLogView(): Promise<void> {
+    const wo = this.woEditSource;
+    const lsx = String(wo?.productionOrder || '').trim();
+    if (!wo || !lsx) {
+      appAlert('LSX trống — không mở được log.');
+      return;
+    }
+    this.woLogLsx = lsx;
+    this.showWoLogModal = true;
+    this.woLogLoading = true;
+    this.woLogText = `Đang đọc log LSX ${lsx} ...`;
+    try {
+      const db = this.firestore.firestore;
+      const variants = Array.from(new Set([lsx, lsx.toUpperCase()]));
+      const factory = String(wo.factory || '').trim();
+      const key = (s: string) => String(s || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[\/#?]+/g, '_');
+      const logKeys = Array.from(new Set([factory, 'ASM1', 'ASM2', 'ASM3'].filter(Boolean).map((f) => `${key(f)}__${key(lsx)}`)));
+      const [pxkSnap, outSnap, logSnap] = await Promise.all([
+        db.collection('pxk-import-data').where('lsx', 'in', variants).get(),
+        db.collection('outbound-materials').where('productionOrder', 'in', variants).get(),
+        db.collection('outbound-lsx-log').where('lsxKey', 'in', logKeys).get()
+      ]);
+      this.readTracker.track('dashboard', 'pxk-import-data', pxkSnap.size || 1);
+      this.readTracker.track('dashboard', 'outbound-materials', outSnap.size || 1);
+      this.readTracker.track('dashboard', 'outbound-lsx-log', logSnap.size || 1);
+      const pxkLines: any[] = [];
+      const pxkDocs: any[] = [];
+      pxkSnap.docs.forEach((d) => {
+        const data = d.data() as any;
+        pxkDocs.push(data);
+        (Array.isArray(data?.lines) ? data.lines : []).forEach((l: any) => pxkLines.push(l));
+      });
+      const outRows = outSnap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((r) => !factory || !r.factory || String(r.factory).trim().toUpperCase() === factory.toUpperCase());
+      const logLines: any[] = [];
+      logSnap.docs.forEach((d) => {
+        const data = d.data() as any;
+        if (factory && data.factory && String(data.factory).trim().toUpperCase() !== factory.toUpperCase()) return;
+        (Array.isArray(data?.lines) ? data.lines : []).forEach((l: any) => logLines.push(l));
+      });
+      this.woLogText = this.formatWoLog(wo, pxkDocs, pxkLines, outRows, logLines);
+    } catch (e: any) {
+      console.error('openWoLogView:', e);
+      this.woLogText = '❌ Không đọc được log: ' + (e?.message || e);
+    } finally {
+      this.woLogLoading = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private formatWoLog(wo: WorkOrder, pxkDocs: any[], pxkLines: any[], outRows: any[], logLines: any[]): string {
+    const n = (v: any) => {
+      const x = Number(v) || 0;
+      return x.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    };
+    const pad = (v: any, w: number) => { const s = String(v ?? ''); return s.length >= w ? s.slice(0, w) : s + ' '.repeat(w - s.length); };
+    const padL = (v: any, w: number) => { const s = String(v ?? ''); return s.length >= w ? s : ' '.repeat(w - s.length) + s; };
+    const dt = (v: any): Date | null => {
+      if (v == null || v === '') return null;
+      if (typeof v === 'number') return new Date(v);
+      return this.parseFirestoreDate(v);
+    };
+    const fT = (v: any) => { const d = dt(v); return d && !isNaN(d.getTime()) ? d.toLocaleString('vi-VN', { hour12: false }) : '—'; };
+    const fD = (v: any) => { const d = dt(v); return d && !isNaN(d.getTime()) ? d.toLocaleDateString('vi-VN') : '—'; };
+    const LINE = '='.repeat(96);
+    const SUB = '-'.repeat(96);
+    const kp = (code: any, po: any) => `${String(code || '').trim().toUpperCase()}|${String(po || '').trim()}`;
+    const out: string[] = [];
+    const statusLabel: Record<string, string> = {
+      waiting: 'Waiting', kitting: 'Kitting', ready: 'Ready', 'ready-iqc': 'Ready IQC',
+      transfer: 'Transfer', done: 'Done', delay: 'Delay'
+    };
+
+    out.push(LINE);
+    out.push(`  LOG LỆNH SẢN XUẤT  ${wo.productionOrder}${wo.lsxSeq ? '  (lần import #' + wo.lsxSeq + ')' : ''}`);
+    out.push(`  Xuất log lúc: ${fT(new Date())}`);
+    out.push(LINE);
+    out.push('');
+    out.push('[1] THÔNG TIN LSX');
+    out.push(SUB);
+    const info: Array<[string, string]> = [
+      ['Nhà máy', wo.factory || '—'],
+      ['LSX', wo.productionOrder || '—'],
+      ['Số thứ tự / Order No', wo.orderNumber || '—'],
+      ['Tháng / Năm', `${wo.month || '—'}/${wo.year || '—'}`],
+      ['Mã TP', wo.productCode || '—'],
+      ['Số lượng', n(wo.quantity)],
+      ['Khách hàng', wo.customer || '—'],
+      ['Line', wo.productionLine || '—'],
+      ['Tình trạng', statusLabel[String(wo.status || '')] || String(wo.status || '—')],
+      ['Gấp', wo.isUrgent ? 'CÓ' : 'Không'],
+      ['Đủ / Thiếu NVL', wo.materialsStatus === 'sufficient' ? 'Đủ' : wo.materialsStatus === 'insufficient' ? 'Thiếu' : '—'],
+      ['NVL thiếu', wo.missingMaterials || '—'],
+      ['Người soạn', `${this.formatWoCreatedByLabel(wo.createdBy, wo.createdByMemberId) || '—'}${wo.createdByMemberId ? ' · ' + wo.createdByMemberId : ''}${wo.createdByFromOutbound ? ' (từ scan xuất kho)' : ''}`],
+      ['Team soạn', wo.createdByTeam || '—'],
+      ['Người check', wo.checkedBy || '—'],
+      ['Ngày nhận thông tin', fD(wo.planReceivedDate)],
+      ['Ngày giao NVL', fD(wo.deliveryDate)],
+      ['Ngày tạo', fT(wo.createdDate)],
+      ['Bắt đầu Kitting', fT((wo as any).kittingStartedAt)],
+      ['Ready lúc', fT((wo as any).readyAt)],
+      ['Done lúc', fT((wo as any).doneAt)],
+      ['Kitting → Ready', this.formatWoKittingToReadyLabel(wo)],
+      ['Cập nhật lần cuối', fT(wo.lastUpdated)],
+      ['Ghi chú', wo.notes || '—']
+    ];
+    info.forEach(([k, v]) => out.push(`  ${pad(k, 22)}: ${v}`));
+    out.push('');
+
+    // Đã xuất theo mã + PO (outbound-materials)
+    const exported = new Map<string, number>();
+    outRows.forEach((r) => {
+      const k = kp(r.materialCode, r.poNumber);
+      exported.set(k, (exported.get(k) || 0) + (Number(r.exportQuantity) || 0));
+    });
+
+    out.push('[2] PXK (PHIẾU XUẤT KHO) — so với lượng đã xuất');
+    out.push(SUB);
+    if (pxkLines.length) {
+      const soCt = Array.from(new Set(pxkLines.map((l) => String(l?.soChungTu || '').trim()).filter(Boolean)));
+      if (soCt.length) out.push(`  Số chứng từ: ${soCt.join(', ')}`);
+      const imported = pxkDocs.map((d) => fT(d?.importedAt || d?.createdAt || d?.updatedAt)).filter((x) => x !== '—');
+      if (imported.length) out.push(`  Import PXK lúc: ${Array.from(new Set(imported)).join(', ')}`);
+      out.push(`${padL('#', 3)}  ${pad('Mã NVL', 12)}${pad('PO', 14)}${padL('Cần', 12)}${padL('Đã xuất', 12)}${padL('Còn', 12)}  ${pad('ĐVT', 5)}${pad('Kho', 8)}Tên vật tư`);
+      const seen = new Set<string>();
+      let totNeed = 0, totOut = 0, cDone = 0;
+      pxkLines.forEach((l, i) => {
+        const k = kp(l?.materialCode, l?.po);
+        const need = Number(l?.quantity) || 0;
+        const got = seen.has(k) ? 0 : (exported.get(k) || 0);
+        seen.add(k);
+        const remain = need - got;
+        totNeed += need; totOut += got;
+        if (remain <= 0.0001) cDone++;
+        const flag = remain > 0.0001 ? '' : (remain < -0.0001 ? '  DƯ' : '  ✔');
+        out.push(`${padL(i + 1, 3)}  ${pad(String(l?.materialCode || '').toUpperCase(), 12)}${pad(l?.po || '', 14)}${padL(n(need), 12)}${padL(n(got), 12)}${padL(n(remain), 12)}  ${pad(l?.unit || '', 5)}${pad(l?.maKho || '', 8)}${l?.tenVatTu || ''}${flag}`);
+      });
+      out.push(`  Tổng: cần ${n(totNeed)} · đã xuất ${n(totOut)} · ${cDone}/${pxkLines.length} dòng đủ`);
+      const extra = Array.from(exported.keys()).filter((k) => !seen.has(k));
+      if (extra.length) out.push(`  ⚠ Xuất ngoài PXK: ${extra.map((k) => k.replace('|', ' / ') + ' = ' + n(exported.get(k))).join('; ')}`);
+    } else {
+      out.push('  Chưa có dữ liệu PXK cho LSX này (import PXK ở tab Work Order).');
+    }
+    out.push('');
+
+    // Chi tiết từng bag theo mã NVL + PO: ưu tiên log scan (outbound-lsx-log), thiếu log thì lấy bản ghi xuất kho
+    out.push('[3] CHI TIẾT TỪNG BAG — theo mã NVL / PO');
+    out.push(SUB);
+    type BagRow = { t: number; by: string; imd: string; bag: string; qty: number; tag: string; loc: string; m: string; src: string };
+    const groups = new Map<string, { code: string; po: string; bags: BagRow[]; fromLog: boolean }>();
+    const grp = (code: any, po: any) => {
+      const k = kp(code, po);
+      if (!groups.has(k)) groups.set(k, { code: String(code || '').trim().toUpperCase(), po: String(po || '').trim(), bags: [], fromLog: false });
+      return groups.get(k)!;
+    };
+    logLines.forEach((l) => {
+      const g = grp(l.code, l.po);
+      g.fromLog = true;
+      g.bags.push({
+        t: Number(l.t) || 0, by: String(l.by || ''), imd: String(l.imd || ''), bag: String(l.bag || ''),
+        qty: Number(l.qty) || 0, tag: String(l.tag || ''), loc: String(l.loc || ''), m: String(l.m || ''), src: 'log'
+      });
+    });
+    outRows.forEach((r) => {
+      const g = grp(r.materialCode, r.poNumber);
+      if (g.fromLog) return;
+      g.bags.push({
+        t: dt(r.exportDate)?.getTime() || dt(r.createdAt)?.getTime() || 0,
+        by: String(r.employeeId || r.exportedBy || ''),
+        imd: String(r.batchNumber || r.importDate || ''),
+        bag: String(r.bagNumberDisplay || r.bagBatch || ''),
+        qty: Number(r.exportQuantity) || 0,
+        tag: '', loc: String(r.location || ''), m: String(r.scanMethod || ''), src: 'xuất kho'
+      });
+    });
+    const pxkNeed = new Map<string, number>();
+    pxkLines.forEach((l) => { const k = kp(l?.materialCode, l?.po); pxkNeed.set(k, (pxkNeed.get(k) || 0) + (Number(l?.quantity) || 0)); });
+    // Mã trong PXK chưa xuất bag nào cũng liệt kê (để thấy còn thiếu)
+    pxkLines.forEach((l) => grp(l?.materialCode, l?.po));
+    const keys = Array.from(groups.keys()).sort();
+    let allBags = 0;
+    const byWho = new Map<string, { c: number; q: number }>();
+    let tMin = 0, tMax = 0;
+    keys.forEach((k) => {
+      const g = groups.get(k)!;
+      const bags = g.bags.sort((x, y) => x.t - y.t);
+      const got = bags.reduce((sum, b) => sum + b.qty, 0);
+      const need = pxkNeed.get(k);
+      const head = need !== undefined
+        ? `cần ${n(need)} · đã xuất ${n(got)} · còn ${n(need - got)}${need - got <= 0.0001 ? (need - got < -0.0001 ? '  DƯ' : '  ✔') : ''}`
+        : `đã xuất ${n(got)}  (ngoài PXK)`;
+      out.push(`■ ${g.code}   PO ${g.po || '—'}   —  ${bags.length} bag  ·  ${head}${bags.length && !g.fromLog ? '   [nguồn: bản ghi xuất kho]' : ''}`);
+      if (!bags.length) {
+        out.push('     (chưa scan bag nào)');
+        out.push('');
+        return;
+      }
+      out.push(`     ${padL('#', 3)}  ${pad('Bag', 10)}${pad('IMD / Lô', 13)}${padL('Lượng', 11)}  ${pad('ID scan', 9)}${pad('Giờ scan', 21)}${pad('Tem', 7)}${pad('Vị trí', 10)}Cách`);
+      bags.forEach((b, i) => {
+        out.push(`     ${padL(i + 1, 3)}  ${pad(b.bag || '—', 10)}${pad(b.imd || '—', 13)}${padL(n(b.qty), 11)}  ${pad(b.by || '—', 9)}${pad(b.t ? fT(b.t) : '—', 21)}${pad(b.tag, 7)}${pad(b.loc, 10)}${b.m}`);
+        allBags++;
+        const w = b.by || '—';
+        const c = byWho.get(w) || { c: 0, q: 0 };
+        c.c++; c.q += b.qty;
+        byWho.set(w, c);
+        if (b.t) { tMin = tMin ? Math.min(tMin, b.t) : b.t; tMax = Math.max(tMax, b.t); }
+      });
+      out.push('');
+    });
+    if (!keys.length) out.push('  Chưa có bag nào được xuất cho LSX này.');
+    else {
+      out.push(`  Tổng: ${allBags} bag · ${keys.length} mã/PO`);
+      if (tMin) out.push(`  Thời gian scan: ${fT(tMin)}  →  ${fT(tMax)}`);
+      if (byWho.size) out.push('  Theo người scan: ' + Array.from(byWho.entries()).map(([w, v]) => `${w} ${v.c} bag (${n(v.q)})`).join(' · '));
+      if (!logLines.length) out.push('  (LSX chưa có log scan — dữ liệu bag lấy từ bản ghi xuất kho; log scan ghi từ 17/10/2026)');
+    }
+    out.push('');
+
+    // Bản ghi xuất kho (outbound-materials)
+    out.push('[4] BẢN GHI XUẤT KHO (Outbound)');
+    out.push(SUB);
+    const rows = outRows.slice().sort((a, b) => (dt(a.exportDate)?.getTime() || 0) - (dt(b.exportDate)?.getTime() || 0));
+    if (rows.length) {
+      out.push(`${padL('#', 4)}  ${pad('Giờ xuất', 21)}${pad('ID', 9)}${pad('Mã NVL', 12)}${pad('PO', 14)}${pad('Lô / IMD', 12)}${pad('Bag', 10)}${padL('Xuất', 11)}${padL('Lẻ', 9)}  ${pad('Vị trí', 10)}${pad('Cách', 9)}Lần`);
+      rows.forEach((r, i) => {
+        out.push(`${padL(i + 1, 4)}  ${pad(fT(r.exportDate), 21)}${pad(r.employeeId || r.exportedBy || '', 9)}${pad(String(r.materialCode || '').toUpperCase(), 12)}${pad(r.poNumber || '', 14)}${pad(r.batchNumber || r.importDate || '', 12)}${pad(r.bagNumberDisplay || r.bagBatch || '', 10)}${padL(n(r.exportQuantity), 11)}${padL(r.leQty ? n(r.leQty) : '', 9)}  ${pad(r.location || '', 10)}${pad(r.scanMethod || '', 9)}${r.scanCount || ''}`);
+        if (r.notes) out.push(`        ↳ ${r.notes}`);
+      });
+      const tot = rows.reduce((s, r) => s + (Number(r.exportQuantity) || 0), 0);
+      out.push(`  Tổng: ${rows.length} bản ghi · ${n(tot)}`);
+    } else {
+      out.push('  Chưa có bản ghi xuất kho cho LSX này.');
+    }
+    out.push('');
+    out.push(LINE);
+    out.push('  --- Hết log ---');
+    return out.join('\n');
+  }
+
+  async copyWoLog(): Promise<void> {
+    if (!this.woLogText) return;
+    try {
+      await navigator.clipboard.writeText(this.woLogText);
+      appAlert('Đã copy log.');
+    } catch {
+      appAlert('Không copy được — bôi đen nội dung rồi Ctrl+C.');
+    }
+  }
+
+  downloadWoLog(): void {
+    if (!this.woLogText) return;
+    const blob = new Blob(['\ufeff' + this.woLogText.replace(/\n/g, '\r\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `LSX_Log_${this.woLogLsx || 'lsx'}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  printWoLog(): void {
+    if (!this.woLogText) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const esc = this.woLogText.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    w.document.write(`<html><head><title>LSX Log ${this.woLogLsx}</title></head><body><pre style="font:11px Consolas,'Courier New',monospace">${esc}</pre></body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
   async openWoPxkView(): Promise<void> {
     const lsx = String(this.woEditSource?.productionOrder || '').trim();
     if (!lsx) {
-      alert('LSX trống — không mở được PXK.');
+      appAlert('LSX trống — không mở được PXK.');
       return;
     }
     this.showWoPxkModal = true;
@@ -1694,7 +1885,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const currentStatus = (wo.status || WorkOrderStatus.WAITING) as WorkOrderStatus;
     const transition = this.isWoStatusTransitionAllowed(currentStatus, nextStatus);
     if (!transition.allowed) {
-      alert(transition.message || 'Không được chuyển sang tình trạng này.');
+      appAlert(transition.message || 'Không được chuyển sang tình trạng này.');
       return;
     }
 
@@ -1751,7 +1942,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       this.woEditSaving = false;
       console.error('Error updating LSX from dashboard heatmap:', error);
-      alert(`Lỗi khi cập nhật LSX: ${error?.message || error}`);
+      appAlert(`Lỗi khi cập nhật LSX: ${error?.message || error}`);
       this.cdr.markForCheck();
     }
   }
@@ -2396,16 +2587,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
         datasets: [
           {
             type: 'bar' as const,
-            label: 'Turnover tháng',
+            label: 'Vòng quay tháng',
             data: bars,
-            backgroundColor: barBlue,
+            // Đạt mục tiêu: xanh; dưới mục tiêu: cam
+            backgroundColor: bars.map((v) => (typeof v === 'number' && v < tgt ? '#F59E0B' : barBlue)),
             borderRadius: 6,
+            maxBarThickness: 28,
             borderSkipped: false,
             order: 2
           },
           {
             type: 'line' as const,
-            label: `Target tháng (${tgt})`,
+            label: `Mục tiêu (${tgt})`,
             data: targetLine,
             borderColor: targetColor,
             backgroundColor: 'transparent',
@@ -2422,7 +2615,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 4, right: 4, bottom: 0, left: 2 } },
+        layout: { padding: { top: 16, right: 4, bottom: 0, left: 2 } },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
@@ -2457,9 +2650,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             grid: { display: false },
             ticks: {
               color: 'rgba(15,23,42,0.55)',
-              maxRotation: 45,
+              maxRotation: 0,
               minRotation: 0,
-              font: { size: 9, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
+              autoSkip: false,
+              font: { size: 10, family: "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" }
             },
             border: { display: false }
           },
@@ -2498,9 +2692,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
               const y = p.y;
               const base = p.base;
               if (![x, y, base].every((n) => typeof n === 'number' && Number.isFinite(n))) return;
-              const midY = (y + base) / 2;
-              c.fillStyle = '#ffffff';
-              c.fillText(raw.toFixed(2), x, midY);
+              void base;
+              c.fillStyle = 'rgba(15,23,42,0.75)';
+              c.fillText(raw.toFixed(2), x, y - 8);
             });
             c.restore();
           }
@@ -2710,10 +2904,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         'sendDashboardKpiReportManualFn'
       );
       const r = await firstValueFrom(callable({ slot }));
-      alert(r?.ok ? `Đã gửi báo cáo KPI (${r.fileName || 'Excel'}) qua email và Zalo.` : 'Không gửi được báo cáo.');
+      appAlert(r?.ok ? `Đã gửi báo cáo KPI (${r.fileName || 'Excel'}) qua email và Zalo.` : 'Không gửi được báo cáo.');
     } catch (error) {
       console.error('sendDashboardKpiReportManualFn failed', error);
-      alert('Không gửi được báo cáo KPI. Kiểm tra email/Zalo hoặc thử lại.');
+      appAlert('Không gửi được báo cáo KPI. Kiểm tra email/Zalo hoặc thử lại.');
     } finally {
       this.kpiReportSending = false;
       this.cdr.markForCheck();
@@ -3949,7 +4143,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   downloadIQCMaterialsReport(): void {
     const rows = this.putawayModalDisplayRows;
     if (rows.length === 0) {
-      alert('Không có dữ liệu để tải xuống!');
+      appAlert('Không có dữ liệu để tải xuống!');
       return;
     }
 
@@ -3979,10 +4173,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       XLSX.writeFile(wb, filename);
       console.log(`✅ Putaway SKU report downloaded: ${filename}`);
-      alert(`✅ Đã tải báo cáo: ${filename}`);
+      appAlert(`✅ Đã tải báo cáo: ${filename}`);
     } catch (error) {
       console.error('❌ Error downloading IQC materials report:', error);
-      alert(`❌ Lỗi khi tải báo cáo: ${error.message}`);
+      appAlert(`❌ Lỗi khi tải báo cáo: ${error.message}`);
     }
   }
 
@@ -3990,7 +4184,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   printPutawayModal(): void {
     const rows = this.putawayModalDisplayRows;
     if (!rows.length) {
-      alert('Không có dữ liệu để in!');
+      appAlert('Không có dữ liệu để in!');
       return;
     }
 
@@ -4092,7 +4286,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     const w = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800');
     if (!w) {
-      alert('Không mở được cửa sổ in. Hãy cho phép popup rồi thử lại.');
+      appAlert('Không mở được cửa sổ in. Hãy cho phép popup rồi thử lại.');
       return;
     }
     w.document.open();

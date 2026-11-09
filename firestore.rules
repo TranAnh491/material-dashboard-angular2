@@ -2,37 +2,176 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Chỉ tài khoản ASP0106 (Quản lý người dùng — tab Settings) mới được sửa quyền hạn.
-    function isAsp0106() {
-      return request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId == 'ASP0106';
+    // Admin = custom claim `admin` trong token Firebase Auth (chỉ ASP0106).
+    // Claim do server gán (scripts/security-bootstrap-admin.js), client không tự sửa được,
+    // khác với trường employeeId / role trong `users` mà trước đây rules dựa vào.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.get('admin', false) == true;
     }
 
-    // Hồ sơ cơ bản: ai cũng đọc được (tên/bộ phận hiển thị ở nhiều tab),
-    // nhưng chỉ tự sửa hồ sơ của mình hoặc ASP0106 sửa hộ người khác.
+    // Phiên đăng nhập bằng quét thẻ (thẻ chỉ có mã ASP, không mật khẩu): không được làm việc quản trị.
+    function isScanSession() {
+      return request.auth != null && request.auth.token.get('scan', false) == true;
+    }
+
+    // Quyền Xóa bật trong Settings (user-permissions chỉ admin ghi được).
+    function hasDeletePermission() {
+      return request.auth != null && !isScanSession() &&
+        exists(/databases/$(database)/documents/user-permissions/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/user-permissions/$(request.auth.uid)).data.get('hasDeletePermission', false) == true ||
+          get(/databases/$(database)/documents/user-permissions/$(request.auth.uid)).data.get('hasEditPermission', false) == true
+        );
+    }
+
+    // ===== Tài khoản & phân quyền =====
+
+    // Hồ sơ: ai đăng nhập cũng đọc (tên/bộ phận hiển thị nhiều tab).
+    // Tự sửa hồ sơ mình chỉ được tên, ảnh, giờ đăng nhập. employeeId / role / email chỉ admin hoặc server ghi.
     match /users/{uid} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && (request.auth.uid == uid || isAsp0106());
+      allow create: if isAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        !('employeeId' in request.resource.data) &&
+        !('password' in request.resource.data) &&
+        request.resource.data.get('role', 'User') == 'User'
+      );
+      allow update: if isAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoURL', 'lastLoginAt', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
     }
 
-    // Quyền hạn (delete/complete/read-only) và quyền truy cập từng tab:
-    // CHỈ ASP0106 được ghi — chặn mọi tài khoản tự cấp quyền/tab cho chính mình.
+    // Quyền hạn: chỉ admin ghi. Tài khoản mới chỉ tự tạo được bản ghi KHÔNG có quyền gì.
     match /user-permissions/{uid} {
       allow read: if request.auth != null;
-      allow write: if isAsp0106();
+      allow create: if isAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        request.resource.data.get('hasDeletePermission', false) == false &&
+        request.resource.data.get('hasCompletePermission', false) == false &&
+        request.resource.data.get('hasEditPermission', false) == false &&
+        !('password' in request.resource.data)
+      );
+      allow update, delete: if isAdmin();
     }
+
+    // Quyền từng tab: chỉ admin ghi. Tài khoản mới chỉ tự tạo được bản ghi có duy nhất tab Dashboard.
     match /user-tab-permissions/{uid} {
       allow read: if request.auth != null;
-      allow write: if isAsp0106();
+      allow create: if isAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        request.resource.data.tabPermissions is map &&
+        request.resource.data.tabPermissions.values().removeAll([false]).size() <= 1 &&
+        request.resource.data.tabPermissions.get('dashboard', false) == true
+      );
+      allow update, delete: if isAdmin();
     }
 
-    // Tất cả collection khác — giữ nguyên hành vi hiện tại (mọi tài khoản đã đăng nhập đọc/ghi được).
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Bảng quyền cũ (có lưu mật khẩu), không còn dùng: chỉ admin.
+    match /local-user-permissions/{id} {
+      allow read, write: if isAdmin();
+    }
 
-      allow delete: if request.auth != null &&
-        exists(/databases/$(database)/documents/user-permissions/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/user-permissions/$(request.auth.uid)).data.hasEditPermission == true;
+    // ===== Liên kết Zalo =====
+    // OTP và mật khẩu mới gửi theo mã nhân viên trong zalo_links (bot ghi bằng Admin SDK).
+    // Client chỉ đọc; chỉ admin xóa/sửa (tab Zalo) — chặn người khác trỏ mã ASP0106 về chat của mình.
+    match /zalo_links/{id} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /zalo_pending/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ===== Quản lý thiết bị kho =====
+
+    function canManageEquipment() {
+      return isAdmin() || hasDeletePermission();
+    }
+
+    // Danh mục thiết bị, nhân sự, hạng mục kiểm tra, ngày lễ: ai đăng nhập cũng đọc, chỉ người quản lý được ghi/xóa.
+    match /warehouse-equipment/{id} {
+      allow read: if request.auth != null;
+      allow write: if canManageEquipment();
+    }
+    match /warehouse-equipment-staff/{id} {
+      allow read: if request.auth != null;
+      allow write: if canManageEquipment();
+    }
+    match /warehouse-equipment-meta/{id} {
+      allow read: if request.auth != null;
+      allow write: if canManageEquipment();
+    }
+
+    // Kết quả kiểm tra: người kiểm tra ghi được, nhưng phải đúng dạng dữ liệu; chỉ người quản lý được xóa.
+    match /warehouse-equipment-inspections/{id} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.equipmentId is string
+        && request.resource.data.inspectionDate is string
+        && request.resource.data.inspectionDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.result in ['PASS', 'FAIL', 'NA', 'NOT_CHECKED'];
+      allow delete: if canManageEquipment();
+    }
+
+    // Đánh dấu đã bảo dưỡng: ai đăng nhập cũng tick được.
+    match /warehouse-equipment-maintenance/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ===== Chỉ máy chủ (Cloud Functions / bot Zalo dùng Admin SDK — không bị rules chặn) =====
+    // Mã OTP lưu ở đây: nếu client đọc được thì tự lấy mã, mất tác dụng OTP. App web chỉ gọi Functions.
+    match /location-unlock-otp/{id}     { allow read, write: if false; }
+    match /location-add-otp/{id}        { allow read, write: if false; }
+    match /wo-pxk-bypass-otp/{id}       { allow read, write: if false; }
+    match /catalog-delete-otp/{id}      { allow read, write: if false; }
+    match /materials-inventory-otp/{id} { allow read, write: if false; }
+    match /fg-lot-lsx-otp/{id}          { allow read, write: if false; }
+    match /inbound-ldv-otp/{id}         { allow read, write: if false; }
+    // Nhóm Zalo nhận OTP / cảnh báo — chỉ bot ghi; đổi được thì chuyển OTP sang chat khác.
+    match /zalo_group_config/{id}       { allow read, write: if false; }
+    // Chống gửi Zalo trùng (Functions dùng)
+    match /fridge-location-zalo/{id}    { allow read, write: if false; }
+    match /negative-stock-zalo/{id}     { allow read, write: if false; }
+    match /read-guard-notify/{id}       { allow read, write: if false; }
+    // Đếm lần quét thẻ sai theo IP (chống dò mã nhân viên) — chỉ Functions ghi
+    match /scan-login-throttle/{id}     { allow read, write: if false; }
+
+    // ===== Các collection khác =====
+    // Giữ nguyên hành vi cũ (mọi tài khoản đã đăng nhập đọc/ghi được).
+    // Firestore CỘNG quyền giữa các match, nên những collection có quy tắc riêng ở trên
+    // phải được loại khỏi đây, nếu không quy tắc riêng sẽ vô tác dụng.
+    function hasOwnRules(col) {
+      return col in [
+        'users',
+        'user-permissions',
+        'user-tab-permissions',
+        'local-user-permissions',
+        'zalo_links',
+        'zalo_pending',
+        'warehouse-equipment',
+        'warehouse-equipment-staff',
+        'warehouse-equipment-meta',
+        'warehouse-equipment-inspections',
+        'warehouse-equipment-maintenance',
+        'location-unlock-otp',
+        'location-add-otp',
+        'wo-pxk-bypass-otp',
+        'catalog-delete-otp',
+        'materials-inventory-otp',
+        'fg-lot-lsx-otp',
+        'inbound-ldv-otp',
+        'zalo_group_config',
+        'fridge-location-zalo',
+        'negative-stock-zalo',
+        'read-guard-notify',
+        'scan-login-throttle'
+      ];
+    }
+
+    match /{col}/{document=**} {
+      allow read, write: if request.auth != null && !hasOwnRules(col);
     }
   }
 }

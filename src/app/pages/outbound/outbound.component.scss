@@ -4,7 +4,7 @@
 .main-content:not(.ob-m-page) * {
   font-size: 13px !important;
   color: #000000 !important;
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   text-shadow: none !important;
@@ -43,7 +43,7 @@
 
 // Bỏ tất cả hiệu ứng hover (desktop)
 .main-content:not(.ob-m-page) *:hover {
-  background: #ffffff !important;
+  background: #FFFFFF !important;
   color: #000000 !important;
   transform: none !important;
   box-shadow: none !important;
@@ -78,9 +78,9 @@
   button {
     height: 40px;
     min-height: 40px;
-    border: 1px solid #d1d5db !important;
+    border: 1px solid #6B6B66 !important;
     border-radius: 4px !important;
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
     display: inline-flex;
     align-items: center;
@@ -122,7 +122,7 @@
     gap: 4px;
     padding: 8px 12px;
     border: 2px solid #007bff;
-    background: #ffffff;
+    background: #FFFFFF;
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
@@ -190,7 +190,7 @@
   padding: 8px;
   background: #f8f9fa;
   border-radius: 6px;
-  border: 1px solid #dee2e6;
+  border: 1px solid #6B6B66;
   
   .scanner-method-buttons {
     display: flex;
@@ -204,8 +204,8 @@
       align-items: center;
       gap: 2px;
       padding: 8px 12px;
-      border: 2px solid #dee2e6;
-      background: #ffffff;
+      border: 2px solid #6B6B66;
+      background: #FFFFFF;
       border-radius: 6px;
       cursor: pointer;
       transition: all 0.3s ease;
@@ -374,9 +374,9 @@
       width: 100%;
       padding: 12px 16px;
       font-size: 16px !important;
-      border: 2px solid #dee2e6;
+      border: 2px solid #6B6B66;
       border-radius: 8px;
-      background: #ffffff;
+      background: #FFFFFF;
       
       &:focus {
         border-color: #007bff;
@@ -428,7 +428,7 @@
         padding: 10px 15px;
         background: #f8f9fa;
         border-radius: 8px;
-        border: 1px solid #dee2e6;
+        border: 1px solid #6B6B66;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -489,7 +489,7 @@
     th {
       background: #f8f9fa;
       font-weight: 600;
-      border-bottom: 2px solid #dee2e6;
+      border-bottom: 2px solid #8F8F89;
     }
     
     // Column widths for mobile - 5 visible columns
@@ -510,7 +510,7 @@
   .card-header {
     padding: 15px;
     background: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid #8F8F89;
     
     h4 {
       font-size: 16px !important;
@@ -528,7 +528,7 @@
   margin: 0; 
   height: 100vh; 
   overflow: hidden; 
-  background: #ffffff; 
+  background: #FFFFFF; 
   position: absolute; 
   top: 0; 
   left: 0; 
@@ -537,8 +537,8 @@
 }
 
 .excel-container { 
-  background: #ffffff; 
-  border: 1px solid #e0e0e0; 
+  background: #FFFFFF; 
+  border: 1px solid #6B6B66; 
   border-radius: 0; 
   overflow: hidden; 
   height: 100vh; 
@@ -548,8 +548,8 @@
 }
 
 .excel-header { 
-  background: #ffffff; 
-  border-bottom: 1px solid #e0e0e0; 
+  background: #FFFFFF; 
+  border-bottom: 1px solid #8F8F89; 
   padding: 16px 24px; 
   flex-shrink: 0;
   display: flex;
@@ -616,7 +616,7 @@
   width: 100%; 
   font-family: inherit; 
   font-size: 13px; 
-  background: #ffffff;
+  background: #FFFFFF;
   
   // Only apply min-width on desktop
   @media (min-width: 769px) {
@@ -673,12 +673,12 @@
     display: inline-block;
     min-width: 40px;
     color: #000000;
-    background: #ffffff;
+    background: #FFFFFF;
     
     &.negative {
-      background-color: #ffffff;
+      background-color: #FFFFFF;
       color: #000000;
-      border: 1px solid #e0e0e0;
+      border: 1px solid #6B6B66;
     }
   }
 }
@@ -686,16 +686,16 @@
 // Negative stock row highlighting - Tối ưu hóa
 .excel-table tbody tr {
   &.negative-stock {
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
     
     td {
-      background-color: #ffffff !important;
+      background-color: #FFFFFF !important;
     }
     
     .stock-cell .stock-value.negative {
-      background-color: #ffffff !important;
+      background-color: #FFFFFF !important;
       color: #000000 !important;
-      border-color: #e0e0e0 !important;
+      border-color: #6B6B66 !important;
     }
   }
 }
@@ -711,21 +711,21 @@
 }
 
 .factory-cell.factory-asm1 { 
-  background-color: #ffffff !important; 
+  background-color: #FFFFFF !important; 
   color: #000000 !important; 
   font-weight: normal !important; 
 }
 
 .excel-table tbody tr { 
-  background-color: #ffffff; 
+  background-color: #FFFFFF; 
 }
 
 .excel-table tbody tr:hover { 
-  background: #ffffff; 
+  background: #FFFFFF; 
 }
 .excel-actions { 
-  background: #ffffff; 
-  border-bottom: 1px solid #e0e0e0; 
+  background: #FFFFFF; 
+  border-bottom: 1px solid #8F8F89; 
 }
 
 // ── BS Scan Dialog ───────────────────────────────────────────────────────────
@@ -740,7 +740,7 @@
 }
 
 .bs-scan-dialog {
-  background: #fff !important;
+  background: #FFFFFF !important;
   border-radius: 8px !important;
   padding: 20px 24px !important;
   max-width: 560px !important;
@@ -807,13 +807,13 @@
     border: 2px solid #b71c1c !important;
     border-radius: 4px !important;
     font-size: 13px !important;
-    background: #fff !important;
+    background: #FFFFFF !important;
     color: #111 !important;
     box-sizing: border-box !important;
 
     &:focus {
       outline: none !important;
-      border-color: #7b1fa2 !important;
+      border-color: #2057B5 !important;
     }
   }
 
@@ -838,11 +838,11 @@
     justify-content: flex-end !important;
     background: transparent !important;
     padding-top: 4px !important;
-    border-top: 1px solid #eee !important;
+    border-top: 1px solid #8F8F89 !important;
   }
   &__cancel {
     padding: 7px 18px !important;
-    border: 1px solid #ccc !important;
+    border: 1px solid #6B6B66 !important;
     border-radius: 4px !important;
     background: #f5f5f5 !important;
     cursor: pointer !important;
@@ -880,7 +880,7 @@
     padding: 4px 8px !important;
     border: 1px solid #f8bbd9 !important;
     color: #111 !important;
-    background: #fff !important;
+    background: #FFFFFF !important;
   }
 }
 
@@ -898,7 +898,7 @@
   align-items: center !important;
   gap: 4px !important;
   padding: 4px 12px !important;
-  border: 1px solid #d1d5db !important;
+  border: 1px solid #6B6B66 !important;
   border-radius: 4px !important;
   background: #f9fafb !important;
   color: #374151 !important;
@@ -927,7 +927,7 @@
   align-items: center !important;
   gap: 8px !important;
   padding: 6px 16px !important;
-  border-bottom: 1px solid #e0e0e0 !important;
+  border-bottom: 1px solid #8F8F89 !important;
   background: #f8f9fa !important;
   flex-shrink: 0 !important;
   position: relative !important;
@@ -966,12 +966,12 @@
 
     &--nl {
       border: 2px solid #1565c0 !important;
-      background: #fff !important;
+      background: #FFFFFF !important;
       color: #1565c0 !important;
     }
     &--bs {
       border: 2px solid #b71c1c !important;
-      background: #fff !important;
+      background: #FFFFFF !important;
       color: #b71c1c !important;
     }
     &--active-nl {
@@ -1030,7 +1030,7 @@
   padding: 4px 10px;
   border: 1px solid #f8bbd9;
   border-radius: 6px;
-  background: #fff;
+  background: #FFFFFF;
 
   .material-icons {
     font-size: 16px;
@@ -1172,7 +1172,7 @@
     padding: 3px 8px;
     background: transparent;
     color: #888;
-    border: 1px solid #ccc;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     cursor: pointer;
 
@@ -1200,8 +1200,8 @@
   padding: 0 10px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid #e0e0e0;
-  background: #fff;
+  border: 1px solid #6B6B66;
+  background: #FFFFFF;
   font-size: 12px;
   color: rgba(0, 0, 0, 0.65);
   .material-icons { font-size: 18px; }
@@ -1231,8 +1231,8 @@
 .custom-btn { 
   height: 40px; 
   padding: 8px 16px; 
-  border: 1px solid #e0e0e0; 
-  background: #ffffff; 
+  border: 1px solid #6B6B66; 
+  background: #FFFFFF; 
   color: #000000; 
   font-weight: normal; 
   font-size: 13px; 
@@ -1243,8 +1243,8 @@
 }
 
 .custom-btn:hover { 
-  background: #ffffff; 
-  border-color: #e0e0e0;
+  background: #FFFFFF; 
+  border-color: #6B6B66;
 }
 
 // Nút Start có màu cam
@@ -1276,8 +1276,8 @@
 .custom-input { 
   height: 40px; 
   padding: 8px 12px; 
-  border: 1px solid #e0e0e0; 
-  background: #ffffff; 
+  border: 1px solid #6B6B66; 
+  background: #FFFFFF; 
   color: #000000; 
   font-size: 13px; 
   border-radius: 0; 
@@ -1285,8 +1285,8 @@
 }
 
 .editable-input, .editable-select { 
-  border: 1px solid #e0e0e0; 
-  background: #ffffff; 
+  border: 1px solid #6B6B66; 
+  background: #FFFFFF; 
   font-family: inherit; 
   font-size: 13px; 
   color: #000000; 
@@ -1296,37 +1296,37 @@
 
 .editable-input:focus, .editable-select:focus { 
   outline: none; 
-  background: #ffffff; 
-  border-color: #e0e0e0;
+  background: #FFFFFF; 
+  border-color: #6B6B66;
 }
 
 // 🔧 LOGIC MỚI: Styling cho cột vị trí - Tối ưu hóa
 
 .date-cell { 
-  background: #ffffff; 
+  background: #FFFFFF; 
   padding: 4px 6px; 
   text-align: center; 
   font-size: 13px; 
   color: #000000; 
   min-width: 100px; 
-  border-right: 1px solid #e0e0e0; 
+  border-right: 1px solid #8F8F89; 
 }
 
 // Styling for import date column (Ngày nhập) - Tối ưu hóa
 .import-date-cell { 
-  background: #ffffff; 
+  background: #FFFFFF; 
   padding: 4px 6px; 
   text-align: center; 
   font-size: 13px; 
   color: #000000; 
   min-width: 90px; 
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid #8F8F89;
   font-weight: normal;
 }
 
 .action-btn { 
-  background: #ffffff; 
-  border: 1px solid #e0e0e0; 
+  background: #FFFFFF; 
+  border: 1px solid #6B6B66; 
   color: #000000; 
   padding: 4px 8px; 
   border-radius: 0; 
@@ -1335,16 +1335,16 @@
 }
 
 .action-btn:hover { 
-  background: #ffffff; 
-  border-color: #e0e0e0;
+  background: #FFFFFF; 
+  border-color: #6B6B66;
 }
 .pagination-container { 
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
   padding: 16px 20px; 
-  background: #ffffff; 
-  border-top: 1px solid #e0e0e0; 
+  background: #FFFFFF; 
+  border-top: 1px solid #8F8F89; 
 }
 
 .pagination-controls { 
@@ -1355,8 +1355,8 @@
 .page-btn { 
   width: 32px; 
   height: 32px; 
-  border: 1px solid #e0e0e0; 
-  background: #ffffff; 
+  border: 1px solid #6B6B66; 
+  background: #FFFFFF; 
   color: #000000; 
   border-radius: 0; 
   cursor: pointer; 
@@ -1367,14 +1367,14 @@
 }
 
 .page-btn:hover { 
-  background: #ffffff; 
-  border-color: #e0e0e0;
+  background: #FFFFFF; 
+  border-color: #6B6B66;
 }
 
 .page-btn.active { 
   background: #f5f5f5; 
   color: #000000; 
-  border-color: #e0e0e0;
+  border-color: #6B6B66;
 }
 
 .loading-container { 
@@ -1397,7 +1397,7 @@
 }
 
 .error-message { 
-  background: #ffffff; 
+  background: #FFFFFF; 
   color: #000000; 
   padding: 16px; 
   border-radius: 0; 
@@ -1405,14 +1405,14 @@
   display: flex; 
   align-items: center; 
   gap: 8px; 
-  border: 1px solid #e0e0e0;
+  border: 1px solid #6B6B66;
   font-size: 13px;
 }
 
 .factory-badge.asm1-badge { 
-  background: #ffffff; 
+  background: #FFFFFF; 
   color: #000000; 
-  border: 1px solid #e0e0e0; 
+  border: 1px solid #6B6B66; 
   padding: 6px 12px; 
   border-radius: 0; 
   font-size: 13px; 
@@ -1425,9 +1425,9 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #ffffff; // White background
+  background: #FFFFFF; // White background
   color: #000000; // Black text
-  border: 1px solid #e0e0e0; // Light gray border
+  border: 1px solid #6B6B66; // Light gray border
   border-radius: 0; // No border radius
   font-size: 13px;
   font-weight: 600;
@@ -1441,11 +1441,11 @@
     white-space: nowrap;
   }
 }
-.date-filter-row { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 12px 20px; }
+.date-filter-row { background: #f8fafc; border-bottom: 1px solid #8F8F89; padding: 12px 20px; }
 .date-inputs { display: flex; gap: 16px; align-items: center; }
 .input-group { display: flex; align-items: center; gap: 8px; }
 .input-group label { font-size: 14px; color: #4a5568; font-weight: 500; }
-.input-group input[type="date"] { padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px; background: #ffffff; }
+.input-group input[type="date"] { padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px; background: #FFFFFF; }
 
 // Dropdown styling to fix z-index issues
 .dropdown {
@@ -1457,8 +1457,8 @@
     align-items: center;
     gap: 4px;
     padding: 8px 12px;
-    background: #ffffff;
-    border: 1px solid #d1d5db;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 6px;
     color: #374151;
     font-size: 14px;
@@ -1488,8 +1488,8 @@
     left: 0;
     z-index: 9999 !important; // High z-index to appear above header
     min-width: 200px;
-    background: #ffffff;
-    border: 1px solid #d1d5db;
+    background: #FFFFFF;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
     padding: 8px 0;
@@ -1539,7 +1539,7 @@
   gap: 12px;
   padding: 8px 16px;
   background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #8F8F89;
   flex-wrap: wrap;
 }
 
@@ -1551,7 +1551,7 @@
   
   .scanner-input {
     padding: 6px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid #6B6B66;
     border-radius: 4px;
     font-size: 12px;
     width: 100%;
@@ -1674,7 +1674,7 @@
 
 .search-input {
   padding: 6px 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 12px;
   width: 160px;
@@ -1689,7 +1689,7 @@
 
 .search-type-select {
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 12px;
   background: white;
@@ -1703,7 +1703,7 @@
 
 .status-filter-select {
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 12px;
   background: white;
@@ -1730,7 +1730,7 @@
 
 .date-input {
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #6B6B66;
   border-radius: 4px;
   font-size: 12px;
   background: white;
@@ -1864,7 +1864,7 @@
 .modal-header {
   background: #f8f9fa;
   padding: 16px 20px;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid #8F8F89;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2004,7 +2004,7 @@
 .export-form {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #8F8F89;
   
   label {
     display: block;
@@ -2057,7 +2057,7 @@
 .modal-footer {
   background: #f8f9fa;
   padding: 12px 20px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid #8F8F89;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -2235,10 +2235,10 @@
     background: #f5f5f5;
     padding: 6px 12px;
     border-radius: 4px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     
     .date-input {
-      border: 1px solid #ddd;
+      border: 1px solid #6B6B66;
       border-radius: 3px;
       padding: 4px 8px;
       font-size: 11px;
@@ -2388,7 +2388,7 @@
       
       .batch-value {
         padding: 8px 12px;
-        background: #ffffff;
+        background: #FFFFFF;
         border: 1px solid #c8e6c9;
         border-radius: 4px;
         font-size: 13px;
@@ -2414,7 +2414,7 @@
         .employee-input {
           flex: 1;
           padding: 8px 12px;
-          background: #ffffff;
+          background: #FFFFFF;
           border: 1px solid #c8e6c9;
           border-radius: 4px;
           font-size: 13px;
@@ -2585,7 +2585,7 @@
           padding: 8px;
           background: #f5f5f5;
           border-radius: 4px;
-          border: 1px solid #e0e0e0;
+          border: 1px solid #6B6B66;
           
           .material-item {
             display: grid;
@@ -2593,8 +2593,8 @@
             gap: 8px;
             align-items: center;
             padding: 6px 8px;
-            background: #ffffff;
-            border: 1px solid #e0e0e0;
+            background: #FFFFFF;
+            border: 1px solid #6B6B66;
             border-radius: 4px;
             font-size: 11px;
             
@@ -2856,7 +2856,7 @@
   th, td {
     padding: 8px 6px;
     text-align: center;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #6B6B66;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2970,7 +2970,7 @@
   th, td {
     padding: 6px 4px;
     text-align: left;
-    border: 1px solid #dee2e6;
+    border: 1px solid #6B6B66;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3349,7 +3349,7 @@
         outline: none;
         border-color: #ef6c00;
         box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.25);
-        background: #fff;
+        background: #FFFFFF;
       }
 
       &::placeholder {
@@ -3370,7 +3370,7 @@
         padding: 20px;
         border: 2px solid #ff9800;
         border-radius: 10px;
-        background: #fff;
+        background: #FFFFFF;
         color: #f57c00;
         font-size: 20px;
         font-weight: 800;
@@ -3427,7 +3427,7 @@
     
     .scan-info {
       background: #f8f9fa;
-      border: 1px solid #e9ecef;
+      border: 1px solid #6B6B66;
       border-radius: 8px;
       padding: 16px;
       margin-bottom: 20px;
@@ -3469,7 +3469,7 @@
         .scan-input {
           width: 100%;
           padding: 12px 16px;
-          border: 2px solid #e9ecef;
+          border: 2px solid #6B6B66;
           border-radius: 8px;
           font-size: 16px;
           font-family: Arial, sans-serif;
@@ -3541,7 +3541,7 @@
   
   .modal-footer {
     padding: 16px 24px;
-    border-top: 1px solid #e9ecef;
+    border-top: 1px solid #8F8F89;
     display: flex;
     justify-content: flex-end;
     
@@ -3607,7 +3607,7 @@
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid #8F8F89;
       background: #f5f5f5;
       
       h3 {
@@ -3637,7 +3637,7 @@
     .scan-review-info {
       padding: 16px 20px;
       background: #f8f9fa;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid #8F8F89;
       
       .scan-info-item {
         margin-bottom: 8px;
@@ -3661,7 +3661,7 @@
       padding: 16px 20px;
       
       .scan-review-item {
-        border: 1px solid #e0e0e0;
+        border: 1px solid #6B6B66;
         border-radius: 8px;
         padding: 12px;
         margin-bottom: 12px;
@@ -3716,7 +3716,7 @@
       display: flex;
       gap: 12px;
       padding: 16px 20px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid #8F8F89;
       background: #f5f5f5;
       
       // Mobile responsive
@@ -3788,7 +3788,7 @@
   .pending-data-section {
     margin-top: 24px;
     padding-top: 24px;
-    border-top: 2px solid #e0e0e0;
+    border-top: 2px solid #8F8F89;
     
     h4 {
       color: #1976d2;
@@ -3808,14 +3808,14 @@
     .scan-list {
       max-height: 300px;
       overflow-y: auto;
-      border: 1px solid #e0e0e0;
+      border: 1px solid #6B6B66;
       border-radius: 8px;
       background: #fafafa;
     }
     
     .scan-item {
       padding: 16px;
-      border-bottom: 1px solid #e0e0e0;
+      border-bottom: 1px solid #8F8F89;
       background: white;
       
       &:last-child {
@@ -3881,7 +3881,7 @@
 .px-import-dialog {
   width: min(1100px, 96vw);
   max-height: min(90vh, 860px);
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 12px;
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.28);
   display: flex;
@@ -3893,7 +3893,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 14px 16px 10px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #8F8F89;
 
     h3 {
       margin: 0;
@@ -3927,9 +3927,9 @@
     button {
       height: 36px;
       padding: 0 12px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #6B6B66;
       border-radius: 8px;
-      background: #fff;
+      background: #FFFFFF;
       font-weight: 600;
       cursor: pointer;
     }
@@ -3945,7 +3945,7 @@
     padding: 8px 10px;
     border-radius: 8px;
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #6B6B66;
     font-size: 13px;
 
     &--empty {
@@ -3958,7 +3958,7 @@
     min-height: 0;
     overflow: auto;
     margin: 0 16px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #6B6B66;
     border-radius: 8px;
 
     table {
@@ -3969,7 +3969,7 @@
 
     th, td {
       padding: 6px 8px;
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid #8F8F89;
       text-align: left;
       vertical-align: middle;
     }
@@ -3987,7 +3987,7 @@
       width: 100%;
       min-width: 72px;
       height: 32px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #6B6B66;
       border-radius: 6px;
       padding: 0 8px;
     }
@@ -4003,8 +4003,8 @@
       height: 38px;
       padding: 0 14px;
       border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      background: #fff;
+      border: 1px solid #6B6B66;
+      background: #FFFFFF;
       font-weight: 700;
       cursor: pointer;
     }
@@ -4062,8 +4062,8 @@
   height: 36px !important;
   min-height: 36px !important;
   box-sizing: border-box !important;
-  border: 1px solid #cbd5e1 !important;
-  background: #fff !important;
+  border: 1px solid #6B6B66 !important;
+  background: #FFFFFF !important;
   padding: 0 10px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
@@ -4148,7 +4148,7 @@
 }
 
 .main-content:not(.ob-m-page) .ob-toolbar .review-btn-desktop {
-  background: #fff !important;
+  background: #FFFFFF !important;
   border: 1px solid #2563eb !important;
   color: #1d4ed8 !important;
 }
@@ -4213,7 +4213,7 @@
 .ob-op-gate__card {
   width: 100%;
   max-width: 420px;
-  background: #fff;
+  background: #FFFFFF;
   border-radius: 16px;
   padding: 28px 22px 22px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
@@ -4307,3 +4307,208 @@
 .ob-m-header__row2 .ob-op-chip {
   margin-left: 8px;
 }
+/* Popup Log LSX (notepad) */
+.lsx-log { width: min(96vw, 1100px); max-height: 88vh; display: flex; flex-direction: column; }
+.lsx-log__bar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; flex-wrap: wrap;
+  input { height: 34px; padding: 0 10px; border: 1px solid #6B6B66; border-radius: 6px; min-width: 240px; font-size: 14px; } }
+.lsx-log__sum { font-size: 13px; color: #555; }
+.lsx-log__err { margin: 0 16px 10px; color: #A92F2F; font-size: 13px; }
+.lsx-log__table { overflow: auto; padding: 0 16px 16px;
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid #8F8F89; text-align: left; white-space: nowrap; }
+  th { position: sticky; top: 0; background: #F4F4F2; font-weight: 700; } }
+.lsx-log__num { text-align: right !important; }
+
+/* Popup Log LSX: overlay riêng (không dùng .modal-overlay của tab — class đó là nền trong suốt) */
+.lsx-log-overlay {
+  position: fixed; inset: 0; z-index: 10050;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+.lsx-log { background: #FFFFFF; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.lsx-log__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #8F8F89;
+  h3 { margin: 0; font-size: 16px; font-weight: 700; } }
+.lsx-log__close { border: 0; background: none; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+
+/* ===== Bảng scan máy tính (17/10/2026) ===== */
+.ob-toolbar__scan--big { height: 48px !important; font-size: 20px !important; min-width: 360px; font-weight: 600; border-width: 2px !important; }
+/* Bảng scan dùng chung với Inbound */
+@import '../../shared/scan-board';
+.ob-temle__row {
+  display: flex; flex-direction: column; gap: 4px; margin: 8px 0;
+  > span { font-size: 13px; color: #444; }
+}
+
+/* Report không cân được */
+.wx-overlay { position: fixed; inset: 0; z-index: 10060; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+.wx-overlay--top { z-index: 10070; }
+.wx { width: min(92vw, 420px); background: #FFFFFF; border-radius: 10px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.wx__head { display: flex; justify-content: space-between; align-items: center; h3 { margin: 0; font-size: 16px; font-weight: 800; } }
+.wx__x { border: 0; background: none; font-size: 18px; cursor: pointer; }
+.wx__info { margin: 8px 0; font-size: 13px; color: #252823; }
+.wx__opts { display: flex; flex-direction: column; gap: 6px; }
+.wx__opt { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.wx__input { height: 34px; border: 1px solid #6B6B66; border-radius: 6px; padding: 0 8px; font-size: 14px; }
+.wx__msg { margin: 10px 0 0; font-size: 13px; color: #A92F2F; &--ok { color: #1B6E46; } }
+.wx__foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.wx__btn { height: 34px; padding: 0 14px; border: 1px solid #6B6B66; border-radius: 6px; background: #FFFFFF; font-weight: 600; cursor: pointer;
+  &--primary { background: #252823; color: #fff; border-color: #252823; } &:disabled { opacity: .5; } }
+
+.wx.ow { width: min(96vw, 520px); max-height: 96vh; overflow-y: auto; }
+.ow__warn { color: #A92F2F; font-weight: 700; }
+.ow__cam { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #111; border-radius: 8px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  video, img { width: 100%; height: 100%; object-fit: contain; } }
+.ow__cam-hint { position: absolute; color: #eee; font-size: 13px; padding: 12px; text-align: center; }
+.ow__cam-act { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.ow__file { position: relative; display: inline-flex; align-items: center; overflow: hidden;
+  input { position: absolute; inset: 0; opacity: 0; cursor: pointer; } }
+.ow__fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px;
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; }
+  .wx__input { height: 38px; font-size: 16px; } }
+.ow__muted { margin: 0; font-size: 12px; color: #666; }
+.ow__pct { margin: 0; font-size: 15px; font-weight: 800; color: #1B6E46; &--bad { color: #A92F2F; } }
+.ow__foot { flex-wrap: wrap; }
+.ow__spacer { flex: 1; }
+
+/* Cân bag lẻ — giao diện lớn, dễ bấm (camera trái · nhập phải) */
+.wx.ow { width: min(98vw, 1040px); max-height: 96vh; overflow-y: auto; padding: 18px 20px; }
+.wx.ow .wx__head h3 { font-size: 22px; }
+.wx.ow .wx__x { font-size: 24px; width: 40px; height: 40px; }
+.wx.ow .wx__info { font-size: 16px; line-height: 1.5; }
+.ow__body { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .ow__body { grid-template-columns: 1fr; } }
+.ow__cam-act .wx__btn, .ow__foot .wx__btn { height: 52px; padding: 0 20px; font-size: 17px; font-weight: 700; }
+.ow__fields { margin-top: 0; gap: 14px;
+  label { font-size: 16px; gap: 6px; }
+  .wx__input { height: 60px; font-size: 28px; font-weight: 700; padding: 0 14px; } }
+.ow__muted { font-size: 15px; }
+.ow__pct { font-size: 22px; }
+.wx.ow .wx__msg { font-size: 16px; }
+.ow__foot { margin-top: 14px; gap: 10px; }
+
+.ow__nocam { display: inline-flex; align-items: center; gap: 10px; margin: 6px 0 12px; padding: 8px 14px; border: 1px solid #C9C9C3;
+  border-radius: 8px; background: #F9F9F7; font-size: 16px; font-weight: 700; cursor: pointer;
+  input { width: 20px; height: 20px; cursor: pointer; } }
+.ow__body--nocam { grid-template-columns: 1fr; }
+
+.ow__cam { position: relative; }
+.ow__frame { position: absolute; inset: 12% 10%; border: 3px dashed rgba(255, 213, 79, .95); border-radius: 10px; pointer-events: none;
+  span { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap; padding: 3px 10px; border-radius: 999px;
+    background: rgba(0, 0, 0, .65); color: #fff; font-size: 13px; font-weight: 700; } }
+
+/* Xuất BS: chẵn / lẻ + Tem lẻ (như Xuất NL) */
+.bs-scan-dialog__bags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 6px 0 4px; font-size: 13px; color: #334155;
+  strong { color: #0f172a; }
+  .ob-scan-temle { margin-left: auto; }
+}
+.bs-scan-dialog__warn { color: #b45309; font-weight: 700; }
+
+/* Xuất BS: chọn khoảng ngày import */
+.bs-section__days, .ob-m-bs__days { height: 32px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 6px; font-size: 13px; background: #fff; }
+
+/* Xuất BS: kẻ đường cột / dòng rõ ràng */
+.bs-section .bs-table-wrap { border: 1px solid #cbd5e1; border-radius: 6px; }
+.bs-section .bs-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  th, td { border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+  th:last-child, td:last-child { border-right: none; }
+  th { background: #f1f5f9; color: #0f172a; border-bottom: 2px solid #94a3b8; white-space: nowrap; }
+  tbody tr:nth-child(even) td { background: #f8fafc; }
+  tbody tr:hover td { background: #fff1f2; }
+}
+
+.bs-section__days--on { border-color: #b91c1c; color: #b91c1c; font-weight: 700; }
+
+/* Xuất BS: xuất dở + báo con trỏ không ở ô scan */
+.bs-partial { display: block; font-size: 11px; font-weight: 600; color: #b45309; }
+.bs-scan-focus-warn {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 6px; padding: 6px 10px;
+  border: 2px solid #dc2626; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-weight: 800; font-size: 13px;
+  cursor: pointer; animation: bsFocusBlink 1s ease-in-out infinite;
+  .material-icons { font-size: 22px; }
+}
+.bs-scan-dialog__input.bs-scan-dialog__input--lost { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25); }
+@keyframes bsFocusBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* Xuất BS: hiển thị tất cả, lọc cột, chọn hàng loạt */
+.bs-section__btn--on { background: #fee2e2 !important; border-color: #b91c1c !important; color: #b91c1c !important; font-weight: 700; }
+.bs-section__chk { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: #475569; cursor: pointer; white-space: nowrap; }
+.bs-bulk {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; padding: 6px 10px;
+  border: 1px solid #fca5a5; border-radius: 8px; background: #fff1f2; font-size: 13px;
+  .bs-bulk__del { color: #b91c1c !important; border-color: #fca5a5 !important; }
+}
+.bs-section .bs-table {
+  .bs-table__chk { width: 32px; text-align: center; input { cursor: pointer; } }
+  thead tr:first-child th { top: 0; }
+  tr.bs-table__filters th {
+    top: 31px; padding: 3px 4px; background: #f8fafc; border-bottom: 2px solid #94a3b8;
+    input { width: 100%; min-width: 52px; box-sizing: border-box; height: 26px; padding: 0 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; font-weight: 400; }
+  }
+  tbody tr.bs-table__row--sel td { background: #fef9c3 !important; }
+  tbody tr.bs-table__row--hidden td { color: #94a3b8; font-style: italic; }
+}
+.bs-status { white-space: nowrap; font-weight: 600; color: #64748b; }
+.bs-dup-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #dc2626; color: #fff; font-size: 10.5px; font-weight: 800; vertical-align: middle; }
+.bs-dup-btn { color: #b91c1c !important; border-color: #fca5a5 !important; font-weight: 700; }
+.bs-lsx-stats { width: min(760px, calc(100vw - 32px)); max-height: 85vh; display: flex; flex-direction: column; }
+.bs-lsx-stats__body { overflow: auto; min-height: 0; border: 1px solid #cbd5e1; border-radius: 6px;
+  table { width: 100%; }
+  th { position: sticky; top: 0; background: #f1f5f9; }
+}
+.bs-lsx-stats__row { cursor: pointer; &:hover td { background: #fff1f2 !important; } }
+.px-import-dialog__iqc { background: #7c2d12 !important; color: #fff !important; border-color: #7c2d12 !important; font-weight: 700; }
+.bs-status--done { color: #15803d; }
+.bs-status--part { color: #b45309; }
+.bs-status--off { color: #94a3b8; font-style: italic; }
+.bs-filter-clear { border: none; background: #e2e8f0; border-radius: 4px; cursor: pointer; padding: 2px 6px; font-weight: 700; }
+.bs-pager {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0; font-size: 13px; color: #334155;
+  button { min-width: 30px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  input { width: 56px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; }
+  select { height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; }
+  .bs-pager__hint { margin-left: auto; font-size: 11.5px; color: #94a3b8; }
+}
+
+/* Xuất số lẻ < 1 còn lại của lô */
+.ob-scan-crumb { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 8px; margin-left: 4px;
+  border: 1px solid #0d9488; border-radius: 4px; background: #f0fdfa; color: #0f766e; font-size: 11px; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+  .material-icons { font-size: 14px; } }
+
+/* Chọn LSX Bổ sung */
+.ob-bs-lsx { display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 10px; border: 1px solid #d97706;
+  border-radius: 6px; background: #fff; color: #92400e; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap;
+  .material-icons { font-size: 18px; }
+  &--on { background: #d97706; color: #fff; }
+  &:disabled { opacity: .6; cursor: default; } }
+
+/* Đếm bag CL */
+.cl-count { max-width: 480px; width: calc(100vw - 32px); }
+.cl-count__box { display: flex; gap: 10px; padding: 12px; border: 2px solid #ea580c; border-radius: 8px; background: #fff7ed; color: #7c2d12;
+  font-size: 14px; line-height: 1.5;
+  .material-icons { color: #ea580c; font-size: 28px; }
+  strong { display: block; font-size: 16px; color: #c2410c; margin-bottom: 2px; } }
+.cl-count__lab { display: block; margin: 12px 0 4px; font-weight: 700; }
+.cl-count__input { width: 100%; box-sizing: border-box; height: 44px; font-size: 20px; padding: 0 10px; border: 2px solid #ea580c; border-radius: 6px; }
+.cl-count__err { color: #b91c1c; margin: 6px 0 0; }
+.cl-count__foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* Chụp hình bag TL khi xuất */
+.tl-photo { max-width: 560px; width: calc(100vw - 32px); }
+.tl-photo__sub { margin: 4px 0 8px; font-size: 13px; color: #444; }
+.tl-photo__view { position: relative; background: #111; border-radius: 6px; overflow: hidden; min-height: 200px;
+  video, img { display: block; width: 100%; max-height: 50vh; object-fit: contain; } }
+.tl-photo__err { color: #b91c1c; margin: 6px 0 0; font-size: 13px; }
+.tl-photo__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.tl-photo__file { cursor: pointer; }
+.tl-photo__grow { flex: 1; }
+
+/* Đếm bag CL: Báo cáo lý do bỏ qua */
+.cl-count__report { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding: 8px;
+  border: 1px solid #d0d0d0; border-radius: 6px; background: #f7f7f7;
+  span { width: 100%; font-weight: 600; } }
+.cl-count__report-btn { margin-right: auto; }
